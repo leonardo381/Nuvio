@@ -52,7 +52,8 @@
     let isLoading = true;
     let initialCollection = collection;
     let regularFields = [];
-
+    //MODULE: TMP
+    let schemaPropsDraft = null;
     $: isAuthCollection = collection?.type === "auth";
 
     $: isSuperusersCollection = collection?.name === "_superusers";
@@ -238,7 +239,27 @@
             initialDraft = null;
         }
     }
+/*
+    function areRecordsEqual(recordA, recordB) {
+        const cloneA = structuredClone(recordA || {});
+        const cloneB = structuredClone(recordB || {});
 
+        const fileFields = collection?.fields?.filter((f) => f.type === "file");
+        for (let field of fileFields) {
+            delete cloneA[field.name];
+            delete cloneB[field.name];
+        }
+
+        // props to exclude from the checks
+        const excludeProps = ["expand", "password", "passwordConfirm"];
+        for (let prop of excludeProps) {
+            delete cloneA[prop];
+            delete cloneB[prop];
+        }
+
+        return JSON.stringify(cloneA) == JSON.stringify(cloneB);
+    }
+*/
     function areRecordsEqual(recordA, recordB) {
         const cloneA = structuredClone(recordA || {});
         const cloneB = structuredClone(recordB || {});
@@ -263,7 +284,7 @@
         initialDraft = null;
         window.localStorage.removeItem(draftKey());
     }
-
+/*
     async function save(hidePanel = true) {
         if (isSaving || !canSave || !collection?.id) {
             return;
@@ -310,6 +331,70 @@
 
         isSaving = false;
     }
+*/
+async function save(hidePanel = true) {
+    if (isSaving || !canSave || !collection?.id) {
+        return;
+    }
+
+    isSaving = true;
+
+    try {
+        const data = exportFormData();
+
+        let result;
+        
+
+        if (isNew) {
+            result = await ApiClient.collection(collection.id).create(data);
+        } else {
+            result = await ApiClient.collection(collection.id).update(record.id, data);
+        }
+        //MODULE: TMP
+        //extra step only for blocks: patch props after create/update
+        const isBlocks = collection?.name === "blocks";
+        if (isBlocks && schemaPropsDraft) {
+            try {
+                result = await ApiClient
+                    .collection(collection.id)
+                    .update(result.id, { props: schemaPropsDraft });
+            } catch (err) {
+                console.error("Failed to update props after save:", err);
+                // don't rethrow, so main save still succeeds
+            }
+        }
+
+        addSuccessToast(isNew ? "Successfully created record." : "Successfully updated record.");
+
+        deleteDraft();
+
+        // logout on password change of the current logged in user
+        if (
+            isSuperusersCollection &&
+            record?.id == ApiClient.authStore.record?.id &&
+            !!data.get("password")
+        ) {
+            return ApiClient.logout();
+        }
+
+        if (hidePanel) {
+            forceHide();
+        } else {
+            replaceOriginal(result);
+        }
+
+        dispatch("save", {
+            isNew: isNew,
+            record: result,
+        });
+    } catch (err) {
+        ApiClient.error(err);
+    }
+
+    isSaving = false;
+}
+
+
 
     function deleteConfirm() {
         if (!original?.id) {
@@ -737,9 +822,21 @@
             {/each}
             -->
             {#each regularFields as field (field.name)}
+                <!--MODULE: TMP-->
                 {#if collection.name === "blocks" && field.name === "props"}
-                    <!-- Use our dynamic schema-based form for blocks.props -->
-                    <SchemaForm block={record} />
+                    <SchemaForm
+                        block={record}
+                        on:propsChange={(e) => {
+                            schemaPropsDraft = e.detail;
+
+                            // 🔥 Keep record.props in sync as a JSON string
+                            try {
+                                record.props = JSON.stringify(schemaPropsDraft);
+                            } catch (_) {
+                                record.props = "{}";
+                            }
+                        }}
+                    />
                 {:else if field.type === "text"}
                     <TextField {field} {original} {record} bind:value={record[field.name]} />
                 {:else if field.type === "number"}
