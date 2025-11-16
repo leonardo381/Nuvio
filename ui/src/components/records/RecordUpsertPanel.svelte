@@ -28,7 +28,7 @@
     import { confirm } from "@/stores/confirmation";
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
-
+    import SchemaForm from "@/components/base/SchemaForm.svelte";
     const dispatch = createEventDispatcher();
     const formId = "record_" + CommonHelper.randomString(5);
     const tabFormKey = "form";
@@ -698,7 +698,7 @@
                     <hr />
                 {/if}
             {/if}
-
+            <!--
             {#each regularFields as field (field.name)}
                 {#if field.type === "text"}
                     <TextField {field} {original} {record} bind:value={record[field.name]} />
@@ -735,6 +735,47 @@
                     <GeoPointField {field} {original} {record} bind:value={record[field.name]} />
                 {/if}
             {/each}
+            -->
+            {#each regularFields as field (field.name)}
+                {#if collection.name === "blocks" && field.name === "props"}
+                    <!-- Use our dynamic schema-based form for blocks.props -->
+                    <SchemaForm block={record} />
+                {:else if field.type === "text"}
+                    <TextField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "number"}
+                    <NumberField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "bool"}
+                    <BoolField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "email"}
+                    <EmailField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "url"}
+                    <UrlField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "editor"}
+                    <EditorField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "date"}
+                    <DateField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "select"}
+                    <SelectField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "json"}
+                    <JsonField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "file"}
+                    <FileField
+                        {field}
+                        {original}
+                        {record}
+                        bind:value={record[field.name]}
+                        bind:uploadedFiles={uploadedFilesMap[field.name]}
+                        bind:deletedFileNames={deletedFileNamesMap[field.name]}
+                    />
+                {:else if field.type === "relation"}
+                    <RelationField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "password"}
+                    <PasswordField {field} {original} {record} bind:value={record[field.name]} />
+                {:else if field.type === "geoPoint"}
+                    <GeoPointField {field} {original} {record} bind:value={record[field.name]} />
+                {/if}
+            {/each}
+
         </form>
 
         {#if isAuthCollection && !isSuperusersCollection && !isNew}
