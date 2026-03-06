@@ -28,7 +28,7 @@
     import { confirm } from "@/stores/confirmation";
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
-    import SchemaForm from "@/components/base/SchemaForm.svelte";
+    import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
     const dispatch = createEventDispatcher();
     const formId = "record_" + CommonHelper.randomString(5);
     const tabFormKey = "form";
@@ -352,7 +352,7 @@ async function save(hidePanel = true) {
         }
         //MODULE: TMP
         //extra step only for blocks: patch props after create/update
-        const isBlocks = collection?.name === "blocks";
+        const isBlocks = collection?.name === "Blocks";
         if (isBlocks && schemaPropsDraft) {
             try {
                 result = await ApiClient
@@ -823,7 +823,7 @@ async function save(hidePanel = true) {
             -->
             {#each regularFields as field (field.name)}
                 <!--MODULE: TMP-->
-                {#if collection.name === "blocks" && field.name === "props"}
+                {#if collection.name === "Blocks" && field.name === "props"}
                     <SchemaForm
                         block={record}
                         on:propsChange={(e) => {
@@ -837,6 +837,8 @@ async function save(hidePanel = true) {
                             }
                         }}
                     />
+                    
+                    
                 {:else if field.type === "text"}
                     <TextField {field} {original} {record} bind:value={record[field.name]} />
                 {:else if field.type === "number"}

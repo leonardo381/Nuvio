@@ -332,6 +332,21 @@
 <script>
   import { onMount, createEventDispatcher } from "svelte";
 
+  import TextField from "@/components/records/fields/TextField.svelte";
+  import NumberField from "@/components/records/fields/NumberField.svelte";
+  import BoolField from "@/components/records/fields/BoolField.svelte";
+  import EmailField from "@/components/records/fields/EmailField.svelte";
+  import UrlField from "@/components/records/fields/UrlField.svelte";
+  import DateField from "@/components/records/fields/DateField.svelte";
+  import JsonField from "@/components/records/fields/JsonField.svelte";
+  import EditorField from "@/components/records/fields/EditorField.svelte";
+  import GeoPointField from "@/components/records/fields/GeoPointField.svelte";
+  import SelectField from "@/components/records/fields/SelectField.svelte"; 
+ import PropsFileField from "@/components/records/fields/PropsFileField.svelte";
+
+ import Field from "@/components/base/Field.svelte";
+import FieldLabel from "@/components/records/fields/FieldLabel.svelte";
+
   export let block; // current record
   const dispatch = createEventDispatcher();
 
@@ -372,13 +387,30 @@
       const data = await res.json();
       const cmp = data?.items?.[0];
 
-      if (!cmp || !cmp.schema || !cmp.schema.fields || !cmp.schema.fields.length) {
+      if (!cmp || !cmp.schema) {
         error = "No schema defined for this component.";
         loading = false;
         return;
       }
-      //This is to parse the collection blocks field props data
-      schema = cmp.schema;
+
+      //normalize schema so we ALWAYS have an array in schema.fields
+      let cmpSchema = cmp.schema;
+
+      // if PB ever returns it as a string, parse it
+      if (typeof cmpSchema === "string") {
+        try {
+          cmpSchema = JSON.parse(cmpSchema) || {};
+        } catch (e) {
+          console.warn("Invalid component schema JSON", e);
+          cmpSchema = {};
+        }
+      }
+
+      if (!Array.isArray(cmpSchema.fields)) {
+        cmpSchema.fields = [];
+      }
+
+      schema = cmpSchema;
       let rawProps = block.props;
       let initialProps = {};
 
@@ -394,6 +426,8 @@
       }
       formValues = { ...initialProps };
 
+
+      
     } catch (e) {
       console.error("Schema load exception:", e);
       error = "Error loading schema.";
@@ -421,7 +455,34 @@
     // send updated props to parent
     dispatch("propsChange", formValues);
   }
+
+  function toPBField(f) {
+    const base = {
+      name: f.label || f.key,
+      type: f.type,
+      label: f.label,
+      options: f.options || {},
+    };
+
+    // extra normalization for select so PB's SelectField is happy
+    if (base.type === "select") {
+      const opts = base.options || {};
+
+      base.options = {
+        values: Array.isArray(opts.values) ? opts.values : [],
+        maxSelect:
+          typeof opts.maxSelect === "number" && opts.maxSelect > 0
+            ? opts.maxSelect
+            : 1,
+        valuesSort: opts.valuesSort || "asc",
+        cascadeDelete: !!opts.cascadeDelete,
+      };
+    }
+
+    return base;
+} 
 </script>
+
 
 {#if loading}
   <p>Loading schema…</p>
@@ -430,6 +491,9 @@
   <p>{error}</p>
 
 {:else}
+
+
+<!--
   {#each schema.fields as f (f.key)}
     <div class="field">
       <label>{f.label}</label>
@@ -455,7 +519,6 @@
         />
 
       {:else if f.type === "file"}
-        <!-- simplest version: just store file id or path as text for now -->
         <input
           type="text"
           placeholder="file id or filename"
@@ -464,7 +527,6 @@
         />
 
       {:else}
-        <!-- fallback to text -->
         <input
           type="text"
           value={formValues[f.key] ?? ""}
@@ -473,5 +535,151 @@
       {/if}
     </div>
   {/each}
+ --> 
+{#each (schema.fields || []) as f (f.key)}
+  {#if !f}
+    <!-- skip invalid -->
+
+  {:else if f.type === "text"}
+    <TextField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+    {:else if f.type === "textarea"}
+    <TextField
+        field={{ ...toPBField(f), type: "text" }}
+        original={null}
+        record={formValues}
+        bind:value={formValues[f.key]}
+    />
+
+  {:else if f.type === "number"}
+    <NumberField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+  {:else if f.type === "bool"}
+    <BoolField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+  {:else if f.type === "email"}
+    <EmailField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+  {:else if f.type === "url"}
+    <UrlField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+  {:else if f.type === "date"}
+    <DateField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+  {:else if f.type === "json"}
+    <JsonField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+  {:else if f.type === "editor"}
+    <EditorField
+      field={toPBField(f)}
+      original={null}
+      record={formValues}
+      bind:value={formValues[f.key]}
+    />
+
+{:else if f.type === "select"}
+  <Field class="form-field" name={f.key} let:uniqueId>
+    <FieldLabel
+      {uniqueId}
+      field={{
+        ...toPBField(f),
+        // use label text for the visible label
+        name: f.label || f.key,
+      }}
+    />
+
+    <select
+      id={uniqueId}
+      class="form-input"
+      bind:value={formValues[f.key]}
+      on:change={(e) => updateField(f.key, e.currentTarget.value)}
+    >
+      <option value="">Select…</option>
+
+      {#each (f.options?.values || []) as opt}
+        <option value={opt}>{opt}</option>
+      {/each}
+    </select>
+  </Field>
+
+    {:else if f.type === "geoPoint"}
+      <GeoPointField
+        field={{ ...toPBField(f), type: "geoPoint" }}
+        original={null}
+        record={formValues}
+        bind:value={formValues[f.key]}
+      />
+
+    {:else if f.type === "file"}
+      <PropsFileField
+        field={toPBField(f)}
+        value={formValues[f.key]}
+        onChange={(newVal) => updateField(f.key, newVal)}
+      />
+    <!--
+    {:else if f.type === "relation"}
+        {#key f.key}
+          <div class="form-field">
+            <label for={`schema-${block?.id || "new"}-${f.key}`}>
+              {f.label || f.key}
+            </label>
+            <input
+              id={`schema-${block?.id || "new"}-${f.key}`}
+              class="form-input"
+              type="text"
+              placeholder="record id (or ids, comma-separated)"
+              value={formValues[f.key] ?? ""}
+              on:input={(e) => updateField(f.key, e.currentTarget.value)}
+            />
+          </div>
+        {/key}
+       fallback to TextField for unknown types -->
+      <TextField
+        field={toPBField(f)}
+        original={null}
+        record={formValues}
+        bind:value={formValues[f.key]}
+      />
+  {/if}
+{/each}
+
+
+
+ 
 {/if}
 
