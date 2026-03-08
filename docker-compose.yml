@@ -1,0 +1,6 @@
+services:
+  nuvio:
+    build: .
+    container_name: NuvioQAUT1
+    ports:
+      - "8090:8090"
