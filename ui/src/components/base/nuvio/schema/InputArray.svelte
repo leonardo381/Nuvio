@@ -13,18 +13,24 @@
     dispatch("change", { value: items });
   }
 
-  function createEmptyItem() {
+    function createEmptyItem() {
     const fields = field?.item?.fields ?? [];
     const obj = {};
 
     for (const f of fields) {
-      if (f.type === "array") obj[f.key] = [];
-      else if (f.type === "bool") obj[f.key] = false;
-      else obj[f.key] = "";
+        if (f.type === "array") {
+        obj[f.key] = [];
+        } else if (f.type === "object") {
+        obj[f.key] = {};
+        } else if (f.type === "bool") {
+        obj[f.key] = false;
+        } else {
+        obj[f.key] = "";
+        }
     }
 
     return obj;
-  }
+    }
 
   function addItem() {
     items = [...items, createEmptyItem()];

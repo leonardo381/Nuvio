@@ -10,6 +10,7 @@
   import InputFile from "./InputFile.svelte";
   import InputRelation from "./InputRelation.svelte";
   import InputArray from "./InputArray.svelte";
+  import InputObject from "./InputObject.svelte";
 
   export let block = null;
   export let fields = null;
@@ -105,6 +106,9 @@
 
   {:else if field.type === "array"}
     <InputArray field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+
+  {:else if field.type === "object"}
+    <InputObject field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else}
     <InputText field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
