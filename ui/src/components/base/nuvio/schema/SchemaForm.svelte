@@ -9,8 +9,12 @@
   import InputSelect from "./InputSelect.svelte";
   import InputFile from "./InputFile.svelte";
   import InputRelation from "./InputRelation.svelte";
+  import InputArray from "./InputArray.svelte";
 
-  export let block;
+  export let block = null;
+  export let fields = null;
+  export let value = null;
+
   const dispatch = createEventDispatcher();
 
   let schema = { fields: [] };
@@ -18,6 +22,12 @@
   let lastKey = null;
 
   async function loadSchema() {
+    if (fields) {
+      schema = { fields };
+      values = value || {};
+      return;
+    }
+
     if (!block?.component_key) return;
 
     const filter = encodeURIComponent(`key="${block.component_key}"`);
@@ -33,7 +43,6 @@
 
     schema = s;
 
-    // parse props
     try {
       values = typeof block.props === "string"
         ? JSON.parse(block.props || "{}")
@@ -45,6 +54,7 @@
 
   function update(key, val) {
     values = { ...values, [key]: val };
+    dispatch("change", { value: values });
     dispatch("propsChange", values);
   }
 
@@ -53,9 +63,18 @@
     loadSchema();
   });
 
+  $: if (fields) {
+    schema = { fields };
+    values = value || {};
+  }
+
   $: if (block?.component_key && block.component_key !== lastKey) {
     lastKey = block.component_key;
     loadSchema();
+  }
+
+  $: if (fields && value) {
+    values = value;
   }
 </script>
 
@@ -83,6 +102,9 @@
 
   {:else if field.type === "relation"}
     <InputRelation field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+
+  {:else if field.type === "array"}
+    <InputArray field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else}
     <InputText field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
