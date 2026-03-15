@@ -456,14 +456,17 @@ async function save(hidePanel = true) {
             // "validate" json fields
             if (jsonFields[key] && data[key] !== "") {
                 try {
-                    JSON.parse(data[key]);
+                    if (typeof data[key] !== "string") {
+                        data[key] = JSON.stringify(data[key] ?? null);
+                    } else {
+                        JSON.parse(data[key]);
+                    }
                 } catch (err) {
                     const fieldErr = {};
                     fieldErr[key] = {
                         code: "invalid_json",
                         message: err.toString(),
                     };
-                    // emulate server error
                     throw new ClientResponseError({
                         status: 400,
                         response: {
