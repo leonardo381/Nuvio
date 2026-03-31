@@ -4,7 +4,7 @@
   import InputText from "./InputText.svelte";
   import InputTextArea from "./InputTextArea.svelte";
   import InputBool from "./InputBool.svelte";
-  import InputDate from "./InputDate.svelte";
+  //import InputDate from "./InputDate.svelte";
   import InputJson from "./InputJson.svelte";
   import InputSelect from "./InputSelect.svelte";
   import InputFile from "./InputFile.svelte";
