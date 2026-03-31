@@ -89,9 +89,6 @@
   {:else if field.type === "bool"}
     <InputBool field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
-  {:else if field.type === "date"}
-    <InputDate field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
-
   {:else if field.type === "json"}
     <InputJson field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
