@@ -33,3 +33,8 @@ pb_data/storage/**/*.attrs
 
 # Generated thumbnails folders
 pb_data/storage/**/thumbs_*/
+
+pb_data/auxiliary.db
+pb_data/*.db-shm
+pb_data/*.db-wal
+pb_data/storage/

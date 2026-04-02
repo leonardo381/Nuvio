@@ -10,7 +10,7 @@
   import InputFile from "./InputFile.svelte";
   import InputRelation from "./InputRelation.svelte";
   import InputArray from "./InputArray.svelte";
-  import InputObject from "./InputObject.svelte";
+  import InputObject from "./Inputobject.svelte";
 
   export let block = null;
   export let fields = null;
