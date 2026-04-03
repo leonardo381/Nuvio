@@ -1,4 +1,3 @@
-<!--
 <script>
   import { createEventDispatcher } from "svelte";
   import FieldShell from "./FieldShell.svelte";
@@ -9,55 +8,27 @@
   export let error = "";
 
   const dispatch = createEventDispatcher();
+
   $: id = `schema-${field?.key || "field"}`;
 
-  $: options = Array.isArray(field?.options?.values) ? field.options.values : [];
+  $: rawOptions = Array.isArray(field?.options)
+    ? field.options
+    : Array.isArray(field?.options?.values)
+      ? field.options.values
+      : [];
+
+  $: options = rawOptions.map((opt) =>
+    typeof opt === "string"
+      ? { label: opt, value: opt }
+      : {
+          label: opt?.label ?? opt?.value ?? "",
+          value: opt?.value ?? ""
+        }
+  );
 
   function onChange(e) {
     value = e.currentTarget.value;
-    dispatch("change", value);
-  }
-</script>
-
-<FieldShell {field} {id} {error} required={!!field?.required}>
-  <select
-    id={id}
-    name={field?.key}
-    class="form-select"
-    {disabled}
-    bind:value
-    on:change={onChange}
-  >
-    <option value="">Select…</option>
-    {#each options as opt}
-      <option value={opt}>{opt}</option>
-    {/each}
-  </select>
-</FieldShell>
-
-<style>
-  .form-select { width:100%; padding:10px; border:1px solid rgba(0,0,0,.2); border-radius:8px; background:white; }
-</style>
--->
-<script>
-  import { createEventDispatcher } from "svelte";
-  import FieldShell from "./FieldShell.svelte";
-
-  export let field;
-  export let value = "";
-  export let disabled = false;
-  export let error = "";
-
-  const dispatch = createEventDispatcher();
-  $: id = `schema-${field?.key || "field"}`;
-
-  $: options = Array.isArray(field?.options?.values)
-    ? field.options.values
-    : [];
-
-  function onChange(e) {
-    value = e.currentTarget.value;
-    dispatch("change", value);
+    dispatch("change", { value });
   }
 </script>
 
@@ -72,12 +43,12 @@
       on:change={onChange}
     >
       <option value="">Select…</option>
+
       {#each options as opt}
-        <option value={opt}>{opt}</option>
+        <option value={opt.value}>{opt.label}</option>
       {/each}
     </select>
 
-    <!-- arrow -->
     <span class="pb-select-arrow"></span>
   </div>
 </FieldShell>
