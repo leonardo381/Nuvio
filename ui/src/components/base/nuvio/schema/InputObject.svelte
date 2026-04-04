@@ -30,6 +30,7 @@
     <SchemaForm
       fields={field.fields ?? []}
       value={objectValue}
+      showImport={false}
       on:change={handleChange}
     />
   </div>
@@ -63,5 +64,5 @@
     padding: 14px;
     background: #ffffff;
   }
-  
+
 </style>

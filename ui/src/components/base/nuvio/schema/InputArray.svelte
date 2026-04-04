@@ -103,6 +103,7 @@
             <SchemaForm
               fields={field?.item?.fields ?? []}
               value={item}
+              showImport={false}
               on:change={(e) => updateItem(index, e.detail.value)}
             />
           </div>

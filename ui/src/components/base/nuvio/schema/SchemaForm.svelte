@@ -15,12 +15,14 @@
   export let block = null;
   export let fields = null;
   export let value = null;
+  export let showImport = true;
 
   const dispatch = createEventDispatcher();
 
   let schema = { fields: [] };
   let values = {};
   let lastKey = null;
+  let importInput;
 
   async function loadSchema() {
     if (fields) {
@@ -59,6 +61,29 @@
     dispatch("propsChange", values);
   }
 
+  function openImportPicker() {
+    importInput?.click();
+  }
+
+  async function handleImportFile(event) {
+    const file = event.currentTarget?.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      values = parsed || {};
+      dispatch("change", { value: values });
+      dispatch("propsChange", values);
+    } catch (err) {
+      console.error("Failed to import JSON:", err);
+      alert("Invalid JSON file.");
+    } finally {
+      event.currentTarget.value = "";
+    }
+  }
+
   onMount(() => {
     lastKey = block?.component_key;
     loadSchema();
@@ -78,6 +103,39 @@
     values = value;
   }
 </script>
+
+{#if showImport}
+  <div style="margin-bottom: 12px; display: flex; justify-content: flex-end;">
+    <button
+      type="button"
+      on:click={openImportPicker}
+      style="
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 14px;
+        border: 1px solid #d9e0e7;
+        border-radius: 10px;
+        background: #ffffff;
+        color: #344054;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+      "
+    >
+      Import JSON
+    </button>
+
+    <input
+      bind:this={importInput}
+      type="file"
+      accept=".json,application/json"
+      style="display: none;"
+      on:change={handleImportFile}
+    />
+  </div>
+{/if}
 
 {#each schema.fields as field (field.key)}
   {#if field.type === "text"}
