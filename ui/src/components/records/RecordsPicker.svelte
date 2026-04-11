@@ -47,6 +47,8 @@
 
     $: canSelectMore = maxSelect <= 0 || maxSelect > selected.length;
 
+    $: canCreateRecords = ApiClient.isAdminSuperuser();
+
     export function show() {
         filter = "";
         list = [];
@@ -260,7 +262,7 @@
             autocompleteCollection={collection}
             on:submit={(e) => (filter = e.detail)}
         />
-        {#if !isView}
+        {#if !isView && canCreateRecords}
             <button
                 type="button"
                 class="btn btn-pill btn-transparent btn-hint p-l-xs p-r-xs"

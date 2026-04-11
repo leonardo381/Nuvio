@@ -29,11 +29,11 @@
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
     import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
+    import ClientRoleUi from "@/utils/ClientRoleUi";
     const dispatch = createEventDispatcher();
     const formId = "record_" + CommonHelper.randomString(5);
     const tabFormKey = "form";
     const tabProviderKey = "providers";
-    const clientEditableCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
 
     export let collection;
 
@@ -98,7 +98,17 @@
     $: skipFieldNames = isAuthCollection ? authSkipFieldNames : baseSkipFieldNames;
 
     $: regularFields =
-        collection?.fields?.filter((f) => !skipFieldNames.includes(f.name) && f.type != "autodate") || [];
+        collection?.fields?.filter((f) => {
+            if (skipFieldNames.includes(f.name) || f.type == "autodate") {
+                return false;
+            }
+
+            if (ClientRoleUi.isClientFieldHidden(collection, f.name, "hiddenFormFields")) {
+                return false;
+            }
+
+            return true;
+        }) || [];
 
     function canEditCurrentCollection() {
         if (ApiClient.isAdminSuperuser()) {
@@ -109,11 +119,16 @@
             return false;
         }
 
-        return clientEditableCollectionNames.has((collection?.name || "").toLowerCase());
+        return ClientRoleUi.isClientEditableCollection(collection);
     }
 
     export function show(model) {
         if (!canEditCurrentCollection()) {
+            return;
+        }
+
+        const hasExistingRecordModel = !!(typeof model == "string" ? model : model?.id);
+        if (ApiClient.isClientSuperuser() && !hasExistingRecordModel) {
             return;
         }
 

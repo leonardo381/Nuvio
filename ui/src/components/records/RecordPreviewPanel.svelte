@@ -1,6 +1,7 @@
 <script>
     import { addErrorToast } from "@/stores/toasts";
     import ApiClient from "@/utils/ApiClient";
+    import ClientRoleUi from "@/utils/ClientRoleUi";
     import OverlayPanel from "@/components/base/OverlayPanel.svelte";
     import RecordFieldValue from "@/components/records/RecordFieldValue.svelte";
 
@@ -9,6 +10,10 @@
     let recordPanel;
     let record = {};
     let isLoading = false;
+
+    $: visibleFields = (collection?.fields || []).filter(
+        (field) => !ClientRoleUi.isClientFieldHidden(collection, field.name, "hiddenPreviewFields"),
+    );
 
     $: hasEditorField = !!collection?.fields?.find((f) => f.type === "editor");
 
@@ -65,7 +70,7 @@
 
     <table class="table-border preview-table" class:table-loading={isLoading}>
         <tbody>
-            {#each collection?.fields as field}
+            {#each visibleFields as field}
                 <tr>
                     <td class="min-width txt-hint txt-bold">{field.name}</td>
                     <td class="col-field">

@@ -22,9 +22,10 @@
         isCollectionsLoading,
         loadCollections,
     } from "@/stores/collections";
+    import ClientRoleUi from "@/utils/ClientRoleUi";
 
     const initialQueryParams = new URLSearchParams($querystring);
-    const clientVisibleCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
+    const clientVisibleCollectionNames = ClientRoleUi.clientEditableCollectionNames;
 
     let collectionUpsertPanel;
     let collectionDocsPanel;
@@ -38,6 +39,7 @@
     let totalCount = 0; // used to manully change the count without the need of reloading the recordsCount component
     let canManageCollectionActions = false;
     let canManageRecordActions = false;
+    let canCreateRecords = false;
     let isClientCollectionMode = false;
 
     loadCollections(selectedCollectionIdOrName);
@@ -49,6 +51,8 @@
     $: canManageRecordActions = ApiClient.isAdminSuperuser()
         || (isClientCollectionMode
             && clientVisibleCollectionNames.has(($activeCollection?.name || "").toLowerCase()));
+
+    $: canCreateRecords = ApiClient.isAdminSuperuser();
 
     $: reactiveParams = new URLSearchParams($querystring);
 
@@ -260,7 +264,7 @@
                     </button>
                 {/if}
 
-                {#if $activeCollection.type !== "view" && canManageRecordActions}
+                {#if $activeCollection.type !== "view" && canCreateRecords}
                     <button type="button" class="btn btn-expanded" on:click={() => recordUpsertPanel?.show()}>
                         <i class="ri-add-line" />
                         <span class="txt">New record</span>
@@ -297,7 +301,7 @@
                 recordsCount?.reload();
             }}
             on:new={() => {
-                if (!canManageRecordActions) {
+                if (!canCreateRecords) {
                     return;
                 }
                 recordUpsertPanel?.show();

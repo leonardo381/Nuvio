@@ -83,6 +83,8 @@
 
     $: canSubmit = !isLoading && !!selectedFile?.name;
 
+    $: canCreateRecords = ApiClient.isAdminSuperuser();
+
     export function show() {
         loadList(true);
 
@@ -252,13 +254,15 @@
                         autocompleteCollection={selectedCollection}
                         on:submit={(e) => (filter = e.detail)}
                     />
-                    <button
-                        type="button"
-                        class="btn btn-pill btn-transparent btn-hint p-l-xs p-r-xs"
-                        on:click={() => upsertPanel?.show()}
-                    >
-                        <div class="txt">New record</div>
-                    </button>
+                    {#if canCreateRecords}
+                        <button
+                            type="button"
+                            class="btn btn-pill btn-transparent btn-hint p-l-xs p-r-xs"
+                            on:click={() => upsertPanel?.show()}
+                        >
+                            <div class="txt">New record</div>
+                        </button>
+                    {/if}
                 </div>
                 <Scroller
                     class="files-list"

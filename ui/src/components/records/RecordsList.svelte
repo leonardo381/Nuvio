@@ -11,6 +11,7 @@
     import SortHeader from "@/components/base/SortHeader.svelte";
     import Toggler from "@/components/base/Toggler.svelte";
     import RecordFieldValue from "@/components/records/RecordFieldValue.svelte";
+    import ClientRoleUi from "@/utils/ClientRoleUi";
 
     const dispatch = createEventDispatcher();
     const sortRegex = /^([\+\-])?(\w+)$/;
@@ -49,9 +50,21 @@
     $: canManageRecordActions = ApiClient.isAdminSuperuser();
 
     // skip unused superusers fields
-    $: fields = (collection?.fields || []).filter(
-        (f) => !f.hidden && (!isSuperusers || !unusedSuperusersFields.includes(f.name)),
-    );
+    $: fields = (collection?.fields || []).filter((f) => {
+        if (f.hidden) {
+            return false;
+        }
+
+        if (isSuperusers && unusedSuperusersFields.includes(f.name)) {
+            return false;
+        }
+
+        if (ClientRoleUi.isClientFieldHidden(collection, f.name, "hiddenGridFields")) {
+            return false;
+        }
+
+        return true;
+    });
 
     $: editorFields = fields.filter((f) => f.type === "editor");
 
