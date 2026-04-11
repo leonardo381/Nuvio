@@ -33,6 +33,7 @@
     const formId = "record_" + CommonHelper.randomString(5);
     const tabFormKey = "form";
     const tabProviderKey = "providers";
+    const clientEditableCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
 
     export let collection;
 
@@ -52,6 +53,7 @@
     let isLoading = true;
     let initialCollection = collection;
     let regularFields = [];
+    let canUseDangerousActions = false;
     //MODULE: TMP
     let schemaPropsDraft = null;
     $: isAuthCollection = collection?.type === "auth";
@@ -81,6 +83,8 @@
         onCollectionChange();
     }
 
+    $: canUseDangerousActions = ApiClient.isAdminSuperuser();
+
     const baseSkipFieldNames = ["id"];
 
     const authSkipFieldNames = baseSkipFieldNames.concat(
@@ -96,8 +100,20 @@
     $: regularFields =
         collection?.fields?.filter((f) => !skipFieldNames.includes(f.name) && f.type != "autodate") || [];
 
+    function canEditCurrentCollection() {
+        if (ApiClient.isAdminSuperuser()) {
+            return true;
+        }
+
+        if (!ApiClient.isClientSuperuser()) {
+            return false;
+        }
+
+        return clientEditableCollectionNames.has((collection?.name || "").toLowerCase());
+    }
+
     export function show(model) {
-        if (!ApiClient.isAdminSuperuser()) {
+        if (!canEditCurrentCollection()) {
             return;
         }
 
@@ -621,7 +637,7 @@ async function save(hidePanel = true) {
                 <strong>{collection?.name}</strong> record
             </h4>
 
-            {#if !isNew}
+            {#if !isNew && canUseDangerousActions}
                 <div class="flex-fill" />
                 <div
                     tabindex="0"

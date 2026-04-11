@@ -7,6 +7,7 @@
     import ApiClient from "@/utils/ApiClient";
 
     const pinnedStorageKey = "@pinnedCollections";
+    const clientVisibleCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
 
     let collectionPanel;
     let searchTerm = "";
@@ -14,6 +15,7 @@
     let showSystemSection = false;
     let oldCollectionId;
     let canManageCollections = false;
+    let isClientCollectionMode = false;
 
     loadPinned();
 
@@ -32,7 +34,17 @@
 
     $: canManageCollections = ApiClient.isAdminSuperuser();
 
-    $: filtered = $collections.filter((c) => {
+    $: isClientCollectionMode = ApiClient.isClientSuperuser();
+
+    $: visibleCollections = $collections.filter((c) => {
+        if (!isClientCollectionMode) {
+            return true;
+        }
+
+        return clientVisibleCollectionNames.has((c?.name || "").toLowerCase());
+    });
+
+    $: filtered = visibleCollections.filter((c) => {
         return c.id == searchTerm || c.name?.replace(/\s+/g, "")?.toLowerCase()?.includes(normalizedSearch);
     });
 
@@ -105,45 +117,51 @@
         class:fade={$isCollectionsLoading}
         class:sidebar-content-compact={filtered.length > 20}
     >
-        {#if pinnedCollections.length}
-            <div class="sidebar-title">Pinned</div>
-            {#each pinnedCollections as collection (collection.id)}
+        {#if isClientCollectionMode}
+            {#each filtered as collection (collection.id)}
                 <CollectionSidebarItem {collection} bind:pinnedIds />
             {/each}
-        {/if}
-
-        {#if unpinnedRegularCollections.length}
+        {:else}
             {#if pinnedCollections.length}
-                <div class="sidebar-title">Others</div>
-            {/if}
-            {#each unpinnedRegularCollections as collection (collection.id)}
-                <CollectionSidebarItem {collection} bind:pinnedIds />
-            {/each}
-        {/if}
-
-        {#if unpinnedSystemCollections.length}
-            <button
-                type="button"
-                class="sidebar-title m-b-xs"
-                class:link-hint={!normalizedSearch.length}
-                aria-label={showSystemSection ? "Expand system collections" : "Collapse system collections"}
-                aria-expanded={showSystemSection || normalizedSearch.length}
-                disabled={normalizedSearch.length}
-                on:click={() => {
-                    if (!normalizedSearch.length) {
-                        showSystemSection = !showSystemSection;
-                    }
-                }}
-            >
-                <span class="txt">System</span>
-                {#if !normalizedSearch.length}
-                    <i class="ri-arrow-{showSystemSection ? 'up' : 'down'}-s-line" aria-hidden="true" />
-                {/if}
-            </button>
-            {#if showSystemSection || normalizedSearch.length}
-                {#each unpinnedSystemCollections as collection (collection.id)}
+                <div class="sidebar-title">Pinned</div>
+                {#each pinnedCollections as collection (collection.id)}
                     <CollectionSidebarItem {collection} bind:pinnedIds />
                 {/each}
+            {/if}
+
+            {#if unpinnedRegularCollections.length}
+                {#if pinnedCollections.length}
+                    <div class="sidebar-title">Others</div>
+                {/if}
+                {#each unpinnedRegularCollections as collection (collection.id)}
+                    <CollectionSidebarItem {collection} bind:pinnedIds />
+                {/each}
+            {/if}
+
+            {#if unpinnedSystemCollections.length}
+                <button
+                    type="button"
+                    class="sidebar-title m-b-xs"
+                    class:link-hint={!normalizedSearch.length}
+                    aria-label={showSystemSection ? "Expand system collections" : "Collapse system collections"}
+                    aria-expanded={showSystemSection || normalizedSearch.length}
+                    disabled={normalizedSearch.length}
+                    on:click={() => {
+                        if (!normalizedSearch.length) {
+                            showSystemSection = !showSystemSection;
+                        }
+                    }}
+                >
+                    <span class="txt">System</span>
+                    {#if !normalizedSearch.length}
+                        <i class="ri-arrow-{showSystemSection ? 'up' : 'down'}-s-line" aria-hidden="true" />
+                    {/if}
+                </button>
+                {#if showSystemSection || normalizedSearch.length}
+                    {#each unpinnedSystemCollections as collection (collection.id)}
+                        <CollectionSidebarItem {collection} bind:pinnedIds />
+                    {/each}
+                {/if}
             {/if}
         {/if}
 

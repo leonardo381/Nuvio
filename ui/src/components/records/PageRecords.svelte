@@ -24,6 +24,7 @@
     } from "@/stores/collections";
 
     const initialQueryParams = new URLSearchParams($querystring);
+    const clientVisibleCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
 
     let collectionUpsertPanel;
     let collectionDocsPanel;
@@ -37,12 +38,17 @@
     let totalCount = 0; // used to manully change the count without the need of reloading the recordsCount component
     let canManageCollectionActions = false;
     let canManageRecordActions = false;
+    let isClientCollectionMode = false;
 
     loadCollections(selectedCollectionIdOrName);
 
     $: canManageCollectionActions = ApiClient.isAdminSuperuser();
 
-    $: canManageRecordActions = ApiClient.isAdminSuperuser();
+    $: isClientCollectionMode = ApiClient.isClientSuperuser();
+
+    $: canManageRecordActions = ApiClient.isAdminSuperuser()
+        || (isClientCollectionMode
+            && clientVisibleCollectionNames.has(($activeCollection?.name || "").toLowerCase()));
 
     $: reactiveParams = new URLSearchParams($querystring);
 
@@ -56,6 +62,34 @@
         collectionQueryParam != $activeCollection?.name
     ) {
         changeActiveCollectionByIdOrName(collectionQueryParam);
+    }
+
+    $: allowedClientCollections = $collections.filter((c) =>
+        clientVisibleCollectionNames.has((c?.name || "").toLowerCase()),
+    );
+
+    $: roleVisibleCollectionsCount = isClientCollectionMode
+        ? allowedClientCollections.length
+        : $collections.length;
+
+    $: isClientActiveCollectionAllowed = !isClientCollectionMode
+        || clientVisibleCollectionNames.has(($activeCollection?.name || "").toLowerCase());
+
+    $: if (
+        isClientCollectionMode &&
+        !$isCollectionsLoading &&
+        $activeCollection?.id &&
+        !clientVisibleCollectionNames.has(($activeCollection?.name || "").toLowerCase())
+    ) {
+        const fallback = allowedClientCollections[0];
+        if (fallback) {
+            changeActiveCollectionByIdOrName(fallback.id);
+            selectedCollectionIdOrName = fallback.id;
+            updateQueryParams({
+                collection: fallback.id,
+                recordId: null,
+            });
+        }
     }
 
     // reset filter and sort on collection change
@@ -146,20 +180,22 @@
     }
 </script>
 
-{#if $isCollectionsLoading && !$collections.length}
+{#if $isCollectionsLoading && !roleVisibleCollectionsCount}
     <PageWrapper center>
         <div class="placeholder-section m-b-base">
             <span class="loader loader-lg" />
             <h1>Loading collections...</h1>
         </div>
     </PageWrapper>
-{:else if !$collections.length}
+{:else if !roleVisibleCollectionsCount}
     <PageWrapper center>
         <div class="placeholder-section m-b-base">
             <div class="icon">
                 <i class="ri-database-2-line" />
             </div>
-            {#if $hideControls}
+            {#if isClientCollectionMode}
+                <h1 class="m-b-10">No client collections available yet.</h1>
+            {:else if $hideControls}
                 <h1 class="m-b-10">You don't have any collections yet.</h1>
             {:else if canManageCollectionActions}
                 <h1 class="m-b-10">Create your first collection to add records!</h1>
@@ -172,6 +208,13 @@
                     <span class="txt">Create new collection</span>
                 </button>
             {/if}
+        </div>
+    </PageWrapper>
+{:else if isClientCollectionMode && !isClientActiveCollectionAllowed}
+    <PageWrapper center>
+        <div class="placeholder-section m-b-base">
+            <span class="loader loader-lg" />
+            <h1>Loading collections...</h1>
         </div>
     </PageWrapper>
 {:else}
