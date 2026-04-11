@@ -13,6 +13,10 @@ import ApiClient from "@/utils/ApiClient";
 import { isTokenExpired } from "pocketbase";
 import { wrap } from "svelte-spa-router/wrap";
 
+function isSuperuserAuth() {
+    return ApiClient.isSuperuserAuth();
+}
+
 const routes = {
     "/pbinstal/:token": wrap({
         asyncComponent: () => import("@/components/base/PageInstaller.svelte"),
@@ -42,55 +46,55 @@ const routes = {
 
     "/collections": wrap({
         component: PageRecords,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/logs": wrap({
         component: PageLogs,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings": wrap({
         component: PageApplication,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/mail": wrap({
         component: PageMail,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/storage": wrap({
         component: PageStorage,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/export-collections": wrap({
         component: PageExportCollections,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/import-collections": wrap({
         component: PageImportCollections,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/backups": wrap({
         component: PageBackups,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/crons": wrap({
         component: PageCrons,
-        conditions: [(_) => ApiClient.authStore.isValid],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 

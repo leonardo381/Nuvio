@@ -10,6 +10,10 @@ import { get } from "svelte/store";
 
 const superuserFileTokenKey = "pb_superuser_file_token";
 
+PocketBase.prototype.isSuperuserAuth = function () {
+    return this.authStore.isValid && this.authStore.record?.collectionName === "_superusers";
+};
+
 /**
  * Clears the authorized state and redirects to the login page.
  *

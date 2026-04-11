@@ -31,7 +31,7 @@
             return; // not an actual change
         }
 
-        showAppSidebar = !!e?.detail?.userData?.showAppSidebar;
+        showAppSidebar = !!e?.detail?.userData?.showAppSidebar && ApiClient.isSuperuserAuth();
 
         oldLocation = e?.detail?.location;
 
@@ -165,7 +165,7 @@
 
 <Confirmation />
 
-{#if showAppSidebar && !isTinyMCEPreloaded}
+{#if $superuser?.id && showAppSidebar && !isTinyMCEPreloaded}
     <div class="tinymce-preloader hidden">
         <TinyMCE
             conf={CommonHelper.defaultEditorOptions()}

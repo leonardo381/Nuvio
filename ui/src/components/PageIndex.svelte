@@ -5,7 +5,7 @@
     handler();
 
     function handler() {
-        if (ApiClient.authStore.isValid) {
+        if (ApiClient.isSuperuserAuth()) {
             replace("/collections");
         } else {
             ApiClient.logout();
