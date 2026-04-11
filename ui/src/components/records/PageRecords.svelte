@@ -1,6 +1,7 @@
 <script>
     import { tick } from "svelte";
     import { querystring } from "svelte-spa-router";
+    import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
     import tooltip from "@/actions/tooltip";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
@@ -34,8 +35,14 @@
     let sort = initialQueryParams.get("sort") || "-@rowid";
     let selectedCollectionIdOrName = initialQueryParams.get("collection") || $activeCollection?.id;
     let totalCount = 0; // used to manully change the count without the need of reloading the recordsCount component
+    let canManageCollectionActions = false;
+    let canManageRecordActions = false;
 
     loadCollections(selectedCollectionIdOrName);
+
+    $: canManageCollectionActions = ApiClient.isAdminSuperuser();
+
+    $: canManageRecordActions = ApiClient.isAdminSuperuser();
 
     $: reactiveParams = new URLSearchParams($querystring);
 
@@ -78,7 +85,7 @@
     async function showRecordById(recordId) {
         await tick(); // ensure that the reactive component params are resolved
 
-        $activeCollection?.type === "view"
+        $activeCollection?.type === "view" || !canManageRecordActions
             ? recordPreviewPanel.show(recordId)
             : recordUpsertPanel?.show(recordId);
     }
@@ -154,7 +161,7 @@
             </div>
             {#if $hideControls}
                 <h1 class="m-b-10">You don't have any collections yet.</h1>
-            {:else}
+            {:else if canManageCollectionActions}
                 <h1 class="m-b-10">Create your first collection to add records!</h1>
                 <button
                     type="button"
@@ -178,7 +185,7 @@
             </nav>
 
             <div class="inline-flex gap-5">
-                {#if !$hideControls}
+                {#if !$hideControls && canManageCollectionActions}
                     <button
                         type="button"
                         aria-label="Edit collection"
@@ -199,16 +206,18 @@
             </div>
 
             <div class="btns-group">
-                <button
-                    type="button"
-                    class="btn btn-outline"
-                    on:click={() => collectionDocsPanel?.show($activeCollection)}
-                >
-                    <i class="ri-code-s-slash-line" />
-                    <span class="txt">API Preview</span>
-                </button>
+                {#if canManageCollectionActions}
+                    <button
+                        type="button"
+                        class="btn btn-outline"
+                        on:click={() => collectionDocsPanel?.show($activeCollection)}
+                    >
+                        <i class="ri-code-s-slash-line" />
+                        <span class="txt">API Preview</span>
+                    </button>
+                {/if}
 
-                {#if $activeCollection.type !== "view"}
+                {#if $activeCollection.type !== "view" && canManageRecordActions}
                     <button type="button" class="btn btn-expanded" on:click={() => recordUpsertPanel?.show()}>
                         <i class="ri-add-line" />
                         <span class="txt">New record</span>
@@ -237,14 +246,19 @@
 
                 let showModel = e.detail._partial ? e.detail.id : e.detail;
 
-                $activeCollection.type === "view"
+                $activeCollection.type === "view" || !canManageRecordActions
                     ? recordPreviewPanel?.show(showModel)
                     : recordUpsertPanel?.show(showModel);
             }}
             on:delete={() => {
                 recordsCount?.reload();
             }}
-            on:new={() => recordUpsertPanel?.show()}
+            on:new={() => {
+                if (!canManageRecordActions) {
+                    return;
+                }
+                recordUpsertPanel?.show();
+            }}
         />
 
         <svelte:fragment slot="footer">

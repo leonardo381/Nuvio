@@ -32,6 +32,7 @@
     let hiddenColumns = [];
     let collumnsToHide = [];
     let hiddenColumnsKey = "";
+    let canManageRecordActions = false;
 
     const unusedSuperusersFields = ["verified", "emailVisibility"];
 
@@ -44,6 +45,8 @@
     $: isView = collection?.type === "view";
 
     $: isSuperusers = collection?.type === "auth" && collection.name === "_superusers";
+
+    $: canManageRecordActions = ApiClient.isAdminSuperuser();
 
     // skip unused superusers fields
     $: fields = (collection?.fields || []).filter(
@@ -331,7 +334,7 @@
     <table class="table" class:table-loading={isLoading}>
         <thead>
             <tr>
-                {#if !isView}
+                {#if !isView && canManageRecordActions}
                     <th class="bulk-select-col min-width">
                         {#if isLoading}
                             <span class="loader loader-sm" />
@@ -394,7 +397,7 @@
                         }
                     }}
                 >
-                    {#if !isView}
+                    {#if !isView && canManageRecordActions}
                         <td class="bulk-select-col min-width">
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -439,7 +442,7 @@
                                 >
                                     <span class="txt">Clear filters</span>
                                 </button>
-                            {:else if !isView}
+                            {:else if !isView && canManageRecordActions}
                                 <button
                                     type="button"
                                     class="btn btn-secondary btn-expanded m-t-sm"
@@ -472,7 +475,7 @@
     </table>
 </Scroller>
 
-{#if totalBulkSelected}
+{#if canManageRecordActions && totalBulkSelected}
     <div class="bulkbar" transition:fly={{ duration: 150, y: 5 }}>
         <div class="txt">
             Selected <strong>{totalBulkSelected}</strong>

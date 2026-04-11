@@ -96,6 +96,10 @@
     }
 
     export function show(model) {
+        if (!ApiClient.isAdminSuperuser()) {
+            return;
+        }
+
         load(model);
 
         confirmClose = true;

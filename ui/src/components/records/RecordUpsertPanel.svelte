@@ -97,6 +97,10 @@
         collection?.fields?.filter((f) => !skipFieldNames.includes(f.name) && f.type != "autodate") || [];
 
     export function show(model) {
+        if (!ApiClient.isAdminSuperuser()) {
+            return;
+        }
+
         load(model);
 
         confirmHide = true;

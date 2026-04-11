@@ -1,5 +1,6 @@
 <script>
     import tooltip from "@/actions/tooltip";
+    import ApiClient from "@/utils/ApiClient";
     import OverlayPanel from "@/components/base/OverlayPanel.svelte";
 
     const baseTabs = {
@@ -95,6 +96,10 @@
     }
 
     export function show(model) {
+        if (!ApiClient.isAdminSuperuser()) {
+            return;
+        }
+
         collection = model;
 
         changeTab(Object.keys(tabs)[0]);

@@ -4,6 +4,7 @@
     import CollectionUpsertPanel from "@/components/collections/CollectionUpsertPanel.svelte";
     import { hideControls } from "@/stores/app";
     import { activeCollection, collections, isCollectionsLoading } from "@/stores/collections";
+    import ApiClient from "@/utils/ApiClient";
 
     const pinnedStorageKey = "@pinnedCollections";
 
@@ -12,6 +13,7 @@
     let pinnedIds = [];
     let showSystemSection = false;
     let oldCollectionId;
+    let canManageCollections = false;
 
     loadPinned();
 
@@ -27,6 +29,8 @@
     $: if (pinnedIds) {
         localStorage.setItem(pinnedStorageKey, JSON.stringify(pinnedIds));
     }
+
+    $: canManageCollections = ApiClient.isAdminSuperuser();
 
     $: filtered = $collections.filter((c) => {
         return c.id == searchTerm || c.name?.replace(/\s+/g, "")?.toLowerCase()?.includes(normalizedSearch);
@@ -148,7 +152,7 @@
         {/if}
     </div>
 
-    {#if !$hideControls}
+    {#if !$hideControls && canManageCollections}
         <footer class="sidebar-footer">
             <button type="button" class="btn btn-block btn-outline" on:click={() => collectionPanel?.show()}>
                 <i class="ri-add-line" />
