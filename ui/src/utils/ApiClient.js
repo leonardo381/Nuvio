@@ -14,6 +14,22 @@ PocketBase.prototype.isSuperuserAuth = function () {
     return this.authStore.isValid && this.authStore.record?.collectionName === "_superusers";
 };
 
+PocketBase.prototype.getSuperuserRole = function () {
+    if (!this.isSuperuserAuth()) {
+        return "";
+    }
+
+    return this.authStore.record?.role === "client" ? "client" : "admin";
+};
+
+PocketBase.prototype.isAdminSuperuser = function () {
+    return this.getSuperuserRole() === "admin";
+};
+
+PocketBase.prototype.isClientSuperuser = function () {
+    return this.getSuperuserRole() === "client";
+};
+
 /**
  * Clears the authorized state and redirects to the login page.
  *

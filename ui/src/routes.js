@@ -17,6 +17,10 @@ function isSuperuserAuth() {
     return ApiClient.isSuperuserAuth();
 }
 
+function isAdminSuperuser() {
+    return ApiClient.isAdminSuperuser();
+}
+
 const routes = {
     "/pbinstal/:token": wrap({
         asyncComponent: () => import("@/components/base/PageInstaller.svelte"),
@@ -52,49 +56,49 @@ const routes = {
 
     "/logs": wrap({
         component: PageLogs,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings": wrap({
         component: PageApplication,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/mail": wrap({
         component: PageMail,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/storage": wrap({
         component: PageStorage,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/export-collections": wrap({
         component: PageExportCollections,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/import-collections": wrap({
         component: PageImportCollections,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/backups": wrap({
         component: PageBackups,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
     "/settings/crons": wrap({
         component: PageCrons,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 

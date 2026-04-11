@@ -19,6 +19,8 @@
     let oldLocation = undefined;
 
     let showAppSidebar = false;
+    let canAccessAdminAreas = false;
+    $: canAccessAdminAreas = ApiClient.isAdminSuperuser();
 
     let isTinyMCEPreloaded = false;
 
@@ -32,7 +34,6 @@
         }
 
         showAppSidebar = !!e?.detail?.userData?.showAppSidebar && ApiClient.isSuperuserAuth();
-
         oldLocation = e?.detail?.location;
 
         // resets
@@ -103,26 +104,28 @@
                 >
                     <i class="ri-database-2-line" />
                 </a>
-                <a
-                    href="/logs"
-                    class="menu-item"
-                    aria-label="Logs"
-                    use:link
-                    use:active={{ path: "/logs/?.*", className: "current-route" }}
-                    use:tooltip={{ text: "Logs", position: "right" }}
-                >
-                    <i class="ri-line-chart-line" />
-                </a>
-                <a
-                    href="/settings"
-                    class="menu-item"
-                    aria-label="Settings"
-                    use:link
-                    use:active={{ path: "/settings/?.*", className: "current-route" }}
-                    use:tooltip={{ text: "Settings", position: "right" }}
-                >
-                    <i class="ri-tools-line" />
-                </a>
+                {#if canAccessAdminAreas}
+                    <a
+                        href="/logs"
+                        class="menu-item"
+                        aria-label="Logs"
+                        use:link
+                        use:active={{ path: "/logs/?.*", className: "current-route" }}
+                        use:tooltip={{ text: "Logs", position: "right" }}
+                    >
+                        <i class="ri-line-chart-line" />
+                    </a>
+                    <a
+                        href="/settings"
+                        class="menu-item"
+                        aria-label="Settings"
+                        use:link
+                        use:active={{ path: "/settings/?.*", className: "current-route" }}
+                        use:tooltip={{ text: "Settings", position: "right" }}
+                    >
+                        <i class="ri-tools-line" />
+                    </a>
+                {/if}
             </nav>
 
             <div
@@ -138,15 +141,17 @@
                         {$superuser.email}
                     </div>
                     <hr />
-                    <a
-                        href="/collections?collection=_superusers"
-                        class="dropdown-item closable"
-                        role="menuitem"
-                        use:link
-                    >
-                        <i class="ri-shield-user-line" aria-hidden="true" />
-                        <span class="txt">Manage superusers</span>
-                    </a>
+                    {#if canAccessAdminAreas}
+                        <a
+                            href="/collections?collection=_superusers"
+                            class="dropdown-item closable"
+                            role="menuitem"
+                            use:link
+                        >
+                            <i class="ri-shield-user-line" aria-hidden="true" />
+                            <span class="txt">Manage superusers</span>
+                        </a>
+                    {/if}
                     <button type="button" class="dropdown-item closable" role="menuitem" on:click={logout}>
                         <i class="ri-logout-circle-line" aria-hidden="true" />
                         <span class="txt">Logout</span>
