@@ -3,9 +3,27 @@ import ApiClient from "@/utils/ApiClient";
 const clientEditableCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
 
 const clientCollectionUiConfig = {
+    assets: {
+        hiddenGridFields: ["id", "checksum", "size"],
+        hiddenFormFields: ["id", "checksum", "size"],
+        hiddenPreviewFields: [],
+    },
+
     blocks: {
-        hiddenGridFields: ["slot"],
-        hiddenFormFields: ["slot"],
+        hiddenGridFields: ["slot", "id", "component_key", "enabled", "props"],
+        hiddenFormFields: ["slot", "id", "component_key", "enabled", "props"],
+        hiddenPreviewFields: [],
+    },
+
+    pages: {
+        hiddenGridFields: ["id", "slug"],
+        hiddenFormFields: ["id", "slug"],
+        hiddenPreviewFields: [],
+    },
+
+    websites: {
+        hiddenGridFields: ["id", "slug"],
+        hiddenFormFields: ["id", "slug"],
         hiddenPreviewFields: [],
     },
 };

@@ -90,7 +90,7 @@
 
     $: normalizedCollectionName = (collection?.name || "").toLowerCase();
 
-    $: isClientPagesCollection = ApiClient.isClientSuperuser() && normalizedCollectionName === "pages";
+    $: isPagesCollection = normalizedCollectionName === "pages";
 
     $: blocksCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "blocks") || null;
 
@@ -926,7 +926,7 @@ async function save(hidePanel = true) {
                 {/if}
             {/each}
 
-            {#if isClientPagesCollection && record?.id && blocksCollection?.id}
+            {#if isPagesCollection && record?.id && blocksCollection?.id}
                 <hr />
                 <section class="client-page-blocks-in-panel">
                     <h5 class="m-b-sm">Blocks for this page</h5>
