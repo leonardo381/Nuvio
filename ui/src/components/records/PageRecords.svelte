@@ -10,7 +10,6 @@
     import CollectionDocsPanel from "@/components/collections/CollectionDocsPanel.svelte";
     import CollectionUpsertPanel from "@/components/collections/CollectionUpsertPanel.svelte";
     import CollectionsSidebar from "@/components/collections/CollectionsSidebar.svelte";
-    import ClientPageBlocksCards from "@/components/records/ClientPageBlocksCards.svelte";
     import RecordPreviewPanel from "@/components/records/RecordPreviewPanel.svelte";
     import RecordUpsertPanel from "@/components/records/RecordUpsertPanel.svelte";
     import RecordsCount from "@/components/records/RecordsCount.svelte";
@@ -33,13 +32,11 @@
     let recordUpsertPanel;
     let recordPreviewPanel;
     let clientBlocksUpsertPanel;
-    let clientPageBlocksCards;
     let recordsList;
     let recordsCount;
     let filter = initialQueryParams.get("filter") || "";
     let sort = initialQueryParams.get("sort") || "-@rowid";
     let selectedCollectionIdOrName = initialQueryParams.get("collection") || $activeCollection?.id;
-    let selectedClientPage = null;
     let totalCount = 0; // used to manully change the count without the need of reloading the recordsCount component
     let canManageCollectionActions = false;
     let canManageRecordActions = false;
@@ -76,15 +73,7 @@
         clientVisibleCollectionNames.has((c?.name || "").toLowerCase()),
     );
 
-    $: activeCollectionName = ($activeCollection?.name || "").toLowerCase();
-
-    $: isClientPagesContext = isClientCollectionMode && activeCollectionName === "pages";
-
     $: blocksCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "blocks") || null;
-
-    $: if (!isClientPagesContext && selectedClientPage?.id) {
-        selectedClientPage = null;
-    }
 
     $: roleVisibleCollectionsCount = isClientCollectionMode
         ? allowedClientCollections.length
@@ -123,7 +112,7 @@
         normalizeSort();
     }
 
-    $: if (!$isCollectionsLoading && initialQueryParams.get("recordId") && !isClientPagesContext) {
+    $: if (!$isCollectionsLoading && initialQueryParams.get("recordId")) {
         showRecordById(initialQueryParams.get("recordId"));
     }
 
@@ -143,10 +132,6 @@
     }
 
     function handleRecordSelect(record) {
-        if (isClientPagesContext) {
-            selectedClientPage = record;
-        }
-
         updateQueryParams({
             recordId: record.id,
         });
@@ -328,22 +313,6 @@
             }}
         />
 
-        {#if isClientPagesContext && selectedClientPage?.id}
-            <ClientPageBlocksCards
-                bind:this={clientPageBlocksCards}
-                page={selectedClientPage}
-                {blocksCollection}
-                on:edit={(e) => clientBlocksUpsertPanel?.show(e.detail)}
-            />
-
-            <RecordUpsertPanel
-                bind:this={clientBlocksUpsertPanel}
-                collection={blocksCollection}
-                on:save={() => clientPageBlocksCards?.reload()}
-                on:delete={() => clientPageBlocksCards?.reload()}
-            />
-        {/if}
-
         <svelte:fragment slot="footer">
             <RecordsCount
                 bind:this={recordsCount}
@@ -369,6 +338,7 @@
 <RecordUpsertPanel
     bind:this={recordUpsertPanel}
     collection={$activeCollection}
+    on:clientblockedit={(e) => clientBlocksUpsertPanel?.show(e.detail)}
     on:hide={() => {
         updateQueryParams({ recordId: null });
     }}
@@ -390,6 +360,13 @@
 
         recordsList?.reloadLoadedPages();
     }}
+/>
+
+<RecordUpsertPanel
+    bind:this={clientBlocksUpsertPanel}
+    collection={blocksCollection}
+    on:save={() => recordUpsertPanel?.reloadClientPageBlocks?.()}
+    on:delete={() => recordUpsertPanel?.reloadClientPageBlocks?.()}
 />
 
 <RecordPreviewPanel

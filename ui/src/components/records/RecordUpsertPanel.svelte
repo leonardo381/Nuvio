@@ -29,6 +29,8 @@
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
     import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
+    import ClientPageBlocksCards from "@/components/records/ClientPageBlocksCards.svelte";
+    import { collections } from "@/stores/collections";
     import ClientRoleUi from "@/utils/ClientRoleUi";
     const dispatch = createEventDispatcher();
     const formId = "record_" + CommonHelper.randomString(5);
@@ -56,6 +58,7 @@
     let canUseDangerousActions = false;
     //MODULE: TMP
     let schemaPropsDraft = null;
+    let clientPageBlocksCards;
     $: isAuthCollection = collection?.type === "auth";
 
     $: isSuperusersCollection = collection?.name === "_superusers";
@@ -84,6 +87,12 @@
     }
 
     $: canUseDangerousActions = ApiClient.isAdminSuperuser();
+
+    $: normalizedCollectionName = (collection?.name || "").toLowerCase();
+
+    $: isClientPagesCollection = ApiClient.isClientSuperuser() && normalizedCollectionName === "pages";
+
+    $: blocksCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "blocks") || null;
 
     const baseSkipFieldNames = ["id"];
 
@@ -613,6 +622,10 @@ async function save(hidePanel = true) {
         CommonHelper.copyToClipboard(JSON.stringify(original, null, 2));
         addInfoToast("The record JSON was copied to your clipboard!", 3000);
     }
+
+    export function reloadClientPageBlocks() {
+        clientPageBlocksCards?.reload();
+    }
 </script>
 
 <OverlayPanel
@@ -912,6 +925,19 @@ async function save(hidePanel = true) {
                     <GeoPointField {field} {original} {record} bind:value={record[field.name]} />
                 {/if}
             {/each}
+
+            {#if isClientPagesCollection && record?.id && blocksCollection?.id}
+                <hr />
+                <section class="client-page-blocks-in-panel">
+                    <h5 class="m-b-sm">Blocks for this page</h5>
+                    <ClientPageBlocksCards
+                        bind:this={clientPageBlocksCards}
+                        page={record}
+                        {blocksCollection}
+                        on:edit={(e) => dispatch("clientblockedit", e.detail)}
+                    />
+                </section>
+            {/if}
 
         </form>
 
