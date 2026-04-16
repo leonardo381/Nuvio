@@ -13,7 +13,7 @@
         {
             key: "site",
             label: "Site",
-            collectionNames: new Set(["websites", "website", "pages", "page", "blocks", "components", "assets"]),
+            collectionNames: new Set(["websites", "pages", "blocks", "components", "assets"]),
         },
         {
             key: "leads",
@@ -86,11 +86,15 @@
 
     $: unpinnedSystemCollections = filtered.filter((c) => c.system && !pinnedIds.includes(c.id));
 
+    $: regularCollectionsForGrouping = isClientCollectionMode
+        ? filtered.filter((c) => !c.system)
+        : unpinnedRegularCollections;
+
     // NUVIO CUSTOM START: Partition regular collections into custom groups + fallback Others.
     $: groupedRegularCollections = customCollectionsGroups.map((group) => {
         return {
             ...group,
-            collections: unpinnedRegularCollections.filter((collection) => {
+            collections: regularCollectionsForGrouping.filter((collection) => {
                 return group.collectionNames.has((collection?.name || "").toLowerCase());
             }),
         };
@@ -100,7 +104,7 @@
         groupedRegularCollections.flatMap((group) => group.collections.map((collection) => collection.id)),
     );
 
-    $: ungroupedRegularCollections = unpinnedRegularCollections.filter((collection) => {
+    $: ungroupedRegularCollections = regularCollectionsForGrouping.filter((collection) => {
         return !groupedCollectionNames.has(collection.id);
     });
     // NUVIO CUSTOM END: Partition regular collections into custom groups + fallback Others.
@@ -183,9 +187,46 @@
         class:sidebar-content-compact={filtered.length > 20}
     >
         {#if isClientCollectionMode}
-            {#each filtered as collection (collection.id)}
-                <CollectionSidebarItem {collection} bind:pinnedIds />
+            <!-- NUVIO CUSTOM START: Render custom grouped sidebar sections (Site/Leads/Markting/Reviews). -->
+            {#each groupedRegularCollections as group (group.key)}
+                <button
+                    type="button"
+                    class="sidebar-title m-b-xs"
+                    class:link-hint={!normalizedSearch.length}
+                    aria-label={showCustomGroupSections[group.key]
+                        ? "Collapse grouped collections"
+                        : "Expand grouped collections"}
+                    aria-expanded={showCustomGroupSections[group.key] || normalizedSearch.length}
+                    disabled={normalizedSearch.length}
+                    on:click={() => {
+                        if (!normalizedSearch.length) {
+                            showCustomGroupSections[group.key] = !showCustomGroupSections[group.key];
+                            showCustomGroupSections = { ...showCustomGroupSections };
+                        }
+                    }}
+                >
+                    <span class="txt">{group.label}</span>
+                    {#if !normalizedSearch.length}
+                        <i
+                            class="ri-arrow-{showCustomGroupSections[group.key] ? 'up' : 'down'}-s-line"
+                            aria-hidden="true"
+                        />
+                    {/if}
+                </button>
+                {#if showCustomGroupSections[group.key] || normalizedSearch.length}
+                    {#each group.collections as collection (collection.id)}
+                        <CollectionSidebarItem {collection} bind:pinnedIds />
+                    {/each}
+                {/if}
             {/each}
+
+            {#if ungroupedRegularCollections.length}
+                <div class="sidebar-title">Others</div>
+                {#each ungroupedRegularCollections as collection (collection.id)}
+                    <CollectionSidebarItem {collection} bind:pinnedIds />
+                {/each}
+            {/if}
+            <!-- NUVIO CUSTOM END: Render custom grouped sidebar sections (Site/Leads/Markting/Reviews). -->
         {:else}
             {#if pinnedCollections.length}
                 <div class="sidebar-title">Pinned</div>
