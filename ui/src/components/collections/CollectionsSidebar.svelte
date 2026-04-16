@@ -8,11 +8,43 @@
 
     const pinnedStorageKey = "@pinnedCollections";
     const clientVisibleCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
+    // NUVIO CUSTOM START: Admin collection sidebar grouped aggregators.
+    const customCollectionsGroups = [
+        {
+            key: "site",
+            label: "Site",
+            collectionNames: new Set(["websites", "website", "pages", "page", "blocks", "components", "assets"]),
+        },
+        {
+            key: "leads",
+            label: "Leads",
+            collectionNames: new Set(["leads", "lead", "contacts", "contact", "forms", "submissions"]),
+        },
+        {
+            key: "markting",
+            label: "Markting",
+            collectionNames: new Set(["markting", "marketing", "campaigns", "newsletter", "newsletters"]),
+        },
+        {
+            key: "reviews",
+            label: "Reviews",
+            collectionNames: new Set(["reviews", "review", "testimonials", "ratings"]),
+        },
+    ];
+    // NUVIO CUSTOM END: Admin collection sidebar grouped aggregators.
 
     let collectionPanel;
     let searchTerm = "";
     let pinnedIds = [];
     let showSystemSection = false;
+    // NUVIO CUSTOM START: Expand/collapse state per custom sidebar group.
+    let showCustomGroupSections = {
+        site: true,
+        leads: true,
+        markting: true,
+        reviews: true,
+    };
+    // NUVIO CUSTOM END: Expand/collapse state per custom sidebar group.
     let oldCollectionId;
     let canManageCollections = false;
     let isClientCollectionMode = false;
@@ -54,6 +86,25 @@
 
     $: unpinnedSystemCollections = filtered.filter((c) => c.system && !pinnedIds.includes(c.id));
 
+    // NUVIO CUSTOM START: Partition regular collections into custom groups + fallback Others.
+    $: groupedRegularCollections = customCollectionsGroups.map((group) => {
+        return {
+            ...group,
+            collections: unpinnedRegularCollections.filter((collection) => {
+                return group.collectionNames.has((collection?.name || "").toLowerCase());
+            }),
+        };
+    });
+
+    $: groupedCollectionNames = new Set(
+        groupedRegularCollections.flatMap((group) => group.collections.map((collection) => collection.id)),
+    );
+
+    $: ungroupedRegularCollections = unpinnedRegularCollections.filter((collection) => {
+        return !groupedCollectionNames.has(collection.id);
+    });
+    // NUVIO CUSTOM END: Partition regular collections into custom groups + fallback Others.
+
     $: if ($activeCollection?.id && oldCollectionId != $activeCollection.id) {
         oldCollectionId = $activeCollection.id;
         if ($activeCollection.system && !pinnedCollections.find((c) => c.id == $activeCollection.id)) {
@@ -61,6 +112,20 @@
         } else {
             showSystemSection = false;
         }
+
+        // NUVIO CUSTOM START: Auto-expand the active collection custom group.
+        if (!$activeCollection.system && !pinnedCollections.find((c) => c.id == $activeCollection.id)) {
+            for (const group of customCollectionsGroups) {
+                if (group.collectionNames.has(($activeCollection?.name || "").toLowerCase())) {
+                    if (!showCustomGroupSections[group.key]) {
+                        showCustomGroupSections[group.key] = true;
+                        showCustomGroupSections = { ...showCustomGroupSections };
+                    }
+                    break;
+                }
+            }
+        }
+        // NUVIO CUSTOM END: Auto-expand the active collection custom group.
     }
 
     function scrollIntoView() {
@@ -130,12 +195,46 @@
             {/if}
 
             {#if unpinnedRegularCollections.length}
-                {#if pinnedCollections.length}
-                    <div class="sidebar-title">Others</div>
-                {/if}
-                {#each unpinnedRegularCollections as collection (collection.id)}
-                    <CollectionSidebarItem {collection} bind:pinnedIds />
+                <!-- NUVIO CUSTOM START: Render custom grouped sidebar sections (Site/Leads/Markting/Reviews). -->
+                {#each groupedRegularCollections as group (group.key)}
+                    <button
+                        type="button"
+                        class="sidebar-title m-b-xs"
+                        class:link-hint={!normalizedSearch.length}
+                        aria-label={showCustomGroupSections[group.key]
+                            ? "Collapse grouped collections"
+                            : "Expand grouped collections"}
+                        aria-expanded={showCustomGroupSections[group.key] || normalizedSearch.length}
+                        disabled={normalizedSearch.length}
+                        on:click={() => {
+                            if (!normalizedSearch.length) {
+                                showCustomGroupSections[group.key] = !showCustomGroupSections[group.key];
+                                showCustomGroupSections = { ...showCustomGroupSections };
+                            }
+                        }}
+                    >
+                        <span class="txt">{group.label}</span>
+                        {#if !normalizedSearch.length}
+                            <i
+                                class="ri-arrow-{showCustomGroupSections[group.key] ? 'up' : 'down'}-s-line"
+                                aria-hidden="true"
+                            />
+                        {/if}
+                    </button>
+                    {#if showCustomGroupSections[group.key] || normalizedSearch.length}
+                        {#each group.collections as collection (collection.id)}
+                            <CollectionSidebarItem {collection} bind:pinnedIds />
+                        {/each}
+                    {/if}
                 {/each}
+
+                {#if ungroupedRegularCollections.length}
+                    <div class="sidebar-title">Others</div>
+                    {#each ungroupedRegularCollections as collection (collection.id)}
+                        <CollectionSidebarItem {collection} bind:pinnedIds />
+                    {/each}
+                {/if}
+                <!-- NUVIO CUSTOM END: Render custom grouped sidebar sections (Site/Leads/Markting/Reviews). -->
             {/if}
 
             {#if unpinnedSystemCollections.length}
