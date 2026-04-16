@@ -31,7 +31,9 @@
     let collectionDocsPanel;
     let recordUpsertPanel;
     let recordPreviewPanel;
+    // NUVIO CUSTOM START: Embedded page-blocks editor panel wiring.
     let clientBlocksUpsertPanel;
+    // NUVIO CUSTOM END: Embedded page-blocks editor panel wiring.
     let recordsList;
     let recordsCount;
     let filter = initialQueryParams.get("filter") || "";
@@ -73,7 +75,9 @@
         clientVisibleCollectionNames.has((c?.name || "").toLowerCase()),
     );
 
+    // NUVIO CUSTOM START: Resolve Blocks collection for embedded page-block actions.
     $: blocksCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "blocks") || null;
+    // NUVIO CUSTOM END: Resolve Blocks collection for embedded page-block actions.
 
     $: roleVisibleCollectionsCount = isClientCollectionMode
         ? allowedClientCollections.length
@@ -335,6 +339,7 @@
 
 <CollectionDocsPanel bind:this={collectionDocsPanel} />
 
+<!-- NUVIO CUSTOM START: Open Blocks record upsert from embedded "Blocks for this page" cards. -->
 <RecordUpsertPanel
     bind:this={recordUpsertPanel}
     collection={$activeCollection}
@@ -361,13 +366,16 @@
         recordsList?.reloadLoadedPages();
     }}
 />
+<!-- NUVIO CUSTOM END: Open Blocks record upsert from embedded "Blocks for this page" cards. -->
 
+<!-- NUVIO CUSTOM START: Refresh in-panel page blocks cards after block save/delete. -->
 <RecordUpsertPanel
     bind:this={clientBlocksUpsertPanel}
     collection={blocksCollection}
     on:save={() => recordUpsertPanel?.reloadClientPageBlocks?.()}
     on:delete={() => recordUpsertPanel?.reloadClientPageBlocks?.()}
 />
+<!-- NUVIO CUSTOM END: Refresh in-panel page blocks cards after block save/delete. -->
 
 <RecordPreviewPanel
     bind:this={recordPreviewPanel}

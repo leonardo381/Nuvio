@@ -1,4 +1,5 @@
 <script>
+    // NUVIO CUSTOM START: "Blocks for this page" cards component embedded in Pages record panel.
     import { createEventDispatcher } from "svelte";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
@@ -183,8 +184,10 @@
 
         return "No props summary yet.";
     }
+    // NUVIO CUSTOM END: "Blocks for this page" cards component embedded in Pages record panel.
 </script>
 
+<!-- NUVIO CUSTOM START: "Blocks for this page" cards markup and styles. -->
 <section class="client-page-blocks">
     <div class="section-header">
         <h5 class="m-0">Page Blocks</h5>
@@ -351,3 +354,4 @@
         justify-content: flex-end;
     }
 </style>
+<!-- NUVIO CUSTOM END: "Blocks for this page" cards markup and styles. -->

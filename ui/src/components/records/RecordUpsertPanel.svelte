@@ -29,8 +29,10 @@
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
     import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
+    // NUVIO CUSTOM START: Pages editor embedded blocks cards integration.
     import ClientPageBlocksCards from "@/components/records/ClientPageBlocksCards.svelte";
     import { collections } from "@/stores/collections";
+    // NUVIO CUSTOM END: Pages editor embedded blocks cards integration.
     import ClientRoleUi from "@/utils/ClientRoleUi";
     const dispatch = createEventDispatcher();
     const formId = "record_" + CommonHelper.randomString(5);
@@ -56,9 +58,10 @@
     let initialCollection = collection;
     let regularFields = [];
     let canUseDangerousActions = false;
-    //MODULE: TMP
+    // NUVIO CUSTOM START: Blocks schema props sync and embedded page-blocks cards state.
     let schemaPropsDraft = null;
     let clientPageBlocksCards;
+    // NUVIO CUSTOM END: Blocks schema props sync and embedded page-blocks cards state.
     $: isAuthCollection = collection?.type === "auth";
 
     $: isSuperusersCollection = collection?.name === "_superusers";
@@ -88,11 +91,13 @@
 
     $: canUseDangerousActions = ApiClient.isAdminSuperuser();
 
+    // NUVIO CUSTOM START: Pages/Blocks collection wiring for embedded page-blocks UI.
     $: normalizedCollectionName = (collection?.name || "").toLowerCase();
 
     $: isPagesCollection = normalizedCollectionName === "pages";
 
     $: blocksCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "blocks") || null;
+    // NUVIO CUSTOM END: Pages/Blocks collection wiring for embedded page-blocks UI.
 
     const baseSkipFieldNames = ["id"];
 
@@ -394,8 +399,7 @@ async function save(hidePanel = true) {
         } else {
             result = await ApiClient.collection(collection.id).update(record.id, data);
         }
-        //MODULE: TMP
-        //extra step only for blocks: patch props after create/update
+        // NUVIO CUSTOM START: Keep Blocks.props in sync with schema-driven editor payload.
         const isBlocks = collection?.name === "Blocks";
         if (isBlocks && schemaPropsDraft) {
             try {
@@ -407,6 +411,7 @@ async function save(hidePanel = true) {
                 // don't rethrow, so main save still succeeds
             }
         }
+        // NUVIO CUSTOM END: Keep Blocks.props in sync with schema-driven editor payload.
 
         addSuccessToast(isNew ? "Successfully created record." : "Successfully updated record.");
 
@@ -623,9 +628,11 @@ async function save(hidePanel = true) {
         addInfoToast("The record JSON was copied to your clipboard!", 3000);
     }
 
+    // NUVIO CUSTOM START: Exposed for PageRecords to refresh embedded page-blocks cards.
     export function reloadClientPageBlocks() {
         clientPageBlocksCards?.reload();
     }
+    // NUVIO CUSTOM END: Exposed for PageRecords to refresh embedded page-blocks cards.
 </script>
 
 <OverlayPanel
@@ -872,8 +879,9 @@ async function save(hidePanel = true) {
                 {/if}
             {/each}
             -->
+            <!-- NUVIO CUSTOM START: Blocks collection uses schema-driven props form. -->
             {#each regularFields as field (field.name)}
-                <!--MODULE: TMP-->
+                <!-- NUVIO CUSTOM: Blocks.props field is rendered through SchemaForm below. -->
                 {#if collection.name === "Blocks" && field.name === "props"}
                     <SchemaForm
                         block={record}
@@ -925,7 +933,9 @@ async function save(hidePanel = true) {
                     <GeoPointField {field} {original} {record} bind:value={record[field.name]} />
                 {/if}
             {/each}
+            <!-- NUVIO CUSTOM END: Blocks collection uses schema-driven props form. -->
 
+            <!-- NUVIO CUSTOM START: Embedded "Blocks for this page" section in Pages record panel. -->
             {#if isPagesCollection && record?.id && blocksCollection?.id}
                 <hr />
                 <section class="client-page-blocks-in-panel">
@@ -938,6 +948,7 @@ async function save(hidePanel = true) {
                     />
                 </section>
             {/if}
+            <!-- NUVIO CUSTOM END: Embedded "Blocks for this page" section in Pages record panel. -->
 
         </form>
 

@@ -1,5 +1,6 @@
 import ApiClient from "@/utils/ApiClient";
 
+// NUVIO CUSTOM START: Client role collection access and field visibility configuration.
 const clientEditableCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
 
 const clientCollectionUiConfig = {
@@ -27,6 +28,7 @@ const clientCollectionUiConfig = {
         hiddenPreviewFields: [],
     },
 };
+// NUVIO CUSTOM END: Client role collection access and field visibility configuration.
 
 function normalizeCollectionName(collectionOrName) {
     if (!collectionOrName) {
