@@ -106,7 +106,7 @@
 
     $: websiteSettingsRole = ApiClient.isClientSuperuser() ? "client" : "admin";
 
-    $: websiteSettingsFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole).fields;
+    $: websiteSettingsFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, record?.settings).fields;
 
     $: hasWebsiteSettingsField = (collection?.fields || []).some(
         (field) => (field?.name || "").toLowerCase() === "settings",
@@ -312,7 +312,10 @@
             return;
         }
 
-        websiteSettingsDraft = normalizeWebsiteSettingsValue(record?.settings, websiteSettingsFields);
+        const normalizedFullSettings = normalizeWebsiteSettingsValue(record?.settings);
+        const roleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, normalizedFullSettings).fields;
+
+        websiteSettingsDraft = normalizeWebsiteSettingsValue(normalizedFullSettings, roleScopedFields);
         record.settings = structuredClone(websiteSettingsDraft);
     }
 
@@ -322,7 +325,14 @@
         }
 
         const nextValue = event.detail?.value ?? event.detail ?? {};
-        websiteSettingsDraft = normalizeWebsiteSettingsValue(nextValue, websiteSettingsFields);
+        const mergedSettings = {
+            ...normalizeWebsiteSettingsValue(record?.settings),
+            ...(nextValue || {}),
+        };
+        const normalizedFullSettings = normalizeWebsiteSettingsValue(mergedSettings);
+        const roleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, normalizedFullSettings).fields;
+
+        websiteSettingsDraft = normalizeWebsiteSettingsValue(normalizedFullSettings, roleScopedFields);
         record.settings = structuredClone(websiteSettingsDraft);
     }
     // NUVIO CUSTOM END: Website settings schema-form state sync.

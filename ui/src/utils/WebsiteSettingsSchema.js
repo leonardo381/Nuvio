@@ -2,9 +2,68 @@
 const ROLE_ADMIN = "admin";
 const ROLE_CLIENT = "client";
 const defaultEditableBy = [ROLE_ADMIN];
+const websiteFeatureFlagKeys = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
+const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "i18n"]);
 
 export const websiteSettingsSchema = {
     fields: [
+        {
+            key: "featureFlags",
+            label: "Feature availability",
+            type: "object",
+            editableBy: [ROLE_ADMIN],
+            fields: [
+                {
+                    key: "whatsapp",
+                    label: "WhatsApp",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "contactForm",
+                    label: "Contact form",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "reviews",
+                    label: "Reviews",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "newsletter",
+                    label: "Newsletter",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "booking",
+                    label: "Booking",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "reports",
+                    label: "Reports",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "i18n",
+                    label: "Internationalization",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+            ],
+        },
         {
             key: "whatsapp",
             label: "WhatsApp",
@@ -225,6 +284,23 @@ function filterFieldsByRole(fields, role) {
     return filtered;
 }
 
+function filterFieldsByClientFeatureFlags(fields, featureFlags) {
+    const result = [];
+
+    for (const field of fields || []) {
+        if (!websiteFeatureSectionKeys.has(field?.key)) {
+            result.push(field);
+            continue;
+        }
+
+        if (featureFlags?.[field.key] !== false) {
+            result.push(field);
+        }
+    }
+
+    return result;
+}
+
 function parseRawSettings(rawSettings) {
     if (isPlainObject(rawSettings)) {
         return cloneValue(rawSettings);
@@ -309,11 +385,21 @@ function normalizeFieldValue(field, value) {
     return value;
 }
 
-export function getWebsiteSettingsSchemaForRole(role = ROLE_ADMIN) {
+export function getWebsiteSettingsSchemaForRole(role = ROLE_ADMIN, rawSettings = null) {
     const normalizedRole = normalizeRole(role);
+    const roleFilteredFields = filterFieldsByRole(websiteSettingsSchema.fields, normalizedRole);
+
+    if (normalizedRole !== ROLE_CLIENT) {
+        return {
+            fields: roleFilteredFields,
+        };
+    }
+
+    const normalizedSettings = normalizeWebsiteSettingsValue(rawSettings, websiteSettingsSchema.fields);
+    const featureFlags = normalizedSettings?.featureFlags || {};
 
     return {
-        fields: filterFieldsByRole(websiteSettingsSchema.fields, normalizedRole),
+        fields: filterFieldsByClientFeatureFlags(roleFilteredFields, featureFlags),
     };
 }
 
@@ -333,5 +419,16 @@ export function normalizeWebsiteSettingsValue(rawSettings, schemaFields = websit
     }
 
     return normalized;
+}
+
+export function isWebsiteFeatureAvailable(rawSettings, featureKey, fallback = true) {
+    if (!websiteFeatureFlagKeys.includes(featureKey)) {
+        return fallback;
+    }
+
+    const normalizedSettings = normalizeWebsiteSettingsValue(rawSettings, websiteSettingsSchema.fields);
+    const value = normalizedSettings?.featureFlags?.[featureKey];
+
+    return typeof value === "boolean" ? value : fallback;
 }
 // NUVIO CUSTOM END: Static website-level settings schema with role-aware filtering.
