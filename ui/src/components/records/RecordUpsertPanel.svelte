@@ -29,6 +29,7 @@
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
     import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
+    import { getWebsiteSettingsSchemaForRole, normalizeWebsiteSettingsValue } from "@/utils/WebsiteSettingsSchema";
     // NUVIO CUSTOM START: Pages editor embedded blocks cards integration.
     import ClientPageBlocksCards from "@/components/records/ClientPageBlocksCards.svelte";
     import { collections } from "@/stores/collections";
@@ -58,10 +59,11 @@
     let initialCollection = collection;
     let regularFields = [];
     let canUseDangerousActions = false;
-    // NUVIO CUSTOM START: Blocks schema props sync and embedded page-blocks cards state.
+    // NUVIO CUSTOM START: Blocks schema props sync, website settings schema form draft, and embedded page-blocks cards state.
     let schemaPropsDraft = null;
+    let websiteSettingsDraft = {};
     let clientPageBlocksCards;
-    // NUVIO CUSTOM END: Blocks schema props sync and embedded page-blocks cards state.
+    // NUVIO CUSTOM END: Blocks schema props sync, website settings schema form draft, and embedded page-blocks cards state.
     $: isAuthCollection = collection?.type === "auth";
 
     $: isSuperusersCollection = collection?.name === "_superusers";
@@ -94,9 +96,21 @@
     // NUVIO CUSTOM START: Pages/Blocks collection wiring for embedded page-blocks UI.
     $: normalizedCollectionName = (collection?.name || "").toLowerCase();
 
+    $: isBlocksCollection = normalizedCollectionName === "blocks";
+
     $: isPagesCollection = normalizedCollectionName === "pages";
 
+    $: isWebsitesCollection = normalizedCollectionName === "websites";
+
     $: blocksCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "blocks") || null;
+
+    $: websiteSettingsRole = ApiClient.isClientSuperuser() ? "client" : "admin";
+
+    $: websiteSettingsFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole).fields;
+
+    $: hasWebsiteSettingsField = (collection?.fields || []).some(
+        (field) => (field?.name || "").toLowerCase() === "settings",
+    );
     // NUVIO CUSTOM END: Pages/Blocks collection wiring for embedded page-blocks UI.
 
     const baseSkipFieldNames = ["id"];
@@ -216,6 +230,7 @@
         // resolve the complete model
         original = (await resolveModel(model)) || {};
         record = structuredClone(original);
+        initializeWebsiteSettingsDraft();
 
         // wait to populate the fields to get the normalized values
         await tick();
@@ -285,9 +300,32 @@
     function restoreDraft() {
         if (initialDraft) {
             record = initialDraft;
+            initializeWebsiteSettingsDraft();
             initialDraft = null;
         }
     }
+
+    // NUVIO CUSTOM START: Website settings schema-form state sync.
+    function initializeWebsiteSettingsDraft() {
+        if (!isWebsitesCollection || !hasWebsiteSettingsField) {
+            websiteSettingsDraft = {};
+            return;
+        }
+
+        websiteSettingsDraft = normalizeWebsiteSettingsValue(record?.settings, websiteSettingsFields);
+        record.settings = structuredClone(websiteSettingsDraft);
+    }
+
+    function handleWebsiteSettingsChange(event) {
+        if (!isWebsitesCollection || !hasWebsiteSettingsField) {
+            return;
+        }
+
+        const nextValue = event.detail?.value ?? event.detail ?? {};
+        websiteSettingsDraft = normalizeWebsiteSettingsValue(nextValue, websiteSettingsFields);
+        record.settings = structuredClone(websiteSettingsDraft);
+    }
+    // NUVIO CUSTOM END: Website settings schema-form state sync.
 /*
     function areRecordsEqual(recordA, recordB) {
         const cloneA = structuredClone(recordA || {});
@@ -400,7 +438,7 @@ async function save(hidePanel = true) {
             result = await ApiClient.collection(collection.id).update(record.id, data);
         }
         // NUVIO CUSTOM START: Keep Blocks.props in sync with schema-driven editor payload.
-        const isBlocks = collection?.name === "Blocks";
+        const isBlocks = isBlocksCollection;
         if (isBlocks && schemaPropsDraft) {
             try {
                 result = await ApiClient
@@ -882,7 +920,7 @@ async function save(hidePanel = true) {
             <!-- NUVIO CUSTOM START: Blocks collection uses schema-driven props form. -->
             {#each regularFields as field (field.name)}
                 <!-- NUVIO CUSTOM: Blocks.props field is rendered through SchemaForm below. -->
-                {#if collection.name === "Blocks" && field.name === "props"}
+                {#if isBlocksCollection && (field.name || "").toLowerCase() === "props"}
                     <SchemaForm
                         block={record}
                         on:propsChange={(e) => {
@@ -896,8 +934,18 @@ async function save(hidePanel = true) {
                             }
                         }}
                     />
-                    
-                    
+                {:else if isWebsitesCollection && (field.name || "").toLowerCase() === "settings"}
+                    <!-- NUVIO CUSTOM START: Websites.settings is edited through static schema-driven fields (no raw JSON input). -->
+                    <section class="website-settings-in-panel">
+                        <h5 class="m-b-sm">Website settings</h5>
+                        <SchemaForm
+                            fields={websiteSettingsFields}
+                            value={websiteSettingsDraft}
+                            showImport={false}
+                            on:change={handleWebsiteSettingsChange}
+                        />
+                    </section>
+                    <!-- NUVIO CUSTOM END: Websites.settings is edited through static schema-driven fields (no raw JSON input). -->
                 {:else if field.type === "text"}
                     <TextField {field} {original} {record} bind:value={record[field.name]} />
                 {:else if field.type === "number"}
