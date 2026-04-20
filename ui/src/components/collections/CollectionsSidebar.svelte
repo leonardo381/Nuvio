@@ -7,7 +7,15 @@
     import ApiClient from "@/utils/ApiClient";
 
     const pinnedStorageKey = "@pinnedCollections";
-    const clientVisibleCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
+    const clientVisibleCollectionNames = new Set([
+        "assets",
+        "blocks",
+        "pages",
+        "websites",
+        "contacts",
+        "whatsapp",
+        "whatsapp_interactions",
+    ]);
     // NUVIO CUSTOM START: Admin collection sidebar grouped aggregators.
     const customCollectionsGroups = [
         {
@@ -18,7 +26,15 @@
         {
             key: "leads",
             label: "Leads",
-            collectionNames: new Set(["leads", "lead", "contacts", "contact", "forms", "submissions"]),
+            collectionNames: new Set([
+                "leads",
+                "lead",
+                "contacts",
+                "contact",
+                "forms",
+                "submissions",
+                "whatsapp",
+            ]),
         },
         {
             key: "markting",

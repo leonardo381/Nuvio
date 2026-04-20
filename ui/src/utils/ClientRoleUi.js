@@ -1,7 +1,15 @@
 import ApiClient from "@/utils/ApiClient";
 
 // NUVIO CUSTOM START: Client role collection access and field visibility configuration.
-const clientEditableCollectionNames = new Set(["assets", "blocks", "pages", "websites"]);
+const clientEditableCollectionNames = new Set([
+    "assets",
+    "blocks",
+    "pages",
+    "websites",
+    "contacts",
+    "whatsapp",
+    "whatsapp_interactions",
+]);
 
 const clientCollectionUiConfig = {
     assets: {
@@ -25,6 +33,24 @@ const clientCollectionUiConfig = {
     websites: {
         hiddenGridFields: ["id", "slug"],
         hiddenFormFields: ["id", "slug"],
+        hiddenPreviewFields: [],
+    },
+
+    contacts: {
+        hiddenGridFields: ["id"],
+        hiddenFormFields: ["id"],
+        hiddenPreviewFields: [],
+    },
+
+    whatsapp: {
+        hiddenGridFields: ["id"],
+        hiddenFormFields: ["id"],
+        hiddenPreviewFields: [],
+    },
+
+    whatsapp_interactions: {
+        hiddenGridFields: ["id"],
+        hiddenFormFields: ["id"],
         hiddenPreviewFields: [],
     },
 };
