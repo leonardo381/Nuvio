@@ -148,21 +148,28 @@ export const websiteSettingsSchema = {
             key: "reviews",
             label: "Reviews",
             type: "object",
-            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+            editableBy: [ROLE_ADMIN],
             fields: [
+                {
+                    key: "enabled",
+                    label: "Enabled",
+                    type: "bool",
+                    default: false,
+                    editableBy: [ROLE_ADMIN],
+                },
                 {
                     key: "googlePlaceId",
                     label: "Google Place ID",
                     type: "text",
                     default: "",
-                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                    editableBy: [ROLE_ADMIN],
                 },
                 {
                     key: "reviewLink",
-                    label: "Review link",
+                    label: "Google review link",
                     type: "text",
                     default: "",
-                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                    editableBy: [ROLE_ADMIN],
                 },
             ],
         },
@@ -385,6 +392,17 @@ function normalizeFieldValue(field, value) {
     return value;
 }
 
+function normalizeReviewsSettings(reviewsSettings) {
+    const source = isPlainObject(reviewsSettings) ? reviewsSettings : {};
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        googlePlaceId: typeof source.googlePlaceId === "string" ? source.googlePlaceId.trim() : "",
+        reviewLink: typeof source.reviewLink === "string" ? source.reviewLink.trim() : "",
+    };
+}
+
 export function getWebsiteSettingsSchemaForRole(role = ROLE_ADMIN, rawSettings = null) {
     const normalizedRole = normalizeRole(role);
     const roleFilteredFields = filterFieldsByRole(websiteSettingsSchema.fields, normalizedRole);
@@ -416,6 +434,10 @@ export function normalizeWebsiteSettingsValue(rawSettings, schemaFields = websit
 
     for (const field of schemaFields || []) {
         normalized[field.key] = normalizeFieldValue(field, source[field.key]);
+    }
+
+    if (isPlainObject(normalized.reviews)) {
+        normalized.reviews = normalizeReviewsSettings(normalized.reviews);
     }
 
     return normalized;

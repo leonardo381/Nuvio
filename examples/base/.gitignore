@@ -1,6 +1,12 @@
 # ignore everything
 /*
 
-# exclude from the ignore filter
+# keep these
 !.gitignore
 !main.go
+!nuvio_reviews.go
+
+# ignore Go cache anywhere
+.gocache/
+**/.gocache/
+**/_gocache/

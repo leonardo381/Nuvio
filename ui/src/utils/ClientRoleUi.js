@@ -9,6 +9,7 @@ const clientEditableCollectionNames = new Set([
     "contacts",
     "whatsapp",
     "whatsapp_interactions",
+    "reviews",
 ]);
 
 const clientCollectionUiConfig = {
@@ -51,6 +52,12 @@ const clientCollectionUiConfig = {
     whatsapp_interactions: {
         hiddenGridFields: ["id"],
         hiddenFormFields: ["id"],
+        hiddenPreviewFields: [],
+    },
+
+    reviews: {
+        hiddenGridFields: ["id", "externalid"],
+        hiddenFormFields: ["id", "externalid"],
         hiddenPreviewFields: [],
     },
 };

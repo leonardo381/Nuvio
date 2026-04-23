@@ -29,7 +29,10 @@
     import { setErrors } from "@/stores/errors";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
     import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
-    import { getWebsiteSettingsSchemaForRole, normalizeWebsiteSettingsValue } from "@/utils/WebsiteSettingsSchema";
+    import {
+        getWebsiteSettingsSchemaForRole,
+        normalizeWebsiteSettingsValue,
+    } from "@/utils/WebsiteSettingsSchema";
     // NUVIO CUSTOM START: Pages editor embedded blocks cards integration.
     import ClientPageBlocksCards from "@/components/records/ClientPageBlocksCards.svelte";
     import { collections } from "@/stores/collections";
@@ -59,11 +62,12 @@
     let initialCollection = collection;
     let regularFields = [];
     let canUseDangerousActions = false;
-    // NUVIO CUSTOM START: Blocks schema props sync, website settings schema form draft, and embedded page-blocks cards state.
+    // NUVIO CUSTOM START: Blocks schema props sync, website settings schema state, and embedded page-blocks cards state.
     let schemaPropsDraft = null;
+    let websiteSettingsFullDraft = {};
     let websiteSettingsDraft = {};
     let clientPageBlocksCards;
-    // NUVIO CUSTOM END: Blocks schema props sync, website settings schema form draft, and embedded page-blocks cards state.
+    // NUVIO CUSTOM END: Blocks schema props sync, website settings schema state, and embedded page-blocks cards state.
     $: isAuthCollection = collection?.type === "auth";
 
     $: isSuperusersCollection = collection?.name === "_superusers";
@@ -111,6 +115,7 @@
     $: hasWebsiteSettingsField = (collection?.fields || []).some(
         (field) => (field?.name || "").toLowerCase() === "settings",
     );
+
     // NUVIO CUSTOM END: Pages/Blocks collection wiring for embedded page-blocks UI.
 
     const baseSkipFieldNames = ["id"];
@@ -308,6 +313,7 @@
     // NUVIO CUSTOM START: Website settings schema-form state sync.
     function initializeWebsiteSettingsDraft() {
         if (!isWebsitesCollection || !hasWebsiteSettingsField) {
+            websiteSettingsFullDraft = {};
             websiteSettingsDraft = {};
             return;
         }
@@ -315,8 +321,9 @@
         const normalizedFullSettings = normalizeWebsiteSettingsValue(record?.settings);
         const roleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, normalizedFullSettings).fields;
 
-        websiteSettingsDraft = normalizeWebsiteSettingsValue(normalizedFullSettings, roleScopedFields);
-        record.settings = structuredClone(websiteSettingsDraft);
+        websiteSettingsFullDraft = normalizedFullSettings;
+        websiteSettingsDraft = normalizeWebsiteSettingsValue(websiteSettingsFullDraft, roleScopedFields);
+        record.settings = structuredClone(websiteSettingsFullDraft);
     }
 
     function handleWebsiteSettingsChange(event) {
@@ -325,15 +332,23 @@
         }
 
         const nextValue = event.detail?.value ?? event.detail ?? {};
-        const mergedSettings = {
-            ...normalizeWebsiteSettingsValue(record?.settings),
-            ...(nextValue || {}),
-        };
-        const normalizedFullSettings = normalizeWebsiteSettingsValue(mergedSettings);
-        const roleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, normalizedFullSettings).fields;
+        const roleScopedFields = getWebsiteSettingsSchemaForRole(
+            websiteSettingsRole,
+            websiteSettingsFullDraft,
+        ).fields;
+        const normalizedScopedChanges = normalizeWebsiteSettingsValue(nextValue, roleScopedFields);
+        const normalizedFullSettings = normalizeWebsiteSettingsValue({
+            ...websiteSettingsFullDraft,
+            ...normalizedScopedChanges,
+        });
+        const nextRoleScopedFields = getWebsiteSettingsSchemaForRole(
+            websiteSettingsRole,
+            normalizedFullSettings,
+        ).fields;
 
-        websiteSettingsDraft = normalizeWebsiteSettingsValue(normalizedFullSettings, roleScopedFields);
-        record.settings = structuredClone(websiteSettingsDraft);
+        websiteSettingsFullDraft = normalizedFullSettings;
+        websiteSettingsDraft = normalizeWebsiteSettingsValue(websiteSettingsFullDraft, nextRoleScopedFields);
+        record.settings = structuredClone(websiteSettingsFullDraft);
     }
     // NUVIO CUSTOM END: Website settings schema-form state sync.
 /*
@@ -954,6 +969,7 @@ async function save(hidePanel = true) {
                             showImport={false}
                             on:change={handleWebsiteSettingsChange}
                         />
+
                     </section>
                     <!-- NUVIO CUSTOM END: Websites.settings is edited through static schema-driven fields (no raw JSON input). -->
                 {:else if field.type === "text"}

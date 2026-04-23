@@ -14,6 +14,7 @@
     import RecordUpsertPanel from "@/components/records/RecordUpsertPanel.svelte";
     import RecordsCount from "@/components/records/RecordsCount.svelte";
     import RecordsList from "@/components/records/RecordsList.svelte";
+    import ReviewsCollectionDashboard from "@/components/records/ReviewsCollectionDashboard.svelte";
     import { hideControls, pageTitle } from "@/stores/app";
     import {
         activeCollection,
@@ -36,6 +37,9 @@
     // NUVIO CUSTOM END: Embedded page-blocks editor panel wiring.
     let recordsList;
     let recordsCount;
+    // NUVIO CUSTOM START: Collection-backed Reviews module dashboard ref.
+    let reviewsCollectionDashboard;
+    // NUVIO CUSTOM END: Collection-backed Reviews module dashboard ref.
     let filter = initialQueryParams.get("filter") || "";
     let sort = initialQueryParams.get("sort") || "-@rowid";
     let selectedCollectionIdOrName = initialQueryParams.get("collection") || $activeCollection?.id;
@@ -55,7 +59,21 @@
         || (isClientCollectionMode
             && clientVisibleCollectionNames.has(($activeCollection?.name || "").toLowerCase()));
 
-    $: canCreateRecords = ApiClient.isAdminSuperuser();
+    // NUVIO CUSTOM START: Reviews module is collection-backed/read-only (no manual record create flow).
+    const REVIEWS_COLLECTION_NAME = "reviews";
+    const REVIEWS_COLLECTION_ID = "pbc_1661203300";
+
+    $: activeCollectionName = ($activeCollection?.name || "").trim().toLowerCase();
+    $: activeCollectionId = ($activeCollection?.id || "").trim();
+    $: queryCollectionIdOrName = (new URLSearchParams($querystring).get("collection") || "").trim().toLowerCase();
+
+    $: isReviewsCollection = activeCollectionName === REVIEWS_COLLECTION_NAME
+        || activeCollectionId === REVIEWS_COLLECTION_ID
+        || queryCollectionIdOrName === REVIEWS_COLLECTION_NAME
+        || queryCollectionIdOrName === REVIEWS_COLLECTION_ID;
+
+    $: canCreateRecords = ApiClient.isAdminSuperuser() && !isReviewsCollection;
+    // NUVIO CUSTOM END: Reviews module is collection-backed/read-only (no manual record create flow).
 
     $: reactiveParams = new URLSearchParams($querystring);
 
@@ -78,6 +96,10 @@
     // NUVIO CUSTOM START: Resolve Blocks collection for embedded page-block actions.
     $: blocksCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "blocks") || null;
     // NUVIO CUSTOM END: Resolve Blocks collection for embedded page-block actions.
+
+    // NUVIO CUSTOM START: Resolve Websites collection for Reviews dashboard website selector.
+    $: websitesCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "websites") || null;
+    // NUVIO CUSTOM END: Resolve Websites collection for Reviews dashboard website selector.
 
     $: roleVisibleCollectionsCount = isClientCollectionMode
         ? allowedClientCollections.length
@@ -130,12 +152,22 @@
     async function showRecordById(recordId) {
         await tick(); // ensure that the reactive component params are resolved
 
+        // NUVIO CUSTOM: Reviews collection uses a dedicated dashboard module instead of record panel opening.
+        if (isReviewsCollection) {
+            return;
+        }
+
         $activeCollection?.type === "view" || !canManageRecordActions
             ? recordPreviewPanel.show(recordId)
             : recordUpsertPanel?.show(recordId);
     }
 
     function handleRecordSelect(record) {
+        // NUVIO CUSTOM: Reviews collection interaction is handled by the dedicated dashboard module.
+        if (isReviewsCollection) {
+            return;
+        }
+
         updateQueryParams({
             recordId: record.id,
         });
@@ -265,8 +297,12 @@
 
                 <RefreshButton
                     on:refresh={() => {
-                        recordsList?.load();
-                        recordsCount?.reload();
+                        if (isReviewsCollection) {
+                            reviewsCollectionDashboard?.reload?.();
+                        } else {
+                            recordsList?.load();
+                            recordsCount?.reload();
+                        }
                     }}
                 />
             </div>
@@ -292,39 +328,52 @@
             </div>
         </header>
 
-        <Searchbar
-            value={filter}
-            autocompleteCollection={$activeCollection}
-            on:submit={(e) => (filter = e.detail)}
-        />
+        {#if isReviewsCollection}
+            <!-- NUVIO CUSTOM START: Dedicated collection-backed Reviews module dashboard path. -->
+            <div class="clearfix m-b-sm" />
 
-        <div class="clearfix m-b-sm" />
+            <ReviewsCollectionDashboard
+                bind:this={reviewsCollectionDashboard}
+                {websitesCollection}
+            />
+            <!-- NUVIO CUSTOM END: Dedicated collection-backed Reviews module dashboard path. -->
+        {:else}
+            <Searchbar
+                value={filter}
+                autocompleteCollection={$activeCollection}
+                on:submit={(e) => (filter = e.detail)}
+            />
 
-        <RecordsList
-            bind:this={recordsList}
-            collection={$activeCollection}
-            bind:filter
-            bind:sort
-            on:select={(e) => handleRecordSelect(e.detail)}
-            on:delete={() => {
-                recordsCount?.reload();
-            }}
-            on:new={() => {
-                if (!canCreateRecords) {
-                    return;
-                }
-                recordUpsertPanel?.show();
-            }}
-        />
+            <div class="clearfix m-b-sm" />
+
+            <RecordsList
+                bind:this={recordsList}
+                collection={$activeCollection}
+                bind:filter
+                bind:sort
+                on:select={(e) => handleRecordSelect(e.detail)}
+                on:delete={() => {
+                    recordsCount?.reload();
+                }}
+                on:new={() => {
+                    if (!canCreateRecords) {
+                        return;
+                    }
+                    recordUpsertPanel?.show();
+                }}
+            />
+        {/if}
 
         <svelte:fragment slot="footer">
-            <RecordsCount
-                bind:this={recordsCount}
-                class="m-r-auto txt-sm txt-hint"
-                collection={$activeCollection}
-                {filter}
-                bind:totalCount
-            />
+            {#if !isReviewsCollection}
+                <RecordsCount
+                    bind:this={recordsCount}
+                    class="m-r-auto txt-sm txt-hint"
+                    collection={$activeCollection}
+                    {filter}
+                    bind:totalCount
+                />
+            {/if}
         </svelte:fragment>
     </PageWrapper>
 {/if}

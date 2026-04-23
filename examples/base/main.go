@@ -107,6 +107,10 @@ func main() {
 	// (if publicDir exists and the route path is not already defined)
 	app.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
+			// NUVIO CUSTOM START: Register collection-backed Reviews module routes.
+			registerNuvioReviewsRoutes(e)
+			// NUVIO CUSTOM END: Register collection-backed Reviews module routes.
+
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
 				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
 			}
