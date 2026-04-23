@@ -55,6 +55,20 @@
         return loadDashboard();
     }
 
+    function resolveWebsitesSort(collection) {
+        const preferredSortFields = ["title", "name", "slug"];
+        const availableFields = new Set(
+            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),
+        );
+        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));
+
+        if (!validSortFields.length) {
+            return "+id";
+        }
+
+        return validSortFields.map((field) => `+${field}`).join(",");
+    }
+
     async function loadWebsites() {
         if (!websitesCollection?.id) {
             websites = [];
@@ -67,7 +81,7 @@
 
         try {
             websites = await ApiClient.collection(websitesCollection.id).getFullList({
-                sort: "+title,+name,+slug",
+                sort: resolveWebsitesSort(websitesCollection),
                 requestKey: "nuvio_reviews_websites",
             });
 
