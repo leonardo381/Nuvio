@@ -15,7 +15,6 @@
         "contacts",
         "whatsapp",
         "whatsapp_interactions",
-        "reviews",
     ]);
     // NUVIO CUSTOM START: Admin collection sidebar grouped aggregators.
     const customCollectionsGroups = [

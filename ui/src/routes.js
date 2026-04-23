@@ -1,6 +1,7 @@
 import PageIndex from "@/components/PageIndex.svelte";
 import PageLogs from "@/components/logs/PageLogs.svelte";
 import PageRecords from "@/components/records/PageRecords.svelte";
+import PageReviews from "@/components/reviews/PageReviews.svelte";
 import PageApplication from "@/components/settings/PageApplication.svelte";
 import PageBackups from "@/components/settings/PageBackups.svelte";
 import PageCrons from "@/components/settings/PageCrons.svelte";
@@ -50,6 +51,12 @@ const routes = {
 
     "/collections": wrap({
         component: PageRecords,
+        conditions: [(_) => isSuperuserAuth()],
+        userData: { showAppSidebar: true },
+    }),
+
+    "/reviews": wrap({
+        component: PageReviews,
         conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),

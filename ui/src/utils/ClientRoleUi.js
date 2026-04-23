@@ -9,7 +9,6 @@ const clientEditableCollectionNames = new Set([
     "contacts",
     "whatsapp",
     "whatsapp_interactions",
-    "reviews",
 ]);
 
 const clientCollectionUiConfig = {
@@ -55,11 +54,6 @@ const clientCollectionUiConfig = {
         hiddenPreviewFields: [],
     },
 
-    reviews: {
-        hiddenGridFields: ["id", "externalid"],
-        hiddenFormFields: ["id", "externalid"],
-        hiddenPreviewFields: [],
-    },
 };
 // NUVIO CUSTOM END: Client role collection access and field visibility configuration.
 

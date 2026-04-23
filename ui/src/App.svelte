@@ -104,6 +104,18 @@
                 >
                     <i class="ri-database-2-line" />
                 </a>
+                <!-- NUVIO CUSTOM START: Dedicated Reviews section entry in app sidebar. -->
+                <a
+                    href="/reviews"
+                    class="menu-item"
+                    aria-label="Reviews"
+                    use:link
+                    use:active={{ path: "/reviews/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Reviews", position: "right" }}
+                >
+                    <i class="ri-star-smile-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Reviews section entry in app sidebar. -->
                 {#if canAccessAdminAreas}
                     <a
                         href="/logs"
