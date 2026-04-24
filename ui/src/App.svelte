@@ -116,6 +116,18 @@
                     <i class="ri-star-smile-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Reviews section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated Newsletter section entry in app sidebar. -->
+                <a
+                    href="/newsletter"
+                    class="menu-item"
+                    aria-label="Newsletter"
+                    use:link
+                    use:active={{ path: "/newsletter/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Newsletter", position: "right" }}
+                >
+                    <i class="ri-mail-send-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Newsletter section entry in app sidebar. -->
                 {#if canAccessAdminAreas}
                     <a
                         href="/logs"

@@ -111,6 +111,10 @@ func main() {
 			registerNuvioReviewsRoutes(e)
 			// NUVIO CUSTOM END: Register collection-backed Reviews module routes.
 
+			// NUVIO CUSTOM START: Register Newsletter V1 routes.
+			registerNuvioNewsletterRoutes(e)
+			// NUVIO CUSTOM END: Register Newsletter V1 routes.
+
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
 				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
 			}

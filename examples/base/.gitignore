@@ -5,6 +5,7 @@
 !.gitignore
 !main.go
 !nuvio_reviews.go
+!nuvio_newsletter.go
 
 # ignore Go cache anywhere
 .gocache/
