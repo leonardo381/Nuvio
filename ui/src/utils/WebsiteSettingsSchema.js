@@ -98,6 +98,49 @@ export const websiteSettingsSchema = {
                     default: false,
                     editableBy: [ROLE_ADMIN, ROLE_CLIENT],
                 },
+                {
+                    key: "emailNotifications",
+                    label: "Email notifications",
+                    type: "object",
+                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                    fields: [
+                        {
+                            key: "enabled",
+                            label: "Send email notifications",
+                            type: "bool",
+                            default: false,
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                        },
+                        {
+                            key: "to",
+                            label: "To recipients",
+                            type: "array",
+                            itemLabel: "Recipient",
+                            default: [],
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            item: {
+                                type: "text",
+                                label: "Email",
+                                default: "",
+                                editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            },
+                        },
+                        {
+                            key: "cc",
+                            label: "CC recipients",
+                            type: "array",
+                            itemLabel: "CC recipient",
+                            default: [],
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            item: {
+                                type: "text",
+                                label: "Email",
+                                default: "",
+                                editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            },
+                        },
+                    ],
+                },
             ],
         },
         {
@@ -114,11 +157,47 @@ export const websiteSettingsSchema = {
                     editableBy: [ROLE_ADMIN, ROLE_CLIENT],
                 },
                 {
-                    key: "emailDestination",
-                    label: "Email destination",
-                    type: "text",
-                    default: "",
+                    key: "emailNotifications",
+                    label: "Email notifications",
+                    type: "object",
                     editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                    fields: [
+                        {
+                            key: "enabled",
+                            label: "Send email notifications",
+                            type: "bool",
+                            default: false,
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                        },
+                        {
+                            key: "to",
+                            label: "To recipients",
+                            type: "array",
+                            itemLabel: "Recipient",
+                            default: [],
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            item: {
+                                type: "text",
+                                label: "Email",
+                                default: "",
+                                editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            },
+                        },
+                        {
+                            key: "cc",
+                            label: "CC recipients",
+                            type: "array",
+                            itemLabel: "CC recipient",
+                            default: [],
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            item: {
+                                type: "text",
+                                label: "Email",
+                                default: "",
+                                editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            },
+                        },
+                    ],
                 },
                 {
                     key: "confirmationMessage",
@@ -403,6 +482,94 @@ function normalizeReviewsSettings(reviewsSettings) {
     };
 }
 
+function normalizeEmailRecipients(value, { preserveEmptyArrayRows = false } = {}) {
+    const source = Array.isArray(value) ? value : [value];
+    const recipients = [];
+    const seen = new Set();
+
+    for (const item of source) {
+        const isArrayRowSource = Array.isArray(value);
+        const asString =
+            typeof item === "string"
+                ? item
+                : isPlainObject(item)
+                    ? [item.email, item.address, item.value].find((candidate) => typeof candidate === "string")
+                    : "";
+
+        if (typeof asString !== "string") {
+            continue;
+        }
+
+        const pieces = isArrayRowSource ? [asString] : asString.split(/[\n,;]+/g);
+        for (const piece of pieces) {
+            const normalized = piece.trim().toLowerCase();
+            if (!normalized) {
+                if (preserveEmptyArrayRows && isArrayRowSource) {
+                    recipients.push("");
+                }
+                continue;
+            }
+
+            if (seen.has(normalized)) {
+                continue;
+            }
+
+            recipients.push(normalized);
+            seen.add(normalized);
+        }
+    }
+
+    return recipients;
+}
+
+function normalizeEmailNotifications(settingsSection, { legacyDestination = "" } = {}) {
+    const source = isPlainObject(settingsSection) ? settingsSection : {};
+    const to = normalizeEmailRecipients(source.to, { preserveEmptyArrayRows: true });
+    const legacyTo = typeof legacyDestination === "string" ? legacyDestination.trim().toLowerCase() : "";
+
+    if (!to.length && legacyTo) {
+        to.push(legacyTo);
+    }
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        to,
+        cc: normalizeEmailRecipients(source.cc, { preserveEmptyArrayRows: true }),
+    };
+}
+
+function normalizeContactFormSettings(contactFormSettings) {
+    const source = isPlainObject(contactFormSettings) ? contactFormSettings : {};
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        confirmationMessage:
+            typeof source.confirmationMessage === "string" ? source.confirmationMessage : "",
+        fields: {
+            ...(isPlainObject(source.fields) ? source.fields : {}),
+            phone: !!source?.fields?.phone,
+        },
+        emailNotifications: normalizeEmailNotifications(source.emailNotifications, {
+            legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
+        }),
+    };
+}
+
+function normalizeWhatsappSettings(whatsappSettings) {
+    const source = isPlainObject(whatsappSettings) ? whatsappSettings : {};
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        phone: typeof source.phone === "string" ? source.phone.trim() : "",
+        defaultMessage: typeof source.defaultMessage === "string" ? source.defaultMessage : "",
+        showFloatingButton: !!source.showFloatingButton,
+        emailNotifications: normalizeEmailNotifications(source.emailNotifications),
+    };
+}
+
 export function getWebsiteSettingsSchemaForRole(role = ROLE_ADMIN, rawSettings = null) {
     const normalizedRole = normalizeRole(role);
     const roleFilteredFields = filterFieldsByRole(websiteSettingsSchema.fields, normalizedRole);
@@ -438,6 +605,14 @@ export function normalizeWebsiteSettingsValue(rawSettings, schemaFields = websit
 
     if (isPlainObject(normalized.reviews)) {
         normalized.reviews = normalizeReviewsSettings(normalized.reviews);
+    }
+
+    if (isPlainObject(normalized.contactForm)) {
+        normalized.contactForm = normalizeContactFormSettings(normalized.contactForm);
+    }
+
+    if (isPlainObject(normalized.whatsapp)) {
+        normalized.whatsapp = normalizeWhatsappSettings(normalized.whatsapp);
     }
 
     return normalized;

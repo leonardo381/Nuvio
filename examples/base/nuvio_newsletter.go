@@ -1,16 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/mail"
-	"os"
 	"strings"
 	"time"
 
@@ -24,10 +21,6 @@ const (
 	nuvioCampaignsCollectionID   = "pbc_1661203500"
 )
 
-var nuvioNewsletterHTTPClient = &http.Client{
-	Timeout: 20 * time.Second,
-}
-
 type nuvioWebsiteNewsletterConfig struct {
 	FeatureAvailable bool
 }
@@ -37,19 +30,6 @@ type nuvioCampaignSendResult struct {
 	Status          string `json:"status"`
 	RecipientsCount int    `json:"recipientsCount"`
 	SentAt          string `json:"sentAt"`
-}
-
-type resendSendEmailRequest struct {
-	From    string   `json:"from"`
-	To      []string `json:"to,omitempty"`
-	Bcc     []string `json:"bcc,omitempty"`
-	Subject string   `json:"subject"`
-	Html    string   `json:"html,omitempty"`
-	Text    string   `json:"text,omitempty"`
-}
-
-type resendSendEmailResponse struct {
-	ID string `json:"id"`
 }
 
 // NUVIO CUSTOM START: Newsletter V1 send endpoint (server-side campaign dispatch via Resend).
@@ -133,23 +113,12 @@ func sendNuvioNewsletterCampaign(app core.App, ctx context.Context, campaignID s
 		return nil, fmt.Errorf("No active recipients found for this campaign")
 	}
 
-	resendAPIKey := strings.TrimSpace(os.Getenv("NUVIO_RESEND_API_KEY"))
-	if resendAPIKey == "" {
-		resendAPIKey = strings.TrimSpace(os.Getenv("RESEND_API_KEY"))
-	}
-	if resendAPIKey == "" {
-		return nil, fmt.Errorf("Missing Resend API key (set NUVIO_RESEND_API_KEY or RESEND_API_KEY)")
+	resendConfig, err := loadNuvioResendConfig()
+	if err != nil {
+		return nil, err
 	}
 
-	fromAddress := strings.TrimSpace(os.Getenv("NUVIO_RESEND_FROM"))
-	if fromAddress == "" {
-		fromAddress = strings.TrimSpace(os.Getenv("RESEND_FROM"))
-	}
-	if fromAddress == "" {
-		fromAddress = "onboarding@resend.dev"
-	}
-
-	if err := sendNuvioCampaignEmailViaResend(ctx, resendAPIKey, fromAddress, subject, body, recipients); err != nil {
+	if err := sendNuvioCampaignEmailViaResend(ctx, resendConfig, subject, body, recipients); err != nil {
 		return nil, err
 	}
 
@@ -325,82 +294,26 @@ func normalizeNuvioEmail(raw string) (string, bool) {
 
 func sendNuvioCampaignEmailViaResend(
 	ctx context.Context,
-	apiKey string,
-	from string,
+	config nuvioResendConfig,
 	subject string,
 	body string,
 	recipients []string,
 ) error {
-	requestPayload := resendSendEmailRequest{
-		From:    from,
-		To:      []string{from},
+	trimmedBody := strings.TrimSpace(body)
+
+	message := nuvioTransactionalEmailMessage{
+		To:      []string{config.From},
 		Bcc:     recipients,
 		Subject: subject,
 	}
 
-	trimmedBody := strings.TrimSpace(body)
 	if strings.Contains(trimmedBody, "<") && strings.Contains(trimmedBody, ">") {
-		requestPayload.Html = trimmedBody
+		message.HTML = trimmedBody
 	} else {
-		requestPayload.Text = trimmedBody
+		message.Text = trimmedBody
 	}
 
-	rawPayload, err := json.Marshal(requestPayload)
-	if err != nil {
-		return fmt.Errorf("Failed to encode Resend payload: %w", err)
-	}
-
-	request, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		"https://api.resend.com/emails",
-		bytes.NewBuffer(rawPayload),
-	)
-	if err != nil {
-		return fmt.Errorf("Failed to build Resend request: %w", err)
-	}
-
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+apiKey)
-
-	response, err := nuvioNewsletterHTTPClient.Do(request)
-	if err != nil {
-		return fmt.Errorf("Failed to send campaign via Resend: %w", err)
-	}
-	defer response.Body.Close()
-
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil {
-		return fmt.Errorf("Failed reading Resend response: %w", err)
-	}
-
-	if response.StatusCode >= 400 {
-		message := strings.TrimSpace(string(responseBody))
-
-		parsed := map[string]any{}
-		if err := json.Unmarshal(responseBody, &parsed); err == nil {
-			if parsedMessage, ok := parsed["message"].(string); ok && strings.TrimSpace(parsedMessage) != "" {
-				message = strings.TrimSpace(parsedMessage)
-			}
-		}
-
-		if message == "" {
-			message = "Unknown Resend error"
-		}
-
-		return fmt.Errorf("Resend rejected campaign send (%d): %s", response.StatusCode, message)
-	}
-
-	decoded := resendSendEmailResponse{}
-	if err := json.Unmarshal(responseBody, &decoded); err != nil {
-		return fmt.Errorf("Failed to decode Resend success response: %w", err)
-	}
-
-	if strings.TrimSpace(decoded.ID) == "" {
-		return fmt.Errorf("Resend response missing message id")
-	}
-
-	return nil
+	return sendNuvioTransactionalEmailViaResend(ctx, config, message)
 }
 
 // NUVIO CUSTOM END: Newsletter V1 send endpoint (server-side campaign dispatch via Resend).

@@ -16,6 +16,7 @@
   export let fields = null;
   export let value = null;
   export let showImport = true;
+  export let path = "schema";
 
   const dispatch = createEventDispatcher();
 
@@ -139,33 +140,33 @@
 
 {#each schema.fields as field (field.key)}
   {#if field.type === "text"}
-    <InputText field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputText path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "textarea"}
-    <InputTextArea field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputTextArea path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "bool"}
-    <InputBool field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputBool path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "json"}
-    <InputJson field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputJson path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "select"}
-    <InputSelect field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputSelect path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "file"}
-    <InputFile field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputFile path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "relation"}
-    <InputRelation field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputRelation path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "array"}
-    <InputArray field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputArray path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else if field.type === "object"}
-    <InputObject field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputObject path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
 
   {:else}
-    <InputText field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
+    <InputText path={`${path}.${field.key}`} field={field} value={values[field.key]} on:change={(e) => update(field.key, e.detail?.value ?? e.detail)} />
   {/if}
 {/each}

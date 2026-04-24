@@ -6,10 +6,11 @@
   export let value = "";
   export let disabled = false;
   export let error = "";
+  export let path = "";
 
   const dispatch = createEventDispatcher();
 
-  $: id = `schema-${field?.key || "field"}`;
+  $: id = `schema-${String(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
   $: rawOptions = Array.isArray(field?.options)
     ? field.options

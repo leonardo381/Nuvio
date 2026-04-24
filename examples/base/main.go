@@ -115,6 +115,10 @@ func main() {
 			registerNuvioNewsletterRoutes(e)
 			// NUVIO CUSTOM END: Register Newsletter V1 routes.
 
+			// NUVIO CUSTOM START: Register Contact Form + WhatsApp leads routes.
+			registerNuvioLeadsRoutes(e)
+			// NUVIO CUSTOM END: Register Contact Form + WhatsApp leads routes.
+
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
 				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
 			}

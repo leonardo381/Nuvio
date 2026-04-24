@@ -6,9 +6,10 @@
   export let value = "";     // expected: "YYYY-MM-DD"
   export let disabled = false;
   export let error = "";
+  export let path = "";
 
   const dispatch = createEventDispatcher();
-  $: id = `schema-${field?.key || "field"}`;
+  $: id = `schema-${String(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
   function onInput(e) {
     value = e.currentTarget.value;

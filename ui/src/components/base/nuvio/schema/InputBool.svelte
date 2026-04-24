@@ -6,9 +6,10 @@
   export let value = false;
   export let disabled = false;
   export let error = "";
+  export let path = "";
 
   const dispatch = createEventDispatcher();
-  $: id = `schema-${field?.key || "field"}`;
+  $: id = `schema-${String(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
   function onToggle(e) {
     value = !!e.currentTarget.checked;

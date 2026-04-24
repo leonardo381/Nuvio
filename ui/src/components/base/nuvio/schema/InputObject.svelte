@@ -4,6 +4,7 @@
 
   export let field;
   export let value = {};
+  export let path = "";
 
   const dispatch = createEventDispatcher();
 
@@ -31,6 +32,7 @@
       fields={field.fields ?? []}
       value={objectValue}
       showImport={false}
+      path={path}
       on:change={handleChange}
     />
   </div>

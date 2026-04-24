@@ -39,3 +39,4 @@ pb_data/*.db-shm
 pb_data/*.db-wal
 pb_data/storage/
 nuvio-implementer.md
+ui/.env

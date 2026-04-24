@@ -4,33 +4,43 @@
 
   export let field;
   export let value = [];
+  export let path = "";
 
   const dispatch = createEventDispatcher();
 
   let items = Array.isArray(value) ? [...value] : [];
+  $: supportsObjectItems = Array.isArray(field?.item?.fields) && field.item.fields.length > 0;
 
   function emit() {
     dispatch("change", { value: items });
   }
 
-    function createEmptyItem() {
+  function createEmptyItem() {
+    if (!supportsObjectItems) {
+      if (field?.item?.type === "bool") {
+        return false;
+      }
+
+      return "";
+    }
+
     const fields = field?.item?.fields ?? [];
     const obj = {};
 
     for (const f of fields) {
-        if (f.type === "array") {
+      if (f.type === "array") {
         obj[f.key] = [];
-        } else if (f.type === "object") {
+      } else if (f.type === "object") {
         obj[f.key] = {};
-        } else if (f.type === "bool") {
+      } else if (f.type === "bool") {
         obj[f.key] = false;
-        } else {
+      } else {
         obj[f.key] = "";
-        }
+      }
     }
 
     return obj;
-    }
+  }
 
   function addItem() {
     items = [...items, createEmptyItem()];
@@ -45,6 +55,20 @@
   function updateItem(index, nextValue) {
     items = items.map((item, i) => (i === index ? nextValue : item));
     emit();
+  }
+
+  function updatePrimitiveItem(index, rawValue) {
+    let nextValue = rawValue;
+
+    if (field?.item?.type === "bool") {
+      nextValue = !!rawValue;
+    } else if (field?.item?.type === "number") {
+      nextValue = rawValue === "" ? "" : Number(rawValue);
+    } else {
+      nextValue = String(rawValue ?? "").trim();
+    }
+
+    updateItem(index, nextValue);
   }
 
   $: if (Array.isArray(value)) {
@@ -100,12 +124,38 @@
           </div>
 
           <div class="array-item__body">
-            <SchemaForm
-              fields={field?.item?.fields ?? []}
-              value={item}
-              showImport={false}
-              on:change={(e) => updateItem(index, e.detail.value)}
-            />
+            {#if supportsObjectItems}
+              <SchemaForm
+                fields={field?.item?.fields ?? []}
+                value={item}
+                showImport={false}
+                path={`${path}[${index}]`}
+                on:change={(e) => updateItem(index, e.detail.value)}
+              />
+            {:else if field?.item?.type === "bool"}
+              <label class="array-item__primitive-checkbox">
+                <input
+                  type="checkbox"
+                  checked={!!item}
+                  on:change={(e) => updatePrimitiveItem(index, e.currentTarget.checked)}
+                />
+                <span>{field?.item?.label || "Enabled"}</span>
+              </label>
+            {:else}
+              <label
+                class="array-item__primitive-label"
+                for={"array-" + String(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-") + "-" + index}
+              >
+                {field?.item?.label || "Value"}
+              </label>
+              <input
+                id={"array-" + String(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-") + "-" + index}
+                class="form-input array-item__primitive-input"
+                type={field?.item?.type === "number" ? "number" : "text"}
+                value={item ?? ""}
+                on:input={(e) => updatePrimitiveItem(index, e.currentTarget.value)}
+              />
+            {/if}
           </div>
         </div>
       {/each}
@@ -281,6 +331,26 @@
 .array-item__body {
   padding: 12px;
   background: #ffffff;
+}
+
+.array-item__primitive-label {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475467;
+}
+
+.array-item__primitive-input {
+  width: 100%;
+}
+
+.array-item__primitive-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475467;
 }
 
 </style>
