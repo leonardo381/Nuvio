@@ -77,6 +77,7 @@
     $: activeSubscribers = subscribers.filter((subscriber) => {
         return `${subscriber?.status || ""}`.toLowerCase() === "active";
     });
+    $: sentCampaigns = campaigns.filter((campaign) => `${campaign?.status || ""}`.toLowerCase() === "sent");
 
     function resolveWebsitesSort(collection) {
         const preferredSortFields = ["title", "name", "slug"];
@@ -378,29 +379,64 @@
             </div>
         </div>
     {:else}
-        <section class="newsletter-toolbar panel m-b-base">
-            <div class="toolbar-row">
-                <label class="txt-sm txt-hint" for="newsletter-website">Website</label>
-                <select
-                    id="newsletter-website"
-                    class="input input-sm"
-                    value={selectedWebsiteId}
-                    disabled={isLoadingWebsites || !websites.length}
-                    on:change={(e) => {
-                        selectedWebsiteId = e.target.value || "";
-                    }}
-                >
-                    {#if !websites.length}
-                        <option value="">No websites available</option>
-                    {:else}
-                        {#each websites as website (website.id)}
-                            <option value={website.id}>{resolveWebsiteLabel(website)}</option>
-                        {/each}
-                    {/if}
-                </select>
+        <section class="newsletter-head panel m-b-base">
+            <div class="head-main">
+                <div class="summary-title-wrap">
+                    <h3 class="m-0">Newsletter Operations</h3>
+                    <p class="txt-sm txt-hint m-b-0">Manage subscribers and campaigns by website in one place.</p>
+                </div>
 
-                <div class="flex-fill" />
-                <span class="txt-sm txt-hint">V1: Subscribers + Campaigns + manual send</span>
+                <div class="head-selector">
+                    <label class="txt-sm txt-hint block m-b-5" for="newsletter-website">Website</label>
+                    <div class="selector-row">
+                        <select
+                            id="newsletter-website"
+                            class="input input-sm"
+                            value={selectedWebsiteId}
+                            disabled={isLoadingWebsites || !websites.length}
+                            on:change={(e) => {
+                                selectedWebsiteId = e.target.value || "";
+                            }}
+                        >
+                            {#if !websites.length}
+                                <option value="">No websites available</option>
+                            {:else}
+                                {#each websites as website (website.id)}
+                                    <option value={website.id}>{resolveWebsiteLabel(website)}</option>
+                                {/each}
+                            {/if}
+                        </select>
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-outline"
+                            disabled={isLoadingWebsites}
+                            on:click={loadWebsites}
+                        >
+                            <i class="ri-refresh-line" />
+                            <span class="txt">Reload sites</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-badges">
+                <span class="summary-pill">
+                    <i class="ri-user-3-line" />
+                    {subscribers.length} subscribers
+                </span>
+                <span class="summary-pill">
+                    <i class="ri-user-follow-line" />
+                    {activeSubscribers.length} active
+                </span>
+                <span class="summary-pill">
+                    <i class="ri-megaphone-line" />
+                    {campaigns.length} campaigns
+                </span>
+                <span class="summary-pill">
+                    <i class="ri-send-plane-2-line" />
+                    {sentCampaigns.length} sent
+                </span>
+                <span class="summary-pill summary-hint-pill">Select a website to scope all actions</span>
             </div>
         </section>
 
@@ -437,7 +473,10 @@
                 <div class="tabs-content">
                     {#if activeSection === "subscribers"}
                         <section class="panel m-b-base">
-                            <h4 class="m-t-0 m-b-sm">Add subscriber</h4>
+                            <div class="section-head m-b-sm">
+                                <h4 class="m-0">Add subscriber</h4>
+                                <p class="txt-sm txt-hint m-b-0">Add contacts manually and set their initial lifecycle status.</p>
+                            </div>
                             <form class="grid" on:submit|preventDefault={createSubscriber}>
                                 <div class="col-md-7">
                                     <label class="txt-sm txt-hint block m-b-5" for="subscriber-email">Email</label>
@@ -464,11 +503,11 @@
                                 <div class="col-md-2 align-end">
                                     <button
                                         type="submit"
-                                        class="btn btn-block"
+                                        class="btn btn-block btn-strong"
                                         class:btn-loading={isCreatingSubscriber}
                                         disabled={isCreatingSubscriber}
                                     >
-                                        <span class="txt">Add</span>
+                                        <span class="txt">Add subscriber</span>
                                     </button>
                                 </div>
                             </form>
@@ -478,7 +517,7 @@
                             <div class="flex m-b-sm">
                                 <h4 class="m-0">Subscribers</h4>
                                 <div class="flex-fill" />
-                                <span class="txt-sm txt-hint">{subscribers.length} total</span>
+                                <span class="txt-sm txt-hint">{subscribers.length} total | {activeSubscribers.length} active</span>
                             </div>
 
                             {#if isLoadingSubscribers}
@@ -494,20 +533,30 @@
                                         {#each subscribers as subscriber (subscriber.id)}
                                             <div class="list-item newsletter-list-item">
                                                 <div class="content">
-                                                    <div class="txt">{subscriber.email}</div>
-                                                    <div class="txt-xs txt-hint">
-                                                        Status: <strong>{subscriber.status}</strong>
+                                                    <div class="subscriber-title">
+                                                        <span class="txt">{subscriber.email}</span>
+                                                        <span
+                                                            class="status-chip"
+                                                            class:is-active={subscriber.status === "active"}
+                                                            class:is-pending={subscriber.status === "pending"}
+                                                            class:is-unsubscribed={subscriber.status === "unsubscribed"}
+                                                        >
+                                                            {subscriber.status}
+                                                        </span>
+                                                    </div>
+                                                    <div class="txt-xs txt-hint meta-line">
                                                         {#if subscriber.confirmedAt}
-                                                            | Confirmed: {formatDateTime(subscriber.confirmedAt)}
+                                                            Confirmed: {formatDateTime(subscriber.confirmedAt)}
+                                                            <span class="meta-sep">|</span>
                                                         {/if}
-                                                        | Added: {formatDateTime(subscriber.created)}
+                                                        Added: {formatDateTime(subscriber.created)}
                                                     </div>
                                                 </div>
                                                 <div class="actions">
                                                     {#if subscriber.status !== "active"}
                                                         <button
                                                             type="button"
-                                                            class="btn btn-xs btn-outline"
+                                                            class="btn btn-xs btn-outline action-btn"
                                                             on:click={() => setSubscriberStatus(subscriber, "active")}
                                                         >
                                                             <span class="txt">Mark active</span>
@@ -516,7 +565,7 @@
                                                     {#if subscriber.status !== "unsubscribed"}
                                                         <button
                                                             type="button"
-                                                            class="btn btn-xs btn-outline"
+                                                            class="btn btn-xs btn-outline action-btn"
                                                             on:click={() => setSubscriberStatus(subscriber, "unsubscribed")}
                                                         >
                                                             <span class="txt">Unsubscribe</span>
@@ -531,7 +580,10 @@
                         </section>
                     {:else}
                         <section class="panel m-b-base">
-                            <h4 class="m-t-0 m-b-sm">Create campaign draft</h4>
+                            <div class="section-head m-b-sm">
+                                <h4 class="m-0">Create campaign draft</h4>
+                                <p class="txt-sm txt-hint m-b-0">Build your message, choose recipients, then send when ready.</p>
+                            </div>
                             <form class="grid" on:submit|preventDefault={createCampaignDraft}>
                                 <div class="col-12">
                                     <label class="txt-sm txt-hint block m-b-5" for="campaign-subject">Subject</label>
@@ -547,7 +599,7 @@
                                     <label class="txt-sm txt-hint block m-b-5" for="campaign-body">Body</label>
                                     <textarea
                                         id="campaign-body"
-                                        class="input"
+                                        class="input campaign-body-input"
                                         rows="7"
                                         placeholder="Campaign HTML or plain text content..."
                                         bind:value={campaignForm.body}
@@ -570,7 +622,7 @@
                                 <div class="col-md-8 align-end">
                                     <button
                                         type="submit"
-                                        class="btn"
+                                        class="btn btn-strong"
                                         class:btn-loading={isCreatingCampaign}
                                         disabled={isCreatingCampaign}
                                     >
@@ -606,7 +658,7 @@
                             <div class="flex m-b-sm">
                                 <h4 class="m-0">Campaigns</h4>
                                 <div class="flex-fill" />
-                                <span class="txt-sm txt-hint">{campaigns.length} total</span>
+                                <span class="txt-sm txt-hint">{campaigns.length} total | {sentCampaigns.length} sent</span>
                             </div>
 
                             {#if isLoadingCampaigns}
@@ -622,20 +674,32 @@
                                         {#each campaigns as campaign (campaign.id)}
                                             <div class="list-item newsletter-list-item">
                                                 <div class="content">
-                                                    <div class="txt">{campaign.subject}</div>
-                                                    <div class="txt-xs txt-hint">
-                                                        Status: <strong>{campaign.status}</strong>
-                                                        | Recipients type: {campaign.recipientsType}
-                                                        | Sent count: {campaign.recipientsCount || 0}
-                                                        | Sent at: {formatDateTime(campaign.sentAt)}
-                                                        | Created: {formatDateTime(campaign.created)}
+                                                    <div class="subscriber-title">
+                                                        <span class="txt">{campaign.subject}</span>
+                                                        <span
+                                                            class="status-chip"
+                                                            class:is-active={campaign.status === "sent"}
+                                                            class:is-pending={campaign.status === "draft"}
+                                                            class:is-unsubscribed={campaign.status !== "sent" && campaign.status !== "draft"}
+                                                        >
+                                                            {campaign.status}
+                                                        </span>
+                                                    </div>
+                                                    <div class="txt-xs txt-hint meta-line">
+                                                        Recipients: {campaign.recipientsType}
+                                                        <span class="meta-sep">|</span>
+                                                        Sent count: {campaign.recipientsCount || 0}
+                                                        <span class="meta-sep">|</span>
+                                                        Sent at: {formatDateTime(campaign.sentAt)}
+                                                        <span class="meta-sep">|</span>
+                                                        Created: {formatDateTime(campaign.created)}
                                                     </div>
                                                 </div>
                                                 <div class="actions">
                                                     {#if campaign.status !== "sent"}
                                                         <button
                                                             type="button"
-                                                            class="btn btn-xs"
+                                                            class="btn btn-xs btn-strong"
                                                             class:btn-loading={isSendingCampaign[campaign.id]}
                                                             disabled={!!isSendingCampaign[campaign.id]}
                                                             on:click={() => sendCampaign(campaign)}
@@ -658,19 +722,74 @@
 </PageWrapper>
 
 <style>
-    .newsletter-toolbar {
-        padding-bottom: 12px;
+    .newsletter-head {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 14px 16px;
     }
 
-    .toolbar-row {
+    .head-main {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+    }
+
+    .summary-title-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 260px;
+    }
+
+    .head-selector {
+        width: min(100%, 520px);
+    }
+
+    .selector-row {
         display: flex;
         align-items: center;
-        flex-wrap: wrap;
-        gap: 10px;
+        gap: 8px;
     }
 
-    .toolbar-row select {
-        min-width: 240px;
+    .selector-row .input {
+        flex: 1 1 auto;
+        min-width: 260px;
+    }
+
+    .selector-row .btn {
+        flex: 0 0 auto;
+    }
+
+    .summary-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .summary-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseAlt1Color);
+        color: var(--txtHintColor);
+        font-size: 12px;
+        padding: 6px 10px;
+        white-space: nowrap;
+    }
+
+    .summary-hint-pill {
+        border-style: dashed;
+    }
+
+    .summary-pill i {
+        color: var(--txtPrimaryColor);
+        opacity: 0.85;
+        font-size: 13px;
     }
 
     .loading-state,
@@ -713,5 +832,107 @@
 
     .newsletter-list-item {
         gap: 10px;
+        border-radius: var(--baseRadius);
+        padding: 10px 12px;
+        background: var(--baseAlt1Color);
+    }
+
+    .section-head {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .subscriber-title {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        font-size: 11px;
+        line-height: 1;
+        text-transform: capitalize;
+        padding: 4px 8px;
+    }
+
+    .status-chip.is-active {
+        background: color-mix(in srgb, var(--successColor) 12%, transparent);
+        border-color: color-mix(in srgb, var(--successColor) 40%, transparent);
+        color: var(--successColor);
+    }
+
+    .status-chip.is-pending {
+        background: color-mix(in srgb, var(--warningColor) 14%, transparent);
+        border-color: color-mix(in srgb, var(--warningColor) 40%, transparent);
+        color: var(--warningColor);
+    }
+
+    .status-chip.is-unsubscribed {
+        background: color-mix(in srgb, var(--dangerColor) 12%, transparent);
+        border-color: color-mix(in srgb, var(--dangerColor) 38%, transparent);
+        color: var(--dangerColor);
+    }
+
+    .meta-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        margin-top: 3px;
+    }
+
+    .meta-sep {
+        opacity: 0.55;
+    }
+
+    .action-btn {
+        min-width: 110px;
+    }
+
+    .btn-strong {
+        font-weight: 600;
+    }
+
+    .campaign-body-input {
+        min-height: 170px;
+        resize: vertical;
+    }
+
+    @media (max-width: 640px) {
+        .head-main {
+            align-items: stretch;
+        }
+
+        .head-selector {
+            width: 100%;
+        }
+
+        .selector-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .selector-row .input {
+            min-width: 0;
+        }
+
+        .selector-row .btn {
+            width: 100%;
+        }
+
+        .summary-pill {
+            font-size: 11px;
+            padding: 5px 9px;
+        }
+
+        .newsletter-list-item {
+            padding: 10px;
+        }
     }
 </style>
