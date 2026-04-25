@@ -128,6 +128,18 @@
                     <i class="ri-mail-send-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Newsletter section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated Reports section entry in app sidebar. -->
+                <a
+                    href="/reports"
+                    class="menu-item"
+                    aria-label="Reports"
+                    use:link
+                    use:active={{ path: "/reports/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Reports", position: "right" }}
+                >
+                    <i class="ri-file-chart-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Reports section entry in app sidebar. -->
                 {#if canAccessAdminAreas}
                     <a
                         href="/logs"

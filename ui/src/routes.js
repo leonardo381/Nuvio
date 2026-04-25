@@ -2,6 +2,7 @@ import PageIndex from "@/components/PageIndex.svelte";
 import PageLogs from "@/components/logs/PageLogs.svelte";
 import PageNewsletter from "@/components/newsletter/PageNewsletter.svelte";
 import PageRecords from "@/components/records/PageRecords.svelte";
+import PageReports from "@/components/reports/PageReports.svelte";
 import PageReviews from "@/components/reviews/PageReviews.svelte";
 import PageApplication from "@/components/settings/PageApplication.svelte";
 import PageBackups from "@/components/settings/PageBackups.svelte";
@@ -64,6 +65,12 @@ const routes = {
 
     "/newsletter": wrap({
         component: PageNewsletter,
+        conditions: [(_) => isSuperuserAuth()],
+        userData: { showAppSidebar: true },
+    }),
+
+    "/reports": wrap({
+        component: PageReports,
         conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
