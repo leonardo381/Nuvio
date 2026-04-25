@@ -22,7 +22,7 @@
         name: "",
     };
     let subscriberGroupFormError = "";
-    let campaignForm = {        subject: "",        body: "",        recipientsType: "all",        recipientsIds: [],    };    let campaignFormError = "";    let campaignPreviewMode = "plain";    let subscriberSearch = "";
+    let campaignForm = {        subject: "",        body: "",        recipientsType: "all",        recipientsIds: [],    };    let campaignFormError = "";    let campaignPreviewMode = "plain";    let campaignWorkspace = "builder";    let editingCampaignId = "";    let isSavingCampaign = false;    let subscriberSearch = "";
     let subscriberStatusFilter = "all";
     let subscriberGroupFilter = "all";
     let subscriberSort = "newest";
@@ -305,7 +305,7 @@
 
         editingSubscriberForm = { ...editingSubscriberForm, groupIds: nextGroupIds };
     }
-    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return campaignForm.recipientsIds.includes(subscriberId);    }    function toggleManualRecipient(subscriberId) {        clearCampaignFormError();        if (campaignForm.recipientsIds.includes(subscriberId)) {            campaignForm.recipientsIds = campaignForm.recipientsIds.filter((id) => id !== subscriberId);        } else {            campaignForm.recipientsIds = [...campaignForm.recipientsIds, subscriberId];        }    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
+    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return campaignForm.recipientsIds.includes(subscriberId);    }    function toggleManualRecipient(subscriberId) {        clearCampaignFormError();        if (campaignForm.recipientsIds.includes(subscriberId)) {            campaignForm.recipientsIds = campaignForm.recipientsIds.filter((id) => id !== subscriberId);        } else {            campaignForm.recipientsIds = [...campaignForm.recipientsIds, subscriberId];        }    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
     }
 
@@ -397,6 +397,7 @@
         subscriberForm = { ...subscriberForm, groupIds: [] };
         cancelEditSubscriber();
         resetSubscriberSelection();
+        resetCampaignComposer();
     }
     async function createSubscriber() {
         if (!hasNewsletterCollections || !selectedWebsiteId || isCreatingSubscriber) {
@@ -534,7 +535,96 @@
                 isBulkUpdating = false;
                 return;
             }
-            await Promise.all(updates);            resetSubscriberSelection();            await loadSubscribers();            addSuccessToast(`Updated ${updates.length} subscriber(s).`);        } catch (err) {            ApiClient.error(err);        }        isBulkUpdating = false;    }    async function createCampaignDraft() {        if (!hasNewsletterCollections || !selectedWebsiteId || isCreatingCampaign) {            return;        }        const validationError = resolveCreateCampaignDisabledReason();        if (validationError) {            campaignFormError = validationError;            return;        }        campaignFormError = "";        isCreatingCampaign = true;        try {            await ApiClient.collection(campaignsCollection.id).create({                website: selectedWebsiteId,                subject: `${campaignForm.subject || ""}`.trim(),                body: `${campaignForm.body || ""}`.trim(),                status: "draft",                recipientsType: campaignForm.recipientsType,                recipientsIds: campaignForm.recipientsType === "manual" ? campaignForm.recipientsIds : [],                recipientsCount: 0,            });            campaignForm = {                subject: "",                body: "",                recipientsType: "all",                recipientsIds: [],            };            campaignPreviewMode = "plain";            await loadCampaigns();            addSuccessToast("Draft campaign created.");        } catch (err) {            ApiClient.error(err);        }        isCreatingCampaign = false;    }    async function sendCampaign(campaign) {        if (!campaign?.id || isSendingCampaign[campaign.id]) {            return false;        }        isSendingCampaign[campaign.id] = true;        isSendingCampaign = { ...isSendingCampaign };        let sent = false;        try {            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {                method: "POST",                body: {                    campaignId: campaign.id,                },                requestKey: "nuvio_newsletter_send_" + campaign.id,            });            addSuccessToast(`Campaign sent to ${response?.recipientsCount || 0} recipient(s).`);            await loadCampaigns();            sent = true;        } catch (err) {            ApiClient.error(err);        }        delete isSendingCampaign[campaign.id];        isSendingCampaign = { ...isSendingCampaign };        return sent;    }    function refreshAll() {
+            await Promise.all(updates);            resetSubscriberSelection();            await loadSubscribers();            addSuccessToast(`Updated ${updates.length} subscriber(s).`);        } catch (err) {            ApiClient.error(err);        }        isBulkUpdating = false;    }    async function sendCampaign(campaign) {        if (!campaign?.id || isSendingCampaign[campaign.id]) {            return false;        }        isSendingCampaign[campaign.id] = true;        isSendingCampaign = { ...isSendingCampaign };        let sent = false;        try {            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {                method: "POST",                body: {                    campaignId: campaign.id,                },                requestKey: "nuvio_newsletter_send_" + campaign.id,            });            addSuccessToast(`Campaign sent to ${response?.recipientsCount || 0} recipient(s).`);            await loadCampaigns();            sent = true;        } catch (err) {            ApiClient.error(err);        }        delete isSendingCampaign[campaign.id];        isSendingCampaign = { ...isSendingCampaign };        return sent;    }    function resetCampaignComposer() {
+        campaignForm = {
+            subject: "",
+            body: "",
+            recipientsType: "all",
+            recipientsIds: [],
+        };
+        campaignFormError = "";
+        campaignPreviewMode = "plain";
+        editingCampaignId = "";
+    }
+
+    function startEditCampaign(campaign) {
+        if (!campaign?.id) {
+            return;
+        }
+
+        editingCampaignId = campaign.id;
+        campaignForm = {
+            subject: `${campaign.subject || ""}`,
+            body: `${campaign.body || ""}`,
+            recipientsType: `${campaign.recipientsType || "all"}`.toLowerCase() === "manual" ? "manual" : "all",
+            recipientsIds: Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean) : [],
+        };
+        campaignWorkspace = "builder";
+        campaignFormError = "";
+    }
+
+    async function saveCampaignDraftFromComposer() {
+        if (!hasNewsletterCollections || !selectedWebsiteId || isCreatingCampaign || isSavingCampaign) {
+            return;
+        }
+
+        const validationError = resolveCreateCampaignDisabledReason(
+            false,
+            selectedWebsiteId,
+            campaignForm.subject,
+            campaignForm.body,
+            campaignForm.recipientsType,
+            campaignForm.recipientsIds,
+        );
+
+        if (validationError) {
+            campaignFormError = validationError;
+            return;
+        }
+
+        campaignFormError = "";
+        const payload = {
+            website: selectedWebsiteId,
+            subject: `${campaignForm.subject || ""}`.trim(),
+            body: `${campaignForm.body || ""}`.trim(),
+            status: "draft",
+            recipientsType: campaignForm.recipientsType,
+            recipientsIds: campaignForm.recipientsType === "manual" ? campaignForm.recipientsIds : [],
+        };
+
+        if (editingCampaignId) {
+            isSavingCampaign = true;
+            try {
+                await ApiClient.collection(campaignsCollection.id).update(editingCampaignId, payload);
+                await loadCampaigns();
+                addSuccessToast("Campaign draft updated.");
+                resetCampaignComposer();
+                campaignWorkspace = "audience";
+            } catch (err) {
+                ApiClient.error(err);
+            }
+            isSavingCampaign = false;
+            return;
+        }
+
+        isCreatingCampaign = true;
+        try {
+            await ApiClient.collection(campaignsCollection.id).create({
+                ...payload,
+                recipientsCount: 0,
+            });
+            await loadCampaigns();
+            addSuccessToast("Draft campaign created.");
+            resetCampaignComposer();
+            campaignWorkspace = "audience";
+        } catch (err) {
+            ApiClient.error(err);
+        }
+        isCreatingCampaign = false;
+    }
+
+
+    function refreshAll() {
         loadWebsites();
         loadSubscribers();
         loadCampaigns();
@@ -980,7 +1070,296 @@
                                 </div>
                             {/if}
                         </section>
-                    {:else}                        <section class="panel m-b-base">                            <div class="section-head m-b-sm">                                <h4 class="m-0">Create campaign draft</h4>                                <p class="txt-sm txt-hint m-b-0">Build your message, preview, choose recipients, then send when ready.</p>                            </div>                            <form class="grid" on:submit|preventDefault={createCampaignDraft}>                                <div class="col-12">                                    <label class="txt-sm txt-hint block m-b-5" for="campaign-subject">Subject</label>                                    <input                                        id="campaign-subject"                                        type="text"                                        class="input"                                        placeholder="Newsletter subject..."                                        bind:value={campaignForm.subject}                                        on:input={clearCampaignFormError}                                    />                                </div>                                <div class="col-12">                                    <label class="txt-sm txt-hint block m-b-5" for="campaign-body">Body</label>                                    <textarea                                        id="campaign-body"                                        class="input campaign-body-input"                                        rows="7"                                        placeholder="Campaign HTML or plain text content..."                                        bind:value={campaignForm.body}                                        on:input={clearCampaignFormError}                                    />                                </div>                                <div class="col-md-4">                                    <label class="txt-sm txt-hint block m-b-5" for="campaign-recipients-type">                                        Recipients                                    </label>                                    <select                                        id="campaign-recipients-type"                                        class="input"                                        bind:value={campaignForm.recipientsType}                                        on:change={clearCampaignFormError}                                    >                                        {#each campaignRecipientsTypeOptions as recipientsType}                                            <option value={recipientsType}>{recipientsType}</option>                                        {/each}                                    </select>                                </div>                                <div class="col-md-8 align-end">                                    <button                                        type="submit"                                        class="btn btn-strong"                                        class:btn-loading={isCreatingCampaign}                                        disabled={!!createCampaignDisabledReason}                                        title={createCampaignDisabledReason || null}                                    >                                        <span class="txt">Create draft</span>                                    </button>                                </div>                                {#if campaignFormError}                                    <div class="col-12">                                        <div class="txt-sm txt-danger">{campaignFormError}</div>                                    </div>                                {/if}                            </form>                            <div class="campaign-preview m-t-sm">                                <div class="flex m-b-xs">                                    <h5 class="m-0">Preview</h5>                                    <div class="flex-fill" />                                    <div class="tabs-header compact combined left preview-tabs">                                        <button                                            type="button"                                            class="tab-item"                                            class:active={campaignPreviewMode === "plain"}                                            on:click={() => (campaignPreviewMode = "plain")}                                        >                                            Plain                                        </button>                                        <button                                            type="button"                                            class="tab-item"                                            class:active={campaignPreviewMode === "html"}                                            on:click={() => (campaignPreviewMode = "html")}                                        >                                            HTML                                        </button>                                    </div>                                </div>                                <div class="txt-sm txt-hint m-b-xs">                                    Subject: {`${campaignForm.subject || ""}`.trim() || "(No subject yet)"}                                </div>                                {#if campaignPreviewMode === "plain"}                                    <pre class="campaign-preview-box">{`${campaignForm.body || ""}`.trim() || "Body preview will appear here."}</pre>                                {:else}                                    <div class="campaign-preview-box campaign-preview-html">                                        {#if `${campaignForm.body || ""}`.trim()}                                            {@html campaignForm.body}                                        {:else}                                            <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>                                        {/if}                                    </div>                                {/if}                            </div>                            {#if campaignForm.recipientsType === "manual"}                                <div class="manual-recipients m-t-sm">                                    <h5 class="m-t-0 m-b-xs">Manual recipients ({activeSubscribers.length} active)</h5>                                    {#if !activeSubscribers.length}                                        <div class="empty-state">No active subscribers available for manual selection.</div>                                    {:else}                                        <div class="manual-recipients-grid">                                            {#each activeSubscribers as subscriber (subscriber.id)}                                                <label class="manual-recipient-item">                                                    <input                                                        type="checkbox"                                                        checked={isManualRecipientSelected(subscriber.id)}                                                        on:change={() => toggleManualRecipient(subscriber.id)}                                                    />                                                    <span>{subscriber.email}</span>                                                </label>                                            {/each}                                        </div>                                    {/if}                                </div>                            {/if}                        </section>                        <section class="panel">                            <div class="flex m-b-sm">                                <h4 class="m-0">Campaigns</h4>                                <div class="flex-fill" />                                <span class="txt-sm txt-hint">{campaigns.length} total | {sentCampaigns.length} sent</span>                            </div>                            {#if isLoadingCampaigns}                                <div class="loading-state">                                    <span class="loader loader-sm" />                                    <span class="txt-hint">Loading campaigns...</span>                                </div>                            {:else if !campaigns.length}                                <div class="empty-state empty-state-stack">                                    <span>No campaigns yet for this website.</span>                                    <span class="txt-sm txt-hint">Create your first draft above to start sending newsletters.</span>                                </div>                            {:else}                                <div class="list list-compact">                                    <div class="list-content">                                        {#each campaigns as campaign (campaign.id)}                                            <div class="list-item newsletter-list-item">                                                <div class="content">                                                    <div class="subscriber-title">                                                        <span class="txt">{campaign.subject}</span>                                                        <span                                                            class="status-chip"                                                            class:is-active={normalizeStatus(campaign.status) === "sent"}                                                            class:is-pending={normalizeStatus(campaign.status) === "draft"}                                                            class:is-unsubscribed={normalizeStatus(campaign.status) !== "sent" && normalizeStatus(campaign.status) !== "draft"}                                                        >                                                            {campaign.status}                                                        </span>                                                    </div>                                                    <div class="txt-xs txt-hint meta-line">                                                        Recipients type: {campaign.recipientsType}                                                        <span class="meta-sep">|</span>                                                        Estimated: {resolveCampaignRecipientsCount(campaign)}                                                        <span class="meta-sep">|</span>                                                        Sent count: {campaign.recipientsCount || 0}                                                        <span class="meta-sep">|</span>                                                        Sent at: {formatDateTime(campaign.sentAt)}                                                        <span class="meta-sep">|</span>                                                        Created: {formatDateTime(campaign.created)}                                                    </div>                                                </div>                                                <div class="actions">                                                    {#if normalizeStatus(campaign.status) !== "sent"}                                                        <button                                                            type="button"                                                            class="btn btn-xs btn-strong"                                                            class:btn-loading={isSendingCampaign[campaign.id]}                                                            disabled={!!getSendCampaignDisabledReason(campaign)}                                                            title={getSendCampaignDisabledReason(campaign) || null}                                                            on:click={() => openSendCampaignModal(campaign)}                                                        >                                                            <span class="txt">Send</span>                                                        </button>                                                    {/if}                                                </div>                                            </div>                                        {/each}                                    </div>                                </div>                            {/if}                        </section>                    {/if}                </div>            </div>        {/if}        {#if pendingSendCampaign}
+                    {:else}
+                        <div class="campaign-layout-grid">
+                            <section class="panel campaign-composer-panel">
+                                <div class="tabs-header compact combined left campaign-workspace-tabs m-b-sm">
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={campaignWorkspace === "builder"}
+                                        on:click={() => (campaignWorkspace = "builder")}
+                                    >
+                                        Builder
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={campaignWorkspace === "audience"}
+                                        on:click={() => (campaignWorkspace = "audience")}
+                                    >
+                                        Audience & Send
+                                    </button>
+                                </div>
+
+                                {#if campaignWorkspace === "builder"}
+                                    <div class="section-head m-b-sm">
+                                        <h4 class="m-0">Campaign Builder</h4>
+                                        <p class="txt-sm txt-hint m-b-0">
+                                            Write your campaign and review the preview on the right before moving to audience.
+                                        </p>
+                                    </div>
+
+                                    {#if editingCampaignId}
+                                        <div class="campaign-edit-banner m-b-sm">
+                                            <span class="txt-sm">Editing existing draft</span>
+                                            <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
+                                                <span class="txt">New draft</span>
+                                            </button>
+                                        </div>
+                                    {/if}
+
+                                    <div class="campaign-builder-split">
+                                        <div class="campaign-builder-editor">
+                                            <label class="txt-sm txt-hint block m-b-5" for="campaign-subject">Subject</label>
+                                            <input
+                                                id="campaign-subject"
+                                                type="text"
+                                                class="input"
+                                                placeholder="Newsletter subject..."
+                                                bind:value={campaignForm.subject}
+                                                on:input={clearCampaignFormError}
+                                            />
+
+                                            <label class="txt-sm txt-hint block m-b-5 m-t-sm" for="campaign-body">Body</label>
+                                            <textarea
+                                                id="campaign-body"
+                                                class="input campaign-body-input"
+                                                rows="10"
+                                                placeholder="Campaign HTML or plain text content..."
+                                                bind:value={campaignForm.body}
+                                                on:input={clearCampaignFormError}
+                                            />
+
+                                            <div class="campaign-builder-actions m-t-sm">
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-strong"
+                                                    disabled={!`${campaignForm.subject || ""}`.trim() || !`${campaignForm.body || ""}`.trim()}
+                                                    on:click={() => (campaignWorkspace = "audience")}
+                                                >
+                                                    <span class="txt">Continue to Audience</span>
+                                                </button>
+                                            </div>
+
+                                            {#if campaignFormError}
+                                                <div class="txt-sm txt-danger m-t-sm">{campaignFormError}</div>
+                                            {/if}
+                                        </div>
+
+                                        <div class="campaign-builder-preview-side">
+                                            <div class="flex m-b-xs">
+                                                <h5 class="m-0">Preview</h5>
+                                                <div class="flex-fill" />
+                                                <div class="tabs-header compact combined left preview-tabs">
+                                                    <button
+                                                        type="button"
+                                                        class="tab-item"
+                                                        class:active={campaignPreviewMode === "plain"}
+                                                        on:click={() => (campaignPreviewMode = "plain")}
+                                                    >
+                                                        Plain
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        class="tab-item"
+                                                        class:active={campaignPreviewMode === "html"}
+                                                        on:click={() => (campaignPreviewMode = "html")}
+                                                    >
+                                                        HTML
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div class="txt-sm txt-hint m-b-xs">
+                                                Subject: {`${campaignForm.subject || ""}`.trim() || "(No subject yet)"}
+                                            </div>
+
+                                            {#if campaignPreviewMode === "plain"}
+                                                <pre class="campaign-preview-box">{`${campaignForm.body || ""}`.trim() || "Body preview will appear here."}</pre>
+                                            {:else}
+                                                <div class="campaign-preview-box campaign-preview-html">
+                                                    {#if `${campaignForm.body || ""}`.trim()}
+                                                        {@html campaignForm.body}
+                                                    {:else}
+                                                        <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
+                                                    {/if}
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    </div>
+                                {:else}
+                                    <div class="section-head m-b-sm">
+                                        <h4 class="m-0">Audience & Send</h4>
+                                        <p class="txt-sm txt-hint m-b-0">Select recipients, then create or update your draft.</p>
+                                    </div>
+
+                                    <div class="campaign-audience-summary m-b-sm">
+                                        <div class="txt-sm txt-hint">Subject: {`${campaignForm.subject || ""}`.trim() || "(No subject yet)"}</div>
+                                        <div class="txt-sm txt-hint">Body length: {`${campaignForm.body || ""}`.trim().length} characters</div>
+                                        {#if editingCampaignId}
+                                            <div class="txt-sm">Editing draft id: <code>{editingCampaignId}</code></div>
+                                        {/if}
+                                    </div>
+
+                                    <form class="grid" on:submit|preventDefault={saveCampaignDraftFromComposer}>
+                                        <div class="col-md-4">
+                                            <label class="txt-sm txt-hint block m-b-5" for="campaign-recipients-type">Recipients</label>
+                                            <select
+                                                id="campaign-recipients-type"
+                                                class="input"
+                                                bind:value={campaignForm.recipientsType}
+                                                on:change={clearCampaignFormError}
+                                            >
+                                                {#each campaignRecipientsTypeOptions as recipientsType}
+                                                    <option value={recipientsType}>{recipientsType}</option>
+                                                {/each}
+                                            </select>
+                                        </div>
+
+                                        <div class="col-md-8 campaign-audience-actions">
+                                            <button type="button" class="btn btn-sm btn-outline" on:click={() => (campaignWorkspace = "builder")}>
+                                                <span class="txt">Back to Builder</span>
+                                            </button>
+                                            {#if editingCampaignId}
+                                                <button type="button" class="btn btn-sm btn-outline" on:click={resetCampaignComposer}>
+                                                    <span class="txt">Cancel Edit</span>
+                                                </button>
+                                            {/if}
+                                            <button
+                                                type="submit"
+                                                class="btn btn-strong"
+                                                class:btn-loading={isCreatingCampaign || isSavingCampaign}
+                                                disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
+                                                title={createCampaignDisabledReason || null}
+                                            >
+                                                <span class="txt">{editingCampaignId ? "Update draft" : "Create draft"}</span>
+                                            </button>
+                                        </div>
+
+                                        {#if campaignForm.recipientsType === "manual"}
+                                            <div class="col-12 manual-recipients m-t-sm">
+                                                <h5 class="m-t-0 m-b-xs">Manual recipients ({activeSubscribers.length} active)</h5>
+                                                {#if !activeSubscribers.length}
+                                                    <div class="empty-state">No active subscribers available for manual selection.</div>
+                                                {:else}
+                                                    <div class="manual-recipients-grid">
+                                                        {#each activeSubscribers as subscriber (subscriber.id)}
+                                                            <label class="manual-recipient-item">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isManualRecipientSelected(subscriber.id)}
+                                                                    on:change={() => toggleManualRecipient(subscriber.id)}
+                                                                />
+                                                                <span>{subscriber.email}</span>
+                                                            </label>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                        {/if}
+
+                                        {#if campaignFormError}
+                                            <div class="col-12">
+                                                <div class="txt-sm txt-danger">{campaignFormError}</div>
+                                            </div>
+                                        {/if}
+                                    </form>
+                                {/if}
+                            </section>
+
+                            <section class="panel campaign-list-panel">
+                                <div class="campaigns-header-row m-b-sm">
+                                    <div class="section-head m-b-0">
+                                        <h4 class="m-0">Campaigns</h4>
+                                        <p class="txt-sm txt-hint m-b-0">Edit drafts from here, then finalize audience and send.</p>
+                                    </div>
+                                    <div class="campaign-list-header-actions">
+                                        <span class="txt-sm txt-hint">{campaigns.length} total | {draftCampaigns.length} drafts | {sentCampaigns.length} sent</span>
+                                        {#if editingCampaignId}
+                                            <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
+                                                <span class="txt">Clear Edit</span>
+                                            </button>
+                                        {/if}
+                                    </div>
+                                </div>
+
+                                {#if isLoadingCampaigns}
+                                    <div class="loading-state">
+                                        <span class="loader loader-sm" />
+                                        <span class="txt-hint">Loading campaigns...</span>
+                                    </div>
+                                {:else if !campaigns.length}
+                                    <div class="empty-state empty-state-stack">
+                                        <span>No campaigns yet for this website.</span>
+                                        <span class="txt-sm txt-hint">Create your first draft in Builder to start sending newsletters.</span>
+                                    </div>
+                                {:else}
+                                    <div class="list list-compact">
+                                        <div class="list-content campaign-list-scroll">
+                                            {#each campaigns as campaign (campaign.id)}
+                                                <div
+                                                    class="list-item newsletter-list-item campaign-row-item"
+                                                    class:is-editing={editingCampaignId === campaign.id}
+                                                >
+                                                    <div class="content campaign-row-content">
+                                                        <div class="campaign-row-top">
+                                                            <span class="txt campaign-row-subject">{campaign.subject || "(No subject)"}</span>
+                                                            <span
+                                                                class="status-chip"
+                                                                class:is-active={normalizeStatus(campaign.status) === "sent"}
+                                                                class:is-pending={normalizeStatus(campaign.status) === "draft"}
+                                                                class:is-unsubscribed={normalizeStatus(campaign.status) !== "sent" && normalizeStatus(campaign.status) !== "draft"}
+                                                            >
+                                                                {campaign.status}
+                                                            </span>
+                                                        </div>
+                                                        <div class="txt-xs txt-hint meta-line campaign-row-meta">
+                                                            Recipients: {campaign.recipientsType || "all"}
+                                                            <span class="meta-sep">|</span>
+                                                            Est.: {resolveCampaignRecipientsCount(campaign)}
+                                                            <span class="meta-sep">|</span>
+                                                            Sent: {campaign.recipientsCount || 0}
+                                                            <span class="meta-sep">|</span>
+                                                            Updated: {formatDateTime(campaign.updated || campaign.created)}
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="actions campaign-row-actions">
+                                                        {#if normalizeStatus(campaign.status) === "draft"}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-outline"
+                                                                on:click={() => startEditCampaign(campaign)}
+                                                            >
+                                                                <span class="txt">{editingCampaignId === campaign.id ? "Editing" : "Edit"}</span>
+                                                            </button>
+                                                        {/if}
+
+                                                        {#if normalizeStatus(campaign.status) !== "sent"}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-strong"
+                                                                class:btn-loading={isSendingCampaign[campaign.id]}
+                                                                disabled={!!getSendCampaignDisabledReason(campaign)}
+                                                                title={getSendCampaignDisabledReason(campaign) || null}
+                                                                on:click={() => openSendCampaignModal(campaign)}
+                                                            >
+                                                                <span class="txt">Send</span>
+                                                            </button>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    </div>
+                                {/if}
+                            </section>
+                        </div>
+                    {/if}
+                </div>
+            </div>
+        {/if}        {#if pendingSendCampaign}
             <div class="newsletter-modal-wrap" role="dialog" aria-modal="true" aria-label="Confirm send campaign">
                 <button
                     type="button"
@@ -1328,11 +1707,7 @@
         padding: 0 3px;
         white-space: nowrap;
     }
-    .selection-cell {        display: inline-flex;        align-items: center;        justify-content: center;        padding-right: 2px;    }    .pagination-wrap {        display: flex;        align-items: center;        justify-content: flex-end;        gap: 8px;        margin-top: 10px;    }    .campaign-preview {        border-top: 1px solid var(--baseAlt2Color);        padding-top: 12px;    }    .preview-tabs .tab-item {        min-width: 78px;    }    .campaign-preview-box {        margin: 0;        border: 1px solid var(--baseAlt2Color);        border-radius: var(--baseRadius);        background: var(--baseAlt1Color);        padding: 10px 12px;        min-height: 110px;        max-height: 300px;        overflow: auto;        white-space: pre-wrap;        word-break: break-word;        font-family: inherit;        font-size: var(--baseFontSize);    }    .campaign-preview-html :global(p:last-child) {        margin-bottom: 0;    }    .loading-state,    .empty-state {        border: 1px dashed var(--baseAlt2Color);        border-radius: var(--baseRadius);        padding: 16px;        display: flex;        align-items: center;        justify-content: center;        gap: 8px;        color: var(--txtHintColor);    }    .empty-state-stack {        flex-direction: column;    }    .align-end {
-        display: flex;
-        align-items: flex-end;
-        justify-content: flex-end;
-    }
+    .selection-cell {        display: inline-flex;        align-items: center;        justify-content: center;        padding-right: 2px;    }    .pagination-wrap {        display: flex;        align-items: center;        justify-content: flex-end;        gap: 8px;        margin-top: 10px;    }        .preview-tabs .tab-item {        min-width: 78px;    }    .campaign-preview-box {        margin: 0;        border: 1px solid var(--baseAlt2Color);        border-radius: var(--baseRadius);        background: var(--baseAlt1Color);        padding: 10px 12px;        min-height: 110px;        max-height: 300px;        overflow: auto;        white-space: pre-wrap;        word-break: break-word;        font-family: inherit;        font-size: var(--baseFontSize);    }    .campaign-preview-html :global(p:last-child) {        margin-bottom: 0;    }    .loading-state,    .empty-state {        border: 1px dashed var(--baseAlt2Color);        border-radius: var(--baseRadius);        padding: 16px;        display: flex;        align-items: center;        justify-content: center;        gap: 8px;        color: var(--txtHintColor);    }    .empty-state-stack {        flex-direction: column;    }    
 
     .add-subscriber-btn {
         min-height: var(--inputHeight);
@@ -1400,6 +1775,133 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
+    }
+    .campaign-workspace-tabs {
+        margin-bottom: 10px;
+    }
+
+    .campaign-layout-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.95fr);
+        gap: 12px;
+        align-items: start;
+    }
+
+    .campaign-composer-panel,
+    .campaign-list-panel {
+        min-width: 0;
+    }
+
+    .campaign-list-header-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .campaign-list-scroll {
+        max-height: 620px;
+        overflow: auto;
+    }
+
+    .campaign-builder-split {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        gap: 12px;
+        align-items: start;
+    }
+
+    .campaign-builder-editor,
+    .campaign-builder-preview-side {
+        min-width: 0;
+    }
+
+    .campaign-builder-preview-side {
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
+        padding: 10px;
+    }
+
+    .campaign-edit-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseAlt1Color);
+        padding: 7px 10px;
+    }
+
+    .campaign-builder-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .campaign-audience-summary {
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
+        padding: 8px 10px;
+        display: grid;
+        gap: 4px;
+    }
+
+    .campaign-audience-actions {
+        display: inline-flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .campaigns-header-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .campaign-row-item {
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .campaign-row-item.is-editing {
+        background: var(--bodyColor);
+    }
+
+    .campaign-row-content {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .campaign-row-top {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .campaign-row-subject {
+        font-weight: 600;
+    }
+
+    .campaign-row-meta {
+        gap: 6px;
+    }
+
+    .campaign-row-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
     .section-head-inline {
@@ -1533,6 +2035,14 @@
             grid-template-columns: 1fr;
         }
 
+        .campaign-layout-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .campaign-builder-split {
+            grid-template-columns: 1fr;
+        }
+
         .subscriber-filter-grid {
             grid-template-columns: repeat(2, minmax(180px, 1fr));
             flex-basis: 100%;
@@ -1629,6 +2139,16 @@
         }
     }
 </style>
+
+
+
+
+
+
+
+
+
+
 
 
 
