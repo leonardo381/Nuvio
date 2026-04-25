@@ -626,9 +626,9 @@
                     {#if activeSection === "subscribers"}
                         <section class="panel">
                             <div class="subscribers-panel-header m-b-sm">
-                                <div class="section-head m-b-0">
+                                <div class="section-head section-head-inline m-b-0">
                                     <h4 class="m-0">Subscribers</h4>
-                                    <p class="txt-sm txt-hint m-b-0">Create and manage subscribers directly in the table.</p>
+                                    <span class="txt-sm txt-hint">Create and manage subscribers directly in the table.</span>
                                 </div>
                                 <div class="flex-fill" />
                                 <span class="txt-sm txt-hint">
@@ -1211,7 +1211,7 @@
         flex-wrap: wrap;
         align-items: center;
         gap: 6px;
-        min-height: var(--inputHeight);
+        min-height: var(--smBtnHeight);
     }
 
     .group-pill-btn {
@@ -1250,7 +1250,18 @@
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
         background: transparent;
-        padding: 8px;
+        padding: 5px 6px;
+    }
+
+    .form-group-pill-list .group-pill-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    .form-group-pill-list .group-pill-count {
+        min-width: 14px;
+        height: 14px;
+        font-size: 9px;
     }
 
     .row-group-pill-list {
@@ -1360,6 +1371,14 @@
         background: transparent;
     }
 
+    .subscriber-row-item:nth-child(odd) {
+        background: var(--baseColor);
+    }
+
+    .subscriber-row-item:nth-child(even) {
+        background: var(--baseAlt1Color);
+    }
+
     .subscriber-row-item.is-editing {
         background: var(--bodyColor);
     }
@@ -1381,6 +1400,14 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
+    }
+
+    .section-head-inline {
+        display: inline-flex;
+        flex-direction: row;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 
     .subscriber-title {
@@ -1602,6 +1629,11 @@
         }
     }
 </style>
+
+
+
+
+
 
 
 
