@@ -114,9 +114,21 @@
     }).length;
 
     $: normalizedSubscriberFormEmail = normalizeEmail(subscriberForm.email);
-    $: subscriberAlreadyExists = subscribers.some((subscriber) => normalizeEmail(subscriber?.email) === normalizedSubscriberFormEmail);
-    $: createSubscriberDisabledReason = resolveCreateSubscriberDisabledReason();
-    $: createCampaignDisabledReason = resolveCreateCampaignDisabledReason();
+    $: subscriberAlreadyExists = !!normalizedSubscriberFormEmail
+        && subscribers.some((subscriber) => normalizeEmail(subscriber?.email) === normalizedSubscriberFormEmail);
+    $: createSubscriberDisabledReason = resolveCreateSubscriberDisabledReason(
+        isCreatingSubscriber,
+        selectedWebsiteId,
+        subscriberForm.email,
+    );
+    $: createCampaignDisabledReason = resolveCreateCampaignDisabledReason(
+        isCreatingCampaign,
+        selectedWebsiteId,
+        campaignForm.subject,
+        campaignForm.body,
+        campaignForm.recipientsType,
+        campaignForm.recipientsIds,
+    );
 
     $: normalizedSubscriberSearch = `${subscriberSearch || ""}`.trim().toLowerCase();
     $: filteredSubscribers = sortSubscribers(
@@ -267,48 +279,40 @@
         return sorted;
     }
 
-    function resolveCreateSubscriberDisabledReason() {
-        if (isCreatingSubscriber) {
+    function resolveCreateSubscriberDisabledReason(isCreating, websiteId, email) {
+        if (isCreating) {
             return "Adding subscriber...";
         }
 
-        if (!selectedWebsiteId) {
+        if (!websiteId) {
             return "Select a website first.";
         }
 
-        if (!normalizedSubscriberFormEmail) {
+        if (!`${email || ""}`.length) {
             return "Enter subscriber email.";
-        }
-
-        if (!isValidEmail(normalizedSubscriberFormEmail)) {
-            return "Enter a valid email.";
-        }
-
-        if (subscriberAlreadyExists) {
-            return "This email already exists for this website.";
         }
 
         return "";
     }
 
-    function resolveCreateCampaignDisabledReason() {
-        if (isCreatingCampaign) {
+    function resolveCreateCampaignDisabledReason(isCreating, websiteId, subject, body, recipientsType, recipientsIds) {
+        if (isCreating) {
             return "Creating draft...";
         }
 
-        if (!selectedWebsiteId) {
+        if (!websiteId) {
             return "Select a website first.";
         }
 
-        if (!`${campaignForm.subject || ""}`.trim()) {
+        if (!`${subject || ""}`.trim()) {
             return "Campaign subject is required.";
         }
 
-        if (!`${campaignForm.body || ""}`.trim()) {
+        if (!`${body || ""}`.trim()) {
             return "Campaign body is required.";
         }
 
-        if (campaignForm.recipientsType === "manual" && !campaignForm.recipientsIds.length) {
+        if (recipientsType === "manual" && (!Array.isArray(recipientsIds) || !recipientsIds.length)) {
             return "Select at least one manual recipient.";
         }
 
@@ -522,8 +526,7 @@
         isLoadingCampaigns = false;
     }
 
-    function handleWebsiteChange(event) {
-        selectedWebsiteId = event.target.value || "";
+    function handleWebsiteChange() {
         subscriberFormError = "";
         campaignFormError = "";
         pendingSendCampaign = null;
@@ -719,14 +722,6 @@
 </script>
 
 <PageWrapper>
-    <header class="page-header">
-        <nav class="breadcrumbs">
-            <div class="breadcrumb-item">Newsletter</div>
-        </nav>
-
-        <RefreshButton on:refresh={refreshAll} />
-    </header>
-
     {#if !hasNewsletterCollections}
         <div class="alert alert-warning m-b-base">
             <div class="icon">
@@ -742,6 +737,10 @@
         <section class="newsletter-head panel m-b-base">
             <div class="head-main">
                 <div class="summary-title-wrap">
+                    <div class="title-row">
+                        <h2 class="m-0">Newsletter</h2>
+                        <RefreshButton class="btn-sm" tooltip={"Refresh"} on:refresh={refreshAll} />
+                    </div>
                     <h3 class="m-0">Newsletter Operations</h3>
                     <p class="txt-sm txt-hint m-b-0">Manage subscribers and campaigns by website in one place.</p>
                 </div>
@@ -752,7 +751,7 @@
                         <select
                             id="newsletter-website"
                             class="input input-sm"
-                            value={selectedWebsiteId}
+                            bind:value={selectedWebsiteId}
                             disabled={isLoadingWebsites || !websites.length}
                             on:change={handleWebsiteChange}
                         >
@@ -766,7 +765,7 @@
                         </select>
                         <button
                             type="button"
-                            class="btn btn-sm btn-outline"
+                            class="btn btn-sm"
                             disabled={isLoadingWebsites}
                             on:click={loadWebsites}
                         >
@@ -787,14 +786,6 @@
                     {activeSubscribers.length} active
                 </span>
                 <span class="summary-pill">
-                    <i class="ri-user-add-line" />
-                    {newSubscribersLast7Days} new / 7d
-                </span>
-                <span class="summary-pill">
-                    <i class="ri-user-unfollow-line" />
-                    {unsubscribedLast7Days} unsubscribed / 7d
-                </span>
-                <span class="summary-pill">
                     <i class="ri-megaphone-line" />
                     {campaigns.length} campaigns
                 </span>
@@ -806,7 +797,6 @@
                     <i class="ri-send-plane-2-line" />
                     {sentCampaigns.length} sent
                 </span>
-                <span class="summary-pill summary-hint-pill">Scope and actions are tied to selected website</span>
             </div>
         </section>
 
@@ -877,7 +867,7 @@
                                 <div class="col-md-2 align-end">
                                     <button
                                         type="submit"
-                                        class="btn btn-block btn-strong"
+                                        class="btn btn-strong add-subscriber-btn"
                                         class:btn-loading={isCreatingSubscriber}
                                         disabled={!!createSubscriberDisabledReason}
                                         title={createSubscriberDisabledReason || null}
@@ -947,32 +937,8 @@
                                         />
                                         <span class="txt-sm txt-hint">Select page</span>
                                     </label>
-                                    <button
-                                        type="button"
-                                        class="btn btn-xs btn-outline"
-                                        disabled={!selectedSubscribersCount || isBulkUpdating}
-                                        on:click={() => applyBulkStatus("active")}
-                                        title={!selectedSubscribersCount ? "Select at least one subscriber." : null}
-                                    >
-                                        <span class="txt">Mark selected active</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-xs btn-outline"
-                                        disabled={!selectedSubscribersCount || isBulkUpdating}
-                                        on:click={() => applyBulkStatus("unsubscribed")}
-                                        title={!selectedSubscribersCount ? "Select at least one subscriber." : null}
-                                    >
-                                        <span class="txt">Unsubscribe selected</span>
-                                    </button>
                                 </div>
                             </div>
-
-                            {#if selectedSubscribersCount}
-                                <div class="txt-sm txt-hint m-b-sm">
-                                    {selectedSubscribersCount} subscriber(s) selected.
-                                </div>
-                            {/if}
 
                             {#if isLoadingSubscribers}
                                 <div class="loading-state">
@@ -982,7 +948,7 @@
                             {:else if !subscribers.length}
                                 <div class="empty-state empty-state-stack">
                                     <span>No subscribers yet for this website.</span>
-                                    <span class="txt-sm txt-hint">Use “Add subscriber” above to create your first contact.</span>
+                                    <span class="txt-sm txt-hint">Use "Add subscriber" above to create your first contact.</span>
                                 </div>
                             {:else if !filteredSubscribers.length}
                                 <div class="empty-state empty-state-stack">
@@ -1036,7 +1002,7 @@
                                                     {#if normalizeStatus(subscriber.status) !== "active"}
                                                         <button
                                                             type="button"
-                                                            class="btn btn-xs btn-outline action-btn"
+                                                            class="btn btn-sm btn-outline action-btn"
                                                             on:click={() => setSubscriberStatus(subscriber, "active")}
                                                         >
                                                             <span class="txt">Mark active</span>
@@ -1045,7 +1011,7 @@
                                                     {#if normalizeStatus(subscriber.status) !== "unsubscribed"}
                                                         <button
                                                             type="button"
-                                                            class="btn btn-xs btn-outline action-btn"
+                                                            class="btn btn-sm action-btn"
                                                             on:click={() => setSubscriberStatus(subscriber, "unsubscribed")}
                                                         >
                                                             <span class="txt">Unsubscribe</span>
@@ -1080,6 +1046,38 @@
                                         </button>
                                     </div>
                                 {/if}
+                            {/if}
+
+                            {#if selectedSubscribersCount}
+                                <div class="subscriber-selection-popover" role="status" aria-live="polite">
+                                    <span class="selection-summary">
+                                        Selected {selectedSubscribersCount} record(s)
+                                    </span>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline"
+                                        disabled={isBulkUpdating}
+                                        on:click={resetSubscriberSelection}
+                                    >
+                                        <span class="txt">Reset</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline bulk-action-btn"
+                                        disabled={!selectedSubscribersCount || isBulkUpdating}
+                                        on:click={() => applyBulkStatus("active")}
+                                    >
+                                        <span class="txt">Mark selected active</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-danger btn-outline bulk-action-btn"
+                                        disabled={!selectedSubscribersCount || isBulkUpdating}
+                                        on:click={() => applyBulkStatus("unsubscribed")}
+                                    >
+                                        <span class="txt">Unsubscribe selected</span>
+                                    </button>
+                                </div>
                             {/if}
                         </section>
                     {:else}
@@ -1334,6 +1332,13 @@
         min-width: 260px;
     }
 
+    .title-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 2px;
+    }
+
     .head-selector {
         width: min(100%, 520px);
     }
@@ -1351,6 +1356,10 @@
 
     .selector-row .btn {
         flex: 0 0 auto;
+        height: var(--inputHeight);
+        min-height: var(--inputHeight);
+        padding-top: 0;
+        padding-bottom: 0;
     }
 
     .summary-badges {
@@ -1370,10 +1379,6 @@
         font-size: 12px;
         padding: 6px 10px;
         white-space: nowrap;
-    }
-
-    .summary-hint-pill {
-        border-style: dashed;
     }
 
     .summary-pill i {
@@ -1407,13 +1412,43 @@
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
+        margin-left: auto;
+    }
+
+    .bulk-action-btn {
+        min-height: var(--inputHeight);
+        min-width: 145px;
     }
 
     .bulk-select-all {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        margin-right: 4px;
+        margin-right: 0;
+    }
+
+    .subscriber-selection-popover {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        z-index: 55;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseColor);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+        padding: 8px 10px;
+    }
+
+    .selection-summary {
+        color: var(--txtPrimaryColor);
+        font-weight: 600;
+        font-size: var(--smFontSize);
+        padding: 0 3px;
+        white-space: nowrap;
     }
 
     .selection-cell {
@@ -1478,6 +1513,12 @@
     .align-end {
         display: flex;
         align-items: flex-end;
+        justify-content: flex-end;
+    }
+
+    .add-subscriber-btn {
+        min-height: var(--inputHeight);
+        min-width: 150px;
     }
 
     .manual-recipients {
@@ -1564,6 +1605,7 @@
 
     .action-btn {
         min-width: 110px;
+        min-height: var(--inputHeight);
     }
 
     .btn-strong {
@@ -1617,6 +1659,16 @@
             grid-template-columns: repeat(2, minmax(180px, 1fr));
             flex-basis: 100%;
         }
+
+        .subscriber-selection-popover {
+            left: 10px;
+            right: 10px;
+            bottom: 12px;
+            transform: none;
+            border-radius: var(--baseRadius);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
     }
 
     @media (max-width: 640px) {
@@ -1641,6 +1693,11 @@
             width: 100%;
         }
 
+        .add-subscriber-btn {
+            width: 100%;
+            min-width: 0;
+        }
+
         .summary-pill {
             font-size: 11px;
             padding: 5px 9px;
@@ -1652,9 +1709,18 @@
 
         .bulk-controls {
             width: 100%;
+            justify-content: flex-start;
         }
 
-        .bulk-controls .btn {
+        .subscriber-selection-popover {
+            justify-content: flex-start;
+        }
+
+        .selection-summary {
+            width: 100%;
+        }
+
+        .subscriber-selection-popover .btn {
             width: 100%;
         }
 
