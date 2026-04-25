@@ -33,20 +33,29 @@
 
     let subscribers = [];
     let campaigns = [];
+    let subscriberGroups = [];
 
     let isLoadingWebsites = false;
     let isLoadingSubscribers = false;
     let isLoadingCampaigns = false;
+    let isLoadingSubscriberGroups = false;
     let isCreatingSubscriber = false;
+    let isCreatingSubscriberGroup = false;
     let isCreatingCampaign = false;
     let isBulkUpdating = false;
     let isSendingCampaign = {};
+    let isUpdatingSubscriberGroups = {};
 
     let subscriberForm = {
         email: "",
         status: "pending",
+        groupIds: [],
     };
     let subscriberFormError = "";
+    let subscriberGroupForm = {
+        name: "",
+    };
+    let subscriberGroupFormError = "";
 
     let campaignForm = {
         subject: "",
@@ -59,6 +68,7 @@
 
     let subscriberSearch = "";
     let subscriberStatusFilter = "all";
+    let subscriberGroupFilter = "all";
     let subscriberSort = "newest";
     let subscribersPage = 1;
     let selectedSubscriberIds = [];
@@ -66,6 +76,7 @@
     let pendingSendCampaign = null;
 
     let subscriberEmailInput;
+    let subscriberGroupCountById = {};
 
     let lastWebsitesCollectionId = "";
     let lastDataKey = "";
@@ -77,6 +88,7 @@
     $: websitesCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "websites") || null;
     $: subscribersCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribers") || null;
     $: campaignsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "campaigns") || null;
+    $: subscriberGroupsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribergroups") || null;
 
     $: missingCollectionNames = [];
     $: if (!subscribersCollection?.id) {
@@ -87,6 +99,11 @@
     }
 
     $: hasNewsletterCollections = missingCollectionNames.length === 0;
+    $: subscribersSupportsGroupsField = !!subscribersCollection?.id
+        && CommonHelper.getAllCollectionIdentifiers(subscribersCollection)
+            .map((field) => `${field || ""}`.trim().toLowerCase())
+            .includes("groups");
+    $: hasSubscriberGroupsFeature = !!subscriberGroupsCollection?.id && subscribersSupportsGroupsField;
 
     $: if (!websitesCollection?.id) {
         websites = [];
@@ -97,11 +114,16 @@
         loadWebsites();
     }
 
-    $: websiteDataKey = `${selectedWebsiteId}:${subscribersCollection?.id || ""}:${campaignsCollection?.id || ""}`;
+    $: websiteDataKey = `${selectedWebsiteId}:${subscribersCollection?.id || ""}:${campaignsCollection?.id || ""}:${subscriberGroupsCollection?.id || ""}`;
     $: if (selectedWebsiteId && hasNewsletterCollections && websiteDataKey !== lastDataKey) {
         lastDataKey = websiteDataKey;
         loadSubscribers();
         loadCampaigns();
+        loadSubscriberGroups();
+    }
+
+    $: if (!selectedWebsiteId || !hasSubscriberGroupsFeature) {
+        subscriberGroups = [];
     }
 
     $: activeSubscribers = subscribers.filter((subscriber) => normalizeStatus(subscriber?.status) === "active");
@@ -112,6 +134,18 @@
         return normalizeStatus(subscriber?.status) === "unsubscribed"
             && isWithinLastDays(subscriber?.updated || subscriber?.created, 7);
     }).length;
+    $: subscriberGroupsById = new Map(subscriberGroups.map((group) => [group.id, group]));
+    $: subscriberGroupCountById = subscriberGroups.reduce((acc, group) => {
+        acc[group.id] = 0;
+        return acc;
+    }, {});
+    $: subscribers.forEach((subscriber) => {
+        getSubscriberGroupIds(subscriber).forEach((groupId) => {
+            if (subscriberGroupCountById[groupId] !== undefined) {
+                subscriberGroupCountById[groupId] += 1;
+            }
+        });
+    });
 
     $: normalizedSubscriberFormEmail = normalizeEmail(subscriberForm.email);
     $: subscriberAlreadyExists = !!normalizedSubscriberFormEmail
@@ -120,6 +154,14 @@
         isCreatingSubscriber,
         selectedWebsiteId,
         subscriberForm.email,
+    );
+    $: normalizedSubscriberGroupName = normalizeGroupName(subscriberGroupForm.name).toLowerCase();
+    $: subscriberGroupNameAlreadyExists = !!normalizedSubscriberGroupName
+        && subscriberGroups.some((group) => normalizeGroupName(group?.name).toLowerCase() === normalizedSubscriberGroupName);
+    $: createSubscriberGroupDisabledReason = resolveCreateSubscriberGroupDisabledReason(
+        isCreatingSubscriberGroup,
+        selectedWebsiteId,
+        subscriberGroupForm.name,
     );
     $: createCampaignDisabledReason = resolveCreateCampaignDisabledReason(
         isCreatingCampaign,
@@ -134,11 +176,13 @@
     $: filteredSubscribers = sortSubscribers(
         subscribers.filter((subscriber) => {
             const status = normalizeStatus(subscriber?.status);
+            const groupIds = getSubscriberGroupIds(subscriber);
             const byStatus = subscriberStatusFilter === "all" || status === subscriberStatusFilter;
+            const byGroup = subscriberGroupFilter === "all" || groupIds.includes(subscriberGroupFilter);
             const bySearch = !normalizedSubscriberSearch
                 || `${subscriber?.email || ""}`.toLowerCase().includes(normalizedSubscriberSearch);
 
-            return byStatus && bySearch;
+            return byStatus && byGroup && bySearch;
         }),
     );
     $: subscribersTotalPages = Math.max(1, Math.ceil(filteredSubscribers.length / subscribersPageSize));
@@ -155,10 +199,19 @@
     $: pendingSendRecipientsCount = resolveCampaignRecipientsCount(pendingSendCampaign);
 
     $: {
-        const nextFilterKey = `${selectedWebsiteId}|${subscriberSearch}|${subscriberStatusFilter}|${subscriberSort}|${subscribers.length}`;
+        const nextFilterKey = `${selectedWebsiteId}|${subscriberSearch}|${subscriberStatusFilter}|${subscriberGroupFilter}|${subscriberSort}|${subscribers.length}`;
         if (nextFilterKey !== lastSubscribersFilterKey) {
             lastSubscribersFilterKey = nextFilterKey;
             subscribersPage = 1;
+        }
+    }
+
+    $: {
+        const validGroupIds = new Set(subscriberGroups.map((group) => group.id));
+        const currentGroupIds = Array.isArray(subscriberForm.groupIds) ? subscriberForm.groupIds : [];
+        const nextGroupIds = currentGroupIds.filter((groupId) => validGroupIds.has(groupId));
+        if (nextGroupIds.length !== currentGroupIds.length) {
+            subscriberForm = { ...subscriberForm, groupIds: nextGroupIds };
         }
     }
 
@@ -209,8 +262,32 @@
         return `${status || ""}`.trim().toLowerCase();
     }
 
+    function normalizeGroupName(value) {
+        return `${value || ""}`.trim().replace(/\s+/g, " ");
+    }
+
+    function slugifyGroupName(value) {
+        return normalizeGroupName(value)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 80);
+    }
+
     function isValidEmail(email) {
         return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
+    }
+
+    function getSubscriberGroupIds(subscriber) {
+        return Array.isArray(subscriber?.groups) ? subscriber.groups.filter(Boolean) : [];
+    }
+
+    function hasSubscriberGroup(subscriber, groupId) {
+        return getSubscriberGroupIds(subscriber).includes(groupId);
+    }
+
+    function isUpdatingSubscriberGroup(subscriberId) {
+        return !!isUpdatingSubscriberGroups[subscriberId];
     }
 
     function toTimestamp(value) {
@@ -295,6 +372,26 @@
         return "";
     }
 
+    function resolveCreateSubscriberGroupDisabledReason(isCreating, websiteId, name) {
+        if (isCreating) {
+            return "Creating group...";
+        }
+
+        if (!hasSubscriberGroupsFeature) {
+            return "Groups feature is not available yet.";
+        }
+
+        if (!websiteId) {
+            return "Select a website first.";
+        }
+
+        if (!normalizeGroupName(name)) {
+            return "Enter a group name.";
+        }
+
+        return "";
+    }
+
     function resolveCreateCampaignDisabledReason(isCreating, websiteId, subject, body, recipientsType, recipientsIds) {
         if (isCreating) {
             return "Creating draft...";
@@ -358,6 +455,12 @@
         }
     }
 
+    function clearSubscriberGroupFormError() {
+        if (subscriberGroupFormError) {
+            subscriberGroupFormError = "";
+        }
+    }
+
     function clearCampaignFormError() {
         if (campaignFormError) {
             campaignFormError = "";
@@ -366,6 +469,21 @@
 
     function focusSubscriberEmailInput() {
         subscriberEmailInput?.focus();
+    }
+
+    function toggleSubscriberFormGroup(groupId) {
+        if (!groupId || !hasSubscriberGroupsFeature) {
+            return;
+        }
+
+        clearSubscriberFormError();
+
+        const currentGroupIds = Array.isArray(subscriberForm.groupIds) ? subscriberForm.groupIds : [];
+        const nextGroupIds = currentGroupIds.includes(groupId)
+            ? currentGroupIds.filter((id) => id !== groupId)
+            : [...currentGroupIds, groupId];
+
+        subscriberForm = { ...subscriberForm, groupIds: nextGroupIds };
     }
 
     function setActiveSection(section) {
@@ -462,6 +580,7 @@
                 selectedWebsiteId = "";
                 subscribers = [];
                 campaigns = [];
+                subscriberGroups = [];
                 resetSubscriberSelection();
                 return;
             }
@@ -474,6 +593,7 @@
             selectedWebsiteId = "";
             subscribers = [];
             campaigns = [];
+            subscriberGroups = [];
             resetSubscriberSelection();
             ApiClient.error(err);
         }
@@ -526,10 +646,35 @@
         isLoadingCampaigns = false;
     }
 
+    async function loadSubscriberGroups() {
+        if (!selectedWebsiteId || !hasSubscriberGroupsFeature) {
+            subscriberGroups = [];
+            return;
+        }
+
+        isLoadingSubscriberGroups = true;
+
+        try {
+            subscriberGroups = await ApiClient.collection(subscriberGroupsCollection.id).getFullList({
+                filter: `website="${selectedWebsiteId}"`,
+                sort: "+name",
+                requestKey: "nuvio_newsletter_subscriber_groups_" + selectedWebsiteId,
+            });
+        } catch (err) {
+            subscriberGroups = [];
+            ApiClient.error(err);
+        }
+
+        isLoadingSubscriberGroups = false;
+    }
+
     function handleWebsiteChange() {
         subscriberFormError = "";
+        subscriberGroupFormError = "";
         campaignFormError = "";
         pendingSendCampaign = null;
+        subscriberGroupFilter = "all";
+        subscriberForm = { ...subscriberForm, groupIds: [] };
         resetSubscriberSelection();
     }
 
@@ -558,6 +703,9 @@
                 email,
                 status: subscriberForm.status,
             };
+            if (hasSubscriberGroupsFeature && Array.isArray(subscriberForm.groupIds) && subscriberForm.groupIds.length) {
+                payload.groups = subscriberForm.groupIds;
+            }
 
             if (subscriberForm.status === "active") {
                 payload.confirmedAt = new Date().toISOString();
@@ -568,6 +716,7 @@
             subscriberForm = {
                 email: "",
                 status: "pending",
+                groupIds: [],
             };
 
             await loadSubscribers();
@@ -578,6 +727,68 @@
         }
 
         isCreatingSubscriber = false;
+    }
+
+    async function createSubscriberGroup() {
+        if (!hasSubscriberGroupsFeature || !selectedWebsiteId || isCreatingSubscriberGroup) {
+            return;
+        }
+
+        const name = normalizeGroupName(subscriberGroupForm.name);
+        if (!name) {
+            subscriberGroupFormError = "Please provide a group name.";
+            return;
+        }
+
+        if (subscriberGroupNameAlreadyExists) {
+            subscriberGroupFormError = "A group with this name already exists for this website.";
+            return;
+        }
+
+        subscriberGroupFormError = "";
+        isCreatingSubscriberGroup = true;
+
+        try {
+            await ApiClient.collection(subscriberGroupsCollection.id).create({
+                website: selectedWebsiteId,
+                name,
+                slug: slugifyGroupName(name),
+            });
+
+            subscriberGroupForm = { name: "" };
+            await loadSubscriberGroups();
+            addSuccessToast("Subscriber group added.");
+        } catch (err) {
+            ApiClient.error(err);
+        }
+
+        isCreatingSubscriberGroup = false;
+    }
+
+    async function toggleSubscriberGroup(subscriber, groupId) {
+        if (!subscriber?.id || !groupId || !hasSubscriberGroupsFeature || isUpdatingSubscriberGroup(subscriber.id)) {
+            return;
+        }
+
+        const currentGroupIds = getSubscriberGroupIds(subscriber);
+        const nextGroupIds = currentGroupIds.includes(groupId)
+            ? currentGroupIds.filter((id) => id !== groupId)
+            : [...currentGroupIds, groupId];
+
+        isUpdatingSubscriberGroups[subscriber.id] = true;
+        isUpdatingSubscriberGroups = { ...isUpdatingSubscriberGroups };
+
+        try {
+            await ApiClient.collection(subscribersCollection.id).update(subscriber.id, {
+                groups: nextGroupIds,
+            });
+            await loadSubscribers();
+        } catch (err) {
+            ApiClient.error(err);
+        }
+
+        delete isUpdatingSubscriberGroups[subscriber.id];
+        isUpdatingSubscriberGroups = { ...isUpdatingSubscriberGroups };
     }
 
     async function setSubscriberStatus(subscriber, status) {
@@ -625,6 +836,7 @@
 
             if (!updates.length) {
                 addSuccessToast("Selected subscribers are already up to date.");
+                isBulkUpdating = false;
                 return;
             }
 
@@ -717,6 +929,7 @@
         loadWebsites();
         loadSubscribers();
         loadCampaigns();
+        loadSubscriberGroups();
     }
     // NUVIO CUSTOM END: Newsletter V1 dedicated section/page (collection-backed).
 </script>
@@ -830,8 +1043,9 @@
                                 <h4 class="m-0">Add subscriber</h4>
                                 <p class="txt-sm txt-hint m-b-0">Add contacts manually and set their initial lifecycle status.</p>
                             </div>
-                            <form class="grid" on:submit|preventDefault={createSubscriber}>
-                                <div class="col-md-7">
+                            <form class="subscriber-create-form" on:submit|preventDefault={createSubscriber}>
+                                <div class="subscriber-create-top">
+                                    <div class="create-email-field">
                                     <label class="txt-sm txt-hint block m-b-5" for="subscriber-email">Email</label>
                                     <input
                                         id="subscriber-email"
@@ -842,8 +1056,8 @@
                                         bind:value={subscriberForm.email}
                                         on:input={clearSubscriberFormError}
                                     />
-                                </div>
-                                <div class="col-md-3">
+                                    </div>
+                                    <div class="create-status-field">
                                     <label class="txt-sm txt-hint block m-b-5" for="subscriber-status">Status</label>
                                     <select
                                         id="subscriber-status"
@@ -855,8 +1069,8 @@
                                             <option value={status}>{status}</option>
                                         {/each}
                                     </select>
-                                </div>
-                                <div class="col-md-2 align-end">
+                                    </div>
+                                    <div class="create-action-field">
                                     <button
                                         type="submit"
                                         class="btn btn-strong add-subscriber-btn"
@@ -866,10 +1080,66 @@
                                     >
                                         <span class="txt">Add subscriber</span>
                                     </button>
+                                    </div>
                                 </div>
+                                {#if hasSubscriberGroupsFeature}
+                                    <div class="subscriber-groups-row">
+                                        <div class="subscriber-groups-select">
+                                            <label class="txt-sm txt-hint block m-b-5">Groups (optional)</label>
+                                            <div class="group-pill-list form-group-pill-list">
+                                                {#if isLoadingSubscriberGroups}
+                                                    <span class="txt-sm txt-hint">Loading groups...</span>
+                                                {:else if !subscriberGroups.length}
+                                                    <span class="txt-sm txt-hint">No groups yet. Create your first group.</span>
+                                                {:else}
+                                                    {#each subscriberGroups as group (group.id)}
+                                                        <button
+                                                            type="button"
+                                                            class="group-pill-btn"
+                                                            class:is-selected={subscriberForm.groupIds.includes(group.id)}
+                                                            on:click={() => toggleSubscriberFormGroup(group.id)}
+                                                        >
+                                                            {group.name}
+                                                            <span class="group-pill-count">{subscriberGroupCountById[group.id] || 0}</span>
+                                                        </button>
+                                                    {/each}
+                                                {/if}
+                                            </div>
+                                        </div>
+
+                                        <div class="subscriber-groups-create">
+                                            <label class="txt-sm txt-hint block m-b-5" for="subscriber-group-name">Create group</label>
+                                            <div class="group-create-row">
+                                                <input
+                                                    id="subscriber-group-name"
+                                                    type="text"
+                                                    class="input input-sm"
+                                                    placeholder="e.g. VIP Clients"
+                                                    bind:value={subscriberGroupForm.name}
+                                                    on:input={clearSubscriberGroupFormError}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-outline"
+                                                    class:btn-loading={isCreatingSubscriberGroup}
+                                                    disabled={!!createSubscriberGroupDisabledReason}
+                                                    title={createSubscriberGroupDisabledReason || null}
+                                                    on:click={createSubscriberGroup}
+                                                >
+                                                    <span class="txt">Add group</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {/if}
                                 {#if subscriberFormError}
-                                    <div class="col-12">
+                                    <div>
                                         <div class="txt-sm txt-danger">{subscriberFormError}</div>
+                                    </div>
+                                {/if}
+                                {#if subscriberGroupFormError}
+                                    <div>
+                                        <div class="txt-sm txt-danger">{subscriberGroupFormError}</div>
                                     </div>
                                 {/if}
                             </form>
@@ -885,7 +1155,7 @@
                             </div>
 
                             <div class="subscriber-controls m-b-sm">
-                                <div class="subscriber-filter-grid">
+                                <div class="subscriber-filter-grid" class:group-enabled={hasSubscriberGroupsFeature}>
                                     <div class="control-item">
                                         <label class="txt-sm txt-hint block m-b-5" for="subscriber-search">Search</label>
                                         <input
@@ -917,6 +1187,21 @@
                                             {/each}
                                         </select>
                                     </div>
+                                    {#if hasSubscriberGroupsFeature}
+                                        <div class="control-item">
+                                            <label class="txt-sm txt-hint block m-b-5" for="subscriber-filter-group">Group</label>
+                                            <select
+                                                id="subscriber-filter-group"
+                                                class="input input-sm"
+                                                bind:value={subscriberGroupFilter}
+                                            >
+                                                <option value="all">All groups</option>
+                                                {#each subscriberGroups as group (group.id)}
+                                                    <option value={group.id}>{group.name}</option>
+                                                {/each}
+                                            </select>
+                                        </div>
+                                    {/if}
                                 </div>
 
                                 <div class="bulk-controls">
@@ -951,6 +1236,7 @@
                                         on:click={() => {
                                             subscriberSearch = "";
                                             subscriberStatusFilter = "all";
+                                            subscriberGroupFilter = "all";
                                             subscriberSort = "newest";
                                         }}
                                     >
@@ -989,6 +1275,25 @@
                                                         {/if}
                                                         Added: {formatDateTime(subscriber.created)}
                                                     </div>
+                                                    {#if hasSubscriberGroupsFeature}
+                                                        <div class="group-pill-list row-group-pill-list">
+                                                            {#if !subscriberGroups.length}
+                                                                <span class="txt-xs txt-hint">No groups created yet.</span>
+                                                            {:else}
+                                                                {#each subscriberGroups as group (group.id)}
+                                                                    <button
+                                                                        type="button"
+                                                                        class="group-pill-btn row-group-pill-btn"
+                                                                        class:is-selected={hasSubscriberGroup(subscriber, group.id)}
+                                                                        disabled={isUpdatingSubscriberGroup(subscriber.id)}
+                                                                        on:click={() => toggleSubscriberGroup(subscriber, group.id)}
+                                                                    >
+                                                                        {group.name}
+                                                                    </button>
+                                                                {/each}
+                                                            {/if}
+                                                        </div>
+                                                    {/if}
                                                 </div>
                                                 <div class="actions">
                                                     {#if normalizeStatus(subscriber.status) !== "active"}
@@ -1406,6 +1711,44 @@
         flex-wrap: wrap;
     }
 
+    .subscriber-create-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .subscriber-create-top {
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) minmax(160px, 220px) minmax(140px, 170px);
+        gap: 10px 12px;
+        align-items: end;
+    }
+
+    .create-email-field,
+    .create-status-field,
+    .create-action-field {
+        min-width: 0;
+    }
+
+    .create-action-field {
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+    }
+
+    .subscriber-groups-row {
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) minmax(260px, 340px);
+        gap: 10px 12px;
+        align-items: end;
+        padding-top: 4px;
+    }
+
+    .subscriber-groups-select,
+    .subscriber-groups-create {
+        min-width: 0;
+    }
+
     .subscriber-filter-grid {
         display: grid;
         gap: 8px;
@@ -1414,8 +1757,97 @@
         min-width: 260px;
     }
 
+    .subscriber-filter-grid.group-enabled {
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
+    }
+
     .control-item {
         min-width: 0;
+    }
+
+    .group-create-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .group-create-row .input {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .group-create-row .btn {
+        flex: 0 0 auto;
+        min-height: var(--inputHeight);
+    }
+
+    .group-pill-list {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        min-height: var(--inputHeight);
+    }
+
+    .group-pill-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseColor);
+        color: var(--txtHintColor);
+        font-size: 11px;
+        line-height: 1;
+        padding: 5px 9px;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .group-pill-btn:hover {
+        border-color: color-mix(in srgb, var(--primaryColor) 32%, var(--baseAlt2Color));
+        color: var(--txtPrimaryColor);
+    }
+
+    .group-pill-btn.is-selected {
+        border-color: color-mix(in srgb, var(--primaryColor) 50%, transparent);
+        background: color-mix(in srgb, var(--primaryColor) 10%, transparent);
+        color: var(--txtPrimaryColor);
+    }
+
+    .group-pill-btn:disabled {
+        opacity: 0.62;
+        cursor: default;
+    }
+
+    .form-group-pill-list {
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseAlt1Color);
+        padding: 8px;
+    }
+
+    .row-group-pill-list {
+        margin-top: 7px;
+    }
+
+    .row-group-pill-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+    }
+
+    .group-pill-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+        color: var(--txtHintColor);
+        font-size: 10px;
+        line-height: 1;
+        padding: 0 4px;
     }
 
     .bulk-controls {
@@ -1530,6 +1962,7 @@
     .add-subscriber-btn {
         min-height: var(--inputHeight);
         min-width: 150px;
+        width: 100%;
     }
 
     .manual-recipients {
@@ -1676,9 +2109,26 @@
             align-items: stretch;
         }
 
+        .subscriber-create-top {
+            grid-template-columns: minmax(220px, 1fr) minmax(150px, 200px);
+        }
+
+        .create-action-field {
+            grid-column: 1 / -1;
+            justify-content: flex-end;
+        }
+
+        .subscriber-groups-row {
+            grid-template-columns: 1fr;
+        }
+
         .subscriber-filter-grid {
             grid-template-columns: repeat(2, minmax(180px, 1fr));
             flex-basis: 100%;
+        }
+
+        .subscriber-filter-grid.group-enabled {
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
         }
 
         .subscriber-selection-popover {
@@ -1714,6 +2164,14 @@
             min-width: 0;
         }
 
+        .subscriber-create-top {
+            grid-template-columns: 1fr;
+        }
+
+        .create-action-field {
+            justify-content: stretch;
+        }
+
         .add-subscriber-btn {
             width: 100%;
             min-width: 0;
@@ -1728,9 +2186,22 @@
             grid-template-columns: 1fr;
         }
 
+        .subscriber-filter-grid.group-enabled {
+            grid-template-columns: 1fr;
+        }
+
         .bulk-controls {
             width: 100%;
             justify-content: flex-start;
+        }
+
+        .group-create-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .group-create-row .btn {
+            width: 100%;
         }
 
         .subscriber-selection-popover {
