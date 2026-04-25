@@ -738,16 +738,15 @@
             <div class="head-main">
                 <div class="summary-title-wrap">
                     <div class="title-row">
-                        <h2 class="m-0">Newsletter</h2>
+                        <h2 class="m-0">Newsletter Operations</h2>
                         <RefreshButton class="btn-sm" tooltip={"Refresh"} on:refresh={refreshAll} />
                     </div>
-                    <h3 class="m-0">Newsletter Operations</h3>
-                    <p class="txt-sm txt-hint m-b-0">Manage subscribers and campaigns by website in one place.</p>
+                    <p class="txt-sm txt-hint m-b-0 head-description">Manage subscribers and campaigns by website in one place.</p>
                 </div>
 
                 <div class="head-selector">
-                    <label class="txt-sm txt-hint block m-b-5" for="newsletter-website">Website</label>
                     <div class="selector-row">
+                        <label class="txt-sm txt-hint selector-label m-b-0" for="newsletter-website">Website</label>
                         <select
                             id="newsletter-website"
                             class="input input-sm"
@@ -763,56 +762,12 @@
                                 {/each}
                             {/if}
                         </select>
-                        <button
-                            type="button"
-                            class="btn btn-sm"
-                            disabled={isLoadingWebsites}
-                            on:click={loadWebsites}
-                        >
-                            <i class="ri-refresh-line" />
-                            <span class="txt">Reload sites</span>
-                        </button>
                     </div>
                 </div>
             </div>
 
-            <div class="summary-badges">
-                <span class="summary-pill">
-                    <i class="ri-user-3-line" />
-                    {subscribers.length} subscribers
-                </span>
-                <span class="summary-pill">
-                    <i class="ri-user-follow-line" />
-                    {activeSubscribers.length} active
-                </span>
-                <span class="summary-pill">
-                    <i class="ri-megaphone-line" />
-                    {campaigns.length} campaigns
-                </span>
-                <span class="summary-pill">
-                    <i class="ri-draft-line" />
-                    {draftCampaigns.length} drafts
-                </span>
-                <span class="summary-pill">
-                    <i class="ri-send-plane-2-line" />
-                    {sentCampaigns.length} sent
-                </span>
-            </div>
-        </section>
-
-        {#if $isCollectionsLoading && !selectedWebsiteId}
-            <div class="placeholder-section m-b-base">
-                <span class="loader loader-lg" />
-                <h1>Loading Newsletter...</h1>
-            </div>
-        {:else if !selectedWebsiteId}
-            <div class="placeholder-section m-b-base">
-                <h1>Select a website to manage Newsletter.</h1>
-                <p class="txt-sm txt-hint m-b-0">Once selected, subscribers and campaigns will be loaded automatically.</p>
-            </div>
-        {:else}
-            <div class="tabs">
-                <div class="tabs-header compact combined left">
+            <div class="head-tools">
+                <div class="tabs-header compact combined left operations-tabs">
                     <button
                         type="button"
                         class="tab-item"
@@ -831,6 +786,43 @@
                     </button>
                 </div>
 
+                <div class="summary-badges">
+                    <span class="summary-pill">
+                        <i class="ri-user-3-line" />
+                        {subscribers.length} subscribers
+                    </span>
+                    <span class="summary-pill">
+                        <i class="ri-user-follow-line" />
+                        {activeSubscribers.length} active
+                    </span>
+                    <span class="summary-pill">
+                        <i class="ri-megaphone-line" />
+                        {campaigns.length} campaigns
+                    </span>
+                    <span class="summary-pill">
+                        <i class="ri-draft-line" />
+                        {draftCampaigns.length} drafts
+                    </span>
+                    <span class="summary-pill">
+                        <i class="ri-send-plane-2-line" />
+                        {sentCampaigns.length} sent
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        {#if $isCollectionsLoading && !selectedWebsiteId}
+            <div class="placeholder-section m-b-base">
+                <span class="loader loader-lg" />
+                <h1>Loading Newsletter...</h1>
+            </div>
+        {:else if !selectedWebsiteId}
+            <div class="placeholder-section m-b-base">
+                <h1>Select a website to manage Newsletter.</h1>
+                <p class="txt-sm txt-hint m-b-0">Once selected, subscribers and campaigns will be loaded automatically.</p>
+            </div>
+        {:else}
+            <div class="tabs">
                 <div class="tabs-content">
                     {#if activeSection === "subscribers"}
                         <section class="panel m-b-base">
@@ -1313,22 +1305,22 @@
     .newsletter-head {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 14px 16px;
+        gap: 8px;
+        padding: 12px 14px;
     }
 
     .head-main {
         display: flex;
-        align-items: flex-end;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 18px;
+        gap: 12px;
         flex-wrap: wrap;
     }
 
     .summary-title-wrap {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 2px;
         min-width: 260px;
     }
 
@@ -1336,11 +1328,11 @@
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 2px;
+        margin-bottom: 0;
     }
 
     .head-selector {
-        width: min(100%, 520px);
+        width: min(100%, 560px);
     }
 
     .selector-row {
@@ -1349,22 +1341,36 @@
         gap: 8px;
     }
 
-    .selector-row .input {
-        flex: 1 1 auto;
-        min-width: 260px;
+    .selector-label {
+        white-space: nowrap;
+        min-width: 52px;
     }
 
-    .selector-row .btn {
-        flex: 0 0 auto;
-        height: var(--inputHeight);
-        min-height: var(--inputHeight);
-        padding-top: 0;
-        padding-bottom: 0;
+    .selector-row .input {
+        flex: 1 1 auto;
+        min-width: 250px;
     }
 
     .summary-badges {
         display: flex;
         flex-wrap: wrap;
+        gap: 6px;
+        justify-content: flex-end;
+        margin-left: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: visible;
+    }
+
+    .operations-tabs {
+        margin: 0;
+        flex: 0 0 auto;
+    }
+
+    .head-tools {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
         gap: 8px;
     }
 
@@ -1377,8 +1383,13 @@
         background: var(--baseAlt1Color);
         color: var(--txtHintColor);
         font-size: 12px;
-        padding: 6px 10px;
+        padding: 5px 9px;
         white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .head-description {
+        max-width: 460px;
     }
 
     .summary-pill i {
@@ -1651,6 +1662,16 @@
     }
 
     @media (max-width: 980px) {
+        .head-tools {
+            align-items: stretch;
+            grid-template-columns: 1fr;
+        }
+
+        .summary-badges {
+            justify-content: flex-start;
+            margin-left: 0;
+        }
+
         .subscriber-controls {
             align-items: stretch;
         }
@@ -1685,12 +1706,12 @@
             align-items: stretch;
         }
 
-        .selector-row .input {
+        .selector-label {
             min-width: 0;
         }
 
-        .selector-row .btn {
-            width: 100%;
+        .selector-row .input {
+            min-width: 0;
         }
 
         .add-subscriber-btn {
