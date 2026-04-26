@@ -22,7 +22,7 @@
         name: "",
     };
     let subscriberGroupFormError = "";
-    let campaignForm = {        subject: "",        body: "",        recipientsType: "all",        recipientsIds: [],    };    let campaignFormError = "";    let campaignPreviewMode = "plain";    let campaignWorkspace = "builder";    let editingCampaignId = "";    let isSavingCampaign = false;    let subscriberSearch = "";
+    let campaignForm = {        subject: "",        body: "",        recipientsType: "all",        recipientsIds: [],    };    let campaignFormError = "";    let campaignPreviewMode = "plain";    let campaignWorkspace = "builder";    let campaignStatusFilter = "all";    let editingCampaignId = "";    let isSavingCampaign = false;    let subscriberSearch = "";
     let subscriberStatusFilter = "all";
     let subscriberGroupFilter = "all";
     let subscriberSort = "newest";
@@ -43,13 +43,13 @@
     let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastPersistedContextKey = "";    loadCollections();    $: websitesCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "websites") || null;    $: subscribersCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribers") || null;
     $: campaignsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "campaigns") || null;
     $: subscriberGroupsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribergroups") || null;
-    $: missingCollectionNames = [];    $: if (!subscribersCollection?.id) {        missingCollectionNames.push("Subscribers");    }    $: if (!campaignsCollection?.id) {        missingCollectionNames.push("Campaigns");    }    $: hasNewsletterCollections = missingCollectionNames.length === 0;
+    $: missingCollectionNames = [];    $: if (!subscribersCollection?.id) {        missingCollectionNames.push("Subscribers");    }    $: if (!campaignsCollection?.id) {        missingCollectionNames.push("Campaigns");    };    $: hasNewsletterCollections = missingCollectionNames.length === 0;
     $: subscribersSupportsGroupsField = !!subscribersCollection?.id
         && CommonHelper.getAllCollectionIdentifiers(subscribersCollection)
             .map((field) => `${field || ""}`.trim().toLowerCase())
             .includes("groups");
     $: hasSubscriberGroupsFeature = !!subscriberGroupsCollection?.id && subscribersSupportsGroupsField;
-    $: if (!websitesCollection?.id) {        websites = [];        selectedWebsiteId = "";        lastWebsitesCollectionId = "";    } else if (websitesCollection.id !== lastWebsitesCollectionId) {        lastWebsitesCollectionId = websitesCollection.id;        loadWebsites();    }    $: websiteDataKey = `${selectedWebsiteId}:${subscribersCollection?.id || ""}:${campaignsCollection?.id || ""}:${subscriberGroupsCollection?.id || ""}`;
+    $: if (!websitesCollection?.id) {        websites = [];        selectedWebsiteId = "";        lastWebsitesCollectionId = "";    } else if (websitesCollection.id !== lastWebsitesCollectionId) {        lastWebsitesCollectionId = websitesCollection.id;        loadWebsites();    };    $: websiteDataKey = `${selectedWebsiteId}:${subscribersCollection?.id || ""}:${campaignsCollection?.id || ""}:${subscriberGroupsCollection?.id || ""}`;
     $: if (selectedWebsiteId && hasNewsletterCollections && websiteDataKey !== lastDataKey) {
         lastDataKey = websiteDataKey;
         loadSubscribers();
@@ -99,6 +99,18 @@
         campaignForm.recipientsType,
         campaignForm.recipientsIds,
     );
+    $: campaignSubjectValue = `${campaignForm.subject || ""}`.trim();
+    $: campaignBodyValue = `${campaignForm.body || ""}`.trim();
+    $: shouldShowCampaignSubjectValidation = !campaignSubjectValue && (!!campaignBodyValue || !!campaignFormError);
+    $: shouldShowCampaignBodyValidation = !campaignBodyValue && (!!campaignSubjectValue || !!campaignFormError);
+    $: filteredCampaigns = campaigns.filter((campaign) => {
+        if (campaignStatusFilter === "all") {
+            return true;
+        }
+        return normalizeStatus(campaign?.status) === campaignStatusFilter;
+    });
+    $: editingCampaign = campaigns.find((campaign) => campaign.id === editingCampaignId) || null;
+    $: editingCampaignLabel = `${editingCampaign?.subject || ""}`.trim() || "(No subject)";
     $: normalizedSubscriberSearch = `${subscriberSearch || ""}`.trim().toLowerCase();    $: filteredSubscribers = sortSubscribers(
         subscribers.filter((subscriber) => {
             const status = normalizeStatus(subscriber?.status);
@@ -111,7 +123,7 @@
             return byStatus && byGroup && bySearch;
         }),
     );
-    $: subscribersTotalPages = Math.max(1, Math.ceil(filteredSubscribers.length / subscribersPageSize));    $: if (subscribersPage > subscribersTotalPages) {        subscribersPage = subscribersTotalPages;    }    $: subscribersPageStart = (subscribersPage - 1) * subscribersPageSize;    $: pagedSubscribers = filteredSubscribers.slice(subscribersPageStart, subscribersPageStart + subscribersPageSize);    $: visibleSubscriberIds = pagedSubscribers.map((subscriber) => subscriber.id);    $: areAllVisibleSubscribersSelected = visibleSubscriberIds.length > 0        && visibleSubscriberIds.every((id) => selectedSubscriberIds.includes(id));    $: selectedSubscribersCount = selectedSubscriberIds.length;    $: pendingSendRecipientsCount = resolveCampaignRecipientsCount(pendingSendCampaign);    $: {
+    $: subscribersTotalPages = Math.max(1, Math.ceil(filteredSubscribers.length / subscribersPageSize));    $: if (subscribersPage > subscribersTotalPages) {        subscribersPage = subscribersTotalPages;    };    $: subscribersPageStart = (subscribersPage - 1) * subscribersPageSize;    $: pagedSubscribers = filteredSubscribers.slice(subscribersPageStart, subscribersPageStart + subscribersPageSize);    $: visibleSubscriberIds = pagedSubscribers.map((subscriber) => subscriber.id);    $: areAllVisibleSubscribersSelected = visibleSubscriberIds.length > 0        && visibleSubscriberIds.every((id) => selectedSubscriberIds.includes(id));    $: selectedSubscribersCount = selectedSubscriberIds.length;    $: pendingSendRecipientsCount = resolveCampaignRecipientsCount(pendingSendCampaign);    $: {
         const nextFilterKey = `${selectedWebsiteId}|${subscriberSearch}|${subscriberStatusFilter}|${subscriberGroupFilter}|${subscriberSort}|${subscribers.length}`;
         if (nextFilterKey !== lastSubscribersFilterKey) {
             lastSubscribersFilterKey = nextFilterKey;
@@ -138,7 +150,7 @@
         cancelEditSubscriber();
     }
     // Keep context in URL query so refresh/navigation preserves website and active tab.
-    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    }    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function normalizeStatus(status) {
+    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function normalizeStatus(status) {
         return `${status || ""}`.trim().toLowerCase();
     }
 
@@ -714,7 +726,7 @@
             <div class="tabs">
                 <div class="tabs-content">
                     {#if activeSection === "subscribers"}
-                        <section class="panel">
+                        <section class="panel subscribers-section-panel">
                             <div class="subscribers-panel-header m-b-sm">
                                 <div class="section-head section-head-inline m-b-0">
                                     <h4 class="m-0">Subscribers</h4>
@@ -1092,22 +1104,23 @@
                                     </button>
                                 </div>
 
+                                {#if editingCampaignId}
+                                    <div class="campaign-edit-banner m-b-sm">
+                                        <span class="txt-sm">Editing: <strong>{editingCampaignLabel}</strong></span>
+                                        <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
+                                            <span class="txt">New draft</span>
+                                        </button>
+                                    </div>
+                                {/if}
+
                                 {#if campaignWorkspace === "builder"}
-                                    <div class="section-head m-b-sm">
+                                    <div class="campaign-head-inline m-b-sm">
                                         <h4 class="m-0">Campaign Builder</h4>
-                                        <p class="txt-sm txt-hint m-b-0">
+                                        <div class="campaign-step-label txt-xs txt-hint">Step 1 of 2</div>
+                                        <p class="txt-sm txt-hint m-b-0 campaign-head-description">
                                             Write your campaign and review the preview on the right before moving to audience.
                                         </p>
                                     </div>
-
-                                    {#if editingCampaignId}
-                                        <div class="campaign-edit-banner m-b-sm">
-                                            <span class="txt-sm">Editing existing draft</span>
-                                            <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
-                                                <span class="txt">New draft</span>
-                                            </button>
-                                        </div>
-                                    {/if}
 
                                     <div class="campaign-builder-split">
                                         <div class="campaign-builder-editor">
@@ -1120,6 +1133,9 @@
                                                 bind:value={campaignForm.subject}
                                                 on:input={clearCampaignFormError}
                                             />
+                                            {#if shouldShowCampaignSubjectValidation}
+                                                <div class="txt-xs txt-danger m-t-5">Subject is required.</div>
+                                            {/if}
 
                                             <label class="txt-sm txt-hint block m-b-5 m-t-sm" for="campaign-body">Body</label>
                                             <textarea
@@ -1130,27 +1146,36 @@
                                                 bind:value={campaignForm.body}
                                                 on:input={clearCampaignFormError}
                                             />
+                                            {#if shouldShowCampaignBodyValidation}
+                                                <div class="txt-xs txt-danger m-t-5">Body is required.</div>
+                                            {/if}
 
-                                            <div class="campaign-builder-actions m-t-sm">
+                                            {#if campaignFormError}
+                                                <div class="txt-sm txt-danger m-t-sm">{campaignFormError}</div>
+                                            {/if}
+
+                                            <div class="campaign-builder-footer m-t-sm">
+                                                <span class="txt-sm txt-hint">
+                                                    {#if !campaignSubjectValue || !campaignBodyValue}
+                                                        Complete subject and body to continue to audience.
+                                                    {:else}
+                                                        Ready to continue to audience and recipient setup.
+                                                    {/if}
+                                                </span>
                                                 <button
                                                     type="button"
-                                                    class="btn btn-strong"
-                                                    disabled={!`${campaignForm.subject || ""}`.trim() || !`${campaignForm.body || ""}`.trim()}
+                                                    class="btn btn-strong action-btn campaign-builder-cta"
+                                                    disabled={!campaignSubjectValue || !campaignBodyValue}
                                                     on:click={() => (campaignWorkspace = "audience")}
                                                 >
                                                     <span class="txt">Continue to Audience</span>
                                                 </button>
                                             </div>
-
-                                            {#if campaignFormError}
-                                                <div class="txt-sm txt-danger m-t-sm">{campaignFormError}</div>
-                                            {/if}
                                         </div>
 
                                         <div class="campaign-builder-preview-side">
-                                            <div class="flex m-b-xs">
+                                            <div class="campaign-preview-header m-b-xs">
                                                 <h5 class="m-0">Preview</h5>
-                                                <div class="flex-fill" />
                                                 <div class="tabs-header compact combined left preview-tabs">
                                                     <button
                                                         type="button"
@@ -1171,15 +1196,15 @@
                                                 </div>
                                             </div>
 
-                                            <div class="txt-sm txt-hint m-b-xs">
-                                                Subject: {`${campaignForm.subject || ""}`.trim() || "(No subject yet)"}
+                                            <div class="txt-sm txt-hint m-b-xs campaign-preview-subject">
+                                                Subject: {campaignSubjectValue || "(No subject yet)"}
                                             </div>
 
                                             {#if campaignPreviewMode === "plain"}
-                                                <pre class="campaign-preview-box">{`${campaignForm.body || ""}`.trim() || "Body preview will appear here."}</pre>
+                                                <pre class="campaign-preview-box">{campaignBodyValue || "Body preview will appear here."}</pre>
                                             {:else}
                                                 <div class="campaign-preview-box campaign-preview-html">
-                                                    {#if `${campaignForm.body || ""}`.trim()}
+                                                    {#if campaignBodyValue}
                                                         {@html campaignForm.body}
                                                     {:else}
                                                         <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
@@ -1189,17 +1214,18 @@
                                         </div>
                                     </div>
                                 {:else}
-                                    <div class="section-head m-b-sm">
+                                    <div class="campaign-head-inline m-b-sm">
                                         <h4 class="m-0">Audience & Send</h4>
-                                        <p class="txt-sm txt-hint m-b-0">Select recipients, then create or update your draft.</p>
+                                        <div class="campaign-step-label txt-xs txt-hint">Step 2 of 2</div>
+                                        <p class="txt-sm txt-hint m-b-0 campaign-head-description">
+                                            Select recipients, then create or update your draft.
+                                        </p>
                                     </div>
 
                                     <div class="campaign-audience-summary m-b-sm">
-                                        <div class="txt-sm txt-hint">Subject: {`${campaignForm.subject || ""}`.trim() || "(No subject yet)"}</div>
-                                        <div class="txt-sm txt-hint">Body length: {`${campaignForm.body || ""}`.trim().length} characters</div>
-                                        {#if editingCampaignId}
-                                            <div class="txt-sm">Editing draft id: <code>{editingCampaignId}</code></div>
-                                        {/if}
+                                        <div class="txt-sm txt-hint">Subject: {campaignSubjectValue || "(No subject yet)"}</div>
+                                        <div class="txt-sm txt-hint">Body length: {campaignBodyValue.length} characters</div>
+                                        <div class="txt-sm txt-hint">Recipients mode: {campaignForm.recipientsType}</div>
                                     </div>
 
                                     <form class="grid" on:submit|preventDefault={saveCampaignDraftFromComposer}>
@@ -1218,17 +1244,17 @@
                                         </div>
 
                                         <div class="col-md-8 campaign-audience-actions">
-                                            <button type="button" class="btn btn-sm btn-outline" on:click={() => (campaignWorkspace = "builder")}>
+                                            <button type="button" class="btn btn-sm btn-outline action-btn" on:click={() => (campaignWorkspace = "builder")}>
                                                 <span class="txt">Back to Builder</span>
                                             </button>
                                             {#if editingCampaignId}
-                                                <button type="button" class="btn btn-sm btn-outline" on:click={resetCampaignComposer}>
+                                                <button type="button" class="btn btn-sm btn-outline action-btn" on:click={resetCampaignComposer}>
                                                     <span class="txt">Cancel Edit</span>
                                                 </button>
                                             {/if}
                                             <button
                                                 type="submit"
-                                                class="btn btn-strong"
+                                                class="btn btn-strong action-btn"
                                                 class:btn-loading={isCreatingCampaign || isSavingCampaign}
                                                 disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
                                                 title={createCampaignDisabledReason || null}
@@ -1284,6 +1310,36 @@
                                     </div>
                                 </div>
 
+                                <div class="campaign-filter-chips m-b-sm" role="toolbar" aria-label="Filter campaigns">
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline campaign-filter-chip"
+                                        class:is-active={campaignStatusFilter === "all"}
+                                        aria-pressed={campaignStatusFilter === "all"}
+                                        on:click={() => (campaignStatusFilter = "all")}
+                                    >
+                                        <span class="txt">All ({campaigns.length})</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline campaign-filter-chip"
+                                        class:is-active={campaignStatusFilter === "draft"}
+                                        aria-pressed={campaignStatusFilter === "draft"}
+                                        on:click={() => (campaignStatusFilter = "draft")}
+                                    >
+                                        <span class="txt">Draft ({draftCampaigns.length})</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline campaign-filter-chip"
+                                        class:is-active={campaignStatusFilter === "sent"}
+                                        aria-pressed={campaignStatusFilter === "sent"}
+                                        on:click={() => (campaignStatusFilter = "sent")}
+                                    >
+                                        <span class="txt">Sent ({sentCampaigns.length})</span>
+                                    </button>
+                                </div>
+
                                 {#if isLoadingCampaigns}
                                     <div class="loading-state">
                                         <span class="loader loader-sm" />
@@ -1294,10 +1350,15 @@
                                         <span>No campaigns yet for this website.</span>
                                         <span class="txt-sm txt-hint">Create your first draft in Builder to start sending newsletters.</span>
                                     </div>
+                                {:else if !filteredCampaigns.length}
+                                    <div class="empty-state empty-state-stack">
+                                        <span>No campaigns match this filter.</span>
+                                        <span class="txt-sm txt-hint">Try another status filter to view more campaigns.</span>
+                                    </div>
                                 {:else}
                                     <div class="list list-compact">
                                         <div class="list-content campaign-list-scroll">
-                                            {#each campaigns as campaign (campaign.id)}
+                                            {#each filteredCampaigns as campaign (campaign.id)}
                                                 <div
                                                     class="list-item newsletter-list-item campaign-row-item"
                                                     class:is-editing={editingCampaignId === campaign.id}
@@ -1315,13 +1376,13 @@
                                                             </span>
                                                         </div>
                                                         <div class="txt-xs txt-hint meta-line campaign-row-meta">
-                                                            Recipients: {campaign.recipientsType || "all"}
+                                                            <span><strong>Recipients:</strong> {campaign.recipientsType || "all"}</span>
                                                             <span class="meta-sep">|</span>
-                                                            Est.: {resolveCampaignRecipientsCount(campaign)}
+                                                            <span><strong>Est.:</strong> {resolveCampaignRecipientsCount(campaign)}</span>
                                                             <span class="meta-sep">|</span>
-                                                            Sent: {campaign.recipientsCount || 0}
+                                                            <span><strong>Sent:</strong> {campaign.recipientsCount || 0}</span>
                                                             <span class="meta-sep">|</span>
-                                                            Updated: {formatDateTime(campaign.updated || campaign.created)}
+                                                            <span><strong>Updated:</strong> {formatDateTime(campaign.updated || campaign.created)}</span>
                                                         </div>
                                                     </div>
 
@@ -1329,7 +1390,7 @@
                                                         {#if normalizeStatus(campaign.status) === "draft"}
                                                             <button
                                                                 type="button"
-                                                                class="btn btn-sm btn-outline"
+                                                                class="btn btn-sm btn-outline action-btn campaign-row-btn"
                                                                 on:click={() => startEditCampaign(campaign)}
                                                             >
                                                                 <span class="txt">{editingCampaignId === campaign.id ? "Editing" : "Edit"}</span>
@@ -1339,7 +1400,7 @@
                                                         {#if normalizeStatus(campaign.status) !== "sent"}
                                                             <button
                                                                 type="button"
-                                                                class="btn btn-sm btn-strong"
+                                                                class="btn btn-sm btn-strong action-btn campaign-row-btn"
                                                                 class:btn-loading={isSendingCampaign[campaign.id]}
                                                                 disabled={!!getSendCampaignDisabledReason(campaign)}
                                                                 title={getSendCampaignDisabledReason(campaign) || null}
@@ -1408,7 +1469,11 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        padding: 12px 14px;
+        padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
+    }
+
+    .subscribers-section-panel {
+        padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
     }
 
     .head-main {
@@ -1707,7 +1772,7 @@
         padding: 0 3px;
         white-space: nowrap;
     }
-    .selection-cell {        display: inline-flex;        align-items: center;        justify-content: center;        padding-right: 2px;    }    .pagination-wrap {        display: flex;        align-items: center;        justify-content: flex-end;        gap: 8px;        margin-top: 10px;    }        .preview-tabs .tab-item {        min-width: 78px;    }    .campaign-preview-box {        margin: 0;        border: 1px solid var(--baseAlt2Color);        border-radius: var(--baseRadius);        background: var(--baseAlt1Color);        padding: 10px 12px;        min-height: 110px;        max-height: 300px;        overflow: auto;        white-space: pre-wrap;        word-break: break-word;        font-family: inherit;        font-size: var(--baseFontSize);    }    .campaign-preview-html :global(p:last-child) {        margin-bottom: 0;    }    .loading-state,    .empty-state {        border: 1px dashed var(--baseAlt2Color);        border-radius: var(--baseRadius);        padding: 16px;        display: flex;        align-items: center;        justify-content: center;        gap: 8px;        color: var(--txtHintColor);    }    .empty-state-stack {        flex-direction: column;    }    
+    .selection-cell {        display: inline-flex;        align-items: center;        justify-content: center;        padding-right: 2px;    }    .pagination-wrap {        display: flex;        align-items: center;        justify-content: flex-end;        gap: 8px;        margin-top: 10px;    }        .preview-tabs .tab-item {        min-width: 70px;    }    .campaign-preview-box {        margin: 0;        border: 1px solid var(--baseAlt2Color);        border-radius: var(--baseRadius);        background: var(--baseAlt1Color);        padding: 12px;        min-height: 250px;        max-height: 380px;        overflow: auto;        white-space: pre-wrap;        word-break: break-word;        font-family: inherit;        font-size: var(--baseFontSize);        flex: 1 1 auto;    }    .campaign-preview-html :global(p:last-child) {        margin-bottom: 0;    }    .loading-state,    .empty-state {        border: 1px dashed var(--baseAlt2Color);        border-radius: var(--baseRadius);        padding: 16px;        display: flex;        align-items: center;        justify-content: center;        gap: 8px;        color: var(--txtHintColor);    }    .empty-state-stack {        flex-direction: column;    }    
 
     .add-subscriber-btn {
         min-height: var(--inputHeight);
@@ -1777,12 +1842,35 @@
         gap: 4px;
     }
     .campaign-workspace-tabs {
-        margin-bottom: 10px;
+        margin-bottom: 6px;
+    }
+
+    .campaign-head-inline {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        row-gap: 4px;
+    }
+
+    .campaign-head-description {
+        flex: 1 1 340px;
+        min-width: 220px;
+    }
+
+    .campaign-step-label {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseAlt1Color);
+        padding: 1px 8px;
+        width: fit-content;
     }
 
     .campaign-layout-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.95fr);
+        grid-template-columns: minmax(0, 1.7fr) minmax(300px, 0.75fr);
         gap: 12px;
         align-items: start;
     }
@@ -1805,11 +1893,27 @@
         overflow: auto;
     }
 
+    .campaign-filter-chips {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .campaign-filter-chip {
+        min-height: 28px;
+    }
+
+    .campaign-filter-chip.is-active {
+        background: var(--baseAlt2Color);
+        border-color: var(--baseAlt2Color);
+    }
+
     .campaign-builder-split {
         display: grid;
-        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-        gap: 12px;
-        align-items: start;
+        grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+        gap: 16px;
+        align-items: stretch;
     }
 
     .campaign-builder-editor,
@@ -1818,10 +1922,27 @@
     }
 
     .campaign-builder-preview-side {
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: var(--baseRadius);
-        background: var(--baseColor);
-        padding: 10px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-height: 100%;
+    }
+
+    .campaign-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .campaign-preview-subject {
+        margin: 0;
+        padding: 0;
+        color: var(--txtHintColor);
     }
 
     .campaign-edit-banner {
@@ -1835,9 +1956,22 @@
         padding: 7px 10px;
     }
 
-    .campaign-builder-actions {
+    .campaign-builder-editor {
         display: flex;
+        flex-direction: column;
+        min-height: 100%;
+    }
+
+    .campaign-builder-footer {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
         justify-content: flex-end;
+    }
+
+    .campaign-builder-cta {
+        min-width: 178px;
     }
 
     .campaign-audience-summary {
@@ -1868,10 +2002,22 @@
     .campaign-row-item {
         align-items: flex-start;
         gap: 10px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+    }
+
+    .campaign-row-item:nth-child(odd) {
+        background: var(--baseColor);
+    }
+
+    .campaign-row-item:nth-child(even) {
+        background: var(--baseAlt1Color);
     }
 
     .campaign-row-item.is-editing {
-        background: var(--bodyColor);
+        background: color-mix(in srgb, var(--primaryColor) 7%, var(--baseColor));
+        box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primaryColor) 45%, transparent);
     }
 
     .campaign-row-content {
@@ -1902,6 +2048,10 @@
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
+    }
+
+    .campaign-row-btn {
+        min-width: 96px;
     }
 
     .section-head-inline {
@@ -2043,6 +2193,14 @@
             grid-template-columns: 1fr;
         }
 
+        .campaign-preview-header {
+            flex-wrap: wrap;
+        }
+
+        .campaign-audience-actions {
+            justify-content: flex-start;
+        }
+
         .subscriber-filter-grid {
             grid-template-columns: repeat(2, minmax(180px, 1fr));
             flex-basis: 100%;
@@ -2136,6 +2294,15 @@
         .actions {
             width: 100%;
             justify-content: flex-start;
+        }
+
+        .campaign-builder-footer {
+            justify-content: flex-start;
+        }
+
+        .campaign-builder-cta,
+        .campaign-row-btn {
+            width: 100%;
         }
     }
 </style>
