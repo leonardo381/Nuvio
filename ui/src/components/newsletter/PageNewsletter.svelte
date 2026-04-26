@@ -1,4 +1,4 @@
-﻿<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
+<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
     $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const campaignRecipientsTypeOptions = ["all", "manual"];    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
@@ -12,6 +12,7 @@
     let isSavingSubscriber = false;
     let isSendingCampaign = {};
     let deletingSubscriberId = "";
+    let isSubscriberCreateOpen = false;
     let subscriberForm = {
         email: "",
         status: "pending",
@@ -64,6 +65,9 @@
         return normalizeStatus(subscriber?.status) === "unsubscribed"
             && isWithinLastDays(subscriber?.updated || subscriber?.created, 7);
     }).length;
+    $: if (!isLoadingSubscribers && !subscribers.length) {
+        isSubscriberCreateOpen = true;
+    }
     $: subscriberGroupsById = new Map(subscriberGroups.map((group) => [group.id, group]));
     $: subscriberGroupCountById = subscriberGroups.reduce((acc, group) => {
         acc[group.id] = 0;
@@ -154,6 +158,19 @@
         return `${status || ""}`.trim().toLowerCase();
     }
 
+    function getSubscriberStatusLabel(status) {
+        const normalized = normalizeStatus(status);
+        if (normalized === "pending") {
+            return "Pending";
+        }
+        if (normalized === "active") {
+            return "Active";
+        }
+        if (normalized === "unsubscribed") {
+            return "Unsubscribed";
+        }
+        return `${status || ""}`.trim() || "Unknown";
+    }
     function normalizeGroupName(value) {
         return `${value || ""}`.trim().replace(/\s+/g, " ");
     }
@@ -698,7 +715,8 @@
                         class:active={activeSection === "subscribers"}
                         on:click={() => setActiveSection("subscribers")}
                     >
-                        Subscribers
+                        <i class="ri-user-3-line tab-icon" aria-hidden="true" />
+                        <span class="tab-label">Subscribers</span>
                     </button>
                     <button
                         type="button"
@@ -706,7 +724,8 @@
                         class:active={activeSection === "campaigns"}
                         on:click={() => setActiveSection("campaigns")}
                     >
-                        Campaigns
+                        <i class="ri-megaphone-line tab-icon" aria-hidden="true" />
+                        <span class="tab-label">Campaigns</span>
                     </button>
                 </div>
 
@@ -745,12 +764,25 @@
                                     <span class="txt-sm txt-hint">Create and manage subscribers directly in the table.</span>
                                 </div>
                                 <div class="flex-fill" />
-                                <span class="txt-sm txt-hint">
-                                    {filteredSubscribers.length} shown | {subscribers.length} total
-                                </span>
+                                <div class="subscribers-panel-header-actions">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm add-form-toggle-btn"
+                                        class:btn-strong={!isSubscriberCreateOpen}
+                                        class:btn-outline={isSubscriberCreateOpen}
+                                        on:click={() => (isSubscriberCreateOpen = !isSubscriberCreateOpen)}
+                                    >
+                                        <i class={isSubscriberCreateOpen ? "ri-eye-off-line" : "ri-add-line"} aria-hidden="true" />
+                                        <span class="txt">{isSubscriberCreateOpen ? "Hide form" : "Add form"}</span>
+                                    </button>
+                                    <span class="txt-sm txt-hint">
+                                        {filteredSubscribers.length} shown | {subscribers.length} total
+                                    </span>
+                                </div>
                             </div>
 
-                            <form class="subscriber-create-form subscriber-inline-create m-b-sm" on:submit|preventDefault={createSubscriber}>
+                            {#if isSubscriberCreateOpen}
+                                <form class="subscriber-create-form subscriber-inline-create m-b-sm" on:submit|preventDefault={createSubscriber}>
                                 <div class="subscriber-create-top">
                                     <div class="create-email-field">
                                         <label class="txt-sm txt-hint block m-b-5" for="subscriber-email">Email</label>
@@ -792,7 +824,7 @@
                                 {#if hasSubscriberGroupsFeature}
                                     <div class="subscriber-groups-row">
                                         <div class="subscriber-groups-select">
-                                            <label class="txt-sm txt-hint block m-b-5">Groups (optional)</label>
+                                            <label class="txt-sm txt-hint block m-b-5">Assign groups (optional)</label>
                                             <div class="group-pill-list form-group-pill-list">
                                                 {#if isLoadingSubscriberGroups}
                                                     <span class="txt-sm txt-hint">Loading groups...</span>
@@ -807,7 +839,6 @@
                                                             on:click={() => toggleSubscriberFormGroup(group.id)}
                                                         >
                                                             {group.name}
-                                                            <span class="group-pill-count">{subscriberGroupCountById[group.id] || 0}</span>
                                                         </button>
                                                     {/each}
                                                 {/if}
@@ -849,7 +880,8 @@
                                         <div class="txt-sm txt-danger">{subscriberGroupFormError}</div>
                                     </div>
                                 {/if}
-                            </form>
+                                </form>
+                            {/if}
 
                             <div class="subscriber-controls m-b-sm">
                                 <div class="subscriber-filter-grid" class:group-enabled={hasSubscriberGroupsFeature}>
@@ -880,22 +912,11 @@
                                         </div>
                                     {/if}
                                 </div>
-                                <div class="bulk-controls">
-                                    <label class="bulk-select-all">
-                                        <input
-                                            type="checkbox"
-                                            checked={areAllVisibleSubscribersSelected}
-                                            disabled={!pagedSubscribers.length}
-                                            on:change={toggleAllVisibleSubscribers}
-                                        />
-                                        <span class="txt-sm txt-hint">Select page</span>
-                                    </label>
-                                </div>
                             </div>
                             {#if isLoadingSubscribers}                                <div class="loading-state">                                    <span class="loader loader-sm" />                                    <span class="txt-hint">Loading subscribers...</span>                                </div>                            {:else if !subscribers.length}
                                 <div class="empty-state empty-state-stack">
                                     <span>No subscribers yet for this website.</span>
-                                    <span class="txt-sm txt-hint">Use the inline row above to create your first contact.</span>
+                                    <span class="txt-sm txt-hint">Use “Add subscriber” to create your first contact.</span>
                                 </div>
                             {:else if !filteredSubscribers.length}                                <div class="empty-state empty-state-stack">                                    <span>No subscribers match the current filters.</span>                                    <button                                        type="button"                                        class="btn btn-xs btn-outline"                                        on:click={() => {
                                             subscriberSearch = "";
@@ -904,158 +925,198 @@
                                             subscriberSort = "newest";
                                         }}
                                     >
-                                        <span class="txt">Clear filters</span>                                    </button>                                </div>                            {:else}                                <div class="list list-compact">                                    <div class="list-content">                                        {#each pagedSubscribers as subscriber (subscriber.id)}                                            <div class="list-item newsletter-list-item subscriber-row-item" class:is-editing={editingSubscriberId === subscriber.id}>
-                                                <div class="selection-cell">                                                    <input                                                        type="checkbox"                                                        checked={isSubscriberSelected(subscriber.id)}                                                        aria-label={`Select ${subscriber.email}`}                                                        on:change={() => toggleSubscriberSelection(subscriber.id)}                                                    />                                                </div>
-                                                <div class="content">
+                                        <span class="txt">Clear filters</span>                                    </button>                                </div>                            {:else}                                <div class="list list-compact subscriber-table-list">
+                                    <div class="subscriber-table-head txt-xs txt-hint">
+                                        <div class="selection-cell subscriber-col-select subscriber-col-select-head">
+                                            <input
+                                                type="checkbox"
+                                                checked={areAllVisibleSubscribersSelected}
+                                                disabled={!pagedSubscribers.length}
+                                                on:change={toggleAllVisibleSubscribers}
+                                                aria-label="Select visible subscribers"
+                                            />
+                                        </div>
+                                        <div class="subscriber-col-email">Email</div>
+                                        <div class="subscriber-col-status">Status</div>
+                                        <div class="subscriber-col-confirmed">Confirmed</div>
+                                        <div class="subscriber-col-added">Added</div>
+                                        <div class="subscriber-col-groups">Groups</div>
+                                        <div class="subscriber-col-actions">Actions (test)</div>
+                                    </div>
+                                    <div class="list-content">                                        {#each pagedSubscribers as subscriber (subscriber.id)}                                            <div class="list-item newsletter-list-item subscriber-row-item" class:is-editing={editingSubscriberId === subscriber.id}>
+                                                <div class="subscriber-row-grid">
+                                                    <div class="selection-cell subscriber-col-select">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSubscriberSelected(subscriber.id)}
+                                                            aria-label={`Select ${subscriber.email}`}
+                                                            on:change={() => toggleSubscriberSelection(subscriber.id)}
+                                                        />
+                                                    </div>
+
                                                     {#if editingSubscriberId === subscriber.id}
-                                                        <div class="subscriber-edit-grid">
-                                                            <div class="subscriber-edit-field">
-                                                                <label class="txt-xs txt-hint block m-b-5">Email</label>
-                                                                <input
-                                                                    type="email"
-                                                                    class="input input-sm"
-                                                                    bind:value={editingSubscriberForm.email}
-                                                                    on:input={clearEditingSubscriberError}
-                                                                />
-                                                            </div>
-                                                            <div class="subscriber-edit-field">
-                                                                <label class="txt-xs txt-hint block m-b-5">Status</label>
-                                                                <select
-                                                                    class="input input-sm"
-                                                                    bind:value={editingSubscriberForm.status}
-                                                                    on:change={clearEditingSubscriberError}
-                                                                >
-                                                                    {#each subscriberStatuses as status}
-                                                                        <option value={status}>{status}</option>
-                                                                    {/each}
-                                                                </select>
-                                                            </div>
-                                                            {#if hasSubscriberGroupsFeature}
-                                                                <div class="subscriber-edit-groups">
-                                                                    <label class="txt-xs txt-hint block m-b-5">Groups</label>
-                                                                    <div class="group-pill-list row-group-pill-list">
-                                                                        {#if !subscriberGroups.length}
-                                                                            <span class="txt-xs txt-hint">No groups created yet.</span>
-                                                                        {:else}
-                                                                            {#each subscriberGroups as group (group.id)}
-                                                                                <button
-                                                                                    type="button"
-                                                                                    class="group-pill-btn row-group-pill-btn"
-                                                                                    class:is-selected={editingSubscriberForm.groupIds.includes(group.id)}
-                                                                                    on:click={() => toggleEditingSubscriberGroup(group.id)}
-                                                                                >
-                                                                                    {group.name}
-                                                                                </button>
-                                                                            {/each}
-                                                                        {/if}
-                                                                    </div>
+                                                        <div class="subscriber-edit-wrap">
+                                                            <div class="subscriber-edit-grid">
+                                                                <div class="subscriber-edit-field">
+                                                                    <label class="txt-xs txt-hint block m-b-5">Email</label>
+                                                                    <input
+                                                                        type="email"
+                                                                        class="input input-sm"
+                                                                        bind:value={editingSubscriberForm.email}
+                                                                        on:input={clearEditingSubscriberError}
+                                                                    />
                                                                 </div>
-                                                            {/if}
-                                                            {#if editingSubscriberError}
-                                                                <div class="txt-sm txt-danger">{editingSubscriberError}</div>
-                                                            {/if}
+                                                                <div class="subscriber-edit-field">
+                                                                    <label class="txt-xs txt-hint block m-b-5">Status</label>
+                                                                    <select
+                                                                        class="input input-sm"
+                                                                        bind:value={editingSubscriberForm.status}
+                                                                        on:change={clearEditingSubscriberError}
+                                                                    >
+                                                                        {#each subscriberStatuses as status}
+                                                                            <option value={status}>{status}</option>
+                                                                        {/each}
+                                                                    </select>
+                                                                </div>
+                                                                {#if hasSubscriberGroupsFeature}
+                                                                    <div class="subscriber-edit-groups">
+                                                                        <label class="txt-xs txt-hint block m-b-5">Groups</label>
+                                                                        <div class="group-pill-list row-group-pill-list">
+                                                                            {#if !subscriberGroups.length}
+                                                                                <span class="txt-xs txt-hint">No groups created yet.</span>
+                                                                            {:else}
+                                                                                {#each subscriberGroups as group (group.id)}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        class="group-pill-btn row-group-pill-btn"
+                                                                                        class:is-selected={editingSubscriberForm.groupIds.includes(group.id)}
+                                                                                        on:click={() => toggleEditingSubscriberGroup(group.id)}
+                                                                                    >
+                                                                                        {group.name}
+                                                                                    </button>
+                                                                                {/each}
+                                                                            {/if}
+                                                                        </div>
+                                                                    </div>
+                                                                {/if}
+                                                                {#if editingSubscriberError}
+                                                                    <div class="txt-sm txt-danger">{editingSubscriberError}</div>
+                                                                {/if}
+                                                            </div>
                                                         </div>
                                                     {:else}
-                                                        <div class="subscriber-title">
+                                                        <div class="subscriber-col-email">
                                                             <span class="txt">{subscriber.email}</span>
+                                                        </div>
+                                                        <div class="subscriber-col-status">
                                                             <span
                                                                 class="status-chip"
                                                                 class:is-active={normalizeStatus(subscriber.status) === "active"}
                                                                 class:is-pending={normalizeStatus(subscriber.status) === "pending"}
                                                                 class:is-unsubscribed={normalizeStatus(subscriber.status) === "unsubscribed"}
                                                             >
-                                                                {subscriber.status}
+                                                                {getSubscriberStatusLabel(subscriber.status)}
                                                             </span>
                                                         </div>
-                                                        <div class="txt-xs txt-hint meta-line">
+                                                        <div class="subscriber-col-confirmed txt-xs txt-hint">
                                                             {#if subscriber.confirmedAt}
-                                                                Confirmed: {formatDateTime(subscriber.confirmedAt)}
-                                                                <span class="meta-sep">|</span>
+                                                                {formatDateTime(subscriber.confirmedAt)}
+                                                            {:else}
+                                                                -
                                                             {/if}
-                                                            Added: {formatDateTime(subscriber.created)}
                                                         </div>
-                                                        {#if hasSubscriberGroupsFeature}
-                                                            <div class="group-pill-list row-group-pill-list">
-                                                                {#if !getSubscriberGroupIds(subscriber).length}
-                                                                    <span class="txt-xs txt-hint">No groups assigned.</span>
-                                                                {:else}
-                                                                    {#each getSubscriberGroupIds(subscriber) as groupId (groupId)}
-                                                                        <span class="group-pill-btn row-group-pill-btn is-selected">
-                                                                            {subscriberGroupsById.get(groupId)?.name || "Group"}
-                                                                        </span>
-                                                                    {/each}
-                                                                {/if}
-                                                            </div>
-                                                        {/if}
+                                                        <div class="subscriber-col-added txt-xs txt-hint">
+                                                            {formatDateTime(subscriber.created)}
+                                                        </div>
+                                                        <div class="subscriber-col-groups">
+                                                            {#if hasSubscriberGroupsFeature}
+                                                                <div class="group-pill-list row-group-pill-list">
+                                                                    {#if !getSubscriberGroupIds(subscriber).length}
+                                                                        <span class="txt-xs txt-hint">No groups</span>
+                                                                    {:else}
+                                                                        {#each getSubscriberGroupIds(subscriber) as groupId (groupId)}
+                                                                            <span class="group-pill-btn row-group-pill-btn is-selected">
+                                                                                {subscriberGroupsById.get(groupId)?.name || "Group"}
+                                                                            </span>
+                                                                        {/each}
+                                                                    {/if}
+                                                                </div>
+                                                            {:else}
+                                                                <span class="txt-xs txt-hint">-</span>
+                                                            {/if}
+                                                        </div>
                                                     {/if}
-                                                </div>
-                                                <div class="actions">
-                                                    {#if editingSubscriberId === subscriber.id}
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-sm btn-strong action-btn"
-                                                            class:btn-loading={isSavingSubscriber}
-                                                            disabled={isSavingSubscriber}
-                                                            on:click={() => saveSubscriberEdit(subscriber)}
-                                                        >
-                                                            <span class="txt">Save</span>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-sm btn-outline action-btn"
-                                                            disabled={isSavingSubscriber}
-                                                            on:click={cancelEditSubscriber}
-                                                        >
-                                                            <span class="txt">Cancel</span>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-sm btn-danger btn-outline action-btn"
-                                                            class:btn-loading={deletingSubscriberId === subscriber.id}
-                                                            disabled={!!deletingSubscriberId}
-                                                            on:click={() => openDeleteSubscriberModal(subscriber)}
-                                                        >
-                                                            <span class="txt">Delete</span>
-                                                        </button>
-                                                    {:else}
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-sm btn-outline action-btn"
-                                                            disabled={!!editingSubscriberId}
-                                                            on:click={() => startEditSubscriber(subscriber)}
-                                                        >
-                                                            <span class="txt">Edit</span>
-                                                        </button>
-                                                        {#if normalizeStatus(subscriber.status) !== "active"}
+
+                                                    <div class="actions subscriber-col-actions">
+                                                        {#if editingSubscriberId === subscriber.id}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-strong action-btn"
+                                                                class:btn-loading={isSavingSubscriber}
+                                                                disabled={isSavingSubscriber}
+                                                                on:click={() => saveSubscriberEdit(subscriber)}
+                                                            >
+                                                                <span class="txt">Save</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-outline action-btn"
+                                                                disabled={isSavingSubscriber}
+                                                                on:click={cancelEditSubscriber}
+                                                            >
+                                                                <span class="txt">Cancel</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-danger btn-outline action-btn"
+                                                                class:btn-loading={deletingSubscriberId === subscriber.id}
+                                                                disabled={!!deletingSubscriberId}
+                                                                on:click={() => openDeleteSubscriberModal(subscriber)}
+                                                            >
+                                                                <span class="txt">Delete</span>
+                                                            </button>
+                                                        {:else}
                                                             <button
                                                                 type="button"
                                                                 class="btn btn-sm btn-outline action-btn"
                                                                 disabled={!!editingSubscriberId}
-                                                                on:click={() => setSubscriberStatus(subscriber, "active")}
+                                                                on:click={() => startEditSubscriber(subscriber)}
                                                             >
-                                                                <span class="txt">Mark active</span>
+                                                                <span class="txt">Edit</span>
                                                             </button>
-                                                        {/if}
-                                                        {#if normalizeStatus(subscriber.status) !== "unsubscribed"}
+                                                            {#if normalizeStatus(subscriber.status) !== "active"}
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-sm btn-outline action-btn"
+                                                                    disabled={!!editingSubscriberId}
+                                                                    title="Testing status override"
+                                                                    on:click={() => setSubscriberStatus(subscriber, "active")}
+                                                                >
+                                                                    <span class="txt">Set active</span>
+                                                                </button>
+                                                            {/if}
+                                                            {#if normalizeStatus(subscriber.status) !== "unsubscribed"}
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-sm action-btn"
+                                                                    disabled={!!editingSubscriberId}
+                                                                    title="Testing status override"
+                                                                    on:click={() => setSubscriberStatus(subscriber, "unsubscribed")}
+                                                                >
+                                                                    <span class="txt">Set unsubscribed</span>
+                                                                </button>
+                                                            {/if}
                                                             <button
                                                                 type="button"
-                                                                class="btn btn-sm action-btn"
-                                                                disabled={!!editingSubscriberId}
-                                                                on:click={() => setSubscriberStatus(subscriber, "unsubscribed")}
+                                                                class="btn btn-sm btn-danger btn-outline action-btn"
+                                                                class:btn-loading={deletingSubscriberId === subscriber.id}
+                                                                disabled={!!deletingSubscriberId || !!editingSubscriberId}
+                                                                on:click={() => openDeleteSubscriberModal(subscriber)}
                                                             >
-                                                                <span class="txt">Unsubscribe</span>
+                                                                <span class="txt">Delete</span>
                                                             </button>
                                                         {/if}
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-sm btn-danger btn-outline action-btn"
-                                                            class:btn-loading={deletingSubscriberId === subscriber.id}
-                                                            disabled={!!deletingSubscriberId || !!editingSubscriberId}
-                                                            on:click={() => openDeleteSubscriberModal(subscriber)}
-                                                        >
-                                                            <span class="txt">Delete</span>
-                                                        </button>
-                                                    {/if}
+                                                    </div>
                                                 </div>
                                             </div>
                                         {/each}
@@ -1642,9 +1703,113 @@
         overflow: visible;
     }
 
+    .campaign-workspace-tabs,
+    .campaign-builder-view-tabs,
+    .preview-tabs {
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 2px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: calc(var(--baseRadius) + 2px);
+        background: var(--baseAlt1Color);
+    }
+
     .operations-tabs {
         margin: 0;
+        display: inline-flex;
+        align-items: center;
         flex: 0 0 auto;
+        gap: 2px;
+        padding: 2px;
+        border: 0 !important;
+        border-radius: calc(var(--baseRadius) + 2px);
+        background: var(--baseAlt1Color);
+        overflow: hidden;
+        box-shadow: none !important;
+    }
+
+    .operations-tabs .tab-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 0 16px;
+        border: 0 !important;
+        border-radius: calc(var(--baseRadius) - 1px);
+        background: transparent;
+        font-weight: 500;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 76%, var(--txtHintColor));
+        transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .operations-tabs .tab-item + .tab-item {
+        box-shadow: none;
+    }
+
+    .operations-tabs .tab-item .tab-icon {
+        font-size: 13px;
+        opacity: 0.72;
+        transition: opacity 140ms ease, color 140ms ease;
+    }
+
+    .operations-tabs .tab-item:hover {
+        background: color-mix(in srgb, var(--baseColor) 75%, var(--baseAlt1Color));
+        color: var(--txtPrimaryColor);
+    }
+
+    .operations-tabs .tab-item:focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 50%, transparent);
+    }
+
+    .operations-tabs .tab-item.active {
+        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
+        color: var(--txtPrimaryColor);
+        font-weight: 600;
+        box-shadow: none;
+    }
+
+    .operations-tabs .tab-item.active .tab-icon {
+        opacity: 0.95;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 86%, var(--txtHintColor));
+    }
+
+    .campaign-workspace-tabs .tab-item,
+    .campaign-builder-view-tabs .tab-item,
+    .preview-tabs .tab-item {
+        min-height: 30px;
+        border: 1px solid transparent;
+        border-radius: calc(var(--baseRadius) - 1px);
+        background: transparent;
+        color: var(--txtHintColor);
+        padding: 0 12px;
+        transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+    }
+
+    .campaign-workspace-tabs .tab-item:hover,
+    .campaign-builder-view-tabs .tab-item:hover,
+    .preview-tabs .tab-item:hover {
+        background: color-mix(in srgb, var(--baseColor) 62%, var(--baseAlt1Color));
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 72%, transparent);
+        color: var(--txtPrimaryColor);
+    }
+
+    .campaign-workspace-tabs .tab-item:focus-visible,
+    .campaign-builder-view-tabs .tab-item:focus-visible,
+    .preview-tabs .tab-item:focus-visible {
+        outline: none;
+        border-color: color-mix(in srgb, var(--primaryColor) 48%, var(--baseAlt2Color));
+    }
+
+    .campaign-workspace-tabs .tab-item.active,
+    .campaign-builder-view-tabs .tab-item.active,
+    .preview-tabs .tab-item.active {
+        background: var(--baseColor);
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 85%, transparent);
+        color: var(--txtPrimaryColor);
+        font-weight: 600;
     }
 
     .head-tools {
@@ -1671,20 +1836,34 @@
         opacity: 0.85;
         font-size: 13px;
     }
-    .subscriber-controls {
+.subscriber-controls {
         display: flex;
         align-items: flex-end;
-        justify-content: space-between;
+        justify-content: flex-start;
         gap: 10px;
         flex-wrap: wrap;
         border-top: 1px solid var(--baseAlt2Color);
         padding-top: 10px;
     }
 
-    .subscribers-panel-header {
+.subscribers-panel-header {
         display: flex;
         align-items: center;
         gap: 10px;
+    }
+
+    .subscribers-panel-header-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .add-form-toggle-btn {
+        min-width: 118px;
+        justify-content: center;
+        gap: 6px;
     }
 
     .subscriber-create-form {
@@ -1816,12 +1995,6 @@
         font-size: 10px;
     }
 
-    .form-group-pill-list .group-pill-count {
-        min-width: 14px;
-        height: 14px;
-        font-size: 9px;
-    }
-
     .row-group-pill-list {
         margin-top: 7px;
     }
@@ -1831,36 +2004,9 @@
         font-size: 10px;
     }
 
-    .group-pill-count {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 16px;
-        height: 16px;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
-        color: var(--txtHintColor);
-        font-size: 10px;
-        line-height: 1;
-        padding: 0 4px;
-    }
-    .bulk-controls {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-left: auto;
-    }
-
     .bulk-action-btn {
         min-height: var(--inputHeight);
         min-width: 145px;
-    }
-    .bulk-select-all {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        margin-right: 0;
     }
 
     .subscriber-selection-popover {
@@ -1915,8 +2061,8 @@
     }
 
     .newsletter-list-item {
-        gap: 10px;
-        padding: 10px var(--xsSpacing);
+        gap: 6px;
+        padding: 6px var(--xsSpacing);
     }
 
     .subscriber-row-item {
@@ -1930,11 +2076,89 @@
     }
 
     .subscriber-row-item:nth-child(even) {
-        background: var(--baseAlt1Color);
+        background: color-mix(in srgb, var(--baseAlt1Color) 78%, var(--baseAlt2Color));
     }
 
     .subscriber-row-item.is-editing {
         background: var(--bodyColor);
+    }
+
+    .subscriber-table-list {
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        overflow: hidden;
+    }
+
+    .subscriber-table-head {
+        display: grid;
+        grid-template-columns: 34px minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(180px, 1fr) minmax(250px, 1.25fr);
+        gap: 6px;
+        align-items: center;
+        border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 92%, transparent);
+        background: color-mix(in srgb, var(--baseAlt2Color) 72%, var(--baseAlt1Color));
+        padding: 7px var(--xsSpacing);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 700;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 84%, var(--txtHintColor));
+    }
+
+    .subscriber-row-grid {
+        display: grid;
+        grid-template-columns: 34px minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(180px, 1fr) minmax(250px, 1.25fr);
+        gap: 6px;
+        align-items: center;
+        width: 100%;
+    }
+
+    .subscriber-col-select {
+        justify-self: center;
+    }
+
+    .subscriber-col-select-head {
+        justify-self: center;
+    }
+
+    .subscriber-col-email,
+    .subscriber-col-status,
+    .subscriber-col-confirmed,
+    .subscriber-col-added,
+    .subscriber-col-groups,
+    .subscriber-col-actions {
+        min-width: 0;
+    }
+
+    .subscriber-col-confirmed,
+    .subscriber-col-added {
+        white-space: nowrap;
+    }
+
+    .subscriber-col-email .txt {
+        display: inline-block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    .subscriber-col-groups .group-pill-list {
+        margin-top: 0;
+    }
+
+    .subscriber-col-actions.actions {
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        gap: 6px;
+    }
+
+    .subscriber-col-actions .action-btn {
+        min-width: 82px;
+        min-height: var(--smBtnHeight);
+        padding-inline: 10px;
+    }
+
+    .subscriber-edit-wrap {
+        grid-column: 2 / 7;
     }
 
     .subscriber-edit-grid {
@@ -2210,13 +2434,6 @@
         gap: 8px;
     }
 
-    .subscriber-title {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-    }
-
     .status-chip {
         display: inline-flex;
         align-items: center;
@@ -2335,6 +2552,11 @@
             flex-wrap: wrap;
         }
 
+        .subscribers-panel-header-actions {
+            width: 100%;
+            justify-content: space-between;
+        }
+
         .subscriber-create-top {
             grid-template-columns: minmax(220px, 1fr) minmax(150px, 200px);
         }
@@ -2350,6 +2572,15 @@
 
         .subscriber-edit-grid {
             grid-template-columns: 1fr;
+        }
+
+        .subscriber-table-list {
+            overflow-x: auto;
+        }
+
+        .subscriber-table-head,
+        .subscriber-row-grid {
+            min-width: 1130px;
         }
 
         .campaign-layout-grid {
@@ -2434,11 +2665,6 @@
             grid-template-columns: 1fr;
         }
 
-        .bulk-controls {
-            width: 100%;
-            justify-content: flex-start;
-        }
-
         .group-create-row {
             flex-direction: column;
             align-items: stretch;
@@ -2460,12 +2686,16 @@
             width: 100%;
         }
         .pagination-wrap {            justify-content: center;        }        .newsletter-list-item {
-            padding: 10px;
+            padding: 7px;
         }
 
         .actions {
             width: 100%;
             justify-content: flex-start;
+        }
+
+        .subscriber-col-actions.actions {
+            width: auto;
         }
 
         .campaign-builder-footer {
