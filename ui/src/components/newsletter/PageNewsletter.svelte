@@ -24,7 +24,7 @@
         name: "",
     };
     let subscriberGroupFormError = "";
-    let campaignForm = {        subject: "",        body: "",        recipientsType: "all",        recipientsIds: [],    };    let campaignFormError = "";    let campaignPreviewMode = "plain";    let campaignWorkspace = "builder";    let campaignBuilderView = "edit";    let campaignStatusFilter = "all";    let isCampaignPreviewExpanded = false;    let editingCampaignId = "";    let isSavingCampaign = false;    let subscriberSearch = "";
+    let campaignForm = {        subject: "",        body: "",        recipientsType: "all",        recipientsIds: [],    };    let campaignFormError = "";    let campaignWorkspace = "builder";    let campaignBuilderShowEditor = true;    let campaignBuilderShowPreview = false;    let campaignStatusFilter = "all";    let isCampaignPreviewExpanded = false;    let editingCampaignId = "";    let isSavingCampaign = false;    let subscriberSearch = "";
     let subscriberStatusFilter = "all";
     let subscriberGroupFilter = "all";
     let subscriberSort = "newest";
@@ -347,7 +347,7 @@
 
         editingSubscriberForm = { ...editingSubscriberForm, groupIds: nextGroupIds };
     }
-    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderView = "edit";            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return campaignForm.recipientsIds.includes(subscriberId);    }    function toggleManualRecipient(subscriberId) {        clearCampaignFormError();        if (campaignForm.recipientsIds.includes(subscriberId)) {            campaignForm.recipientsIds = campaignForm.recipientsIds.filter((id) => id !== subscriberId);        } else {            campaignForm.recipientsIds = [...campaignForm.recipientsIds, subscriberId];        }    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
+    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return campaignForm.recipientsIds.includes(subscriberId);    }    function toggleManualRecipient(subscriberId) {        clearCampaignFormError();        if (campaignForm.recipientsIds.includes(subscriberId)) {            campaignForm.recipientsIds = campaignForm.recipientsIds.filter((id) => id !== subscriberId);        } else {            campaignForm.recipientsIds = [...campaignForm.recipientsIds, subscriberId];        }    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
     }
 
@@ -357,6 +357,18 @@
 
     function closeCampaignPreviewModal() {
         isCampaignPreviewExpanded = false;
+    }
+
+    function toggleCampaignBuilderPanel(panel) {
+        const nextShowEditor = panel === "edit" ? !campaignBuilderShowEditor : campaignBuilderShowEditor;
+        const nextShowPreview = panel === "preview" ? !campaignBuilderShowPreview : campaignBuilderShowPreview;
+
+        if (!nextShowEditor && !nextShowPreview) {
+            return;
+        }
+
+        campaignBuilderShowEditor = nextShowEditor;
+        campaignBuilderShowPreview = nextShowPreview;
     }
 
     function openDeleteSubscriberModal(subscriber) {
@@ -603,8 +615,8 @@
             recipientsIds: [],
         };
         campaignFormError = "";
-        campaignPreviewMode = "plain";
-        campaignBuilderView = "edit";
+        campaignBuilderShowEditor = true;
+        campaignBuilderShowPreview = false;
         closeCampaignPreviewModal();
         editingCampaignId = "";
     }
@@ -622,7 +634,8 @@
             recipientsIds: Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean) : [],
         };
         campaignWorkspace = "builder";
-        campaignBuilderView = "edit";
+        campaignBuilderShowEditor = true;
+        campaignBuilderShowPreview = false;
         closeCampaignPreviewModal();
         campaignFormError = "";
     }
@@ -1147,7 +1160,7 @@
                                                                     title="Testing status override"
                                                                     on:click={() => setSubscriberStatus(subscriber, "active")}
                                                                 >
-                                                                    <span class="txt">Set active</span>
+                                                                    <span class="txt">Activate</span>
                                                                 </button>
                                                             {/if}
                                                             {#if normalizeStatus(subscriber.status) !== "unsubscribed"}
@@ -1158,7 +1171,7 @@
                                                                     title="Testing status override"
                                                                     on:click={() => setSubscriberStatus(subscriber, "unsubscribed")}
                                                                 >
-                                                                    <span class="txt">Set unsubscribed</span>
+                                                                    <span class="txt">Unsubscribe</span>
                                                                 </button>
                                                             {/if}
                                                             <button
@@ -1213,26 +1226,30 @@
                     {:else}
                         <div class="campaign-layout-grid">
                             <section class="panel campaign-composer-panel">
-                                <div class="tabs-header compact combined left campaign-workspace-tabs m-b-sm">
-                                    <button
-                                        type="button"
-                                        class="tab-item"
-                                        class:active={campaignWorkspace === "builder"}
-                                        on:click={() => (campaignWorkspace = "builder")}
-                                    >
-                                        Builder
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="tab-item"
-                                        class:active={campaignWorkspace === "audience"}
-                                        on:click={() => {
-                                            campaignWorkspace = "audience";
-                                            closeCampaignPreviewModal();
-                                        }}
-                                    >
-                                        Audience & Send
-                                    </button>
+                                <div class="campaign-top-controls m-b-sm">
+                                    <div class="tabs-header compact combined left campaign-workspace-tabs">
+                                        <button
+                                            type="button"
+                                            class="tab-item"
+                                            class:active={campaignWorkspace === "builder"}
+                                            on:click={() => (campaignWorkspace = "builder")}
+                                        >
+                                            <i class="ri-tools-line tab-icon" aria-hidden="true" />
+                                            Builder
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="tab-item"
+                                            class:active={campaignWorkspace === "audience"}
+                                            on:click={() => {
+                                                campaignWorkspace = "audience";
+                                                closeCampaignPreviewModal();
+                                            }}
+                                        >
+                                            <i class="ri-send-plane-line tab-icon" aria-hidden="true" />
+                                            Audience & Send
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {#if editingCampaignId}
@@ -1257,25 +1274,21 @@
                                             <button
                                                 type="button"
                                                 class="tab-item"
-                                                class:active={campaignBuilderView === "edit"}
-                                                on:click={() => (campaignBuilderView = "edit")}
+                                                class:active={campaignBuilderShowEditor}
+                                                aria-pressed={campaignBuilderShowEditor}
+                                                on:click={() => toggleCampaignBuilderPanel("edit")}
                                             >
+                                                <i class="ri-edit-line tab-icon" aria-hidden="true" />
                                                 Edit
                                             </button>
                                             <button
                                                 type="button"
                                                 class="tab-item"
-                                                class:active={campaignBuilderView === "split"}
-                                                on:click={() => (campaignBuilderView = "split")}
+                                                class:active={campaignBuilderShowPreview}
+                                                aria-pressed={campaignBuilderShowPreview}
+                                                on:click={() => toggleCampaignBuilderPanel("preview")}
                                             >
-                                                Split
-                                            </button>
-                                            <button
-                                                type="button"
-                                                class="tab-item"
-                                                class:active={campaignBuilderView === "preview"}
-                                                on:click={() => (campaignBuilderView = "preview")}
-                                            >
+                                                <i class="ri-eye-line tab-icon" aria-hidden="true" />
                                                 Preview
                                             </button>
                                         </div>
@@ -1283,10 +1296,15 @@
 
                                     <div
                                         class="campaign-builder-layout"
-                                        class:is-edit={campaignBuilderView === "edit"}
-                                        class:is-preview={campaignBuilderView === "preview"}
+                                        class:is-split={campaignBuilderShowEditor && campaignBuilderShowPreview}
+                                        class:is-edit-only={campaignBuilderShowEditor && !campaignBuilderShowPreview}
+                                        class:is-preview-only={!campaignBuilderShowEditor && campaignBuilderShowPreview}
                                     >
+                                        {#if campaignBuilderShowEditor}
                                         <div class="campaign-builder-editor">
+                                            <div class="campaign-editor-header m-b-xs">
+                                                <h5 class="m-0">Editor</h5>
+                                            </div>
                                             <label class="txt-sm txt-hint block m-b-5" for="campaign-subject">Subject</label>
                                             <input
                                                 id="campaign-subject"
@@ -1338,55 +1356,30 @@
                                                 </button>
                                             </div>
                                         </div>
+                                        {/if}
 
+                                        {#if campaignBuilderShowPreview}
                                         <div class="campaign-builder-preview-side">
                                             <div class="campaign-preview-header m-b-xs">
                                                 <h5 class="m-0">Preview</h5>
-                                                <div class="campaign-preview-actions">
-                                                    <div class="tabs-header compact combined left preview-tabs">
-                                                        <button
-                                                            type="button"
-                                                            class="tab-item"
-                                                            class:active={campaignPreviewMode === "plain"}
-                                                            on:click={() => (campaignPreviewMode = "plain")}
-                                                        >
-                                                            Plain
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            class="tab-item"
-                                                            class:active={campaignPreviewMode === "html"}
-                                                            on:click={() => (campaignPreviewMode = "html")}
-                                                        >
-                                                            HTML
-                                                        </button>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-xs btn-outline"
-                                                        on:click={openCampaignPreviewModal}
-                                                    >
-                                                        <span class="txt">Expand</span>
-                                                    </button>
-                                                </div>
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-xs btn-outline campaign-preview-expand-btn"
+                                                    on:click={openCampaignPreviewModal}
+                                                >
+                                                    <span class="txt">Expand</span>
+                                                </button>
                                             </div>
 
-                                            <div class="txt-sm txt-hint m-b-xs campaign-preview-subject">
-                                                Subject: {campaignSubjectValue || "(No subject yet)"}
+                                            <div class="campaign-preview-box campaign-preview-html">
+                                                {#if campaignBodyValue}
+                                                    {@html campaignForm.body}
+                                                {:else}
+                                                    <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
+                                                {/if}
                                             </div>
-
-                                            {#if campaignPreviewMode === "plain"}
-                                                <pre class="campaign-preview-box">{campaignBodyValue || "Body preview will appear here."}</pre>
-                                            {:else}
-                                                <div class="campaign-preview-box campaign-preview-html">
-                                                    {#if campaignBodyValue}
-                                                        {@html campaignForm.body}
-                                                    {:else}
-                                                        <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
-                                                    {/if}
-                                                </div>
-                                            {/if}
                                         </div>
+                                        {/if}
                                     </div>
                                 {:else}
                                     <div class="campaign-head-inline m-b-sm">
@@ -1612,44 +1605,17 @@
                 <div class="newsletter-modal panel campaign-preview-modal" on:click|stopPropagation>
                     <div class="campaign-preview-modal-header m-b-sm">
                         <h4 class="m-0">Campaign Preview</h4>
-                        <div class="campaign-preview-actions">
-                            <div class="tabs-header compact combined left preview-tabs">
-                                <button
-                                    type="button"
-                                    class="tab-item"
-                                    class:active={campaignPreviewMode === "plain"}
-                                    on:click={() => (campaignPreviewMode = "plain")}
-                                >
-                                    Plain
-                                </button>
-                                <button
-                                    type="button"
-                                    class="tab-item"
-                                    class:active={campaignPreviewMode === "html"}
-                                    on:click={() => (campaignPreviewMode = "html")}
-                                >
-                                    HTML
-                                </button>
-                            </div>
-                            <button type="button" class="btn btn-xs btn-outline" on:click={closeCampaignPreviewModal}>
-                                <span class="txt">Close</span>
-                            </button>
-                        </div>
+                        <button type="button" class="btn btn-xs btn-outline" on:click={closeCampaignPreviewModal}>
+                            <span class="txt">Close</span>
+                        </button>
                     </div>
-                    <div class="txt-sm txt-hint m-b-xs campaign-preview-subject">
-                        Subject: {campaignSubjectValue || "(No subject yet)"}
+                    <div class="campaign-preview-box campaign-preview-html campaign-preview-modal-box">
+                        {#if campaignBodyValue}
+                            {@html campaignForm.body}
+                        {:else}
+                            <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
+                        {/if}
                     </div>
-                    {#if campaignPreviewMode === "plain"}
-                        <pre class="campaign-preview-box campaign-preview-modal-box">{campaignBodyValue || "Body preview will appear here."}</pre>
-                    {:else}
-                        <div class="campaign-preview-box campaign-preview-html campaign-preview-modal-box">
-                            {#if campaignBodyValue}
-                                {@html campaignForm.body}
-                            {:else}
-                                <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
-                            {/if}
-                        </div>
-                    {/if}
                 </div>
             </div>
         {/if}
@@ -1763,16 +1729,22 @@
     }
 
     .campaign-workspace-tabs,
-    .campaign-builder-view-tabs,
-    .preview-tabs {
+    .campaign-builder-view-tabs {
         margin: 0;
         display: inline-flex;
         align-items: center;
-        gap: 3px;
+        align-self: flex-start;
+        width: fit-content !important;
+        max-width: 100%;
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+        gap: 2px;
         padding: 2px;
-        border: 1px solid var(--baseAlt2Color);
+        border: 0 !important;
         border-radius: calc(var(--baseRadius) + 2px);
         background: var(--baseAlt1Color);
+        overflow: hidden;
+        box-shadow: none !important;
     }
 
     .operations-tabs {
@@ -1836,39 +1808,51 @@
     }
 
     .campaign-workspace-tabs .tab-item,
-    .campaign-builder-view-tabs .tab-item,
-    .preview-tabs .tab-item {
-        min-height: 30px;
-        border: 1px solid transparent;
+    .campaign-builder-view-tabs .tab-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 34px;
+        border: 0 !important;
         border-radius: calc(var(--baseRadius) - 1px);
         background: transparent;
-        color: var(--txtHintColor);
-        padding: 0 12px;
-        transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 76%, var(--txtHintColor));
+        padding: 0 14px;
+        font-weight: 500;
+        transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
     }
 
     .campaign-workspace-tabs .tab-item:hover,
-    .campaign-builder-view-tabs .tab-item:hover,
-    .preview-tabs .tab-item:hover {
-        background: color-mix(in srgb, var(--baseColor) 62%, var(--baseAlt1Color));
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 72%, transparent);
+    .campaign-builder-view-tabs .tab-item:hover {
+        background: color-mix(in srgb, var(--baseColor) 75%, var(--baseAlt1Color));
         color: var(--txtPrimaryColor);
     }
 
     .campaign-workspace-tabs .tab-item:focus-visible,
-    .campaign-builder-view-tabs .tab-item:focus-visible,
-    .preview-tabs .tab-item:focus-visible {
+    .campaign-builder-view-tabs .tab-item:focus-visible {
         outline: none;
-        border-color: color-mix(in srgb, var(--primaryColor) 48%, var(--baseAlt2Color));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 50%, transparent);
     }
 
     .campaign-workspace-tabs .tab-item.active,
-    .campaign-builder-view-tabs .tab-item.active,
-    .preview-tabs .tab-item.active {
-        background: var(--baseColor);
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 85%, transparent);
+    .campaign-builder-view-tabs .tab-item.active {
+        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
         color: var(--txtPrimaryColor);
         font-weight: 600;
+        box-shadow: none;
+    }
+
+    .campaign-workspace-tabs .tab-item .tab-icon,
+    .campaign-builder-view-tabs .tab-item .tab-icon {
+        font-size: 13px;
+        opacity: 0.72;
+        transition: opacity 140ms ease, color 140ms ease;
+    }
+
+    .campaign-workspace-tabs .tab-item.active .tab-icon,
+    .campaign-builder-view-tabs .tab-item.active .tab-icon {
+        opacity: 0.95;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 86%, var(--txtHintColor));
     }
 
     .head-tools {
@@ -2116,7 +2100,56 @@
         padding: 0 3px;
         white-space: nowrap;
     }
-    .selection-cell {        display: inline-flex;        align-items: center;        justify-content: center;        padding-right: 2px;    }    .pagination-wrap {        display: flex;        align-items: center;        justify-content: flex-end;        gap: 8px;        margin-top: 10px;    }        .preview-tabs .tab-item {        min-width: 70px;    }    .campaign-preview-box {        margin: 0;        border: 1px solid var(--baseAlt2Color);        border-radius: var(--baseRadius);        background: var(--baseAlt1Color);        padding: 12px;        min-height: 250px;        max-height: 380px;        overflow: auto;        white-space: pre-wrap;        word-break: break-word;        font-family: inherit;        font-size: var(--baseFontSize);        flex: 1 1 auto;    }    .campaign-preview-html :global(p:last-child) {        margin-bottom: 0;    }    .loading-state,    .empty-state {        border: 1px dashed var(--baseAlt2Color);        border-radius: var(--baseRadius);        padding: 16px;        display: flex;        align-items: center;        justify-content: center;        gap: 8px;        color: var(--txtHintColor);    }    .empty-state-stack {        flex-direction: column;    }    
+    .selection-cell {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding-right: 2px;
+    }
+
+    .pagination-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .campaign-preview-box {
+        margin: 0;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseAlt1Color);
+        padding: 12px;
+        min-height: 250px;
+        max-height: 380px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: inherit;
+        font-size: var(--baseFontSize);
+        flex: 1 1 auto;
+    }
+
+    .campaign-preview-html :global(p:last-child) {
+        margin-bottom: 0;
+    }
+
+    .loading-state,
+    .empty-state {
+        border: 1px dashed var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: var(--txtHintColor);
+    }
+
+    .empty-state-stack {
+        flex-direction: column;
+    }
 
     .add-subscriber-btn {
         min-height: var(--inputHeight);
@@ -2275,11 +2308,15 @@
         flex-direction: column;
         gap: 4px;
     }
-    .campaign-workspace-tabs {
-        margin-bottom: 6px;
+    .campaign-head-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
-    .campaign-head-row {
+    .campaign-top-controls {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -2293,6 +2330,10 @@
         gap: 8px;
         flex-wrap: wrap;
         row-gap: 4px;
+    }
+
+    .campaign-head-row .campaign-builder-view-tabs {
+        margin-left: auto;
     }
 
     .campaign-head-description {
@@ -2357,25 +2398,19 @@
 
     .campaign-builder-layout {
         display: grid;
-        grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
         gap: 16px;
         align-items: stretch;
-    }
-
-    .campaign-builder-layout.is-edit {
         grid-template-columns: 1fr;
     }
 
-    .campaign-builder-layout.is-preview {
+    .campaign-builder-layout.is-split {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        column-gap: 20px;
+    }
+
+    .campaign-builder-layout.is-edit-only,
+    .campaign-builder-layout.is-preview-only {
         grid-template-columns: 1fr;
-    }
-
-    .campaign-builder-layout.is-edit .campaign-builder-preview-side {
-        display: none;
-    }
-
-    .campaign-builder-layout.is-preview .campaign-builder-editor {
-        display: none;
     }
 
     .campaign-builder-editor,
@@ -2394,6 +2429,18 @@
         min-height: 100%;
     }
 
+    .campaign-builder-layout.is-split .campaign-builder-preview-side {
+        border-left: 1px solid var(--baseAlt2Color);
+        padding-left: 16px;
+    }
+
+    .campaign-editor-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 30px;
+    }
+
     .campaign-preview-header {
         display: flex;
         align-items: center;
@@ -2401,16 +2448,8 @@
         gap: 8px;
     }
 
-    .campaign-preview-actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .campaign-preview-subject {
-        margin: 0;
-        padding: 0;
-        color: var(--txtHintColor);
+    .campaign-preview-expand-btn {
+        margin-left: auto;
     }
 
     .campaign-edit-banner {
@@ -2695,13 +2734,24 @@
             grid-template-columns: 1fr;
         }
 
+        .campaign-top-controls {
+            align-items: flex-start;
+            justify-content: flex-start;
+        }
+
+        .campaign-builder-layout.is-split .campaign-builder-preview-side {
+            border-left: 0;
+            padding-left: 0;
+            border-top: 1px solid var(--baseAlt2Color);
+            padding-top: 12px;
+        }
+
         .campaign-preview-header {
             flex-wrap: wrap;
         }
 
-        .campaign-preview-actions {
-            width: 100%;
-            justify-content: space-between;
+        .campaign-preview-expand-btn {
+            margin-left: 0;
         }
 
         .campaign-audience-actions {
@@ -2816,12 +2866,14 @@
         }
 
         .campaign-builder-view-tabs {
-            width: 100%;
+            width: fit-content;
+            max-width: 100%;
+            margin-left: 0;
         }
 
         .campaign-builder-view-tabs .tab-item {
-            flex: 1 1 0;
-            min-width: 0;
+            flex: 0 0 auto;
+            min-width: 78px;
         }
 
         .campaign-builder-cta,
