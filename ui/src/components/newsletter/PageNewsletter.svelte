@@ -1,5 +1,5 @@
 <script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
-    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const campaignRecipientsTypeOptions = ["all", "manual"];    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
+    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const campaignRecipientsTypeOptions = ["all", "manual"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
     let isLoadingWebsites = false;    let isLoadingSubscribers = false;
@@ -14,6 +14,7 @@
     let deletingSubscriberId = "";
     let isSubscriberCreateOpen = false;
     let subscriberForm = {
+        name: "",
         email: "",
         status: "pending",
         groupIds: [],
@@ -34,6 +35,7 @@
     let pendingDeleteSubscriber = null;
     let editingSubscriberId = "";
     let editingSubscriberForm = {
+        name: "",
         email: "",
         status: "pending",
         groupIds: [],
@@ -45,10 +47,14 @@
     $: campaignsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "campaigns") || null;
     $: subscriberGroupsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribergroups") || null;
     $: missingCollectionNames = [];    $: if (!subscribersCollection?.id) {        missingCollectionNames.push("Subscribers");    }    $: if (!campaignsCollection?.id) {        missingCollectionNames.push("Campaigns");    };    $: hasNewsletterCollections = missingCollectionNames.length === 0;
-    $: subscribersSupportsGroupsField = !!subscribersCollection?.id
-        && CommonHelper.getAllCollectionIdentifiers(subscribersCollection)
-            .map((field) => `${field || ""}`.trim().toLowerCase())
-            .includes("groups");
+    $: subscriberFieldKeys = new Set(
+        !!subscribersCollection?.id
+            ? CommonHelper.getAllCollectionIdentifiers(subscribersCollection).map((field) => `${field || ""}`.trim().toLowerCase())
+            : [],
+    );
+    $: subscribersSupportsGroupsField = subscriberFieldKeys.has("groups");
+    $: subscribersSupportsNameField = subscriberFieldKeys.has("name");
+    $: subscribersSupportsSourceField = subscriberFieldKeys.has("source");
     $: hasSubscriberGroupsFeature = !!subscriberGroupsCollection?.id && subscribersSupportsGroupsField;
     $: if (!websitesCollection?.id) {        websites = [];        selectedWebsiteId = "";        lastWebsitesCollectionId = "";    } else if (websitesCollection.id !== lastWebsitesCollectionId) {        lastWebsitesCollectionId = websitesCollection.id;        loadWebsites();    };    $: websiteDataKey = `${selectedWebsiteId}:${subscribersCollection?.id || ""}:${campaignsCollection?.id || ""}:${subscriberGroupsCollection?.id || ""}`;
     $: if (selectedWebsiteId && hasNewsletterCollections && websiteDataKey !== lastDataKey) {
@@ -122,7 +128,8 @@
             const byStatus = subscriberStatusFilter === "all" || status === subscriberStatusFilter;
             const byGroup = subscriberGroupFilter === "all" || groupIds.includes(subscriberGroupFilter);
             const bySearch = !normalizedSubscriberSearch
-                || `${subscriber?.email || ""}`.toLowerCase().includes(normalizedSubscriberSearch);
+                || `${subscriber?.email || ""}`.toLowerCase().includes(normalizedSubscriberSearch)
+                || `${subscriber?.name || ""}`.toLowerCase().includes(normalizedSubscriberSearch);
 
             return byStatus && byGroup && bySearch;
         }),
@@ -154,7 +161,11 @@
         cancelEditSubscriber();
     }
     // Keep context in URL query so refresh/navigation preserves website and active tab.
-    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function normalizeStatus(status) {
+    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function normalizeSubscriberName(name) {
+        return `${name || ""}`.trim().replace(/\s+/g, " ");
+    }    function resolveSubscriberDisplayName(subscriber) {
+        return normalizeSubscriberName(subscriber?.name);
+    }    function normalizeStatus(status) {
         return `${status || ""}`.trim().toLowerCase();
     }
 
@@ -304,6 +315,7 @@
         editingSubscriberId = subscriber.id;
         editingSubscriberError = "";
         editingSubscriberForm = {
+            name: normalizeSubscriberName(subscriber.name),
             email: `${subscriber.email || ""}`,
             status: normalizeStatus(subscriber.status) || "pending",
             groupIds: [...getSubscriberGroupIds(subscriber)],
@@ -314,6 +326,7 @@
         editingSubscriberId = "";
         editingSubscriberError = "";
         editingSubscriberForm = {
+            name: "",
             email: "",
             status: "pending",
             groupIds: [],
@@ -431,7 +444,7 @@
         pendingSendCampaign = null;
         pendingDeleteSubscriber = null;
         subscriberGroupFilter = "all";
-        subscriberForm = { ...subscriberForm, groupIds: [] };
+        subscriberForm = { ...subscriberForm, name: "", groupIds: [] };
         cancelEditSubscriber();
         resetSubscriberSelection();
         resetCampaignComposer();
@@ -445,6 +458,12 @@
                 email,
                 status: subscriberForm.status,
             };
+            if (subscribersSupportsNameField) {
+                payload.name = normalizeSubscriberName(subscriberForm.name);
+            }
+            if (subscribersSupportsSourceField) {
+                payload.source = subscriberLeadSource;
+            }
             if (hasSubscriberGroupsFeature && Array.isArray(subscriberForm.groupIds) && subscriberForm.groupIds.length) {
                 payload.groups = subscriberForm.groupIds;
             }
@@ -453,6 +472,7 @@
                 payload.confirmedAt = new Date().toISOString();
             }
             await ApiClient.collection(subscribersCollection.id).create(payload);            subscriberForm = {
+                name: "",
                 email: "",
                 status: "pending",
                 groupIds: [],
@@ -485,6 +505,9 @@
                 email,
                 status: normalizeStatus(editingSubscriberForm.status) || "pending",
             };
+            if (subscribersSupportsNameField) {
+                payload.name = normalizeSubscriberName(editingSubscriberForm.name);
+            }
 
             if (hasSubscriberGroupsFeature) {
                 payload.groups = Array.isArray(editingSubscriberForm.groupIds) ? editingSubscriberForm.groupIds : [];
@@ -784,23 +807,38 @@
                             {#if isSubscriberCreateOpen}
                                 <form class="subscriber-create-form subscriber-inline-create m-b-sm" on:submit|preventDefault={createSubscriber}>
                                 <div class="subscriber-create-top">
-                                    <div class="create-email-field">
-                                        <label class="txt-sm txt-hint block m-b-5" for="subscriber-email">Email</label>
-                                        <input
-                                            id="subscriber-email"
-                                            bind:this={subscriberEmailInput}
-                                            type="email"
-                                            class="input"
-                                            placeholder="name@example.com"
-                                            bind:value={subscriberForm.email}
-                                            on:input={clearSubscriberFormError}
-                                        />
+                                    <div class="create-email-field" class:with-name={subscribersSupportsNameField}>
+                                        {#if subscribersSupportsNameField}
+                                            <div class="create-name-field">
+                                                <label class="txt-sm txt-hint block m-b-5" for="subscriber-name">Name (optional)</label>
+                                                <input
+                                                    id="subscriber-name"
+                                                    type="text"
+                                                    class="input input-sm create-name-input"
+                                                    placeholder="Subscriber name"
+                                                    bind:value={subscriberForm.name}
+                                                    on:input={clearSubscriberFormError}
+                                                />
+                                            </div>
+                                        {/if}
+                                        <div class="create-email-inline-field">
+                                            <label class="txt-sm txt-hint block m-b-5" for="subscriber-email">Email</label>
+                                            <input
+                                                id="subscriber-email"
+                                                bind:this={subscriberEmailInput}
+                                                type="email"
+                                                class="input input-sm"
+                                                placeholder="name@example.com"
+                                                bind:value={subscriberForm.email}
+                                                on:input={clearSubscriberFormError}
+                                            />
+                                        </div>
                                     </div>
                                     <div class="create-status-field">
                                         <label class="txt-sm txt-hint block m-b-5" for="subscriber-status">Status</label>
                                         <select
                                             id="subscriber-status"
-                                            class="input"
+                                            class="input input-sm"
                                             bind:value={subscriberForm.status}
                                             on:change={clearSubscriberFormError}
                                         >
@@ -888,7 +926,7 @@
                                     <div class="control-item">
                                         <label class="txt-sm txt-hint block m-b-5" for="subscriber-search">Search</label>
                                         <input
-                                            id="subscriber-search"                                            type="text"                                            class="input input-sm"                                            placeholder="Search by email..."                                            bind:value={subscriberSearch}                                        />                                    </div>                                    <div class="control-item">                                        <label class="txt-sm txt-hint block m-b-5" for="subscriber-filter-status">Status</label>                                        <select                                            id="subscriber-filter-status"                                            class="input input-sm"                                            bind:value={subscriberStatusFilter}                                        >                                            <option value="all">All statuses</option>                                            {#each subscriberStatuses as status}                                                <option value={status}>{status}</option>                                            {/each}                                        </select>                                    </div>                                    <div class="control-item">
+                                            id="subscriber-search"                                            type="text"                                            class="input input-sm"                                            placeholder="Search by name or email..."                                            bind:value={subscriberSearch}                                        />                                    </div>                                    <div class="control-item">                                        <label class="txt-sm txt-hint block m-b-5" for="subscriber-filter-status">Status</label>                                        <select                                            id="subscriber-filter-status"                                            class="input input-sm"                                            bind:value={subscriberStatusFilter}                                        >                                            <option value="all">All statuses</option>                                            {#each subscriberStatuses as status}                                                <option value={status}>{status}</option>                                            {/each}                                        </select>                                    </div>                                    <div class="control-item">
                                         <label class="txt-sm txt-hint block m-b-5" for="subscriber-sort">Sort</label>
                                         <select id="subscriber-sort" class="input input-sm" bind:value={subscriberSort}>
                                             {#each subscriberSortOptions as sortOption}
@@ -936,12 +974,13 @@
                                                 aria-label="Select visible subscribers"
                                             />
                                         </div>
+                                        <div class="subscriber-col-name">Name</div>
                                         <div class="subscriber-col-email">Email</div>
                                         <div class="subscriber-col-status">Status</div>
                                         <div class="subscriber-col-confirmed">Confirmed</div>
                                         <div class="subscriber-col-added">Added</div>
                                         <div class="subscriber-col-groups">Groups</div>
-                                        <div class="subscriber-col-actions">Actions (test)</div>
+                                        <div class="subscriber-col-actions">Actions</div>
                                     </div>
                                     <div class="list-content">                                        {#each pagedSubscribers as subscriber (subscriber.id)}                                            <div class="list-item newsletter-list-item subscriber-row-item" class:is-editing={editingSubscriberId === subscriber.id}>
                                                 <div class="subscriber-row-grid">
@@ -957,6 +996,17 @@
                                                     {#if editingSubscriberId === subscriber.id}
                                                         <div class="subscriber-edit-wrap">
                                                             <div class="subscriber-edit-grid">
+                                                                {#if subscribersSupportsNameField}
+                                                                    <div class="subscriber-edit-field">
+                                                                        <label class="txt-xs txt-hint block m-b-5">Name (optional)</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            class="input input-sm"
+                                                                            bind:value={editingSubscriberForm.name}
+                                                                            on:input={clearEditingSubscriberError}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
                                                                 <div class="subscriber-edit-field">
                                                                     <label class="txt-xs txt-hint block m-b-5">Email</label>
                                                                     <input
@@ -1005,8 +1055,13 @@
                                                             </div>
                                                         </div>
                                                     {:else}
+                                                        <div class="subscriber-col-name">
+                                                            <span class="txt subscriber-primary-label">
+                                                                {resolveSubscriberDisplayName(subscriber) || "-"}
+                                                            </span>
+                                                        </div>
                                                         <div class="subscriber-col-email">
-                                                            <span class="txt">{subscriber.email}</span>
+                                                            <span class="txt subscriber-primary-label">{subscriber.email}</span>
                                                         </div>
                                                         <div class="subscriber-col-status">
                                                             <span
@@ -1397,7 +1452,11 @@
                                                                     checked={isManualRecipientSelected(subscriber.id)}
                                                                     on:change={() => toggleManualRecipient(subscriber.id)}
                                                                 />
-                                                                <span>{subscriber.email}</span>
+                                                                {#if resolveSubscriberDisplayName(subscriber)}
+                                                                    <span>{resolveSubscriberDisplayName(subscriber)} <span class="txt-xs txt-hint">({subscriber.email})</span></span>
+                                                                {:else}
+                                                                    <span>{subscriber.email}</span>
+                                                                {/if}
                                                             </label>
                                                         {/each}
                                                     </div>
@@ -1892,6 +1951,31 @@
         min-width: 0;
     }
 
+    .create-email-field {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        align-items: end;
+    }
+
+    .create-email-field.with-name {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .create-name-field,
+    .create-email-inline-field {
+        min-width: 0;
+    }
+
+    .create-name-field .input,
+    .create-email-inline-field .input {
+        width: 100%;
+    }
+
+    .create-name-input {
+        margin-bottom: 0;
+    }
+
     .create-action-field {
         display: flex;
         align-items: flex-end;
@@ -2086,12 +2170,13 @@
     .subscriber-table-list {
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
-        overflow: hidden;
+        overflow-x: auto;
+        overflow-y: hidden;
     }
 
     .subscriber-table-head {
         display: grid;
-        grid-template-columns: 34px minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(180px, 1fr) minmax(250px, 1.25fr);
+        grid-template-columns: 34px minmax(130px, 0.9fr) minmax(210px, 1.35fr) minmax(110px, 0.8fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(170px, 1fr) minmax(340px, 1.35fr);
         gap: 6px;
         align-items: center;
         border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 92%, transparent);
@@ -2105,7 +2190,7 @@
 
     .subscriber-row-grid {
         display: grid;
-        grid-template-columns: 34px minmax(220px, 1.4fr) minmax(110px, 0.8fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(180px, 1fr) minmax(250px, 1.25fr);
+        grid-template-columns: 34px minmax(130px, 0.9fr) minmax(210px, 1.35fr) minmax(110px, 0.8fr) minmax(150px, 0.95fr) minmax(150px, 0.95fr) minmax(170px, 1fr) minmax(340px, 1.35fr);
         gap: 6px;
         align-items: center;
         width: 100%;
@@ -2119,6 +2204,7 @@
         justify-self: center;
     }
 
+    .subscriber-col-name,
     .subscriber-col-email,
     .subscriber-col-status,
     .subscriber-col-confirmed,
@@ -2141,24 +2227,34 @@
         max-width: 100%;
     }
 
+    .subscriber-primary-label {
+        display: inline-block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
     .subscriber-col-groups .group-pill-list {
         margin-top: 0;
     }
 
     .subscriber-col-actions.actions {
         justify-content: flex-start;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         gap: 6px;
     }
 
     .subscriber-col-actions .action-btn {
-        min-width: 82px;
+        min-width: 0;
         min-height: var(--smBtnHeight);
         padding-inline: 10px;
+        white-space: nowrap;
+        flex: 0 1 auto;
     }
 
     .subscriber-edit-wrap {
-        grid-column: 2 / 7;
+        grid-column: 2 / 8;
     }
 
     .subscriber-edit-grid {
@@ -2561,6 +2657,14 @@
             grid-template-columns: minmax(220px, 1fr) minmax(150px, 200px);
         }
 
+        .create-email-field {
+            grid-template-columns: 1fr;
+        }
+
+        .create-email-field.with-name {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+
         .create-action-field {
             grid-column: 1 / -1;
             justify-content: flex-end;
@@ -2580,7 +2684,7 @@
 
         .subscriber-table-head,
         .subscriber-row-grid {
-            min-width: 1130px;
+            min-width: 1360px;
         }
 
         .campaign-layout-grid {
@@ -2646,6 +2750,11 @@
             min-width: 0;
         }
         .subscriber-create-top {
+            grid-template-columns: 1fr;
+        }
+
+        .create-email-field,
+        .create-email-field.with-name {
             grid-template-columns: 1fr;
         }
 
