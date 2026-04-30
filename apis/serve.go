@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -87,6 +88,31 @@ func Serve(app core.App, config ServeConfig) error {
 			// add a default CSP
 			if e.Response.Header().Get("Content-Security-Policy") == "" {
 				e.Response.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' http://127.0.0.1:* https://tile.openstreetmap.org data: blob:; connect-src 'self' http://127.0.0.1:* https://nominatim.openstreetmap.org; script-src 'self' 'sha256-GRUzBA7PzKYug7pqxv5rJaec5bwDCw1Vo6/IXwvD3Tc='")
+			}
+
+			// local CMS preview: allow embedding public preview app iframe in dev only.
+			if e.App.IsDev() {
+				frameSrc := strings.TrimSpace(os.Getenv("NUVIO_CMS_PREVIEW_FRAME_SRC"))
+				if frameSrc == "" {
+					frameSrc = "http://localhost:5173 http://127.0.0.1:5173"
+				}
+
+				csp := e.Response.Header().Get("Content-Security-Policy")
+				if csp != "" {
+					if strings.Contains(csp, "frame-src") {
+						csp = replaceCspDirective(csp, "frame-src", "frame-src 'self' "+frameSrc)
+					} else {
+						csp += "; frame-src 'self' " + frameSrc
+					}
+
+					if strings.Contains(csp, "child-src") {
+						csp = replaceCspDirective(csp, "child-src", "child-src 'self' "+frameSrc)
+					} else {
+						csp += "; child-src 'self' " + frameSrc
+					}
+
+					e.Response.Header().Set("Content-Security-Policy", csp)
+				}
 			}
 
 			return e.Next()
@@ -301,6 +327,17 @@ func Serve(app core.App, config ServeConfig) error {
 	}
 
 	return nil
+}
+
+func replaceCspDirective(csp string, directive string, replacement string) string {
+	parts := strings.Split(csp, ";")
+	for i, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if strings.HasPrefix(trimmed, directive+" ") || trimmed == directive {
+			parts[i] = " " + replacement
+		}
+	}
+	return strings.Join(parts, ";")
 }
 
 // serverAddrToHost loosely converts http.Server.Addr string into a host to print.

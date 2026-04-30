@@ -61,6 +61,7 @@
     let sectionPropsDraftById = {};
     let sectionErrorById = {};
     let isSavingSectionById = {};
+    let pagePreviewReloadToken = 0;
 
     let lastCollectionsKey = "";
     let lastPersistedContextKey = "";
@@ -128,6 +129,10 @@
 
     $: websitePublicUrl = getWebsitePublicUrl(selectedWebsite);
     $: selectedPagePath = getPagePath(selectedPage);
+    $: selectedWebsiteSlug = normalizeString(websiteSlugField ? selectedWebsite?.[websiteSlugField] : "");
+    $: selectedPageSlug = normalizeString(pageSlugField ? selectedPage?.[pageSlugField] : "");
+    $: pagePreviewUrl = buildPagePreviewUrl(selectedWebsiteSlug, selectedPageSlug);
+    $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewUrl, pagePreviewReloadToken);
 
     $: componentsById = new Map(components.map((record) => [record.id, record]));
     $: componentsByKey = new Map(
@@ -356,6 +361,91 @@
             return domain;
         }
         return `https://${domain}`;
+    }
+
+    function getConfiguredPublicBaseUrl() {
+        const explicitPublicBase = normalizeString(import.meta.env?.VITE_PUBLIC_SITE_BASE_URL);
+        if (explicitPublicBase) {
+            return explicitPublicBase;
+        }
+
+        return normalizeString(import.meta.env?.VITE_SITE_BASE_URL);
+    }
+
+    function normalizeBaseUrl(value, options = {}) {
+        const { allowSingleLabelHost = true } = options;
+        const input = normalizeString(value);
+        if (!input) {
+            return "";
+        }
+
+        const candidate = /^https?:\/\//i.test(input) ? input : `https://${input}`;
+        try {
+            const parsed = new URL(candidate);
+            if (!/^https?:$/i.test(parsed.protocol)) {
+                return "";
+            }
+
+            const hostname = normalizeString(parsed.hostname).toLowerCase();
+            const isLocalHost =
+                hostname === "localhost" ||
+                hostname === "127.0.0.1" ||
+                hostname === "::1" ||
+                hostname === "[::1]";
+            const isIpv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
+            const isSingleLabelHost = !!hostname && !hostname.includes(".") && !isLocalHost && !isIpv4;
+            const isKnownPlaceholder = new Set(["test", "example", "invalid", "placeholder", "your-domain", "domain"]).has(
+                hostname,
+            );
+
+            if (!allowSingleLabelHost && (isSingleLabelHost || isKnownPlaceholder)) {
+                return "";
+            }
+
+            return parsed.origin;
+        } catch (_) {
+            return "";
+        }
+    }
+
+    function buildPagePreviewUrl(websiteSlug, pageSlug) {
+        const normalizedWebsiteSlug = normalizeString(websiteSlug);
+        const normalizedPageSlug = normalizeString(pageSlug);
+
+        if (!normalizedWebsiteSlug || !normalizedPageSlug) {
+            return "";
+        }
+
+        const configuredBase = normalizeBaseUrl(getConfiguredPublicBaseUrl());
+        const websiteBase = normalizeBaseUrl(getWebsitePublicUrl(selectedWebsite), { allowSingleLabelHost: false });
+        const baseUrl = configuredBase || websiteBase;
+
+        if (!baseUrl) {
+            return "";
+        }
+
+        return `${baseUrl}/site/${encodeURIComponent(normalizedWebsiteSlug)}/${encodeURIComponent(normalizedPageSlug)}`;
+    }
+
+    function buildPreviewIframeSrc(url, reloadToken) {
+        const previewUrl = normalizeString(url);
+        if (!previewUrl) {
+            return "";
+        }
+
+        try {
+            const parsed = new URL(previewUrl);
+            if (reloadToken) {
+                parsed.searchParams.set("_cmsPreview", `${reloadToken}`);
+            }
+            return parsed.toString();
+        } catch (_) {
+            return "";
+        }
+    }
+
+    function refreshPagePreview() {
+        pagePreviewReloadToken = Date.now();
     }
 
     function getExpandedComponent(block) {
@@ -745,6 +835,7 @@
             await ApiClient.collection(pagesCollection.id).update(selectedPage.id, payload);
             addSuccessToast("Page updated.");
             await loadPages();
+            refreshPagePreview();
         } catch (err) {
             ApiClient.error(err);
             pageError = err?.response?.message || err?.message || "Failed to save page.";
@@ -856,6 +947,7 @@
             await ApiClient.collection(blocksCollection.id).update(blockId, payload);
             addSuccessToast("Section updated.");
             await loadBlocks();
+            refreshPagePreview();
         } catch (err) {
             ApiClient.error(err);
             sectionErrorById = {
@@ -1081,6 +1173,50 @@
                             {#if pageError}
                                 <p class="txt-danger m-t-8 m-b-0">{pageError}</p>
                             {/if}
+
+                            <div class="page-preview-wrap m-t-base">
+                                <div class="sections-head page-preview-head">
+                                    <div>
+                                        <h5 class="m-0">Page Preview</h5>
+                                        <p class="txt-sm txt-hint m-b-0 m-t-6">Preview shows saved content only.</p>
+                                    </div>
+                                    <div class="page-preview-actions">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline"
+                                            disabled={!pagePreviewUrl}
+                                            on:click={refreshPagePreview}
+                                        >
+                                            Refresh preview
+                                        </button>
+                                        {#if pagePreviewUrl}
+                                            <a href={pagePreviewUrl} target="_blank" rel="noreferrer noopener" class="btn btn-sm btn-outline">
+                                                Open in new tab
+                                            </a>
+                                        {/if}
+                                    </div>
+                                </div>
+
+                                {#if !selectedPageSlug}
+                                    <div class="preview-empty-state m-t-sm">
+                                        This page has no slug yet. Add a page slug to enable preview.
+                                    </div>
+                                {:else if !pagePreviewUrl}
+                                    <div class="preview-empty-state m-t-sm">
+                                        Preview base URL is not configured. Set <code>VITE_PUBLIC_SITE_BASE_URL</code> in the admin UI
+                                        environment (for local dev: <code>VITE_PUBLIC_SITE_BASE_URL=http://localhost:5173</code>).
+                                    </div>
+                                {:else}
+                                    <div class="page-preview-iframe-wrap m-t-sm">
+                                        <iframe
+                                            class="page-preview-iframe"
+                                            src={pagePreviewIframeSrc}
+                                            title={`Preview: ${selectedPagePath}`}
+                                            loading="lazy"
+                                        ></iframe>
+                                    </div>
+                                {/if}
+                            </div>
 
                             <div class="sections-wrap m-t-base">
                                 <div class="sections-head">
@@ -1505,6 +1641,52 @@
         flex-wrap: wrap;
     }
 
+    .page-preview-wrap {
+        border-top: 1px solid var(--baseAlt2Color);
+        padding-top: 10px;
+    }
+
+    .page-preview-head {
+        align-items: flex-start;
+    }
+
+    .page-preview-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .preview-empty-state {
+        border: 1px dashed var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseAlt1Color);
+        color: var(--txtHintColor);
+        font-size: var(--smFontSize);
+        padding: 12px;
+    }
+
+    .preview-empty-state code {
+        font-size: 12px;
+    }
+
+    .page-preview-iframe-wrap {
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        overflow: hidden;
+        background: var(--baseColor);
+        min-height: 480px;
+    }
+
+    .page-preview-iframe {
+        width: 100%;
+        height: 70vh;
+        min-height: 480px;
+        border: 0;
+        display: block;
+        background: white;
+    }
+
     .sections-wrap {
         border-top: 1px solid var(--baseAlt2Color);
         padding-top: 10px;
@@ -1656,6 +1838,25 @@
 
         .form-grid.two-col {
             grid-template-columns: 1fr;
+        }
+
+        .page-preview-head {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .page-preview-actions {
+            width: 100%;
+        }
+
+        .page-preview-actions .btn {
+            flex: 1 1 auto;
+            justify-content: center;
+        }
+
+        .page-preview-iframe {
+            height: 65vh;
+            min-height: 420px;
         }
     }
 </style>
