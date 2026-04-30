@@ -1,5 +1,5 @@
 <script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
-    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const campaignRecipientsTypeOptions = ["all", "manual"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
+    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
     let isLoadingWebsites = false;    let isLoadingSubscribers = false;
@@ -24,7 +24,7 @@
         name: "",
     };
     let subscriberGroupFormError = "";
-    let campaignForm = {        subject: "",        body: "",        recipientsType: "all",        recipientsIds: [],    };    let campaignFormError = "";    let campaignWorkspace = "builder";    let campaignBuilderShowEditor = true;    let campaignBuilderShowPreview = false;    let campaignStatusFilter = "all";    let isCampaignPreviewExpanded = false;    let editingCampaignId = "";    let isSavingCampaign = false;    let subscriberSearch = "";
+    let campaignForm = {        subject: "",        body: "",        recipientsType: "manual",        recipientsIds: [],    };    let campaignFormError = "";    let campaignWorkspace = "builder";    let campaignBuilderShowEditor = true;    let campaignBuilderShowPreview = false;    let campaignStatusFilter = "all";    let isCampaignPreviewExpanded = false;    let editingCampaignId = "";    let isSavingCampaign = false;    let subscriberSearch = "";
     let subscriberStatusFilter = "all";
     let subscriberGroupFilter = "all";
     let subscriberSort = "newest";
@@ -106,7 +106,6 @@
         selectedWebsiteId,
         campaignForm.subject,
         campaignForm.body,
-        campaignForm.recipientsType,
         campaignForm.recipientsIds,
     );
     $: campaignSubjectValue = `${campaignForm.subject || ""}`.trim();
@@ -206,6 +205,51 @@
         return getSubscriberGroupIds(subscriber).includes(groupId);
     }
 
+    function getActiveSubscriberIdsForGroup(groupId) {
+        if (!groupId) {
+            return [];
+        }
+        return activeSubscribers
+            .filter((subscriber) => hasSubscriberGroup(subscriber, groupId))
+            .map((subscriber) => subscriber.id);
+    }
+
+    function isManualGroupFullySelected(groupId) {
+        const groupIds = getActiveSubscriberIdsForGroup(groupId);
+        return groupIds.length > 0 && groupIds.every((id) => campaignForm.recipientsIds.includes(id));
+    }
+
+    function toggleManualRecipientsForGroup(groupId) {
+        clearCampaignFormError();
+        const groupIds = getActiveSubscriberIdsForGroup(groupId);
+        if (!groupIds.length) {
+            return;
+        }
+
+        const next = new Set(campaignForm.recipientsIds);
+        const shouldUnselect = groupIds.every((id) => next.has(id));
+
+        groupIds.forEach((id) => {
+            if (shouldUnselect) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+        });
+
+        campaignForm.recipientsIds = [...next];
+    }
+
+    function selectAllManualRecipients() {
+        clearCampaignFormError();
+        campaignForm.recipientsIds = activeSubscribers.map((subscriber) => subscriber.id);
+    }
+
+    function clearManualRecipients() {
+        clearCampaignFormError();
+        campaignForm.recipientsIds = [];
+    }
+
     function toTimestamp(value) {        const raw = `${value || ""}`.trim();        if (!raw) {            return 0;        }        const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");        const parsed = new Date(normalized).getTime();        return Number.isNaN(parsed) ? 0 : parsed;    }    function isWithinLastDays(value, days) {        const ts = toTimestamp(value);        if (!ts) {            return false;        }        const diff = Date.now() - ts;        return diff >= 0 && diff <= (days * 24 * 60 * 60 * 1000);    }    function formatDateTime(value) {        const raw = `${value || ""}`.trim();        if (!raw) {            return "-";        }        const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");        const parsed = new Date(normalized);        if (Number.isNaN(parsed.getTime())) {            return raw;        }        return parsed.toLocaleString();    }    function sortSubscribers(list) {        const sorted = [...list];        sorted.sort((a, b) => {            if (subscriberSort === "oldest") {                return toTimestamp(a?.created) - toTimestamp(b?.created);            }            if (subscriberSort === "emailAsc") {                return `${a?.email || ""}`.localeCompare(`${b?.email || ""}`);            }            if (subscriberSort === "emailDesc") {                return `${b?.email || ""}`.localeCompare(`${a?.email || ""}`);            }            if (subscriberSort === "status") {                const statusCompare = normalizeStatus(a?.status).localeCompare(normalizeStatus(b?.status));                if (statusCompare !== 0) {                    return statusCompare;                }            }            // newest/default
             return toTimestamp(b?.created) - toTimestamp(a?.created);        });        return sorted;    }    function resolveCreateSubscriberDisabledReason(isCreating, websiteId, email) {
         if (isCreating) {
@@ -243,7 +287,7 @@
         return "";
     }
 
-    function resolveCreateCampaignDisabledReason(isCreating, websiteId, subject, body, recipientsType, recipientsIds) {
+    function resolveCreateCampaignDisabledReason(isCreating, websiteId, subject, body, recipientsIds) {
         if (isCreating) {
             return "Creating draft...";
         }
@@ -260,8 +304,8 @@
             return "Campaign body is required.";
         }
 
-        if (recipientsType === "manual" && (!Array.isArray(recipientsIds) || !recipientsIds.length)) {
-            return "Select at least one manual recipient.";
+        if (!Array.isArray(recipientsIds) || !recipientsIds.length) {
+            return "Select at least one recipient.";
         }
 
         return "";
@@ -611,7 +655,7 @@
         campaignForm = {
             subject: "",
             body: "",
-            recipientsType: "all",
+            recipientsType: "manual",
             recipientsIds: [],
         };
         campaignFormError = "";
@@ -626,14 +670,18 @@
             return;
         }
 
+        const previousRecipientsType = `${campaign.recipientsType || "all"}`.toLowerCase();
+        const resolvedRecipientsIds = previousRecipientsType === "manual"
+            ? (Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean) : [])
+            : activeSubscribers.map((subscriber) => subscriber.id);
+
         editingCampaignId = campaign.id;
         campaignForm = {
             subject: `${campaign.subject || ""}`,
             body: `${campaign.body || ""}`,
-            recipientsType: `${campaign.recipientsType || "all"}`.toLowerCase() === "manual" ? "manual" : "all",
-            recipientsIds: Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean) : [],
+            recipientsType: "manual",
+            recipientsIds: [...new Set(resolvedRecipientsIds)],
         };
-        campaignWorkspace = "builder";
         campaignBuilderShowEditor = true;
         campaignBuilderShowPreview = false;
         closeCampaignPreviewModal();
@@ -650,7 +698,6 @@
             selectedWebsiteId,
             campaignForm.subject,
             campaignForm.body,
-            campaignForm.recipientsType,
             campaignForm.recipientsIds,
         );
 
@@ -665,8 +712,8 @@
             subject: `${campaignForm.subject || ""}`.trim(),
             body: `${campaignForm.body || ""}`.trim(),
             status: "draft",
-            recipientsType: campaignForm.recipientsType,
-            recipientsIds: campaignForm.recipientsType === "manual" ? campaignForm.recipientsIds : [],
+            recipientsType: "manual",
+            recipientsIds: Array.isArray(campaignForm.recipientsIds) ? campaignForm.recipientsIds : [],
         };
 
         if (editingCampaignId) {
@@ -1382,80 +1429,141 @@
                                         {/if}
                                     </div>
                                 {:else}
-                                    <div class="campaign-head-inline m-b-sm">
-                                        <h4 class="m-0">Audience & Send</h4>
-                                        <div class="campaign-step-label txt-xs txt-hint">Step 2 of 2</div>
-                                        <p class="txt-sm txt-hint m-b-0 campaign-head-description">
-                                            Select recipients, then create or update your draft.
-                                        </p>
+                                    <div class="campaign-head-row m-b-sm">
+                                        <div class="campaign-head-inline">
+                                            <h4 class="m-0">Audience & Send</h4>
+                                            <div class="campaign-step-label txt-xs txt-hint">Step 2 of 2</div>
+                                            <p class="txt-sm txt-hint m-b-0 campaign-head-description">
+                                                Finalize the audience and save the draft ready to send.
+                                            </p>
+                                        </div>
+                                        <div class="campaign-audience-actions-wrap">
+                                            <div class="campaign-audience-actions">
+                                                <button type="button" class="btn btn-sm btn-outline action-btn" on:click={() => (campaignWorkspace = "builder")}>
+                                                    <span class="txt">Back to Builder</span>
+                                                </button>
+                                                {#if editingCampaignId}
+                                                    <button type="button" class="btn btn-sm btn-outline action-btn" on:click={resetCampaignComposer}>
+                                                        <span class="txt">Cancel Edit</span>
+                                                    </button>
+                                                {/if}
+                                                <button
+                                                    type="submit"
+                                                    form="campaign-audience-form"
+                                                    class="btn btn-sm btn-strong action-btn"
+                                                    class:btn-loading={isCreatingCampaign || isSavingCampaign}
+                                                    disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
+                                                    title={createCampaignDisabledReason || null}
+                                                >
+                                                    <span class="txt">{editingCampaignId ? "Update draft" : "Create draft"}</span>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div class="campaign-audience-summary m-b-sm">
-                                        <div class="txt-sm txt-hint">Subject: {campaignSubjectValue || "(No subject yet)"}</div>
-                                        <div class="txt-sm txt-hint">Body length: {campaignBodyValue.length} characters</div>
-                                        <div class="txt-sm txt-hint">Recipients mode: {campaignForm.recipientsType}</div>
+                                        <div class="campaign-audience-stat">
+                                            <span class="audience-stat-label">Draft</span>
+                                            <span class="audience-stat-value">{campaignSubjectValue || "Untitled draft"}</span>
+                                        </div>
+                                        <div class="campaign-audience-stat">
+                                            <span class="audience-stat-label">Status</span>
+                                            <span class="audience-stat-value">{editingCampaignId ? "Editing existing draft" : "New draft"}</span>
+                                        </div>
+                                        <div class="campaign-audience-stat">
+                                            <span class="audience-stat-label">Audience mode</span>
+                                            <span class="audience-stat-value">Manual selection</span>
+                                        </div>
+                                        <div class="campaign-audience-stat">
+                                            <span class="audience-stat-label">Recipients</span>
+                                            <span class="audience-stat-value">
+                                                {campaignForm.recipientsIds.length} selected / {activeSubscribers.length} active
+                                            </span>
+                                        </div>
+                                        <div class="campaign-audience-stat">
+                                            <span class="audience-stat-label">Groups</span>
+                                            <span class="audience-stat-value">
+                                                {hasSubscriberGroupsFeature ? `${subscriberGroups.length} available` : "Not enabled"}
+                                            </span>
+                                        </div>
                                     </div>
 
-                                    <form class="grid" on:submit|preventDefault={saveCampaignDraftFromComposer}>
-                                        <div class="col-md-4">
-                                            <label class="txt-sm txt-hint block m-b-5" for="campaign-recipients-type">Recipients</label>
-                                            <select
-                                                id="campaign-recipients-type"
-                                                class="input"
-                                                bind:value={campaignForm.recipientsType}
-                                                on:change={clearCampaignFormError}
-                                            >
-                                                {#each campaignRecipientsTypeOptions as recipientsType}
-                                                    <option value={recipientsType}>{recipientsType}</option>
-                                                {/each}
-                                            </select>
-                                        </div>
+                                    <form id="campaign-audience-form" class="grid campaign-audience-form" on:submit|preventDefault={saveCampaignDraftFromComposer}>
+                                        <div class="col-12 manual-recipients m-t-sm">
+                                            <div class="manual-recipients-head">
+                                                <h5 class="m-0">Recipients</h5>
+                                                <span class="manual-recipients-count txt-xs">
+                                                    {campaignForm.recipientsIds.length} selected / {activeSubscribers.length} active
+                                                </span>
+                                            </div>
 
-                                        <div class="col-md-8 campaign-audience-actions">
-                                            <button type="button" class="btn btn-sm btn-outline action-btn" on:click={() => (campaignWorkspace = "builder")}>
-                                                <span class="txt">Back to Builder</span>
-                                            </button>
-                                            {#if editingCampaignId}
-                                                <button type="button" class="btn btn-sm btn-outline action-btn" on:click={resetCampaignComposer}>
-                                                    <span class="txt">Cancel Edit</span>
-                                                </button>
-                                            {/if}
-                                            <button
-                                                type="submit"
-                                                class="btn btn-strong action-btn"
-                                                class:btn-loading={isCreatingCampaign || isSavingCampaign}
-                                                disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
-                                                title={createCampaignDisabledReason || null}
-                                            >
-                                                <span class="txt">{editingCampaignId ? "Update draft" : "Create draft"}</span>
-                                            </button>
-                                        </div>
-
-                                        {#if campaignForm.recipientsType === "manual"}
-                                            <div class="col-12 manual-recipients m-t-sm">
-                                                <h5 class="m-t-0 m-b-xs">Manual recipients ({activeSubscribers.length} active)</h5>
-                                                {#if !activeSubscribers.length}
-                                                    <div class="empty-state">No active subscribers available for manual selection.</div>
-                                                {:else}
-                                                    <div class="manual-recipients-grid">
-                                                        {#each activeSubscribers as subscriber (subscriber.id)}
-                                                            <label class="manual-recipient-item">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={isManualRecipientSelected(subscriber.id)}
-                                                                    on:change={() => toggleManualRecipient(subscriber.id)}
-                                                                />
-                                                                {#if resolveSubscriberDisplayName(subscriber)}
-                                                                    <span>{resolveSubscriberDisplayName(subscriber)} <span class="txt-xs txt-hint">({subscriber.email})</span></span>
-                                                                {:else}
-                                                                    <span>{subscriber.email}</span>
-                                                                {/if}
-                                                            </label>
+                                            <div class="manual-group-tools m-b-sm">
+                                                <div class="manual-group-tools-head">
+                                                    <span class="txt-sm txt-hint">Choose individual recipients, mark everyone, or select by groups.</span>
+                                                    <div class="manual-group-action-buttons">
+                                                        <button type="button" class="btn btn-xs btn-outline" on:click={selectAllManualRecipients}>
+                                                            <span class="txt">Mark everyone</span>
+                                                        </button>
+                                                        <button type="button" class="btn btn-xs btn-outline" on:click={clearManualRecipients}>
+                                                            <span class="txt">Clear selection</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {#if hasSubscriberGroupsFeature && subscriberGroups.length}
+                                                    <div class="manual-group-chip-list">
+                                                        {#each subscriberGroups as group (group.id)}
+                                                            <button
+                                                                type="button"
+                                                                class="manual-group-chip"
+                                                                class:is-active={isManualGroupFullySelected(group.id)}
+                                                                on:click={() => toggleManualRecipientsForGroup(group.id)}
+                                                            >
+                                                                <span class="manual-group-chip-name">{group.name}</span>
+                                                                <span class="manual-group-chip-count">{getActiveSubscriberIdsForGroup(group.id).length}</span>
+                                                            </button>
                                                         {/each}
                                                     </div>
+                                                {:else if hasSubscriberGroupsFeature}
+                                                    <p class="txt-xs txt-hint m-b-0">No groups available yet for this website.</p>
                                                 {/if}
                                             </div>
-                                        {/if}
+
+                                            {#if !activeSubscribers.length}
+                                                <div class="empty-state">No active subscribers available for manual selection.</div>
+                                            {:else}
+                                                <div class="manual-recipients-grid">
+                                                    {#each activeSubscribers as subscriber (subscriber.id)}
+                                                        <label class="manual-recipient-item">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isManualRecipientSelected(subscriber.id)}
+                                                                on:change={() => toggleManualRecipient(subscriber.id)}
+                                                            />
+                                                            <span class="manual-recipient-content">
+                                                                {#if resolveSubscriberDisplayName(subscriber)}
+                                                                    <span class="manual-recipient-title">{resolveSubscriberDisplayName(subscriber)}</span>
+                                                                    <span class="manual-recipient-subtitle">{subscriber.email}</span>
+                                                                {:else}
+                                                                    <span class="manual-recipient-title">{subscriber.email}</span>
+                                                                {/if}
+                                                                {#if hasSubscriberGroupsFeature}
+                                                                    <span class="manual-recipient-groups txt-xs txt-hint">
+                                                                        {#if getSubscriberGroupIds(subscriber).length}
+                                                                            {getSubscriberGroupIds(subscriber)
+                                                                                .map((groupId) => subscriberGroupsById.get(groupId)?.name)
+                                                                                .filter(Boolean)
+                                                                                .join(", ")}
+                                                                        {:else}
+                                                                            No groups
+                                                                        {/if}
+                                                                    </span>
+                                                                {/if}
+                                                            </span>
+                                                        </label>
+                                                    {/each}
+                                                </div>
+                                            {/if}
+                                        </div>
 
                                         {#if campaignFormError}
                                             <div class="col-12">
@@ -2158,23 +2266,89 @@
     }
     .manual-recipients {
         border-top: 1px solid var(--baseAlt2Color);
-        padding-top: 12px;
+        padding-top: 10px;
+    }
+
+    .manual-recipients-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+    }
+
+    .manual-recipients-count {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        padding: 2px 8px;
+        background: var(--baseColor);
+        color: var(--txtHintColor);
     }
 
     .manual-recipients-grid {
         display: grid;
         gap: 8px;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     }
 
     .manual-recipient-item {
-        display: inline-flex;
-        align-items: center;
+        display: flex;
+        align-items: flex-start;
         gap: 8px;
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
         padding: 8px 10px;
         background: var(--baseAlt1Color);
+        cursor: pointer;
+        min-width: 0;
+        transition: border-color 140ms ease, background-color 140ms ease;
+    }
+
+    .manual-recipient-item:hover {
+        border-color: color-mix(in srgb, var(--primaryColor) 28%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1Color) 78%, var(--baseAlt2Color));
+    }
+
+    .manual-recipient-item input {
+        margin-top: 2px;
+        flex: 0 0 auto;
+    }
+
+    .manual-recipient-content {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    .manual-recipient-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--txtPrimaryColor);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .manual-recipient-subtitle {
+        font-size: 12px;
+        color: var(--txtHintColor);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .manual-recipient-groups {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .manual-recipient-item input:checked + .manual-recipient-content .manual-recipient-title {
+        font-weight: 600;
     }
 
     .newsletter-list-item {
@@ -2482,20 +2656,131 @@
     }
 
     .campaign-audience-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 8px;
+    }
+
+    .campaign-audience-stat {
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
         background: var(--baseColor);
         padding: 8px 10px;
-        display: grid;
-        gap: 4px;
+        min-width: 0;
+    }
+
+    .audience-stat-label {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--txtHintColor);
+        margin-bottom: 3px;
+    }
+
+    .audience-stat-value {
+        display: block;
+        font-size: 13px;
+        color: var(--txtPrimaryColor);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .campaign-audience-form {
+        row-gap: 10px;
+    }
+
+    .campaign-audience-actions-wrap {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
     }
 
     .campaign-audience-actions {
         display: inline-flex;
-        align-items: flex-end;
+        align-items: center;
         justify-content: flex-end;
         gap: 8px;
         flex-wrap: wrap;
+    }
+
+    .campaign-audience-actions .action-btn {
+        min-width: 112px;
+    }
+
+    .manual-group-tools {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .manual-group-tools-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+    }
+
+    .manual-group-action-buttons {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .manual-group-chip-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .manual-group-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseAlt1Color);
+        color: var(--txtHintColor);
+        min-height: 28px;
+        padding: 0 9px;
+        transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+    }
+
+    .manual-group-chip:hover {
+        border-color: color-mix(in srgb, var(--primaryColor) 28%, var(--baseAlt2Color));
+        color: var(--txtPrimaryColor);
+    }
+
+    .manual-group-chip.is-active {
+        border-color: color-mix(in srgb, var(--primaryColor) 38%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--primaryColor) 10%, var(--baseColor));
+        color: var(--txtPrimaryColor);
+    }
+
+    .manual-group-chip-name {
+        font-size: 12px;
+        max-width: 180px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .manual-group-chip-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        border: 1px solid var(--baseAlt2Color);
+        background: var(--baseColor);
+        color: var(--txtHintColor);
+        font-size: 11px;
+        padding: 0 4px;
     }
 
     .campaigns-header-row {
@@ -2754,6 +3039,12 @@
             margin-left: 0;
         }
 
+        .campaign-audience-actions-wrap {
+            margin-left: 0;
+            width: 100%;
+            justify-content: flex-start;
+        }
+
         .campaign-audience-actions {
             justify-content: flex-start;
         }
@@ -2863,6 +3154,36 @@
 
         .campaign-head-row {
             align-items: stretch;
+        }
+
+        .campaign-audience-summary {
+            grid-template-columns: 1fr;
+        }
+
+        .campaign-audience-actions {
+            width: 100%;
+            justify-content: stretch;
+        }
+
+        .campaign-audience-actions .action-btn {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .manual-recipients-head {
+            align-items: flex-start;
+        }
+
+        .manual-group-tools-head {
+            align-items: flex-start;
+        }
+
+        .manual-group-action-buttons {
+            width: 100%;
+        }
+
+        .manual-group-action-buttons .btn {
+            flex: 1 1 auto;
         }
 
         .campaign-builder-view-tabs {

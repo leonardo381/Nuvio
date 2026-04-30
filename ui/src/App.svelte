@@ -128,6 +128,18 @@
                     <i class="ri-mail-send-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Newsletter section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated CMS section entry in app sidebar. -->
+                <a
+                    href="/cms"
+                    class="menu-item"
+                    aria-label="CMS"
+                    use:link
+                    use:active={{ path: "/cms/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "CMS", position: "right" }}
+                >
+                    <i class="ri-layout-grid-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated CMS section entry in app sidebar. -->
                 <!-- NUVIO CUSTOM START: Dedicated Reports section entry in app sidebar. -->
                 <a
                     href="/reports"
