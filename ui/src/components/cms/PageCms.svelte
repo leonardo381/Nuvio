@@ -18,7 +18,6 @@
     const cmsTabSettingsKey = "settings";
     const pageEditorTabContentKey = "content";
     const pageEditorTabSeoKey = "seo";
-    const pageEditorTabPreviewKey = "preview";
     const pageStatusFilterAllKey = "all";
     const pageStatusFilterActiveKey = "active";
     const pageStatusFilterInactiveKey = "inactive";
@@ -37,6 +36,7 @@
     let pageStatusFilter = pageStatusFilterAllKey;
     let pageSearch = "";
     let openSectionId = "";
+    let focusedBlockId = "";
 
     let isLoadingWebsites = false;
     let isLoadingPages = false;
@@ -139,7 +139,8 @@
     $: selectedWebsiteSlug = normalizeString(websiteSlugField ? selectedWebsite?.[websiteSlugField] : "");
     $: selectedPageSlug = normalizeString(pageSlugField ? selectedPage?.[pageSlugField] : "");
     $: pagePreviewUrl = buildPagePreviewUrl(selectedWebsiteSlug, selectedPageSlug);
-    $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewUrl, pagePreviewReloadToken);
+    $: pagePreviewFocusedUrl = buildPagePreviewFocusedUrl(pagePreviewUrl, focusedBlockId);
+    $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewFocusedUrl, pagePreviewReloadToken);
     $: normalizedPageSearch = normalizeString(pageSearch).toLowerCase();
     $: activePagesCount = pageEnabledField ? pages.filter((record) => isPageActive(record)).length : 0;
     $: inactivePagesCount = pageEnabledField ? Math.max(0, pages.length - activePagesCount) : 0;
@@ -178,6 +179,7 @@
     $: if (selectedPage?.id && selectedPage.id !== lastPageSeedId) {
         lastPageSeedId = selectedPage.id;
         openSectionId = "";
+        focusedBlockId = "";
         activePageEditorTab = pageEditorTabContentKey;
         pageEditForm = {
             seoTitle: pageSeoTitleField ? `${selectedPage?.[pageSeoTitleField] || ""}` : "",
@@ -189,6 +191,11 @@
     $: if (!selectedPage?.id) {
         lastPageSeedId = "";
         openSectionId = "";
+        focusedBlockId = "";
+        activePageEditorTab = pageEditorTabContentKey;
+    }
+
+    $: if (activePageEditorTab !== pageEditorTabContentKey && activePageEditorTab !== pageEditorTabSeoKey) {
         activePageEditorTab = pageEditorTabContentKey;
     }
 
@@ -244,6 +251,10 @@
                 openSectionId = "";
             }
         }
+    }
+
+    $: if (focusedBlockId && !blocks.some((block) => `${block?.id || ""}` === `${focusedBlockId}`)) {
+        focusedBlockId = "";
     }
 
     $: {
@@ -498,7 +509,27 @@
         return `${baseUrl}/site/${encodeURIComponent(normalizedWebsiteSlug)}/${encodeURIComponent(normalizedPageSlug)}`;
     }
 
-    function buildPreviewIframeSrc(url, reloadToken) {
+    function buildPagePreviewFocusedUrl(pagePreviewUrl, blockId) {
+        const normalizedPreviewUrl = normalizeString(pagePreviewUrl);
+        if (!normalizedPreviewUrl) {
+            return "";
+        }
+
+        try {
+            const parsed = new URL(normalizedPreviewUrl);
+            const normalizedBlockId = normalizeString(blockId);
+            if (normalizedBlockId) {
+                parsed.searchParams.set("focusBlock", normalizedBlockId);
+            } else {
+                parsed.searchParams.delete("focusBlock");
+            }
+            return parsed.toString();
+        } catch (_) {
+            return "";
+        }
+    }
+
+    function buildPreviewIframeSrc(url, reloadToken, reloadQueryKey = "_cmsPreview") {
         const previewUrl = normalizeString(url);
         if (!previewUrl) {
             return "";
@@ -506,8 +537,8 @@
 
         try {
             const parsed = new URL(previewUrl);
-            if (reloadToken) {
-                parsed.searchParams.set("_cmsPreview", `${reloadToken}`);
+            if (reloadToken && normalizeString(reloadQueryKey)) {
+                parsed.searchParams.set(reloadQueryKey, `${reloadToken}`);
             }
             return parsed.toString();
         } catch (_) {
@@ -729,11 +760,32 @@
     }
 
     function toggleSection(blockId) {
-        if (openSectionId === blockId) {
+        const normalizedBlockId = normalizeString(blockId);
+        if (!normalizedBlockId) {
+            return;
+        }
+
+        activePageEditorTab = pageEditorTabContentKey;
+
+        if (focusedBlockId !== normalizedBlockId) {
+            focusedBlockId = normalizedBlockId;
+            refreshPagePreview();
+        }
+
+        if (openSectionId === normalizedBlockId) {
             openSectionId = "";
             return;
         }
-        openSectionId = blockId;
+        openSectionId = normalizedBlockId;
+    }
+
+    function clearFocusedPreview() {
+        if (!focusedBlockId) {
+            return;
+        }
+
+        focusedBlockId = "";
+        refreshPagePreview();
     }
 
     function updateSectionDraft(blockId, nextValue) {
@@ -972,6 +1024,7 @@
         pageSearch = "";
         pageStatusFilter = pageStatusFilterAllKey;
         openSectionId = "";
+        focusedBlockId = "";
         activePageEditorTab = pageEditorTabContentKey;
 
         await loadPages();
@@ -985,13 +1038,14 @@
 
         selectedPageId = `${pageId || ""}`;
         openSectionId = "";
+        focusedBlockId = "";
         activePageEditorTab = pageEditorTabContentKey;
 
         await loadBlocks();
     }
 
     function setActivePageEditorTab(nextTab) {
-        if (nextTab === pageEditorTabContentKey || nextTab === pageEditorTabSeoKey || nextTab === pageEditorTabPreviewKey) {
+        if (nextTab === pageEditorTabContentKey || nextTab === pageEditorTabSeoKey) {
             activePageEditorTab = nextTab;
         }
     }
@@ -1378,92 +1432,152 @@
                                         <i class="ri-search-eye-line tab-icon" aria-hidden="true" />
                                         <span class="tab-label">SEO</span>
                                     </button>
-                                    <button
-                                        type="button"
-                                        class="tab-item"
-                                        class:active={activePageEditorTab === pageEditorTabPreviewKey}
-                                        on:click={() => setActivePageEditorTab(pageEditorTabPreviewKey)}
-                                    >
-                                        <i class="ri-eye-line tab-icon" aria-hidden="true" />
-                                        <span class="tab-label">Preview</span>
-                                    </button>
                                 </div>
                             </div>
 
                             {#if activePageEditorTab === pageEditorTabContentKey}
-                                <div class="sections-wrap m-t-sm">
-                                    <div class="sections-head">
-                                        <h5 class="m-0">Sections on this page</h5>
-                                        <span class="txt-sm txt-hint">{blocks.length} total</span>
+                                <div class="content-tab-grid m-t-sm">
+                                    <div class="sections-wrap content-sections-pane">
+                                        <div class="sections-head">
+                                            <h5 class="m-0">Sections on this page</h5>
+                                            <span class="txt-sm txt-hint">{blocks.length} total</span>
+                                        </div>
+
+                                        {#if !blockPageRelationField}
+                                            <p class="txt-sm txt-danger m-t-8 m-b-0">Sections relation to pages was not found.</p>
+                                        {:else if !blockPropsField}
+                                            <p class="txt-sm txt-danger m-t-8 m-b-0">Sections props field was not found.</p>
+                                        {:else if isLoadingBlocks || isLoadingComponents}
+                                            <p class="txt-sm txt-hint m-t-8 m-b-0">Loading sections...</p>
+                                        {:else if !blocks.length}
+                                            <p class="txt-sm txt-hint m-t-8 m-b-0">There are no sections linked to this page.</p>
+                                        {:else}
+                                            <div class="sections-list m-t-sm">
+                                                {#each blocks as block, index}
+                                                    {@const sectionFields = getSectionSchemaFields(block)}
+                                                    {@const sectionSubtitle = getSectionDescription(block, index)}
+                                                    {@const sectionSummaryPills = getSectionSummaryPills(block, sectionFields)}
+                                                    <article
+                                                        class="section-card"
+                                                        class:open={openSectionId === block.id}
+                                                        class:selected={focusedBlockId === block.id}
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            class="section-toggle"
+                                                            aria-expanded={openSectionId === block.id}
+                                                            on:click={() => toggleSection(block.id)}
+                                                        >
+                                                            <span class="section-toggle-header">
+                                                                <span class="section-toggle-content">
+                                                                    <strong>{getSectionTitle(block, index)}</strong>
+                                                                    {#if sectionSubtitle}
+                                                                        <small>{sectionSubtitle}</small>
+                                                                    {/if}
+                                                                    <span class="section-summary-row">
+                                                                        <span class="section-summary-pill">{index + 1} of {blocks.length}</span>
+                                                                        {#each sectionSummaryPills as summaryPill}
+                                                                            <span class="section-summary-pill">{summaryPill}</span>
+                                                                        {/each}
+                                                                    </span>
+                                                                </span>
+                                                                <span class="section-toggle-caret" aria-hidden="true">
+                                                                    <i class={openSectionId === block.id ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} />
+                                                                </span>
+                                                            </span>
+                                                        </button>
+
+                                                        {#if openSectionId === block.id}
+                                                            <div class="section-body">
+                                                                {#if sectionFields.length}
+                                                                    <SchemaForm
+                                                                        fields={sectionFields}
+                                                                        value={sectionPropsDraftById[block.id] || {}}
+                                                                        showImport={false}
+                                                                        path={`sections.${block.id}`}
+                                                                        on:propsChange={(event) => updateSectionDraft(block.id, event.detail)}
+                                                                    />
+                                                                {:else}
+                                                                    <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
+                                                                {/if}
+
+                                                                <div class="form-actions m-t-sm">
+                                                                    <button
+                                                                        type="button"
+                                                                        class="btn btn-sm btn-strong"
+                                                                        disabled={!!isSavingSectionById[block.id] || !blockPropsField}
+                                                                        on:click={() => saveSection(block)}
+                                                                    >
+                                                                        {isSavingSectionById[block.id] ? "Saving..." : "Save section"}
+                                                                    </button>
+                                                                </div>
+
+                                                                {#if sectionErrorById[block.id]}
+                                                                    <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[block.id]}</p>
+                                                                {/if}
+                                                            </div>
+                                                        {/if}
+                                                    </article>
+                                                {/each}
+                                            </div>
+                                        {/if}
                                     </div>
 
-                                    {#if !blockPageRelationField}
-                                        <p class="txt-sm txt-danger m-t-8 m-b-0">Sections relation to pages was not found.</p>
-                                    {:else if !blockPropsField}
-                                        <p class="txt-sm txt-danger m-t-8 m-b-0">Sections props field was not found.</p>
-                                    {:else if isLoadingBlocks || isLoadingComponents}
-                                        <p class="txt-sm txt-hint m-t-8 m-b-0">Loading sections...</p>
-                                    {:else if !blocks.length}
-                                        <p class="txt-sm txt-hint m-t-8 m-b-0">There are no sections linked to this page.</p>
-                                    {:else}
-                                        <div class="sections-list m-t-sm">
-                                            {#each blocks as block, index}
-                                                {@const sectionFields = getSectionSchemaFields(block)}
-                                                {@const sectionSubtitle = getSectionDescription(block, index)}
-                                                {@const sectionSummaryPills = getSectionSummaryPills(block, sectionFields)}
-                                                <article class="section-card" class:open={openSectionId === block.id}>
-                                                    <button type="button" class="section-toggle" on:click={() => toggleSection(block.id)}>
-                                                        <span class="section-toggle-content">
-                                                            <strong>{getSectionTitle(block, index)}</strong>
-                                                            {#if sectionSubtitle}
-                                                                <small>{sectionSubtitle}</small>
-                                                            {/if}
-                                                            <span class="section-summary-row">
-                                                                {#each sectionSummaryPills as summaryPill}
-                                                                    <span class="section-summary-pill">{summaryPill}</span>
-                                                                {/each}
-                                                            </span>
-                                                        </span>
-                                                        <span class="section-toggle-caret">
-                                                            <span class="txt-xs txt-hint">{openSectionId === block.id ? "Collapse" : "Expand"}</span>
-                                                            <i class={openSectionId === block.id ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} />
-                                                        </span>
-                                                    </button>
-
-                                                    {#if openSectionId === block.id}
-                                                        <div class="section-body">
-                                                            {#if sectionFields.length}
-                                                                <SchemaForm
-                                                                    fields={sectionFields}
-                                                                    value={sectionPropsDraftById[block.id] || {}}
-                                                                    showImport={false}
-                                                                    path={`sections.${block.id}`}
-                                                                    on:propsChange={(event) => updateSectionDraft(block.id, event.detail)}
-                                                                />
-                                                            {:else}
-                                                                <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
-                                                            {/if}
-
-                                                            <div class="form-actions m-t-sm">
-                                                                <button
-                                                                    type="button"
-                                                                    class="btn btn-sm btn-strong"
-                                                                    disabled={!!isSavingSectionById[block.id] || !blockPropsField}
-                                                                    on:click={() => saveSection(block)}
-                                                                >
-                                                                    {isSavingSectionById[block.id] ? "Saving..." : "Save section"}
-                                                                </button>
-                                                            </div>
-
-                                                            {#if sectionErrorById[block.id]}
-                                                                <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[block.id]}</p>
-                                                            {/if}
-                                                        </div>
-                                                    {/if}
-                                                </article>
-                                            {/each}
+                                    <aside class="content-preview-pane">
+                                        <div class="sections-head page-preview-head">
+                                            <div>
+                                                <h5 class="m-0">Page preview</h5>
+                                                <p class="txt-sm txt-hint m-b-0 m-t-6">
+                                                    Select a section to highlight it in the preview. Preview shows saved content only.
+                                                </p>
+                                                {#if focusedBlockId}
+                                                    <div class="preview-focus-hint m-t-8">
+                                                        <span>Highlighting selected section.</span>
+                                                        <button type="button" class="btn-link" on:click={clearFocusedPreview}>
+                                                            Clear highlight
+                                                        </button>
+                                                    </div>
+                                                {/if}
+                                            </div>
+                                            <div class="page-preview-actions">
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-outline"
+                                                    disabled={!pagePreviewUrl}
+                                                    on:click={refreshPagePreview}
+                                                >
+                                                    Refresh preview
+                                                </button>
+                                                {#if pagePreviewUrl}
+                                                    <a
+                                                        href={pagePreviewFocusedUrl || pagePreviewUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer noopener"
+                                                        class="btn btn-sm btn-outline"
+                                                    >
+                                                        Open in new tab
+                                                    </a>
+                                                {/if}
+                                            </div>
                                         </div>
-                                    {/if}
+
+                                        {#if !selectedPageSlug}
+                                            <div class="preview-empty-state m-t-sm">
+                                                This page has no slug yet. Add a page slug to enable preview.
+                                            </div>
+                                        {:else if !pagePreviewUrl}
+                                            <div class="preview-empty-state m-t-sm">Preview unavailable</div>
+                                        {:else}
+                                            <div class="page-preview-iframe-wrap content-preview-iframe-wrap m-t-sm">
+                                                <iframe
+                                                    class="page-preview-iframe content-preview-iframe"
+                                                    src={pagePreviewIframeSrc}
+                                                    title={`Preview: ${getPageLabel(selectedPage)}`}
+                                                    loading="lazy"
+                                                ></iframe>
+                                            </div>
+                                        {/if}
+                                    </aside>
                                 </div>
                             {:else if activePageEditorTab === pageEditorTabSeoKey}
                                 <div class="seo-page-wrap m-t-sm">
@@ -1523,50 +1637,6 @@
                                         {/if}
                                     {:else}
                                         <p class="txt-sm txt-hint m-t-8 m-b-0">SEO fields are not available for this page collection.</p>
-                                    {/if}
-                                </div>
-                            {:else if activePageEditorTab === pageEditorTabPreviewKey}
-                                <div class="page-preview-wrap m-t-sm">
-                                    <div class="sections-head page-preview-head">
-                                        <div>
-                                            <h5 class="m-0">Page Preview</h5>
-                                            <p class="txt-sm txt-hint m-b-0 m-t-6">Preview shows saved content only.</p>
-                                        </div>
-                                        <div class="page-preview-actions">
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm btn-outline"
-                                                disabled={!pagePreviewUrl}
-                                                on:click={refreshPagePreview}
-                                            >
-                                                Refresh preview
-                                            </button>
-                                            {#if pagePreviewUrl}
-                                                <a href={pagePreviewUrl} target="_blank" rel="noreferrer noopener" class="btn btn-sm btn-outline">
-                                                    Open in new tab
-                                                </a>
-                                            {/if}
-                                        </div>
-                                    </div>
-
-                                    {#if !selectedPageSlug}
-                                        <div class="preview-empty-state m-t-sm">
-                                            This page has no slug yet. Add a page slug to enable preview.
-                                        </div>
-                                    {:else if !pagePreviewUrl}
-                                        <div class="preview-empty-state m-t-sm">
-                                            Preview base URL is not configured. Set <code>VITE_PUBLIC_SITE_BASE_URL</code> in the admin UI
-                                            environment (for local dev: <code>VITE_PUBLIC_SITE_BASE_URL=http://localhost:5173</code>).
-                                        </div>
-                                    {:else}
-                                        <div class="page-preview-iframe-wrap m-t-sm">
-                                            <iframe
-                                                class="page-preview-iframe"
-                                                src={pagePreviewIframeSrc}
-                                                title={`Preview: ${getPageLabel(selectedPage)}`}
-                                                loading="lazy"
-                                            ></iframe>
-                                        </div>
                                     {/if}
                                 </div>
                             {/if}
@@ -1908,7 +1978,7 @@
 
     .content-workspace-grid {
         display: grid;
-        grid-template-columns: minmax(260px, 0.85fr) minmax(520px, 1.8fr);
+        grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
         gap: 14px;
         align-items: start;
     }
@@ -2114,11 +2184,6 @@
         flex-wrap: wrap;
     }
 
-    .page-preview-wrap {
-        border-top: 1px solid var(--baseAlt2Color);
-        padding-top: 10px;
-    }
-
     .page-preview-head {
         align-items: flex-start;
     }
@@ -2137,10 +2202,6 @@
         color: var(--txtHintColor);
         font-size: var(--smFontSize);
         padding: 12px;
-    }
-
-    .preview-empty-state code {
-        font-size: 12px;
     }
 
     .page-preview-iframe-wrap {
@@ -2163,6 +2224,36 @@
     .sections-wrap {
         border-top: 1px solid var(--baseAlt2Color);
         padding-top: 10px;
+        min-width: 0;
+    }
+
+    .content-tab-grid {
+        display: grid;
+        grid-template-columns: minmax(240px, 0.68fr) minmax(560px, 1.42fr);
+        gap: 14px;
+        align-items: start;
+    }
+
+    .content-sections-pane {
+        min-width: 0;
+    }
+
+    .content-preview-pane {
+        min-width: 0;
+        border-top: 1px solid var(--baseAlt2Color);
+        padding-top: 10px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .content-preview-iframe-wrap {
+        flex: 1 1 auto;
+        min-height: clamp(560px, calc(100vh - 300px), 780px);
+    }
+
+    .content-preview-iframe {
+        height: 100%;
+        min-height: clamp(560px, calc(100vh - 300px), 780px);
     }
 
     .sections-head {
@@ -2175,58 +2266,80 @@
     .sections-list {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 12px;
     }
 
     .section-card {
         border: 1px solid var(--baseAlt2Color);
-        border-radius: var(--baseRadius);
+        border-radius: 10px;
         background: var(--baseColor);
         overflow: hidden;
+        box-shadow: 0 1px 2px color-mix(in srgb, var(--baseAlt2Color) 26%, transparent);
+    }
+
+    .section-card.selected {
+        border-color: color-mix(in srgb, var(--primaryColor) 45%, var(--baseAlt2Color));
+        box-shadow:
+            inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 28%, transparent),
+            0 1px 2px color-mix(in srgb, var(--baseAlt2Color) 30%, transparent);
     }
 
     .section-toggle {
         width: 100%;
         border: 0;
-        background: var(--baseAlt1Color);
+        background: var(--baseColor);
         text-align: left;
-        padding: 10px 12px 11px;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 10px;
+        padding: 12px 12px 12px;
+        display: block;
         cursor: pointer;
     }
 
     .section-toggle:hover {
-        background: color-mix(in srgb, var(--primaryColor) 4%, var(--baseColor));
+        background: color-mix(in srgb, var(--primaryColor) 2.5%, var(--baseColor));
     }
 
     .section-card.open .section-toggle {
+        background: color-mix(in srgb, var(--primaryColor) 4%, var(--baseColor));
+    }
+
+    .section-card.selected .section-toggle {
         background: color-mix(in srgb, var(--primaryColor) 6%, var(--baseColor));
+    }
+
+    .section-toggle-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 8px;
+        min-width: 0;
     }
 
     .section-toggle-content {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 5px;
         min-width: 0;
-        flex: 1 1 auto;
     }
 
     .section-toggle-content strong {
         color: var(--txtPrimaryColor);
-        font-size: var(--baseFontSize);
+        font-size: 14px;
         line-height: 1.2;
-        white-space: nowrap;
+        white-space: normal;
         overflow: hidden;
-        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
     }
 
     .section-toggle-content small {
         color: var(--txtHintColor);
-        font-size: 12px;
-        line-height: 1.25;
+        font-size: 11px;
+        line-height: 1.3;
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
     }
 
     .section-summary-row {
@@ -2251,22 +2364,34 @@
 
     .section-toggle-caret {
         display: inline-flex;
-        align-items: flex-end;
+        align-items: center;
         justify-content: center;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 54px;
+        min-width: 28px;
+        width: 28px;
+        height: 28px;
+        flex: 0 0 auto;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
     }
 
     .section-toggle-caret i {
-        font-size: 16px;
+        font-size: 20px;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 74%, var(--txtHintColor));
+    }
+
+    .preview-focus-hint {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--smFontSize);
         color: var(--txtHintColor);
     }
 
     .section-body {
         border-top: 1px solid var(--baseAlt2Color);
         background: var(--baseColor);
-        padding: 12px 12px 10px;
+        padding: 12px 12px 12px;
     }
 
     .seo-page-wrap {
@@ -2319,6 +2444,18 @@
     @media (max-width: 1200px) {
         .content-workspace-grid {
             grid-template-columns: 1fr;
+        }
+
+        .content-tab-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .content-preview-iframe-wrap {
+            min-height: clamp(480px, 62vh, 700px);
+        }
+
+        .content-preview-iframe {
+            min-height: clamp(480px, 62vh, 700px);
         }
 
         .pages-list-panel,
@@ -2377,6 +2514,28 @@
         .page-preview-iframe {
             height: 65vh;
             min-height: 420px;
+        }
+
+        .content-preview-iframe-wrap {
+            min-height: clamp(420px, 58vh, 620px);
+        }
+
+        .content-preview-iframe {
+            min-height: clamp(420px, 58vh, 620px);
+        }
+
+        .section-toggle {
+            align-items: flex-start;
+        }
+
+        .section-toggle-header {
+            width: 100%;
+        }
+
+        .section-toggle-caret {
+            min-width: 32px;
+            width: 32px;
+            height: 32px;
         }
 
         .pages-list-totals {
