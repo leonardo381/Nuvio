@@ -1,6 +1,7 @@
-<!--
 <script>
-  import { createEventDispatcher } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
+  import TinyMCE from "@/components/base/TinyMCE.svelte";
+  import CommonHelper from "@/utils/CommonHelper";
   import FieldShell from "./FieldShell.svelte";
 
   export let field;
@@ -12,96 +13,63 @@
   const dispatch = createEventDispatcher();
   $: id = `schema-${String(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
-  function onInput(e) {
-    value = e.currentTarget.value;
-    dispatch("change", value);
+  let mounted = false;
+  let mountTimer = null;
+  let editorValue = normalizeValue(value);
+  let lastDispatchedValue = editorValue;
+
+  $: editorConfig = {
+    ...CommonHelper.defaultEditorOptions(),
+    convert_urls: false,
+    relative_urls: false,
+    min_height: field?.options?.rows ? Math.max(180, Number(field.options.rows) * 36) : 270,
+    height: field?.options?.rows ? Math.max(180, Number(field.options.rows) * 36) : 270,
+  };
+
+  $: {
+    const next = normalizeValue(value);
+    if (next !== editorValue) {
+      editorValue = next;
+      lastDispatchedValue = next;
+    }
   }
+
+  $: if (mounted && editorValue !== lastDispatchedValue) {
+    lastDispatchedValue = editorValue;
+    dispatch("change", editorValue);
+  }
+
+  function normalizeValue(raw) {
+    if (typeof raw === "string") return raw;
+    if (raw === null || typeof raw === "undefined") return "";
+    return String(raw);
+  }
+
+  onMount(() => {
+    // Slight delay avoids heavy initial paint when many fields mount together.
+    mountTimer = setTimeout(() => {
+      mounted = true;
+    }, 60);
+
+    return () => {
+      if (mountTimer) clearTimeout(mountTimer);
+    };
+  });
 </script>
 
 <FieldShell {field} {id} {error} required={!!field?.required}>
-  <textarea
-    id={id}
-    name={field?.key}
-    class="form-textarea"
-    rows={field?.options?.rows ?? 4}
-    {disabled}
-    on:input={onInput}
-  >{value ?? ""}</textarea>
+  {#if mounted}
+    <TinyMCE id={id} conf={editorConfig} bind:value={editorValue} {disabled} />
+  {:else}
+    <div class="textarea-editor-skeleton" aria-hidden="true"></div>
+  {/if}
 </FieldShell>
--->
-<script>
-  import { createEventDispatcher } from "svelte";
-  import FieldShell from "./FieldShell.svelte";
-
-  export let field;
-  export let value = "";
-  export let disabled = false;
-  export let error = "";
-
-  const dispatch = createEventDispatcher();
-  $: id = `schema-${field?.key || "field"}`;
-
-  function onInput(e) {
-    value = e.currentTarget.value;
-    dispatch("change", value);
-  }
-</script>
-
-<FieldShell {field} {id} {error} required={!!field?.required}>
-  <textarea
-    id={id}
-    name={field?.key}
-    class="form-textarea"
-    rows={field?.options?.rows ?? 4}
-    {disabled}
-    on:input={onInput}
-  >{value ?? ""}</textarea>
-</FieldShell>
-
-<!--
 <style>
-  .pb-textarea {
+  .textarea-editor-skeleton {
     width: 100%;
-    min-height: 96px;
-    padding: 10px 12px;
-
-    font-size: 14px;
-    color: #1f2937;
-    line-height: 1.4;
-
-    background-color: #f8fafc;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-
-    resize: vertical;
-    outline: none;
-
-    transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease,
-      background-color 0.15s ease;
-  }
-
-  .pb-textarea::placeholder {
-    color: #9ca3af;
-  }
-
-  .pb-textarea:focus {
-    background-color: #ffffff;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-
-  .pb-textarea:disabled {
-    background-color: #f1f5f9;
-    color: #9ca3af;
-    cursor: not-allowed;
-  }
-
-  /* error state (optional, if FieldShell sets error class) */
-  :global(.form-field.error) .pb-textarea {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+    min-height: 220px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--baseAlt1Color) 70%, #fff);
   }
 </style>
--->
