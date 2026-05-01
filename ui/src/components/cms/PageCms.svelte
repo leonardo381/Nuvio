@@ -1525,18 +1525,19 @@
 
                                     <aside class="content-preview-pane">
                                         <div class="sections-head page-preview-head">
-                                            <div>
+                                            <div class="page-preview-head-left">
                                                 <h5 class="m-0">Page preview</h5>
-                                                <p class="txt-sm txt-hint m-b-0 m-t-6">
-                                                    Select a section to highlight it in the preview. Preview shows saved content only.
-                                                </p>
                                                 {#if focusedBlockId}
-                                                    <div class="preview-focus-hint m-t-8">
+                                                    <div class="preview-focus-hint">
                                                         <span>Highlighting selected section.</span>
                                                         <button type="button" class="btn-link" on:click={clearFocusedPreview}>
                                                             Clear highlight
                                                         </button>
                                                     </div>
+                                                {:else}
+                                                    <span class="txt-sm txt-hint page-preview-helper">
+                                                        Select a section to highlight it in the preview. Preview shows saved content only.
+                                                    </span>
                                                 {/if}
                                             </div>
                                             <div class="page-preview-actions">
@@ -2185,7 +2186,25 @@
     }
 
     .page-preview-head {
-        align-items: flex-start;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: nowrap;
+    }
+
+    .page-preview-head-left {
+        min-width: 0;
+        flex: 1 1 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: nowrap;
+    }
+
+    .page-preview-helper {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .page-preview-actions {
@@ -2263,18 +2282,22 @@
         gap: 8px;
     }
 
+    .content-sections-pane .sections-head {
+        min-height: 28px;
+    }
+
     .sections-list {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 8px;
     }
 
     .section-card {
         border: 1px solid var(--baseAlt2Color);
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--baseColor);
         overflow: hidden;
-        box-shadow: 0 1px 2px color-mix(in srgb, var(--baseAlt2Color) 26%, transparent);
+        box-shadow: 0 1px 1px color-mix(in srgb, var(--baseAlt2Color) 22%, transparent);
     }
 
     .section-card.selected {
@@ -2289,7 +2312,7 @@
         border: 0;
         background: var(--baseColor);
         text-align: left;
-        padding: 12px 12px 12px;
+        padding: 9px 10px;
         display: block;
         cursor: pointer;
     }
@@ -2317,37 +2340,37 @@
     .section-toggle-content {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 3px;
         min-width: 0;
     }
 
     .section-toggle-content strong {
         color: var(--txtPrimaryColor);
-        font-size: 14px;
-        line-height: 1.2;
+        font-size: 13px;
+        line-height: 1.25;
         white-space: normal;
         overflow: hidden;
         display: -webkit-box;
         -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
     }
 
     .section-toggle-content small {
         color: var(--txtHintColor);
-        font-size: 11px;
-        line-height: 1.3;
+        font-size: 10.5px;
+        line-height: 1.25;
         display: -webkit-box;
         overflow: hidden;
         -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 1;
     }
 
     .section-summary-row {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: 4px;
         flex-wrap: wrap;
-        margin-top: 1px;
+        margin-top: 0;
     }
 
     .section-summary-pill {
@@ -2355,9 +2378,9 @@
         align-items: center;
         border: 1px solid var(--baseAlt2Color);
         border-radius: 999px;
-        padding: 2px 7px;
-        font-size: 11px;
-        line-height: 1.15;
+        padding: 1px 6px;
+        font-size: 10px;
+        line-height: 1.1;
         color: var(--txtHintColor);
         background: var(--baseColor);
     }
@@ -2366,9 +2389,9 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 28px;
-        width: 28px;
-        height: 28px;
+        min-width: 24px;
+        width: 24px;
+        height: 24px;
         flex: 0 0 auto;
         border: 0;
         border-radius: 999px;
@@ -2376,22 +2399,24 @@
     }
 
     .section-toggle-caret i {
-        font-size: 20px;
+        font-size: 18px;
         color: color-mix(in srgb, var(--txtPrimaryColor) 74%, var(--txtHintColor));
     }
 
     .preview-focus-hint {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         font-size: var(--smFontSize);
         color: var(--txtHintColor);
+        min-width: 0;
+        white-space: nowrap;
     }
 
     .section-body {
         border-top: 1px solid var(--baseAlt2Color);
         background: var(--baseColor);
-        padding: 12px 12px 12px;
+        padding: 10px 10px 10px;
     }
 
     .seo-page-wrap {
@@ -2500,6 +2525,21 @@
         .page-preview-head {
             flex-direction: column;
             align-items: stretch;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .page-preview-head-left {
+            width: 100%;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .page-preview-helper {
+            white-space: normal;
+            overflow: visible;
+            text-overflow: unset;
         }
 
         .page-preview-actions {
