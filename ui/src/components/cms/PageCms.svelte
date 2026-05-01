@@ -19,6 +19,9 @@
     const pageEditorTabContentKey = "content";
     const pageEditorTabSeoKey = "seo";
     const pageEditorTabPreviewKey = "preview";
+    const pageStatusFilterAllKey = "all";
+    const pageStatusFilterActiveKey = "active";
+    const pageStatusFilterInactiveKey = "inactive";
     const clientSettingsRole = "client";
     const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "newsletter", "i18n"]);
 
@@ -31,6 +34,8 @@
     let selectedPageId = initialQueryParams.get("cmsPage") || "";
     let activeCmsTab = initialQueryParams.get("cmsTab") === cmsTabSettingsKey ? cmsTabSettingsKey : cmsTabPagesKey;
     let activePageEditorTab = pageEditorTabContentKey;
+    let pageStatusFilter = pageStatusFilterAllKey;
+    let pageSearch = "";
     let openSectionId = "";
 
     let isLoadingWebsites = false;
@@ -115,6 +120,7 @@
     $: blockTitleField = resolveFieldName(blocksCollection, ["title", "name", "label"]);
     $: blockPropsField = resolveFieldName(blocksCollection, ["props"]);
     $: blockComponentKeyField = resolveFieldName(blocksCollection, ["component_key", "componentKey"]);
+    $: blockVariantField = resolveFieldName(blocksCollection, ["variant"]);
     $: blockComponentRelationField = resolveRelationFieldName(blocksCollection, componentsCollection?.id, ["component"]);
     $: blockPageRelationField = resolveRelationFieldName(blocksCollection, pagesCollection?.id, ["page"]);
 
@@ -130,11 +136,34 @@
     $: clientWebsiteSettingsFields = filterClientWebsiteSettingsFields(roleScopedSettingsFields);
 
     $: websitePublicUrl = getWebsitePublicUrl(selectedWebsite);
-    $: selectedPagePath = getPagePath(selectedPage);
     $: selectedWebsiteSlug = normalizeString(websiteSlugField ? selectedWebsite?.[websiteSlugField] : "");
     $: selectedPageSlug = normalizeString(pageSlugField ? selectedPage?.[pageSlugField] : "");
     $: pagePreviewUrl = buildPagePreviewUrl(selectedWebsiteSlug, selectedPageSlug);
     $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewUrl, pagePreviewReloadToken);
+    $: normalizedPageSearch = normalizeString(pageSearch).toLowerCase();
+    $: activePagesCount = pageEnabledField ? pages.filter((record) => isPageActive(record)).length : 0;
+    $: inactivePagesCount = pageEnabledField ? Math.max(0, pages.length - activePagesCount) : 0;
+    $: filteredPages = pages.filter((record) => {
+        if (pageEnabledField) {
+            if (pageStatusFilter === pageStatusFilterActiveKey && !isPageActive(record)) {
+                return false;
+            }
+            if (pageStatusFilter === pageStatusFilterInactiveKey && isPageActive(record)) {
+                return false;
+            }
+        }
+
+        if (!normalizedPageSearch) {
+            return true;
+        }
+
+        const pageLabel = normalizeString(getPageLabel(record)).toLowerCase();
+        const pageSlug = normalizeString(pageSlugField ? record?.[pageSlugField] : "").toLowerCase();
+        return pageLabel.includes(normalizedPageSearch) || pageSlug.includes(normalizedPageSearch);
+    });
+    $: if (!pageEnabledField && pageStatusFilter !== pageStatusFilterAllKey) {
+        pageStatusFilter = pageStatusFilterAllKey;
+    }
 
     $: componentsById = new Map(components.map((record) => [record.id, record]));
     $: componentsByKey = new Map(
@@ -345,15 +374,46 @@
     }
 
     function getPageLabel(record) {
-        return `${CommonHelper.displayValue(record || {}, [pageTitleField, pageSlugField], "") || ""}`.trim() || record?.id || "-";
+        const title = normalizeString(pageTitleField ? record?.[pageTitleField] : "");
+        if (title) {
+            return title;
+        }
+
+        const slug = normalizeString(pageSlugField ? record?.[pageSlugField] : "");
+        if (slug) {
+            return slug;
+        }
+
+        return record?.id || "-";
     }
 
-    function getPagePath(record) {
-        const slug = normalizeString(pageSlugField ? record?.[pageSlugField] : "");
-        if (!slug) {
-            return "/";
+    function formatPageListDate(value) {
+        const raw = normalizeString(value);
+        if (!raw) {
+            return "";
         }
-        return slug.startsWith("/") ? slug : `/${slug}`;
+
+        const parsed = new Date(raw);
+        if (Number.isNaN(parsed.getTime())) {
+            return "";
+        }
+
+        return parsed.toLocaleString([], {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    }
+
+    function getPageListMeta(record) {
+        const updated = formatPageListDate(record?.updated || record?.created);
+        if (updated) {
+            return `Updated ${updated}`;
+        }
+
+        return "Click to edit content, SEO, and preview.";
     }
 
     function isPageActive(record) {
@@ -549,13 +609,123 @@
         return `Section ${index + 1}`;
     }
 
-    function getSectionDescription(block) {
+    function areSameLabel(left, right) {
+        return normalizeString(left).toLowerCase() === normalizeString(right).toLowerCase();
+    }
+
+    function toHumanLabel(value) {
+        const raw = normalizeString(value);
+        if (!raw) {
+            return "";
+        }
+
+        const readable = raw
+            .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+            .replace(/[_-]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        if (!readable) {
+            return "";
+        }
+
+        return readable
+            .split(" ")
+            .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+            .join(" ");
+    }
+
+    function formatCount(count, singular, plural = `${singular}s`) {
+        return `${count} ${count === 1 ? singular : plural}`;
+    }
+
+    function getSectionVariantLabel(block) {
+        if (!blockVariantField) {
+            return "";
+        }
+
+        const rawVariant = normalizeString(block?.[blockVariantField]);
+        if (!rawVariant) {
+            return "";
+        }
+
+        return toHumanLabel(rawVariant);
+    }
+
+    function getSectionDescription(block, index) {
+        const title = getSectionTitle(block, index);
         const component = getComponentForBlock(block);
         const componentName = normalizeString(componentNameField ? component?.[componentNameField] : "");
-        if (componentName) {
+        if (componentName && !areSameLabel(componentName, title)) {
             return componentName;
         }
+
+        const variantLabel = getSectionVariantLabel(block);
+        if (variantLabel && !areSameLabel(variantLabel, title)) {
+            return `Variant: ${variantLabel}`;
+        }
+
         return "Edit section content.";
+    }
+
+    function getSectionDraftProps(block) {
+        const blockId = normalizeString(block?.id);
+        const draftValue = blockId ? sectionPropsDraftById?.[blockId] : null;
+
+        if (isPlainObject(draftValue)) {
+            return draftValue;
+        }
+
+        return toPropsObject(blockPropsField ? block?.[blockPropsField] : {});
+    }
+
+    function getSectionSummary(block, schemaFields = getSectionSchemaFields(block)) {
+        const summary = {
+            editableFields: schemaFields.length,
+            itemsCount: 0,
+            hasMedia: false,
+            variantLabel: getSectionVariantLabel(block),
+        };
+
+        if (!schemaFields.length) {
+            return summary;
+        }
+
+        const propsValue = getSectionDraftProps(block);
+
+        for (const field of schemaFields) {
+            const fieldType = normalizeString(field?.type).toLowerCase();
+            const fieldKey = normalizeString(field?.key);
+
+            if (fieldType === "file") {
+                summary.hasMedia = true;
+            }
+
+            if (fieldType === "array" && fieldKey && Array.isArray(propsValue?.[fieldKey])) {
+                summary.itemsCount += propsValue[fieldKey].length;
+            }
+        }
+
+        return summary;
+    }
+
+    function getSectionSummaryPills(block, schemaFields = getSectionSchemaFields(block)) {
+        const sectionSummary = getSectionSummary(block, schemaFields);
+        const pills = [formatCount(sectionSummary.editableFields, "field")];
+
+        if (sectionSummary.itemsCount > 0) {
+            pills.push(formatCount(sectionSummary.itemsCount, "item"));
+        }
+
+        if (sectionSummary.hasMedia) {
+            pills.push("Media");
+        }
+
+        if (sectionSummary.variantLabel) {
+            pills.push(`Variant: ${sectionSummary.variantLabel}`);
+        }
+
+        return pills;
     }
 
     function toggleSection(blockId) {
@@ -799,6 +969,8 @@
 
         selectedWebsiteId = `${websiteId || ""}`;
         selectedPageId = "";
+        pageSearch = "";
+        pageStatusFilter = pageStatusFilterAllKey;
         openSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
 
@@ -1081,8 +1253,57 @@
                 <div class="content-workspace-grid">
                     <aside class="panel pages-list-panel">
                         <div class="pages-list-head">
-                            <h4 class="m-0">Pages</h4>
-                            <span class="txt-sm txt-hint">{pages.length} total</span>
+                            <div class="pages-list-title-wrap">
+                                <h4 class="m-0">Pages</h4>
+                                <p class="txt-sm txt-hint m-b-0 m-t-6">Find and open a page to edit content and SEO.</p>
+                            </div>
+                            <span class="txt-sm txt-hint pages-list-totals">
+                                {#if pageEnabledField}
+                                    {pages.length} total | {activePagesCount} active | {inactivePagesCount} inactive
+                                {:else}
+                                    {pages.length} total
+                                {/if}
+                            </span>
+                        </div>
+
+                        <div class="page-filter-chips m-t-sm" role="toolbar" aria-label="Filter pages by status">
+                            <button
+                                type="button"
+                                class="btn btn-xs btn-outline page-filter-chip"
+                                class:is-active={pageStatusFilter === pageStatusFilterAllKey}
+                                on:click={() => (pageStatusFilter = pageStatusFilterAllKey)}
+                            >
+                                All ({pages.length})
+                            </button>
+                            {#if pageEnabledField}
+                                <button
+                                    type="button"
+                                    class="btn btn-xs btn-outline page-filter-chip"
+                                    class:is-active={pageStatusFilter === pageStatusFilterActiveKey}
+                                    on:click={() => (pageStatusFilter = pageStatusFilterActiveKey)}
+                                >
+                                    Active ({activePagesCount})
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-xs btn-outline page-filter-chip"
+                                    class:is-active={pageStatusFilter === pageStatusFilterInactiveKey}
+                                    on:click={() => (pageStatusFilter = pageStatusFilterInactiveKey)}
+                                >
+                                    Inactive ({inactivePagesCount})
+                                </button>
+                            {/if}
+                        </div>
+
+                        <div class="m-t-sm">
+                            <label class="txt-sm txt-hint block m-b-5" for="cms-pages-search">Search</label>
+                            <input
+                                id="cms-pages-search"
+                                class="input input-sm"
+                                type="search"
+                                placeholder="Search by page title..."
+                                bind:value={pageSearch}
+                            />
                         </div>
 
                         {#if !selectedWebsiteId}
@@ -1093,23 +1314,27 @@
                             <div class="txt-hint m-t-sm">Loading pages...</div>
                         {:else if !pages.length}
                             <div class="txt-hint m-t-sm">There are no pages for this website.</div>
+                        {:else if !filteredPages.length}
+                            <div class="txt-hint m-t-sm">No pages match the current filters.</div>
                         {:else}
                             <div class="pages-list-body m-t-sm">
-                                {#each pages as page}
+                                {#each filteredPages as page}
                                     <button
                                         type="button"
                                         class="page-row"
                                         class:active={page.id === selectedPageId}
                                         on:click={() => selectPage(page.id)}
                                     >
-                                        <span class="page-row-title">{getPageLabel(page)}</span>
-                                        <div class="page-row-meta">
-                                            <span class="page-row-path">{getPagePath(page)}</span>
+                                        <div class="page-row-main">
+                                            <span class="page-row-title">{getPageLabel(page)}</span>
                                             {#if pageEnabledField}
                                                 <span class="page-list-status" class:is-active={isPageActive(page)}>
                                                     {isPageActive(page) ? "Active" : "Inactive"}
                                                 </span>
                                             {/if}
+                                        </div>
+                                        <div class="page-row-meta">
+                                            <span class="txt-xs txt-hint">{getPageListMeta(page)}</span>
                                         </div>
                                     </button>
                                 {/each}
@@ -1122,7 +1347,6 @@
                             <div class="page-editor-head">
                                 <div class="page-context-main">
                                     <h4 class="m-0">{getPageLabel(selectedPage)}</h4>
-                                    <p class="txt-sm txt-hint m-b-0 page-context-path">{selectedPagePath}</p>
                                 </div>
                                 <div class="page-context-meta">
                                     {#if pageEnabledField}
@@ -1184,29 +1408,40 @@
                                     {:else}
                                         <div class="sections-list m-t-sm">
                                             {#each blocks as block, index}
+                                                {@const sectionFields = getSectionSchemaFields(block)}
+                                                {@const sectionSubtitle = getSectionDescription(block, index)}
+                                                {@const sectionSummaryPills = getSectionSummaryPills(block, sectionFields)}
                                                 <article class="section-card" class:open={openSectionId === block.id}>
                                                     <button type="button" class="section-toggle" on:click={() => toggleSection(block.id)}>
                                                         <span class="section-toggle-content">
                                                             <strong>{getSectionTitle(block, index)}</strong>
-                                                            <small>{getSectionDescription(block)}</small>
+                                                            {#if sectionSubtitle}
+                                                                <small>{sectionSubtitle}</small>
+                                                            {/if}
+                                                            <span class="section-summary-row">
+                                                                {#each sectionSummaryPills as summaryPill}
+                                                                    <span class="section-summary-pill">{summaryPill}</span>
+                                                                {/each}
+                                                            </span>
                                                         </span>
-                                                        <i class={openSectionId === block.id ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} />
+                                                        <span class="section-toggle-caret">
+                                                            <span class="txt-xs txt-hint">{openSectionId === block.id ? "Collapse" : "Expand"}</span>
+                                                            <i class={openSectionId === block.id ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} />
+                                                        </span>
                                                     </button>
 
                                                     {#if openSectionId === block.id}
                                                         <div class="section-body">
-                                                            {#if getSectionSchemaFields(block).length}
+                                                            {#if sectionFields.length}
                                                                 <SchemaForm
-                                                                    fields={getSectionSchemaFields(block)}
+                                                                    fields={sectionFields}
                                                                     value={sectionPropsDraftById[block.id] || {}}
                                                                     showImport={false}
                                                                     path={`sections.${block.id}`}
                                                                     on:propsChange={(event) => updateSectionDraft(block.id, event.detail)}
                                                                 />
                                                             {:else}
-                                                                <p class="txt-sm txt-hint m-b-0">
-                                                                    This section has no editable fields in schema yet.
-                                                                </p>
+                                                                <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
                                                             {/if}
 
                                                             <div class="form-actions m-t-sm">
@@ -1328,7 +1563,7 @@
                                             <iframe
                                                 class="page-preview-iframe"
                                                 src={pagePreviewIframeSrc}
-                                                title={`Preview: ${selectedPagePath}`}
+                                                title={`Preview: ${getPageLabel(selectedPage)}`}
                                                 loading="lazy"
                                             ></iframe>
                                         </div>
@@ -1687,56 +1922,105 @@
 
     .pages-list-head {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .pages-list-title-wrap {
+        min-width: 0;
+    }
+
+    .pages-list-totals {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .page-filter-chips {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .page-filter-chip {
+        min-height: 28px;
+    }
+
+    .page-filter-chip.is-active {
+        background: var(--baseAlt2Color);
+        border-color: var(--baseAlt2Color);
     }
 
     .pages-list-body {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0;
         max-height: 620px;
         overflow: auto;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
     }
 
     .page-row {
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: var(--baseRadius);
-        background: var(--baseAlt1Color);
-        padding: 10px;
+        border: 0;
+        border-bottom: 1px solid var(--baseAlt2Color);
+        border-radius: 0;
+        background: transparent;
+        padding: 10px 12px;
         text-align: left;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 6px;
         cursor: pointer;
     }
 
+    .page-row:last-child {
+        border-bottom: 0;
+    }
+
+    .page-row:nth-child(odd) {
+        background: var(--baseColor);
+    }
+
+    .page-row:nth-child(even) {
+        background: var(--baseAlt1Color);
+    }
+
     .page-row:hover {
-        background: color-mix(in srgb, var(--baseAlt1Color) 72%, var(--baseColor));
+        background: color-mix(in srgb, var(--primaryColor) 4%, var(--baseColor));
     }
 
     .page-row.active {
-        border-color: color-mix(in srgb, var(--primaryColor) 40%, var(--baseAlt2Color));
         background: color-mix(in srgb, var(--primaryColor) 8%, var(--baseColor));
-        box-shadow: inset 2px 0 0 color-mix(in srgb, var(--primaryColor) 60%, transparent);
+        box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primaryColor) 60%, transparent);
+    }
+
+    .page-row-main {
+        width: 100%;
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
 
     .page-row-title {
         color: var(--txtPrimaryColor);
         font-weight: 600;
-    }
-
-    .page-row-path {
-        color: var(--txtHintColor);
-        font-size: var(--smFontSize);
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .page-row-meta {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 8px;
+        justify-content: flex-start;
+        gap: 6px;
         min-width: 0;
     }
 
@@ -1783,11 +2067,6 @@
         align-items: baseline;
         gap: 8px;
         flex-wrap: wrap;
-    }
-
-    .page-context-path {
-        margin-top: 0;
-        white-space: nowrap;
     }
 
     .page-context-meta {
@@ -1902,36 +2181,43 @@
     .section-card {
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
-        background: var(--baseAlt1Color);
+        background: var(--baseColor);
         overflow: hidden;
     }
 
     .section-toggle {
         width: 100%;
         border: 0;
-        background: transparent;
+        background: var(--baseAlt1Color);
         text-align: left;
-        padding: 10px 12px;
+        padding: 10px 12px 11px;
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 8px;
+        gap: 10px;
         cursor: pointer;
     }
 
     .section-toggle:hover {
-        background: color-mix(in srgb, var(--baseAlt1Color) 72%, var(--baseColor));
+        background: color-mix(in srgb, var(--primaryColor) 4%, var(--baseColor));
+    }
+
+    .section-card.open .section-toggle {
+        background: color-mix(in srgb, var(--primaryColor) 6%, var(--baseColor));
     }
 
     .section-toggle-content {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 4px;
         min-width: 0;
+        flex: 1 1 auto;
     }
 
     .section-toggle-content strong {
         color: var(--txtPrimaryColor);
+        font-size: var(--baseFontSize);
+        line-height: 1.2;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1940,12 +2226,47 @@
     .section-toggle-content small {
         color: var(--txtHintColor);
         font-size: 12px;
+        line-height: 1.25;
+    }
+
+    .section-summary-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex-wrap: wrap;
+        margin-top: 1px;
+    }
+
+    .section-summary-pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        padding: 2px 7px;
+        font-size: 11px;
+        line-height: 1.15;
+        color: var(--txtHintColor);
+        background: var(--baseColor);
+    }
+
+    .section-toggle-caret {
+        display: inline-flex;
+        align-items: flex-end;
+        justify-content: center;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 54px;
+    }
+
+    .section-toggle-caret i {
+        font-size: 16px;
+        color: var(--txtHintColor);
     }
 
     .section-body {
         border-top: 1px solid var(--baseAlt2Color);
         background: var(--baseColor);
-        padding: 12px;
+        padding: 12px 12px 10px;
     }
 
     .seo-page-wrap {
@@ -2056,6 +2377,11 @@
         .page-preview-iframe {
             height: 65vh;
             min-height: 420px;
+        }
+
+        .pages-list-totals {
+            text-align: left;
+            white-space: normal;
         }
     }
 </style>
