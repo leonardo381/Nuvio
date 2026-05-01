@@ -16,6 +16,9 @@
     const initialQueryParams = new URLSearchParams($querystring);
     const cmsTabPagesKey = "pages";
     const cmsTabSettingsKey = "settings";
+    const pageEditorTabContentKey = "content";
+    const pageEditorTabSeoKey = "seo";
+    const pageEditorTabPreviewKey = "preview";
     const clientSettingsRole = "client";
     const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "newsletter", "i18n"]);
 
@@ -27,6 +30,7 @@
     let selectedWebsiteId = initialQueryParams.get("cmsWebsite") || "";
     let selectedPageId = initialQueryParams.get("cmsPage") || "";
     let activeCmsTab = initialQueryParams.get("cmsTab") === cmsTabSettingsKey ? cmsTabSettingsKey : cmsTabPagesKey;
+    let activePageEditorTab = pageEditorTabContentKey;
     let openSectionId = "";
 
     let isLoadingWebsites = false;
@@ -41,8 +45,6 @@
     let websiteSettingsError = "";
     let websiteIdentitySeoError = "";
     let pageEditForm = {
-        title: "",
-        enabled: true,
         seoTitle: "",
         seoDescription: "",
     };
@@ -146,9 +148,9 @@
 
     $: if (selectedPage?.id && selectedPage.id !== lastPageSeedId) {
         lastPageSeedId = selectedPage.id;
+        openSectionId = "";
+        activePageEditorTab = pageEditorTabContentKey;
         pageEditForm = {
-            title: pageTitleField ? `${selectedPage?.[pageTitleField] || ""}` : "",
-            enabled: pageEnabledField ? !!selectedPage?.[pageEnabledField] : true,
             seoTitle: pageSeoTitleField ? `${selectedPage?.[pageSeoTitleField] || ""}` : "",
             seoDescription: pageSeoDescriptionField ? `${selectedPage?.[pageSeoDescriptionField] || ""}` : "",
         };
@@ -157,6 +159,8 @@
 
     $: if (!selectedPage?.id) {
         lastPageSeedId = "";
+        openSectionId = "";
+        activePageEditorTab = pageEditorTabContentKey;
     }
 
     $: if (!hasCmsCollections) {
@@ -207,8 +211,8 @@
             sectionErrorById = nextErrors;
             isSavingSectionById = nextSaving;
 
-            if (!openSectionId || !blocks.some((block) => block.id === openSectionId)) {
-                openSectionId = blocks[0]?.id || "";
+            if (openSectionId && !blocks.some((block) => block.id === openSectionId)) {
+                openSectionId = "";
             }
         }
     }
@@ -350,6 +354,13 @@
             return "/";
         }
         return slug.startsWith("/") ? slug : `/${slug}`;
+    }
+
+    function isPageActive(record) {
+        if (!pageEnabledField) {
+            return false;
+        }
+        return !!record?.[pageEnabledField];
     }
 
     function getWebsitePublicUrl(record) {
@@ -769,8 +780,8 @@
             }
 
             blocks = await ApiClient.collection(blocksCollection.id).getFullList(query);
-            if (!openSectionId || !blocks.some((block) => block.id === openSectionId)) {
-                openSectionId = blocks[0]?.id || "";
+            if (openSectionId && !blocks.some((block) => block.id === openSectionId)) {
+                openSectionId = "";
             }
         } catch (err) {
             blocks = [];
@@ -789,6 +800,7 @@
         selectedWebsiteId = `${websiteId || ""}`;
         selectedPageId = "";
         openSectionId = "";
+        activePageEditorTab = pageEditorTabContentKey;
 
         await loadPages();
         await loadBlocks();
@@ -801,27 +813,26 @@
 
         selectedPageId = `${pageId || ""}`;
         openSectionId = "";
+        activePageEditorTab = pageEditorTabContentKey;
 
         await loadBlocks();
     }
 
-    async function savePage() {
+    function setActivePageEditorTab(nextTab) {
+        if (nextTab === pageEditorTabContentKey || nextTab === pageEditorTabSeoKey || nextTab === pageEditorTabPreviewKey) {
+            activePageEditorTab = nextTab;
+        }
+    }
+
+    async function savePageSeo() {
         pageError = "";
 
-        if (!selectedPage?.id || !pagesCollection?.id || !selectedWebsiteId || !pageWebsiteRelationField) {
+        if (!selectedPage?.id || !pagesCollection?.id) {
             pageError = "Select a page first.";
             return;
         }
 
         const payload = {};
-        setPayloadField(payload, pageWebsiteRelationField, selectedWebsiteId);
-
-        if (pageTitleField) {
-            setPayloadField(payload, pageTitleField, normalizeString(pageEditForm.title));
-        }
-        if (pageEnabledField) {
-            setPayloadField(payload, pageEnabledField, !!pageEditForm.enabled);
-        }
         if (pageSeoTitleField) {
             setPayloadField(payload, pageSeoTitleField, normalizeString(pageEditForm.seoTitle));
         }
@@ -829,11 +840,16 @@
             setPayloadField(payload, pageSeoDescriptionField, `${pageEditForm.seoDescription || ""}`);
         }
 
+        if (!Object.keys(payload).length) {
+            pageError = "SEO fields are not available for this page collection.";
+            return;
+        }
+
         isSavingPage = true;
 
         try {
             await ApiClient.collection(pagesCollection.id).update(selectedPage.id, payload);
-            addSuccessToast("Page updated.");
+            addSuccessToast("Page SEO updated.");
             await loadPages();
             refreshPagePreview();
         } catch (err) {
@@ -995,10 +1011,8 @@
                 </div>
 
                 <div class="head-selector">
-                    <div class="selector-label-row">
+                    <div class="selector-row">
                         <label class="txt-sm txt-hint selector-label m-b-0" for="cms-website">Website</label>
-                    </div>
-                    <div class="selector-controls">
                         <select
                             id="cms-website"
                             class="input input-sm"
@@ -1021,42 +1035,44 @@
                 </div>
             </div>
 
-            <div class="summary-badges">
-                <span class="summary-pill">
-                    <i class="ri-file-list-3-line" />
-                    {pages.length} pages
-                </span>
-                <span class="summary-pill">
-                    <i class="ri-layout-grid-line" />
-                    {blocks.length} sections
-                </span>
-                {#if !componentsCollection?.id}
-                    <span class="summary-pill warning">
-                        <i class="ri-alert-line" />
-                        components missing
-                    </span>
-                {/if}
-            </div>
+            <div class="head-tools">
+                <div class="tabs-header compact combined left operations-tabs cms-top-tabs">
+                    <button
+                        type="button"
+                        class="tab-item"
+                        class:active={activeCmsTab === cmsTabPagesKey}
+                        on:click={() => setActiveCmsTab(cmsTabPagesKey)}
+                    >
+                        <i class="ri-file-list-3-line tab-icon" aria-hidden="true" />
+                        <span class="tab-label">Pages</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="tab-item"
+                        class:active={activeCmsTab === cmsTabSettingsKey}
+                        on:click={() => setActiveCmsTab(cmsTabSettingsKey)}
+                    >
+                        <i class="ri-settings-3-line tab-icon" aria-hidden="true" />
+                        <span class="tab-label">Website Settings</span>
+                    </button>
+                </div>
 
-            <div class="tabs-header compact combined left operations-tabs cms-top-tabs">
-                <button
-                    type="button"
-                    class="tab-item"
-                    class:active={activeCmsTab === cmsTabPagesKey}
-                    on:click={() => setActiveCmsTab(cmsTabPagesKey)}
-                >
-                    <i class="ri-file-list-3-line tab-icon" aria-hidden="true" />
-                    <span class="tab-label">Pages</span>
-                </button>
-                <button
-                    type="button"
-                    class="tab-item"
-                    class:active={activeCmsTab === cmsTabSettingsKey}
-                    on:click={() => setActiveCmsTab(cmsTabSettingsKey)}
-                >
-                    <i class="ri-settings-3-line tab-icon" aria-hidden="true" />
-                    <span class="tab-label">Website Settings</span>
-                </button>
+                <div class="summary-badges">
+                    <span class="summary-pill">
+                        <i class="ri-file-list-3-line" />
+                        {pages.length} pages
+                    </span>
+                    <span class="summary-pill">
+                        <i class="ri-layout-grid-line" />
+                        {blocks.length} sections
+                    </span>
+                    {#if !componentsCollection?.id}
+                        <span class="summary-pill warning">
+                            <i class="ri-alert-line" />
+                            components missing
+                        </span>
+                    {/if}
+                </div>
             </div>
         </section>
 
@@ -1087,7 +1103,14 @@
                                         on:click={() => selectPage(page.id)}
                                     >
                                         <span class="page-row-title">{getPageLabel(page)}</span>
-                                        <span class="page-row-path">{getPagePath(page)}</span>
+                                        <div class="page-row-meta">
+                                            <span class="page-row-path">{getPagePath(page)}</span>
+                                            {#if pageEnabledField}
+                                                <span class="page-list-status" class:is-active={isPageActive(page)}>
+                                                    {isPageActive(page) ? "Active" : "Inactive"}
+                                                </span>
+                                            {/if}
+                                        </div>
                                     </button>
                                 {/each}
                             </div>
@@ -1097,190 +1120,221 @@
                     <div class="page-editor-panel">
                         {#if selectedPage}
                             <div class="page-editor-head">
-                                <div>
-                                    <h4 class="m-0">Page Details</h4>
-                                    <p class="txt-sm txt-hint m-b-0 m-t-6">URL: {selectedPagePath}</p>
+                                <div class="page-context-main">
+                                    <h4 class="m-0">{getPageLabel(selectedPage)}</h4>
+                                    <p class="txt-sm txt-hint m-b-0 page-context-path">{selectedPagePath}</p>
+                                </div>
+                                <div class="page-context-meta">
+                                    {#if pageEnabledField}
+                                        <span class="page-status-pill" class:is-active={isPageActive(selectedPage)}>
+                                            {isPageActive(selectedPage) ? "Active" : "Inactive"}
+                                        </span>
+                                    {/if}
+                                    <span class="page-status-pill page-count-pill">{blocks.length} sections</span>
                                 </div>
                             </div>
 
-                            <div class="form-grid two-col m-t-sm">
-                                {#if pageTitleField}
-                                    <div class="form-field">
-                                        <label class="txt-sm txt-hint block m-b-5" for="cms-page-title-content">Title</label>
-                                        <input id="cms-page-title-content" class="input input-sm" bind:value={pageEditForm.title} />
-                                    </div>
-                                {/if}
-
-                                <div class="form-field read-only-field">
-                                    <label class="txt-sm txt-hint block m-b-5">URL</label>
-                                    <div class="read-only-value">{selectedPagePath}</div>
+                            <div class="page-editor-tabs-row">
+                                <div class="tabs-header compact combined left operations-tabs page-editor-tabs">
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={activePageEditorTab === pageEditorTabContentKey}
+                                        on:click={() => setActivePageEditorTab(pageEditorTabContentKey)}
+                                    >
+                                        <i class="ri-layout-grid-line tab-icon" aria-hidden="true" />
+                                        <span class="tab-label">Content</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={activePageEditorTab === pageEditorTabSeoKey}
+                                        on:click={() => setActivePageEditorTab(pageEditorTabSeoKey)}
+                                    >
+                                        <i class="ri-search-eye-line tab-icon" aria-hidden="true" />
+                                        <span class="tab-label">SEO</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={activePageEditorTab === pageEditorTabPreviewKey}
+                                        on:click={() => setActivePageEditorTab(pageEditorTabPreviewKey)}
+                                    >
+                                        <i class="ri-eye-line tab-icon" aria-hidden="true" />
+                                        <span class="tab-label">Preview</span>
+                                    </button>
                                 </div>
                             </div>
 
-                            {#if pageEnabledField}
-                                <label class="checkbox-field m-t-8">
-                                    <input type="checkbox" bind:checked={pageEditForm.enabled} />
-                                    <span>Page active</span>
-                                </label>
-                            {/if}
-
-                            {#if pageSeoTitleField || pageSeoDescriptionField}
-                                <div class="seo-page-wrap m-t-base">
+                            {#if activePageEditorTab === pageEditorTabContentKey}
+                                <div class="sections-wrap m-t-sm">
                                     <div class="sections-head">
-                                        <h5 class="m-0">Page SEO</h5>
+                                        <h5 class="m-0">Sections on this page</h5>
+                                        <span class="txt-sm txt-hint">{blocks.length} total</span>
                                     </div>
 
-                                    <div class="form-grid m-t-sm">
-                                        {#if pageSeoTitleField}
-                                            <div class="form-field">
-                                                <label class="txt-sm txt-hint block m-b-5" for="cms-page-seo-title-content">
-                                                    SEO Title
-                                                </label>
-                                                <input
-                                                    id="cms-page-seo-title-content"
-                                                    class="input input-sm"
-                                                    bind:value={pageEditForm.seoTitle}
-                                                />
-                                            </div>
-                                        {/if}
+                                    {#if !blockPageRelationField}
+                                        <p class="txt-sm txt-danger m-t-8 m-b-0">Sections relation to pages was not found.</p>
+                                    {:else if !blockPropsField}
+                                        <p class="txt-sm txt-danger m-t-8 m-b-0">Sections props field was not found.</p>
+                                    {:else if isLoadingBlocks || isLoadingComponents}
+                                        <p class="txt-sm txt-hint m-t-8 m-b-0">Loading sections...</p>
+                                    {:else if !blocks.length}
+                                        <p class="txt-sm txt-hint m-t-8 m-b-0">There are no sections linked to this page.</p>
+                                    {:else}
+                                        <div class="sections-list m-t-sm">
+                                            {#each blocks as block, index}
+                                                <article class="section-card" class:open={openSectionId === block.id}>
+                                                    <button type="button" class="section-toggle" on:click={() => toggleSection(block.id)}>
+                                                        <span class="section-toggle-content">
+                                                            <strong>{getSectionTitle(block, index)}</strong>
+                                                            <small>{getSectionDescription(block)}</small>
+                                                        </span>
+                                                        <i class={openSectionId === block.id ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} />
+                                                    </button>
 
-                                        {#if pageSeoDescriptionField}
-                                            <div class="form-field">
-                                                <label
-                                                    class="txt-sm txt-hint block m-b-5"
-                                                    for="cms-page-seo-description-content"
-                                                >
-                                                    SEO Description
-                                                </label>
-                                                <textarea
-                                                    id="cms-page-seo-description-content"
-                                                    class="input input-sm textarea-input"
-                                                    rows="4"
-                                                    bind:value={pageEditForm.seoDescription}
-                                                />
-                                            </div>
-                                        {/if}
-                                    </div>
-                                </div>
-                            {/if}
+                                                    {#if openSectionId === block.id}
+                                                        <div class="section-body">
+                                                            {#if getSectionSchemaFields(block).length}
+                                                                <SchemaForm
+                                                                    fields={getSectionSchemaFields(block)}
+                                                                    value={sectionPropsDraftById[block.id] || {}}
+                                                                    showImport={false}
+                                                                    path={`sections.${block.id}`}
+                                                                    on:propsChange={(event) => updateSectionDraft(block.id, event.detail)}
+                                                                />
+                                                            {:else}
+                                                                <p class="txt-sm txt-hint m-b-0">
+                                                                    This section has no editable fields in schema yet.
+                                                                </p>
+                                                            {/if}
 
-                            <div class="form-actions m-t-sm">
-                                <button type="button" class="btn btn-sm btn-strong" disabled={isSavingPage} on:click={savePage}>
-                                    {isSavingPage ? "Saving..." : "Save page"}
-                                </button>
-                            </div>
+                                                            <div class="form-actions m-t-sm">
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-sm btn-strong"
+                                                                    disabled={!!isSavingSectionById[block.id] || !blockPropsField}
+                                                                    on:click={() => saveSection(block)}
+                                                                >
+                                                                    {isSavingSectionById[block.id] ? "Saving..." : "Save section"}
+                                                                </button>
+                                                            </div>
 
-                            {#if pageError}
-                                <p class="txt-danger m-t-8 m-b-0">{pageError}</p>
-                            {/if}
-
-                            <div class="page-preview-wrap m-t-base">
-                                <div class="sections-head page-preview-head">
-                                    <div>
-                                        <h5 class="m-0">Page Preview</h5>
-                                        <p class="txt-sm txt-hint m-b-0 m-t-6">Preview shows saved content only.</p>
-                                    </div>
-                                    <div class="page-preview-actions">
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline"
-                                            disabled={!pagePreviewUrl}
-                                            on:click={refreshPagePreview}
-                                        >
-                                            Refresh preview
-                                        </button>
-                                        {#if pagePreviewUrl}
-                                            <a href={pagePreviewUrl} target="_blank" rel="noreferrer noopener" class="btn btn-sm btn-outline">
-                                                Open in new tab
-                                            </a>
-                                        {/if}
-                                    </div>
-                                </div>
-
-                                {#if !selectedPageSlug}
-                                    <div class="preview-empty-state m-t-sm">
-                                        This page has no slug yet. Add a page slug to enable preview.
-                                    </div>
-                                {:else if !pagePreviewUrl}
-                                    <div class="preview-empty-state m-t-sm">
-                                        Preview base URL is not configured. Set <code>VITE_PUBLIC_SITE_BASE_URL</code> in the admin UI
-                                        environment (for local dev: <code>VITE_PUBLIC_SITE_BASE_URL=http://localhost:5173</code>).
-                                    </div>
-                                {:else}
-                                    <div class="page-preview-iframe-wrap m-t-sm">
-                                        <iframe
-                                            class="page-preview-iframe"
-                                            src={pagePreviewIframeSrc}
-                                            title={`Preview: ${selectedPagePath}`}
-                                            loading="lazy"
-                                        ></iframe>
-                                    </div>
-                                {/if}
-                            </div>
-
-                            <div class="sections-wrap m-t-base">
-                                <div class="sections-head">
-                                    <h5 class="m-0">Sections on this page</h5>
-                                    <span class="txt-sm txt-hint">{blocks.length} total</span>
-                                </div>
-
-                                {#if !blockPageRelationField}
-                                    <p class="txt-sm txt-danger m-t-8 m-b-0">Sections relation to pages was not found.</p>
-                                {:else if !blockPropsField}
-                                    <p class="txt-sm txt-danger m-t-8 m-b-0">Sections props field was not found.</p>
-                                {:else if isLoadingBlocks || isLoadingComponents}
-                                    <p class="txt-sm txt-hint m-t-8 m-b-0">Loading sections...</p>
-                                {:else if !blocks.length}
-                                    <p class="txt-sm txt-hint m-t-8 m-b-0">There are no sections linked to this page.</p>
-                                {:else}
-                                    <div class="sections-list m-t-sm">
-                                        {#each blocks as block, index}
-                                            <article class="section-card" class:open={openSectionId === block.id}>
-                                                <button type="button" class="section-toggle" on:click={() => toggleSection(block.id)}>
-                                                    <span class="section-toggle-content">
-                                                        <strong>{getSectionTitle(block, index)}</strong>
-                                                        <small>{getSectionDescription(block)}</small>
-                                                    </span>
-                                                    <i class={openSectionId === block.id ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} />
-                                                </button>
-
-                                                {#if openSectionId === block.id}
-                                                    <div class="section-body">
-                                                        {#if getSectionSchemaFields(block).length}
-                                                            <SchemaForm
-                                                                fields={getSectionSchemaFields(block)}
-                                                                value={sectionPropsDraftById[block.id] || {}}
-                                                                showImport={false}
-                                                                path={`sections.${block.id}`}
-                                                                on:propsChange={(event) => updateSectionDraft(block.id, event.detail)}
-                                                            />
-                                                        {:else}
-                                                            <p class="txt-sm txt-hint m-b-0">
-                                                                This section has no editable fields in schema yet.
-                                                            </p>
-                                                        {/if}
-
-                                                        <div class="form-actions m-t-sm">
-                                                            <button
-                                                                type="button"
-                                                                class="btn btn-sm btn-strong"
-                                                                disabled={!!isSavingSectionById[block.id] || !blockPropsField}
-                                                                on:click={() => saveSection(block)}
-                                                            >
-                                                                {isSavingSectionById[block.id] ? "Saving..." : "Save section"}
-                                                            </button>
+                                                            {#if sectionErrorById[block.id]}
+                                                                <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[block.id]}</p>
+                                                            {/if}
                                                         </div>
-
-                                                        {#if sectionErrorById[block.id]}
-                                                            <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[block.id]}</p>
-                                                        {/if}
-                                                    </div>
-                                                {/if}
-                                            </article>
-                                        {/each}
+                                                    {/if}
+                                                </article>
+                                            {/each}
+                                        </div>
+                                    {/if}
+                                </div>
+                            {:else if activePageEditorTab === pageEditorTabSeoKey}
+                                <div class="seo-page-wrap m-t-sm">
+                                    <div class="sections-head">
+                                        <div>
+                                            <h5 class="m-0">Page SEO</h5>
+                                            <p class="txt-sm txt-hint m-b-0 m-t-6">Control how this page appears in search results.</p>
+                                        </div>
                                     </div>
-                                {/if}
-                            </div>
+
+                                    {#if pageSeoTitleField || pageSeoDescriptionField}
+                                        <div class="form-grid m-t-sm">
+                                            {#if pageSeoTitleField}
+                                                <div class="form-field">
+                                                    <label class="txt-sm txt-hint block m-b-5" for="cms-page-seo-title-content">
+                                                        SEO Title
+                                                    </label>
+                                                    <input
+                                                        id="cms-page-seo-title-content"
+                                                        class="input input-sm"
+                                                        bind:value={pageEditForm.seoTitle}
+                                                    />
+                                                </div>
+                                            {/if}
+
+                                            {#if pageSeoDescriptionField}
+                                                <div class="form-field">
+                                                    <label
+                                                        class="txt-sm txt-hint block m-b-5"
+                                                        for="cms-page-seo-description-content"
+                                                    >
+                                                        SEO Description
+                                                    </label>
+                                                    <textarea
+                                                        id="cms-page-seo-description-content"
+                                                        class="input input-sm textarea-input"
+                                                        rows="4"
+                                                        bind:value={pageEditForm.seoDescription}
+                                                    />
+                                                </div>
+                                            {/if}
+                                        </div>
+
+                                        <div class="form-actions m-t-sm">
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-strong"
+                                                disabled={isSavingPage}
+                                                on:click={savePageSeo}
+                                            >
+                                                {isSavingPage ? "Saving..." : "Save SEO"}
+                                            </button>
+                                        </div>
+
+                                        {#if pageError}
+                                            <p class="txt-danger m-t-8 m-b-0">{pageError}</p>
+                                        {/if}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-t-8 m-b-0">SEO fields are not available for this page collection.</p>
+                                    {/if}
+                                </div>
+                            {:else if activePageEditorTab === pageEditorTabPreviewKey}
+                                <div class="page-preview-wrap m-t-sm">
+                                    <div class="sections-head page-preview-head">
+                                        <div>
+                                            <h5 class="m-0">Page Preview</h5>
+                                            <p class="txt-sm txt-hint m-b-0 m-t-6">Preview shows saved content only.</p>
+                                        </div>
+                                        <div class="page-preview-actions">
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-outline"
+                                                disabled={!pagePreviewUrl}
+                                                on:click={refreshPagePreview}
+                                            >
+                                                Refresh preview
+                                            </button>
+                                            {#if pagePreviewUrl}
+                                                <a href={pagePreviewUrl} target="_blank" rel="noreferrer noopener" class="btn btn-sm btn-outline">
+                                                    Open in new tab
+                                                </a>
+                                            {/if}
+                                        </div>
+                                    </div>
+
+                                    {#if !selectedPageSlug}
+                                        <div class="preview-empty-state m-t-sm">
+                                            This page has no slug yet. Add a page slug to enable preview.
+                                        </div>
+                                    {:else if !pagePreviewUrl}
+                                        <div class="preview-empty-state m-t-sm">
+                                            Preview base URL is not configured. Set <code>VITE_PUBLIC_SITE_BASE_URL</code> in the admin UI
+                                            environment (for local dev: <code>VITE_PUBLIC_SITE_BASE_URL=http://localhost:5173</code>).
+                                        </div>
+                                    {:else}
+                                        <div class="page-preview-iframe-wrap m-t-sm">
+                                            <iframe
+                                                class="page-preview-iframe"
+                                                src={pagePreviewIframeSrc}
+                                                title={`Preview: ${selectedPagePath}`}
+                                                loading="lazy"
+                                            ></iframe>
+                                        </div>
+                                    {/if}
+                                </div>
+                            {/if}
                         {:else}
                             <div class="txt-hint">Select a page to edit.</div>
                         {/if}
@@ -1471,24 +1525,43 @@
         gap: 4px;
     }
 
-    .selector-controls {
+    .selector-row {
         display: flex;
         align-items: center;
         gap: 8px;
     }
 
-    .selector-controls .input {
+    .selector-label {
+        white-space: nowrap;
+        min-width: 52px;
+    }
+
+    .selector-row .input {
         flex: 1 1 auto;
         min-width: 260px;
+    }
+
+    .selector-row .btn {
+        flex: 0 0 auto;
     }
 
     .summary-badges {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
         gap: 6px;
         justify-content: flex-end;
         margin-left: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: visible;
+    }
+
+    .head-tools {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        margin-top: 0;
     }
 
     .summary-pill {
@@ -1514,8 +1587,77 @@
         color: color-mix(in srgb, var(--dangerColor) 65%, var(--txtHintColor));
     }
 
+    .operations-tabs {
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        flex: 0 0 auto;
+        gap: 2px;
+        padding: 2px;
+        border: 0 !important;
+        border-radius: calc(var(--baseRadius) + 2px);
+        background: var(--baseAlt1Color);
+        overflow: hidden;
+        box-shadow: none !important;
+    }
+
+    .operations-tabs .tab-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 34px;
+        padding: 0 16px;
+        border: 0 !important;
+        border-radius: calc(var(--baseRadius) - 1px);
+        background: transparent;
+        font-weight: 500;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 76%, var(--txtHintColor));
+        transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .operations-tabs .tab-item + .tab-item {
+        box-shadow: none;
+    }
+
+    .operations-tabs .tab-item .tab-icon {
+        font-size: 13px;
+        opacity: 0.72;
+        transition: opacity 140ms ease, color 140ms ease;
+    }
+
+    .operations-tabs .tab-item:hover {
+        background: color-mix(in srgb, var(--baseColor) 75%, var(--baseAlt1Color));
+        color: var(--txtPrimaryColor);
+    }
+
+    .operations-tabs .tab-item:focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 50%, transparent);
+    }
+
+    .operations-tabs .tab-item.active {
+        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
+        color: var(--txtPrimaryColor);
+        font-weight: 600;
+        box-shadow: none;
+    }
+
+    .operations-tabs .tab-item.active .tab-icon {
+        opacity: 0.95;
+        color: color-mix(in srgb, var(--txtPrimaryColor) 86%, var(--txtHintColor));
+    }
+
     .cms-top-tabs {
-        margin-top: 2px;
+        margin-top: 0;
+        flex: 0 0 auto;
+    }
+
+    .page-editor-tabs-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        width: auto;
+        margin-top: 4px;
     }
 
     .cms-section-panel {
@@ -1537,6 +1679,12 @@
         min-height: 460px;
         overflow: hidden;
         padding: 12px;
+    }
+
+    .page-editor-panel {
+        border-top: 0;
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
     }
 
     .pages-list-head {
@@ -1586,11 +1734,78 @@
         font-size: var(--smFontSize);
     }
 
-    .page-editor-head {
+    .page-row-meta {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
         gap: 8px;
+        min-width: 0;
+    }
+
+    .page-list-status,
+    .page-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 20px;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 1px solid var(--baseAlt2Color);
+        background: var(--baseAlt1Color);
+        color: var(--txtHintColor);
+        font-size: 11px;
+        line-height: 1;
+        white-space: nowrap;
+        font-weight: 600;
+    }
+
+    .page-list-status.is-active,
+    .page-status-pill.is-active {
+        color: color-mix(in srgb, var(--successColor) 80%, var(--txtHintColor));
+        border-color: color-mix(in srgb, var(--successColor) 42%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--successColor) 10%, var(--baseColor));
+    }
+
+    .page-count-pill {
+        color: var(--txtHintColor);
+    }
+
+    .page-editor-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding-bottom: 2px;
+    }
+
+    .page-context-main {
+        min-width: 0;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .page-context-path {
+        margin-top: 0;
+        white-space: nowrap;
+    }
+
+    .page-context-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .page-editor-tabs {
+        display: inline-flex;
+        align-items: center;
+        align-self: flex-start;
+        width: fit-content !important;
+        max-width: 100%;
+        flex: 0 0 auto;
         flex-wrap: wrap;
     }
 
@@ -1614,25 +1829,6 @@
     .form-field .input {
         width: 100%;
         background: var(--baseColor);
-    }
-
-    .read-only-field .read-only-value {
-        min-height: 32px;
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: var(--baseRadius);
-        background: var(--baseColor);
-        display: flex;
-        align-items: center;
-        padding: 0 10px;
-        color: var(--txtHintColor);
-    }
-
-    .checkbox-field {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        color: var(--txtHintColor);
-        font-size: var(--smFontSize);
     }
 
     .form-actions {
@@ -1818,12 +2014,16 @@
             padding: calc(var(--baseSpacing) - 12px) calc(var(--baseSpacing) - 10px);
         }
 
-        .selector-controls {
+        .selector-row {
             flex-direction: column;
             align-items: stretch;
         }
 
-        .selector-controls .input {
+        .selector-row .input {
+            min-width: 0;
+        }
+
+        .selector-label {
             min-width: 0;
         }
 
@@ -1832,8 +2032,9 @@
             margin-left: 0;
         }
 
-        .cms-top-tabs {
-            width: 100%;
+        .head-tools {
+            align-items: stretch;
+            grid-template-columns: 1fr;
         }
 
         .form-grid.two-col {
