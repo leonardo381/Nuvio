@@ -1076,10 +1076,10 @@
             </div>
         </section>
 
-        <section class="panel cms-section-panel m-b-base">
+        <section class="panel cms-section-panel m-b-base" class:is-pages-workspace={activeCmsTab === cmsTabPagesKey}>
             {#if activeCmsTab === cmsTabPagesKey}
                 <div class="content-workspace-grid">
-                    <aside class="pages-list-panel">
+                    <aside class="panel pages-list-panel">
                         <div class="pages-list-head">
                             <h4 class="m-0">Pages</h4>
                             <span class="txt-sm txt-hint">{pages.length} total</span>
@@ -1117,7 +1117,7 @@
                         {/if}
                     </aside>
 
-                    <div class="page-editor-panel">
+                    <div class="panel page-editor-panel">
                         {#if selectedPage}
                             <div class="page-editor-head">
                                 <div class="page-context-main">
@@ -1664,27 +1664,25 @@
         padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
     }
 
+    .cms-section-panel.is-pages-workspace {
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        padding: 0;
+    }
+
     .content-workspace-grid {
         display: grid;
         grid-template-columns: minmax(260px, 0.85fr) minmax(520px, 1.8fr);
-        gap: 12px;
-        align-items: stretch;
+        gap: 14px;
+        align-items: start;
     }
 
     .pages-list-panel,
     .page-editor-panel {
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: var(--baseRadius);
-        background: var(--baseColor);
         min-height: 460px;
         overflow: hidden;
-        padding: 12px;
-    }
-
-    .page-editor-panel {
-        border-top: 0;
-        border-top-left-radius: 0;
-        border-top-right-radius: 0;
+        padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
     }
 
     .pages-list-head {
