@@ -266,11 +266,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 74%, transparent);
     border-radius: var(--baseRadius);
-    background: color-mix(in srgb, var(--baseAlt1Color) 35%, var(--baseColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 12%, var(--baseColor));
     padding: 8px 10px;
-    margin-bottom: 10px;
+    margin-bottom: 9px;
   }
 
   .file-current-main {
@@ -283,6 +283,9 @@
 
   .file-current-label {
     min-height: 18px;
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
+    color: color-mix(in srgb, var(--txtHintColor) 96%, var(--txtPrimaryColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 20%, var(--baseColor));
   }
 
   .file-current-name {
@@ -301,6 +304,10 @@
     gap: 10px;
     align-items: center;
     flex-wrap: wrap;
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 72%, transparent);
+    border-radius: var(--baseRadius);
+    background: var(--baseColor);
+    padding: 9px 10px;
   }
 
   .file-input-wrap {
@@ -309,33 +316,36 @@
   }
 
   .file-remove-btn {
-    color: color-mix(in srgb, var(--dangerColor) 78%, var(--txtHintColor));
-    border-color: color-mix(in srgb, var(--dangerColor) 28%, var(--baseAlt2Color));
+    color: color-mix(in srgb, var(--dangerColor) 62%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 20%, var(--baseAlt2Color));
+    background: color-mix(in srgb, var(--baseAlt1Color) 8%, var(--baseColor));
   }
 
   .file-remove-btn:hover,
   .file-remove-btn:focus-visible {
-    color: color-mix(in srgb, var(--dangerColor) 88%, var(--txtHintColor));
-    border-color: color-mix(in srgb, var(--dangerColor) 48%, var(--baseAlt2Color));
-    background: color-mix(in srgb, var(--dangerColor) 8%, var(--baseColor));
+    color: color-mix(in srgb, var(--dangerColor) 78%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 34%, var(--baseAlt2Color));
+    background: color-mix(in srgb, var(--dangerColor) 6%, var(--baseColor));
   }
 
   .file-native-input {
     width: 100%;
-    height: 46px;
+    height: 44px;
     padding: 8px 10px;
     display: flex;
     align-items: center;
     box-sizing: border-box;
     line-height: 1;
+    background: var(--baseColor);
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
   }
 
   .file-native-input::file-selector-button {
     height: 28px;
     padding: 0 12px;
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
     border-radius: 8px;
-    background: var(--baseColor);
+    background: color-mix(in srgb, var(--baseAlt1Color) 16%, var(--baseColor));
     color: var(--txtPrimaryColor);
     font-size: var(--smFontSize);
     cursor: pointer;
@@ -358,7 +368,7 @@
   }
 
   .schema-file-picker-empty {
-    padding: 24px 8px;
+    padding: 22px 8px;
     text-align: center;
     color: var(--txtHintColor);
     font-size: var(--smFontSize);
@@ -367,14 +377,14 @@
   .schema-file-asset-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
+    gap: 10px;
   }
 
   .schema-file-asset-card {
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 74%, transparent);
     background: var(--baseColor);
-    border-radius: 12px;
-    padding: 10px;
+    border-radius: 10px;
+    padding: 9px;
     text-align: left;
     cursor: pointer;
     transition: background-color var(--baseAnimationSpeed), border-color var(--baseAnimationSpeed);
@@ -382,8 +392,8 @@
 
   .schema-file-asset-card:hover,
   .schema-file-asset-card:focus-visible {
-    background: color-mix(in srgb, var(--baseAlt1Color) 66%, var(--baseColor));
-    border-color: color-mix(in srgb, var(--primaryColor) 26%, var(--baseAlt2Color));
+    background: color-mix(in srgb, var(--baseAlt1Color) 22%, var(--baseColor));
+    border-color: color-mix(in srgb, var(--primaryColor) 28%, var(--baseAlt2Color));
   }
 
   .schema-file-asset-thumb {
@@ -391,7 +401,7 @@
     aspect-ratio: 1 / 1;
     border-radius: 10px;
     overflow: hidden;
-    background: color-mix(in srgb, var(--baseAlt1Color) 75%, var(--baseColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 34%, var(--baseColor));
     margin-bottom: 8px;
   }
 

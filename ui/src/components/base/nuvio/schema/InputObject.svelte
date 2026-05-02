@@ -73,11 +73,11 @@
 
 <style>
   .object-field {
-    border: 1px solid var(--baseAlt2Color);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 74%, transparent);
     border-radius: var(--baseRadius);
-    background: var(--baseColor);
+    background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
     overflow: hidden;
-    margin: 12px 0;
+    margin: 10px 0;
   }
 
   .object-field__header {
@@ -87,9 +87,9 @@
     color: inherit;
     cursor: pointer;
     text-align: left;
-    padding: 10px 12px;
-    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-    background: color-mix(in srgb, var(--baseAlt1Color) 62%, var(--baseColor));
+    padding: 9px 11px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
@@ -113,9 +113,9 @@
 
   .object-field__count {
     min-height: 20px;
-    border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
-    color: var(--txtHintColor);
-    background: var(--baseColor);
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
+    color: color-mix(in srgb, var(--txtHintColor) 96%, var(--txtPrimaryColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 20%, var(--baseColor));
   }
 
   .object-field__chevron {
@@ -131,14 +131,14 @@
   }
 
   .object-field__body {
-    padding: 10px 10px 8px;
-    background: transparent;
+    padding: 9px 10px 10px;
+    background: var(--baseColor);
   }
 
   .object-field__empty {
-    border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 68%, transparent);
     border-radius: var(--baseRadius);
-    background: color-mix(in srgb, var(--baseAlt1Color) 34%, var(--baseColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 10%, var(--baseColor));
     color: var(--txtHintColor);
     padding: 10px;
     font-size: var(--smFontSize);

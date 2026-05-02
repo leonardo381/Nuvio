@@ -2377,9 +2377,8 @@
 
     .section-drawer-body :global(.pb-field) {
         margin: 10px 0;
-        padding: 8px 10px 10px;
-        border-radius: 8px;
-        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        padding: 0;
+        border: 0;
         background: transparent;
     }
 
@@ -2392,27 +2391,6 @@
     .section-drawer-body :global(.object-field) {
         margin-top: 10px !important;
         margin-bottom: 10px !important;
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent) !important;
-        background: var(--baseColor) !important;
-        border-radius: 8px !important;
-    }
-
-    .section-drawer-body :global(.array-field__header),
-    .section-drawer-body :global(.object-field__header),
-    .section-drawer-body :global(.array-item__header) {
-        background: color-mix(in srgb, var(--baseAlt1Color) 58%, var(--baseColor)) !important;
-        border-bottom-color: color-mix(in srgb, var(--baseAlt2Color) 82%, transparent) !important;
-    }
-
-    .section-drawer-body :global(.array-field__items),
-    .section-drawer-body :global(.object-field__body),
-    .section-drawer-body :global(.array-item__body) {
-        padding: 10px !important;
-    }
-
-    .section-drawer-body :global(.array-item) {
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent) !important;
-        border-radius: 8px !important;
     }
 
     .seo-page-wrap {

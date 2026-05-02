@@ -182,7 +182,7 @@
 
     <button
       type="button"
-      class="btn btn-sm btn-outline array-field__add-button"
+      class="btn btn-sm array-field__add-button"
       on:click={addItem}
     >
       <span class="array-field__add-icon">+</span>
@@ -277,11 +277,11 @@
 
 <style>
   .array-field {
-    border: 1px solid var(--baseAlt2Color);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
     border-radius: var(--baseRadius);
     background: var(--baseColor);
     overflow: hidden;
-    margin: 12px 0;
+    margin: 10px 0;
   }
 
   .array-field__header {
@@ -289,9 +289,9 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 12px;
-    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-    background: color-mix(in srgb, var(--baseAlt1Color) 62%, var(--baseColor));
+    padding: 9px 11px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 16%, var(--baseColor));
   }
 
   .array-field__header-left {
@@ -311,9 +311,9 @@
 
   .array-field__count {
     min-height: 20px;
-    border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
-    color: var(--txtHintColor);
-    background: var(--baseColor);
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
+    color: color-mix(in srgb, var(--txtHintColor) 96%, var(--txtPrimaryColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 20%, var(--baseColor));
   }
 
   .array-field__add-button {
@@ -328,11 +328,11 @@
   }
 
   .array-field__empty {
-    margin: 10px 12px 12px;
-    padding: 12px;
-    border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    margin: 9px 10px 10px;
+    padding: 10px 11px;
+    border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 70%, transparent);
     border-radius: var(--baseRadius);
-    background: color-mix(in srgb, var(--baseAlt1Color) 38%, var(--baseColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 12%, var(--baseColor));
     text-align: left;
   }
 
@@ -351,17 +351,22 @@
   }
 
   .array-field__items {
-    padding: 10px 12px 12px;
+    padding: 8px 10px 10px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
 
   .array-item {
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
-    border-radius: var(--baseRadius);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 72%, transparent);
+    border-radius: calc(var(--baseRadius) - 1px);
     overflow: hidden;
-    background: var(--baseColor);
+    background: color-mix(in srgb, var(--baseAlt1Color) 10%, var(--baseColor));
+  }
+
+  .array-item.is-open {
+    border-color: color-mix(in srgb, var(--primaryColor) 34%, var(--baseAlt2Color));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 14%, transparent);
   }
 
   .array-item__header {
@@ -369,9 +374,9 @@
     align-items: stretch;
     justify-content: space-between;
     gap: 10px;
-    padding: 8px 10px 8px 8px;
-    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 84%, transparent);
-    background: color-mix(in srgb, var(--baseAlt1Color) 46%, var(--baseColor));
+    padding: 7px 9px 7px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 68%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 20%, var(--baseColor));
   }
 
   .array-item__toggle {
@@ -399,11 +404,11 @@
   }
 
   .array-item__index {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
-    background: var(--baseColor);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
     color: var(--txtHintColor);
     display: flex;
     align-items: center;
@@ -417,14 +422,14 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
   }
 
   .array-item__title {
     font-size: var(--smFontSize);
     font-weight: 600;
     color: var(--txtPrimaryColor);
-    line-height: 1.2;
+    line-height: 1.25;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -433,7 +438,7 @@
   .array-item__snippet {
     font-size: 11px;
     line-height: 1.3;
-    color: var(--txtHintColor);
+    color: color-mix(in srgb, var(--txtHintColor) 97%, var(--txtPrimaryColor));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -460,20 +465,21 @@
   .array-item__remove-button {
     white-space: nowrap;
     min-height: 28px;
-    color: color-mix(in srgb, var(--dangerColor) 78%, var(--txtHintColor));
-    border-color: color-mix(in srgb, var(--dangerColor) 28%, var(--baseAlt2Color));
+    color: color-mix(in srgb, var(--dangerColor) 62%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 20%, var(--baseAlt2Color));
+    background: color-mix(in srgb, var(--baseAlt1Color) 8%, var(--baseColor));
   }
 
   .array-item__remove-button:hover,
   .array-item__remove-button:focus-visible {
-    color: color-mix(in srgb, var(--dangerColor) 88%, var(--txtHintColor));
-    border-color: color-mix(in srgb, var(--dangerColor) 48%, var(--baseAlt2Color));
-    background: color-mix(in srgb, var(--dangerColor) 8%, var(--baseColor));
+    color: color-mix(in srgb, var(--dangerColor) 78%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 32%, var(--baseAlt2Color));
+    background: color-mix(in srgb, var(--dangerColor) 6%, var(--baseColor));
   }
 
   .array-item__body {
-    padding: 10px;
-    background: transparent;
+    padding: 9px 10px 10px;
+    background: var(--baseColor);
   }
 
   .array-item__body :global(.pb-field:last-child) {
