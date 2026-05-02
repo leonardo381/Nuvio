@@ -1867,15 +1867,15 @@
             >
                 <svelte:fragment slot="header">
                     <div class="section-drawer-title-wrap">
-                        <span class="txt-xs txt-hint txt-uppercase txt-bold">Edit section</span>
-                        <strong>{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
-                        <span class="txt-sm txt-hint">Edit section content.</span>
+                        <div class="section-drawer-heading-row">
+                            <span class="txt-xs txt-hint txt-uppercase txt-bold">Edit section</span>
+                            <strong>{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
+                        </div>
                         <div class="section-drawer-meta">
                             <span class="label label-sm section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
                             {#each selectedEditingSectionSummaryPills as summaryPill}
                                 <span class="label label-sm section-summary-pill">{summaryPill}</span>
                             {/each}
-                            <span class="label label-sm section-summary-pill">Page: {getPageLabel(selectedPage)}</span>
                         </div>
                     </div>
                     <button
@@ -2209,22 +2209,53 @@
         min-height: clamp(560px, calc(100vh - 300px), 780px);
     }
 
+    :global(.cms-section-editor-panel .panel-header) {
+        flex-wrap: nowrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        column-gap: 10px;
+        row-gap: 4px;
+        padding: 7px 12px 6px;
+    }
+
+    :global(.cms-section-editor-panel .panel-header > :first-child) {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    :global(.cms-section-editor-panel .panel-header > :last-child) {
+        flex: 0 0 auto;
+        margin-left: 8px;
+    }
+
     .section-drawer-title-wrap {
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 3px;
     }
 
-    .section-drawer-title-wrap strong {
+    .section-drawer-heading-row {
+        min-width: 0;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: nowrap;
+    }
+
+    .section-drawer-heading-row > .txt-xs {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    .section-drawer-heading-row strong {
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
         font-size: 15px;
-        line-height: 1.18;
+        line-height: 1.14;
         color: var(--txtPrimaryColor);
-    }
-
-    .section-drawer-title-wrap > .txt-sm {
-        font-size: 11.5px;
-        line-height: 1.15;
     }
 
     .section-drawer-meta {
@@ -2236,7 +2267,7 @@
     }
 
     .section-drawer-close-btn {
-        min-height: 28px;
+        min-height: 26px;
         padding: 0 9px;
         align-self: flex-start;
     }

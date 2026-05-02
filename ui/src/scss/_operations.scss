@@ -82,6 +82,8 @@
     display: inline-flex;
     align-items: center;
     flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
     gap: 2px;
     padding: 2px;
     border: 0 !important;
@@ -134,6 +136,23 @@
             opacity: 0.95;
             color: color-mix(in srgb, var(--txtPrimaryColor) 86%, var(--txtHintColor));
         }
+    }
+}
+
+.tabs-header.operations-tabs.operations-tabs--nested {
+    gap: 1px;
+    padding: 1px;
+    border-radius: calc(var(--baseRadius) + 1px);
+
+    .tab-item {
+        min-height: 30px;
+        padding: 0 12px;
+        font-size: var(--smFontSize);
+        gap: 5px;
+    }
+
+    .tab-item .tab-icon {
+        font-size: 12px;
     }
 }
 
@@ -190,4 +209,3 @@
         }
     }
 }
-

@@ -1273,7 +1273,7 @@
                         <div class="campaign-layout-grid">
                             <section class="panel campaign-composer-panel">
                                 <div class="campaign-top-controls m-b-sm">
-                                    <div class="tabs-header compact combined left operations-tabs">
+                                    <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
                                         <button
                                             type="button"
                                             class="tab-item"
@@ -1316,7 +1316,7 @@
                                                 Write your campaign and review the preview before moving to audience.
                                             </p>
                                         </div>
-                                        <div class="tabs-header compact combined left operations-tabs campaign-builder-view-tabs">
+                                        <div class="tabs-header compact combined left operations-tabs operations-tabs--nested campaign-builder-view-tabs">
                                             <button
                                                 type="button"
                                                 class="tab-item"
@@ -1429,7 +1429,7 @@
                                     </div>
                                 {:else}
                                     <div class="campaign-head-row m-b-sm">
-                                        <div class="campaign-head-inline">
+                                        <div class="campaign-head-inline campaign-head-inline--single-line">
                                             <h4 class="m-0">Audience & Send</h4>
                                             <div class="campaign-step-label txt-xs txt-hint">Step 2 of 2</div>
                                             <p class="txt-sm txt-hint m-b-0 campaign-head-description">
@@ -2304,6 +2304,28 @@
         row-gap: 4px;
     }
 
+    .campaign-head-inline--single-line {
+        flex: 1 1 auto;
+        min-width: 0;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .campaign-head-inline--single-line h4,
+    .campaign-head-inline--single-line .campaign-step-label {
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .campaign-head-inline--single-line .campaign-head-description {
+        flex: 1 1 auto;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .campaign-head-row .campaign-builder-view-tabs {
         margin-left: auto;
     }
@@ -2806,6 +2828,16 @@
         .campaign-top-controls {
             align-items: flex-start;
             justify-content: flex-start;
+        }
+
+        .campaign-head-inline--single-line {
+            flex-wrap: wrap;
+        }
+
+        .campaign-head-inline--single-line .campaign-head-description {
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
         }
 
         .campaign-builder-layout.is-split .campaign-builder-preview-side {
