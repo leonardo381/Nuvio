@@ -1863,16 +1863,22 @@
                 on:hide={closeSectionEditor}
             >
                 <svelte:fragment slot="header">
-                    <div class="section-drawer-title-wrap">
-                        <div class="section-drawer-heading-row">
+                    <div class="section-drawer-head">
+                        <div class="section-drawer-head-top">
                             <span class="txt-xs txt-hint txt-uppercase txt-bold">Edit section</span>
-                            <strong>{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
                         </div>
-                        <div class="section-drawer-meta">
-                            <span class="label label-sm section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
-                            {#each selectedEditingSectionSummaryPills as summaryPill}
-                                <span class="label label-sm section-summary-pill">{summaryPill}</span>
-                            {/each}
+                        <strong class="section-drawer-name">{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
+                        <div class="section-drawer-support-row">
+                            <span class="txt-sm txt-hint section-drawer-helper">{selectedEditingSectionSubtitle || "Edit section content."}</span>
+                            <div class="section-drawer-meta">
+                                <span class="label label-sm section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
+                                {#each selectedEditingSectionSummaryPills as summaryPill}
+                                    <span class="label label-sm section-summary-pill">{summaryPill}</span>
+                                {/each}
+                                {#if selectedPage}
+                                    <span class="label label-sm section-summary-pill">Page: {getPageLabel(selectedPage)}</span>
+                                {/if}
+                            </div>
                         </div>
                     </div>
                     <button
@@ -2203,13 +2209,17 @@
         min-height: clamp(560px, calc(100vh - 300px), 780px);
     }
 
+    :global(.overlay-panel.cms-section-editor-panel) {
+        width: min(90vw, 800px);
+    }
+
     :global(.cms-section-editor-panel .panel-header) {
         flex-wrap: nowrap;
         align-items: flex-start;
         justify-content: space-between;
-        column-gap: 10px;
+        column-gap: 12px;
         row-gap: 4px;
-        padding: 7px 12px 6px;
+        padding: 8px 14px;
     }
 
     :global(.cms-section-editor-panel .panel-header > :first-child) {
@@ -2222,47 +2232,60 @@
         margin-left: 8px;
     }
 
-    .section-drawer-title-wrap {
+    .section-drawer-head {
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 4px;
     }
 
-    .section-drawer-heading-row {
+    .section-drawer-head-top {
         min-width: 0;
         display: inline-flex;
-        align-items: baseline;
+        align-items: center;
         gap: 8px;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
     }
 
-    .section-drawer-heading-row > .txt-xs {
+    .section-drawer-head-top > .txt-xs {
         flex: 0 0 auto;
         white-space: nowrap;
     }
 
-    .section-drawer-heading-row strong {
+    .section-drawer-name {
         min-width: 0;
-        white-space: nowrap;
+        display: block;
+        white-space: normal;
         overflow: hidden;
         text-overflow: ellipsis;
-        font-size: 15px;
-        line-height: 1.14;
+        font-size: 18px;
+        line-height: 1.2;
         color: var(--txtPrimaryColor);
+    }
+
+    .section-drawer-support-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .section-drawer-helper {
+        line-height: 1.3;
     }
 
     .section-drawer-meta {
         display: inline-flex;
         align-items: center;
-        gap: 3px;
+        gap: 4px;
         flex-wrap: wrap;
-        margin-top: 0;
+        min-width: 0;
     }
 
     .section-drawer-close-btn {
-        min-height: 26px;
-        padding: 0 9px;
+        min-height: 30px;
+        padding: 0 10px;
         align-self: flex-start;
     }
 
