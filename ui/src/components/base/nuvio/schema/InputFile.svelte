@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from "svelte";
   import ApiClient from "@/utils/ApiClient";
+  import OverlayPanel from "@/components/base/OverlayPanel.svelte";
   import FieldShell from "./FieldShell.svelte";
 
   export let field;
@@ -152,15 +153,15 @@
 
 <FieldShell {field} {id} error={error || localError} required={!!field?.required}>
   {#if value}
-    <div class="file-preview">
-      <div class="file-name">
-        <span class="tag">Current</span>
-        <code>{value?.filename ?? value}</code>
+    <div class="file-current">
+      <div class="file-current-main">
+        <span class="label label-sm file-current-label">Current file</span>
+        <span class="file-current-name" title={value?.filename ?? value}>{value?.filename ?? value}</span>
       </div>
 
       <button
         type="button"
-        class="pb-btn pb-btn-light"
+        class="btn btn-sm btn-outline file-remove-btn"
         on:click={clearFile}
         disabled={disabled || isUploading}
       >
@@ -170,18 +171,20 @@
   {/if}
 
   <div class="file-actions">
-    <input
-      id={id}
-      name={path || field?.key}
-      class="form-input"
-      type="file"
-      disabled={disabled || isUploading}
-      on:change={handleFileChange}
-    />
+    <div class="file-input-wrap">
+      <input
+        id={id}
+        name={path || field?.key}
+        class="form-input file-native-input"
+        type="file"
+        disabled={disabled || isUploading}
+        on:change={handleFileChange}
+      />
+    </div>
 
     <button
       type="button"
-      class="pb-btn pb-btn-light"
+      class="btn btn-sm btn-outline"
       on:click={openPicker}
       disabled={disabled || isUploading}
     >
@@ -190,17 +193,26 @@
   </div>
 
   {#if showPicker}
-    <div class="picker-backdrop" on:click={closePicker}></div>
-
-    <div class="picker-modal">
-      <div class="picker-header">
-        <strong>Choose existing asset</strong>
-        <button type="button" class="pb-btn pb-btn-light" on:click={closePicker}>
+    <OverlayPanel
+      popup
+      class="overlay-panel-xl schema-file-picker"
+      active={true}
+      overlayClose={true}
+      escClose={false}
+      btnClose={false}
+      on:hide={closePicker}
+    >
+      <svelte:fragment slot="header">
+        <div class="schema-file-picker-head">
+          <h5 class="m-0">Choose existing asset</h5>
+          <span class="txt-sm txt-hint">Select a file from Assets.</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" on:click={closePicker}>
           Close
         </button>
-      </div>
+      </svelte:fragment>
 
-      <div class="picker-toolbar">
+      <div class="schema-file-picker-toolbar">
         <input
           class="form-input"
           type="text"
@@ -211,99 +223,105 @@
       </div>
 
       {#if isLoadingAssets}
-        <div class="picker-empty">Loading assets...</div>
+        <div class="schema-file-picker-empty">Loading assets...</div>
       {:else if pickerError}
-        <div class="picker-empty">{pickerError}</div>
+        <div class="schema-file-picker-empty">{pickerError}</div>
       {:else if assets.length === 0}
-        <div class="picker-empty">No assets found.</div>
+        <div class="schema-file-picker-empty">No assets found.</div>
       {:else}
-        <div class="asset-grid">
+        <div class="schema-file-asset-grid">
           {#each assets as asset}
             <button
               type="button"
-              class="asset-card"
+              class="schema-file-asset-card"
               on:click={() => chooseExisting(asset)}
             >
-              <div class="asset-thumb">
+              <div class="schema-file-asset-thumb">
                 {#if asset.file}
                   <img src={assetUrl(asset)} alt={asset.originalName || asset.file} />
                 {/if}
               </div>
 
-              <div class="asset-meta">
-                <div class="asset-name">{asset.originalName || asset.file}</div>
-                <div class="asset-file">{asset.file}</div>
+              <div class="schema-file-asset-meta">
+                <div class="schema-file-asset-name">{asset.originalName || asset.file}</div>
+                <div class="schema-file-asset-file">{asset.file}</div>
               </div>
             </button>
           {/each}
         </div>
       {/if}
-    </div>
+
+      <svelte:fragment slot="footer">
+        <button type="button" class="btn btn-sm btn-outline" on:click={closePicker}>
+          Close
+        </button>
+      </svelte:fragment>
+    </OverlayPanel>
   {/if}
 </FieldShell>
 
 <style>
-  .file-preview{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-    margin-bottom:10px;
+  .file-current {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    border-radius: var(--baseRadius);
+    background: color-mix(in srgb, var(--baseAlt1Color) 35%, var(--baseColor));
+    padding: 8px 10px;
+    margin-bottom: 10px;
   }
 
-  .file-name{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    min-width:0;
+  .file-current-main {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .tag{
-    font-size:12px;
-    padding:2px 8px;
-    border-radius:999px;
-    background: rgba(15,23,42,0.08);
+  .file-current-label {
+    min-height: 18px;
   }
 
-  code{
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    max-width: 360px;
-    display:inline-block;
-    vertical-align:bottom;
+  .file-current-name {
+    min-width: 0;
+    display: inline-block;
+    max-width: min(100%, 420px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--txtPrimaryColor);
+    font-size: var(--smFontSize);
   }
 
   .file-actions {
     display: flex;
     gap: 10px;
     align-items: center;
+    flex-wrap: wrap;
   }
 
-  .file-actions .form-input {
-    flex: 1;
+  .file-input-wrap {
+    flex: 1 1 260px;
+    min-width: 0;
   }
 
-  .pb-btn{
-    border: 1px solid rgba(15,23,42,0.12);
-    border-radius: 10px;
-    padding: 8px 10px;
-    font-size: 13px;
-    background: #f8fafc;
-    cursor: pointer;
-    white-space: nowrap;
+  .file-remove-btn {
+    color: color-mix(in srgb, var(--dangerColor) 78%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 28%, var(--baseAlt2Color));
   }
 
-  .pb-btn:disabled{
-    opacity:.65;
-    cursor:not-allowed;
+  .file-remove-btn:hover,
+  .file-remove-btn:focus-visible {
+    color: color-mix(in srgb, var(--dangerColor) 88%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 48%, var(--baseAlt2Color));
+    background: color-mix(in srgb, var(--dangerColor) 8%, var(--baseColor));
   }
 
-  .pb-btn-light{
-    background:#f8fafc;
-  }
-
-  .form-input[type="file"] {
+  .file-native-input {
+    width: 100%;
     height: 46px;
     padding: 8px 10px;
     display: flex;
@@ -312,109 +330,108 @@
     line-height: 1;
   }
 
-  .form-input[type="file"]::file-selector-button {
+  .file-native-input::file-selector-button {
     height: 28px;
     padding: 0 12px;
-    border: 1px solid rgba(15,23,42,0.12);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
     border-radius: 8px;
-    background: #f8fafc;
-    font-size: 13px;
+    background: var(--baseColor);
+    color: var(--txtPrimaryColor);
+    font-size: var(--smFontSize);
     cursor: pointer;
   }
 
-  .picker-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.35);
-    z-index: 999;
+  :global(.overlay-panel.schema-file-picker) {
+    width: min(92vw, 980px);
+    max-height: 88vh;
   }
 
-  .picker-modal {
-    position: fixed;
-    inset: 50% auto auto 50%;
-    transform: translate(-50%, -50%);
-    width: min(900px, 92vw);
-    max-height: 80vh;
-    overflow: auto;
-    background: white;
-    border: 1px solid rgba(15,23,42,0.12);
-    border-radius: 16px;
-    padding: 16px;
-    z-index: 1000;
-    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
-  }
-
-  .picker-header {
+  .schema-file-picker-head {
+    min-width: 0;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .schema-file-picker-toolbar {
     margin-bottom: 12px;
   }
 
-  .picker-toolbar {
-    margin-bottom: 12px;
-  }
-
-  .picker-empty {
+  .schema-file-picker-empty {
     padding: 24px 8px;
     text-align: center;
-    color: #64748b;
+    color: var(--txtHintColor);
+    font-size: var(--smFontSize);
   }
 
-  .asset-grid {
+  .schema-file-asset-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 12px;
   }
 
-  .asset-card {
-    border: 1px solid rgba(15,23,42,0.12);
-    background: #fff;
+  .schema-file-asset-card {
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    background: var(--baseColor);
     border-radius: 12px;
     padding: 10px;
     text-align: left;
     cursor: pointer;
+    transition: background-color var(--baseAnimationSpeed), border-color var(--baseAnimationSpeed);
   }
 
-  .asset-card:hover {
-    background: #f8fafc;
+  .schema-file-asset-card:hover,
+  .schema-file-asset-card:focus-visible {
+    background: color-mix(in srgb, var(--baseAlt1Color) 66%, var(--baseColor));
+    border-color: color-mix(in srgb, var(--primaryColor) 26%, var(--baseAlt2Color));
   }
 
-  .asset-thumb {
+  .schema-file-asset-thumb {
     width: 100%;
     aspect-ratio: 1 / 1;
     border-radius: 10px;
     overflow: hidden;
-    background: #f1f5f9;
+    background: color-mix(in srgb, var(--baseAlt1Color) 75%, var(--baseColor));
     margin-bottom: 8px;
   }
 
-  .asset-thumb img {
+  .schema-file-asset-thumb img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
   }
 
-  .asset-meta {
+  .schema-file-asset-meta {
     min-width: 0;
   }
 
-  .asset-name,
-  .asset-file {
+  .schema-file-asset-name,
+  .schema-file-asset-file {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .asset-name {
+  .schema-file-asset-name {
     font-size: 13px;
-    color: #0f172a;
+    color: var(--txtPrimaryColor);
   }
 
-  .asset-file {
+  .schema-file-asset-file {
     font-size: 12px;
-    color: #64748b;
+    color: var(--txtHintColor);
+  }
+
+  @media (max-width: 720px) {
+    .file-current {
+      flex-wrap: wrap;
+    }
+
+    .file-remove-btn,
+    .file-actions > .btn {
+      width: 100%;
+      justify-content: center;
+    }
   }
 </style>
