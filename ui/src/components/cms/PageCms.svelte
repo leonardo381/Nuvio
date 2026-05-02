@@ -1660,12 +1660,12 @@
                                         <div class="form-grid m-t-sm">
                                             {#if pageSeoTitleField}
                                                 <div class="form-field">
-                                                    <label class="txt-sm txt-hint block m-b-5" for="cms-page-seo-title-content">
+                                                    <label for="cms-page-seo-title-content">
                                                         SEO Title
                                                     </label>
                                                     <input
                                                         id="cms-page-seo-title-content"
-                                                        class="input input-sm"
+                                                        class="input"
                                                         bind:value={pageEditForm.seoTitle}
                                                     />
                                                 </div>
@@ -1673,15 +1673,12 @@
 
                                             {#if pageSeoDescriptionField}
                                                 <div class="form-field">
-                                                    <label
-                                                        class="txt-sm txt-hint block m-b-5"
-                                                        for="cms-page-seo-description-content"
-                                                    >
+                                                    <label for="cms-page-seo-description-content">
                                                         SEO Description
                                                     </label>
                                                     <textarea
                                                         id="cms-page-seo-description-content"
-                                                        class="input input-sm textarea-input"
+                                                        class="input textarea-input"
                                                         rows="4"
                                                         bind:value={pageEditForm.seoDescription}
                                                     />
@@ -1735,10 +1732,10 @@
                                 <div class="form-grid two-col m-t-sm">
                                     {#if websiteSeoTitleField}
                                         <div class="form-field">
-                                            <label class="txt-sm txt-hint block m-b-5" for="cms-website-seo-title">SEO Title global</label>
+                                            <label for="cms-website-seo-title">SEO Title global</label>
                                             <input
                                                 id="cms-website-seo-title"
-                                                class="input input-sm"
+                                                class="input"
                                                 bind:value={websiteIdentitySeoDraft.seoTitle}
                                             />
                                         </div>
@@ -1746,12 +1743,12 @@
 
                                     {#if websiteSeoDescriptionField}
                                         <div class="form-field">
-                                            <label class="txt-sm txt-hint block m-b-5" for="cms-website-seo-description">
+                                            <label for="cms-website-seo-description">
                                                 SEO Description global
                                             </label>
                                             <textarea
                                                 id="cms-website-seo-description"
-                                                class="input input-sm textarea-input"
+                                                class="input textarea-input"
                                                 rows="4"
                                                 bind:value={websiteIdentitySeoDraft.seoDescription}
                                             />
@@ -1760,14 +1757,14 @@
 
                                     {#if websiteLogoField}
                                         <div class="form-field">
-                                            <label class="txt-sm txt-hint block m-b-5" for="cms-website-logo-file">Logo</label>
+                                            <label for="cms-website-logo-file">Logo</label>
                                             <input
                                                 id="cms-website-logo-file"
-                                                class="input input-sm file-input"
+                                                class="input file-input"
                                                 type="file"
                                                 on:change={(event) => handleWebsiteSeoFileChange("logo", event)}
                                             />
-                                            <div class="file-field-hint m-t-6">
+                                            <div class="help-block file-field-hint m-t-6">
                                                 {#if websiteIdentitySeoDraft.logoFile}
                                                     <span>New: {websiteIdentitySeoDraft.logoFile.name}</span>
                                                 {:else if websiteIdentitySeoDraft.logoCurrent}
@@ -1781,16 +1778,16 @@
 
                                     {#if websiteSeoImageField}
                                         <div class="form-field">
-                                            <label class="txt-sm txt-hint block m-b-5" for="cms-website-seo-image-file">
+                                            <label for="cms-website-seo-image-file">
                                                 Global SEO Image
                                             </label>
                                             <input
                                                 id="cms-website-seo-image-file"
-                                                class="input input-sm file-input"
+                                                class="input file-input"
                                                 type="file"
                                                 on:change={(event) => handleWebsiteSeoFileChange("seoImage", event)}
                                             />
-                                            <div class="file-field-hint m-t-6">
+                                            <div class="help-block file-field-hint m-t-6">
                                                 {#if websiteIdentitySeoDraft.seoImageFile}
                                                     <span>New: {websiteIdentitySeoDraft.seoImageFile.name}</span>
                                                 {:else if websiteIdentitySeoDraft.seoImageCurrent}
@@ -2111,30 +2108,27 @@
 
     .form-grid {
         display: grid;
-        gap: 10px;
+        gap: 10px 12px;
     }
 
     .form-grid.two-col {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .form-field {
-        min-width: 0;
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: var(--baseRadius);
-        background: var(--baseAlt1Color);
-        padding: 8px 10px 10px;
+    .form-grid .form-field {
+        margin-bottom: 0;
     }
 
-    .form-field .input {
-        width: 100%;
-        background: var(--baseColor);
+    .form-field {
+        min-width: 0;
     }
 
     .form-actions {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
     }
 
     .page-preview-head {
@@ -2437,7 +2431,6 @@
 
     .file-input {
         width: 100%;
-        padding: 6px 8px;
     }
 
     .file-field-hint {

@@ -40,31 +40,32 @@
 
 <style>
   .object-field {
-    border: 1px solid #d9e0e7;
-    border-radius: 10px;
-    background: #ffffff;
+    border: 1px solid var(--baseAlt2Color);
+    border-radius: var(--baseRadius);
+    background: var(--baseColor);
     overflow: hidden;
-    margin: 0;
-    margin-top: 16px;
-    margin-bottom: 16px;
+    margin: 12px 0;
   }
 
   .object-field__header {
-    padding: 12px 16px 10px;
-    border-bottom: 1px solid #e5ebf2;
-    background: #fbfcfd;
+    padding: 10px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 62%, var(--baseColor));
   }
 
   .object-field__title {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    color: #475467;
+    color: var(--txtPrimaryColor);
     line-height: 1.2;
   }
 
   .object-field__body {
-    padding: 14px;
-    background: #ffffff;
+    padding: 10px;
+    background: transparent;
   }
 
+  .object-field__body :global(.pb-field:last-child) {
+    margin-bottom: 0;
+  }
 </style>

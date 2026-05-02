@@ -80,14 +80,14 @@
   <div class="array-field__header">
     <div class="array-field__header-left">
       <div class="array-field__title">{field.label}</div>
-      <div class="array-field__count">
+      <div class="label label-sm array-field__count">
         {items.length} {items.length === 1 ? "item" : "items"}
       </div>
     </div>
 
     <button
       type="button"
-      class="array-field__add-button"
+      class="btn btn-sm btn-outline array-field__add-button"
       on:click={addItem}
     >
       <span class="array-field__add-icon">+</span>
@@ -116,7 +116,7 @@
 
             <button
               type="button"
-              class="array-item__remove-button"
+              class="btn btn-sm btn-outline btn-danger array-item__remove-button"
               on:click={() => removeItem(index)}
             >
               Remove
@@ -165,192 +165,176 @@
 
 <style>
   .array-field {
-  border: 1px solid #d9e0e7;
-  border-radius: 10px;
-  background: #ffffff;
-  overflow: hidden;
-  margin: 0;
-  margin-top: 16px;
-  margin-bottom: 16px;
-}
+    border: 1px solid var(--baseAlt2Color);
+    border-radius: var(--baseRadius);
+    background: var(--baseColor);
+    overflow: hidden;
+    margin: 12px 0;
+  }
 
-.array-field__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
-  border-bottom: 1px solid #e5ebf2;
-  background: #fbfcfd;
-}
+  .array-field__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 62%, var(--baseColor));
+  }
 
-.array-field__header-left {
-  min-width: 0;
-}
+  .array-field__header-left {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 
-.array-field__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #475467;
-  line-height: 1.2;
-}
+  .array-field__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--txtPrimaryColor);
+    line-height: 1.2;
+  }
 
-.array-field__count {
-  margin-top: 6px;
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #f2f4f7;
-  color: #667085;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-}
+  .array-field__count {
+    min-height: 20px;
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+    color: var(--txtHintColor);
+    background: var(--baseColor);
+  }
 
-.array-field__add-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid #d0d5dd;
-  background: #ffffff;
-  color: #475467;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  white-space: nowrap;
-}
+  .array-field__add-button {
+    gap: 5px;
+    white-space: nowrap;
+  }
 
-.array-field__add-button:hover {
-  background: #f9fafb;
-  border-color: #c7ced8;
-  color: #344054;
-}
+  .array-field__add-icon {
+    font-size: 13px;
+    line-height: 1;
+    font-weight: 700;
+  }
 
-.array-field__add-icon {
-  font-size: 14px;
-  line-height: 1;
-  font-weight: 700;
-}
+  .array-field__empty {
+    margin: 10px 12px 12px;
+    padding: 12px;
+    border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+    border-radius: var(--baseRadius);
+    background: color-mix(in srgb, var(--baseAlt1Color) 38%, var(--baseColor));
+    text-align: left;
+  }
 
-.array-field__empty {
-  margin: 14px 16px 16px;
-  padding: 16px;
-  border: 1px dashed #d6dde6;
-  border-radius: 10px;
-  background: #fbfcfd;
-  text-align: center;
-}
+  .array-field__empty-title {
+    font-size: var(--smFontSize);
+    font-weight: 600;
+    color: var(--txtPrimaryColor);
+    line-height: var(--smLineHeight);
+  }
 
-.array-field__empty-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #475467;
-}
+  .array-field__empty-text {
+    margin-top: 2px;
+    font-size: var(--smFontSize);
+    line-height: var(--smLineHeight);
+    color: var(--txtHintColor);
+  }
 
-.array-field__empty-text {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #667085;
-}
+  .array-field__items {
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
-.array-field__items {
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
+  .array-item {
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+    border-radius: var(--baseRadius);
+    overflow: hidden;
+    background: var(--baseColor);
+  }
 
-.array-item {
-  border: 1px solid #e1e7ee;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #ffffff;
-}
+  .array-item__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 84%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 46%, var(--baseColor));
+  }
 
-.array-item__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid #e8edf3;
-  background: #fafbfc;
-}
+  .array-item__title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
 
-.array-item__title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
+  .array-item__index {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+    background: var(--baseColor);
+    color: var(--txtHintColor);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
 
-.array-item__index {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: #f2f4f7;
-  color: #475467;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
+  .array-item__title {
+    font-size: var(--smFontSize);
+    font-weight: 600;
+    color: var(--txtPrimaryColor);
+    line-height: 1.2;
+  }
 
-.array-item__title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #475467;
-  line-height: 1.2;
-}
+  .array-item__remove-button {
+    white-space: nowrap;
+  }
 
-.array-item__remove-button {
-  border: 1px solid #f2d4d7;
-  background: #fffafa;
-  color: #c2414c;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  white-space: nowrap;
-}
+  .array-item__body {
+    padding: 10px;
+    background: transparent;
+  }
 
-.array-item__remove-button:hover {
-  background: #fff3f4;
-  border-color: #e8bcc2;
-  color: #b42318;
-}
+  .array-item__body :global(.pb-field:last-child) {
+    margin-bottom: 0;
+  }
 
-.array-item__body {
-  padding: 12px;
-  background: #ffffff;
-}
+  .array-item__primitive-label {
+    display: inline-block;
+    margin-bottom: 6px;
+    font-size: var(--smFontSize);
+    font-weight: 600;
+    color: var(--txtHintColor);
+  }
 
-.array-item__primitive-label {
-  display: inline-block;
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #475467;
-}
+  .array-item__primitive-input {
+    width: 100%;
+  }
 
-.array-item__primitive-input {
-  width: 100%;
-}
+  .array-item__primitive-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--smFontSize);
+    line-height: var(--smLineHeight);
+    color: var(--txtPrimaryColor);
+  }
 
-.array-item__primitive-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #475467;
-}
+  @media (max-width: 720px) {
+    .array-field__header,
+    .array-item__header {
+      flex-wrap: wrap;
+    }
 
+    .array-field__add-button,
+    .array-item__remove-button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
 </style>

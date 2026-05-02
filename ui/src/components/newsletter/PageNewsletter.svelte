@@ -1818,7 +1818,7 @@
     .subscriber-create-form {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
     }
 
     .subscriber-inline-create {
@@ -1914,7 +1914,7 @@
 
     .group-create-row .btn {
         flex: 0 0 auto;
-        min-height: var(--inputHeight);
+        min-height: var(--smBtnHeight);
     }
 
     .group-pill-list {
@@ -1979,7 +1979,6 @@
     }
 
     .bulk-action-btn {
-        min-height: var(--inputHeight);
         min-width: 145px;
     }
 
@@ -2472,6 +2471,7 @@
     }
 
     .campaign-builder-cta {
+        min-height: var(--inputHeight);
         min-width: 178px;
     }
 
@@ -2717,7 +2717,7 @@
 
     .action-btn {
         min-width: 96px;
-        min-height: var(--inputHeight);
+        min-height: var(--smBtnHeight);
     }
 
     .campaign-body-input {

@@ -34,89 +34,54 @@
 </script>
 
 <FieldShell {field} {id} {error} required={!!field?.required}>
-  <div class="pb-select-wrapper">
+  <div class="schema-select-wrap">
     <select
       id={id}
       name={field?.key}
-      class="form-select"
+      class="form-select schema-select-input"
       {disabled}
       bind:value
       on:change={onChange}
     >
-      <option value="">Select…</option>
+      <option value="">Select...</option>
 
       {#each options as opt}
         <option value={opt.value}>{opt.label}</option>
       {/each}
     </select>
 
-    <span class="pb-select-arrow"></span>
+    <span class="schema-select-arrow" aria-hidden="true"></span>
   </div>
 </FieldShell>
 
-<!--
 <style>
-  .pb-select-wrapper {
+  .schema-select-wrap {
     position: relative;
     width: 100%;
   }
 
-  .pb-select {
+  .schema-select-input {
+    width: 100%;
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-
-    width: 100%;
-    padding: 10px 36px 10px 12px;
-
-    font-size: 14px;
-    color: #1f2937;
-
-    background-color: #f8fafc;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-
-    outline: none;
-    cursor: pointer;
-
-    transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease,
-      background-color 0.15s ease;
+    padding-right: 34px;
   }
 
-  .pb-select:focus {
-    background-color: #ffffff;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-  }
-
-  .pb-select:disabled {
-    background-color: #f1f5f9;
-    color: #9ca3af;
-    cursor: not-allowed;
-  }
-
-  /* dropdown arrow */
-  .pb-select-arrow {
+  .schema-select-arrow {
     position: absolute;
-    top: 50%;
     right: 12px;
+    top: 50%;
     width: 0;
     height: 0;
-    pointer-events: none;
-
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #6b7280;
-
     transform: translateY(-50%);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid color-mix(in srgb, var(--txtHintColor) 90%, var(--txtPrimaryColor));
+    pointer-events: none;
   }
 
-  /* error state (if FieldShell adds .error) */
-  :global(.form-field.error) .pb-select {
-    border-color: #ef4444;
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+  .schema-select-input:disabled + .schema-select-arrow {
+    opacity: 0.55;
   }
 </style>
--->
