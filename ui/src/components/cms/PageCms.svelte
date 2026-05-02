@@ -1,4 +1,5 @@
 ﻿<script>
+    import { onMount, tick } from "svelte";
     import { querystring } from "svelte-spa-router";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
     import RefreshButton from "@/components/base/RefreshButton.svelte";
@@ -69,6 +70,7 @@
     let sectionErrorById = {};
     let isSavingSectionById = {};
     let pagePreviewReloadToken = 0;
+    const sectionCardElements = new Map();
 
     let lastCollectionsKey = "";
     let lastPersistedContextKey = "";
@@ -517,6 +519,7 @@
 
         try {
             const parsed = new URL(normalizedPreviewUrl);
+            parsed.searchParams.set("cmsPreview", "1");
             const normalizedBlockId = normalizeString(blockId);
             if (normalizedBlockId) {
                 parsed.searchParams.set("focusBlock", normalizedBlockId);
@@ -529,7 +532,7 @@
         }
     }
 
-    function buildPreviewIframeSrc(url, reloadToken, reloadQueryKey = "_cmsPreview") {
+    function buildPreviewIframeSrc(url, reloadToken) {
         const previewUrl = normalizeString(url);
         if (!previewUrl) {
             return "";
@@ -537,8 +540,8 @@
 
         try {
             const parsed = new URL(previewUrl);
-            if (reloadToken && normalizeString(reloadQueryKey)) {
-                parsed.searchParams.set(reloadQueryKey, `${reloadToken}`);
+            if (reloadToken) {
+                parsed.searchParams.set("_cmsPreview", `${reloadToken}`);
             }
             return parsed.toString();
         } catch (_) {
@@ -787,6 +790,152 @@
         focusedBlockId = "";
         refreshPagePreview();
     }
+
+    function getOriginFromUrl(value) {
+        try {
+            return normalizeString(new URL(value).origin);
+        } catch (_) {
+            return "";
+        }
+    }
+
+    function getAllowedPreviewOrigins() {
+        const allowedOrigins = new Set();
+        const configuredBase = normalizeBaseUrl(getConfiguredPublicBaseUrl(), { allowSingleLabelHost: false });
+        const websiteBase = normalizeBaseUrl(getWebsitePublicUrl(selectedWebsite), { allowSingleLabelHost: false });
+
+        for (const candidate of [configuredBase, pagePreviewUrl, websiteBase]) {
+            const origin = getOriginFromUrl(candidate);
+            if (origin) {
+                allowedOrigins.add(origin);
+            }
+        }
+
+        return allowedOrigins;
+    }
+
+    function isPreviewMessageOriginAllowed(origin) {
+        const normalizedOrigin = normalizeString(origin);
+        if (!normalizedOrigin) {
+            return false;
+        }
+
+        const allowedOrigins = getAllowedPreviewOrigins();
+        if (allowedOrigins.has(normalizedOrigin)) {
+            return true;
+        }
+
+        if (import.meta.env.DEV) {
+            return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedOrigin);
+        }
+
+        return false;
+    }
+
+    function parsePreviewMessageData(data) {
+        if (data && typeof data === "object") {
+            return data;
+        }
+
+        if (typeof data === "string") {
+            try {
+                const parsed = JSON.parse(data);
+                return parsed && typeof parsed === "object" ? parsed : null;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    function registerSectionCard(node, blockId) {
+        let currentBlockId = normalizeString(blockId);
+
+        if (currentBlockId) {
+            sectionCardElements.set(currentBlockId, node);
+        }
+
+        return {
+            update(nextBlockId) {
+                const normalizedNextBlockId = normalizeString(nextBlockId);
+                if (currentBlockId && currentBlockId !== normalizedNextBlockId) {
+                    sectionCardElements.delete(currentBlockId);
+                }
+                currentBlockId = normalizedNextBlockId;
+                if (currentBlockId) {
+                    sectionCardElements.set(currentBlockId, node);
+                }
+            },
+            destroy() {
+                if (currentBlockId) {
+                    sectionCardElements.delete(currentBlockId);
+                }
+            },
+        };
+    }
+
+    function scrollSectionCardIntoView(blockId) {
+        const normalizedBlockId = normalizeString(blockId);
+        if (!normalizedBlockId) {
+            return;
+        }
+
+        const cardElement = sectionCardElements.get(normalizedBlockId);
+        if (!cardElement || typeof cardElement.scrollIntoView !== "function") {
+            return;
+        }
+
+        cardElement.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+            inline: "nearest",
+        });
+    }
+
+    async function handlePreviewIframeEditMessage(event) {
+        const message = parsePreviewMessageData(event?.data);
+        if (!message || message.source !== "nuvio-preview" || message.type !== "edit-block") {
+            return;
+        }
+
+        if (!isPreviewMessageOriginAllowed(event?.origin || "")) {
+            return;
+        }
+
+        const nextBlockId = normalizeString(message?.blockId);
+        if (!nextBlockId) {
+            return;
+        }
+
+        if (!blocks.some((block) => `${block?.id || ""}` === nextBlockId)) {
+            return;
+        }
+
+        activePageEditorTab = pageEditorTabContentKey;
+        focusedBlockId = nextBlockId;
+        openSectionId = nextBlockId;
+        refreshPagePreview();
+
+        await tick();
+        scrollSectionCardIntoView(nextBlockId);
+    }
+
+    onMount(() => {
+        if (typeof window === "undefined") {
+            return undefined;
+        }
+
+        const handleWindowMessage = (event) => {
+            void handlePreviewIframeEditMessage(event);
+        };
+
+        window.addEventListener("message", handleWindowMessage);
+
+        return () => {
+            window.removeEventListener("message", handleWindowMessage);
+        };
+    });
 
     function updateSectionDraft(blockId, nextValue) {
         sectionPropsDraftById = {
@@ -1461,6 +1610,7 @@
                                                         class="section-card"
                                                         class:open={openSectionId === block.id}
                                                         class:selected={focusedBlockId === block.id}
+                                                        use:registerSectionCard={block.id}
                                                     >
                                                         <button
                                                             type="button"
