@@ -764,7 +764,7 @@
                 <i class="ri-information-line" />
             </div>
             <div>                Newsletter collections are missing:                <strong>{missingCollectionNames.join(", ")}</strong>.                Run the latest migrations to enable Newsletter V1.            </div>        </div>    {:else}
-        <section class="newsletter-head panel m-b-base">
+        <section class="newsletter-head operations-head panel m-b-base">
             <div class="head-main">
                 <div class="summary-title-wrap">
                     <div class="title-row">
@@ -851,7 +851,6 @@
                                     <button
                                         type="button"
                                         class="btn btn-sm add-form-toggle-btn"
-                                        class:btn-strong={!isSubscriberCreateOpen}
                                         class:btn-outline={isSubscriberCreateOpen}
                                         on:click={() => (isSubscriberCreateOpen = !isSubscriberCreateOpen)}
                                     >
@@ -910,7 +909,7 @@
                                     <div class="create-action-field">
                                         <button
                                             type="submit"
-                                            class="btn btn-strong add-subscriber-btn"
+                                            class="btn add-subscriber-btn"
                                             class:btn-loading={isCreatingSubscriber}
                                             disabled={!!createSubscriberDisabledReason}
                                             title={createSubscriberDisabledReason || null}
@@ -1166,7 +1165,7 @@
                                                         {#if editingSubscriberId === subscriber.id}
                                                             <button
                                                                 type="button"
-                                                                class="btn btn-sm btn-strong action-btn"
+                                                                class="btn btn-sm action-btn"
                                                                 class:btn-loading={isSavingSubscriber}
                                                                 disabled={isSavingSubscriber}
                                                                 on:click={() => saveSubscriberEdit(subscriber)}
@@ -1274,7 +1273,7 @@
                         <div class="campaign-layout-grid">
                             <section class="panel campaign-composer-panel">
                                 <div class="campaign-top-controls m-b-sm">
-                                    <div class="tabs-header compact combined left campaign-workspace-tabs">
+                                    <div class="tabs-header compact combined left operations-tabs">
                                         <button
                                             type="button"
                                             class="tab-item"
@@ -1317,7 +1316,7 @@
                                                 Write your campaign and review the preview before moving to audience.
                                             </p>
                                         </div>
-                                        <div class="tabs-header compact combined left campaign-builder-view-tabs">
+                                        <div class="tabs-header compact combined left operations-tabs campaign-builder-view-tabs">
                                             <button
                                                 type="button"
                                                 class="tab-item"
@@ -1392,7 +1391,7 @@
                                                 </span>
                                                 <button
                                                     type="button"
-                                                    class="btn btn-strong action-btn campaign-builder-cta"
+                                                    class="btn action-btn campaign-builder-cta"
                                                     disabled={!campaignSubjectValue || !campaignBodyValue}
                                                     on:click={() => {
                                                         campaignWorkspace = "audience";
@@ -1450,7 +1449,7 @@
                                                 <button
                                                     type="submit"
                                                     form="campaign-audience-form"
-                                                    class="btn btn-sm btn-strong action-btn"
+                                                    class="btn btn-sm action-btn"
                                                     class:btn-loading={isCreatingCampaign || isSavingCampaign}
                                                     disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
                                                     title={createCampaignDisabledReason || null}
@@ -1680,7 +1679,7 @@
                                                         {#if normalizeStatus(campaign.status) !== "sent"}
                                                             <button
                                                                 type="button"
-                                                                class="btn btn-sm btn-strong action-btn campaign-row-btn"
+                                                                class="btn btn-sm action-btn campaign-row-btn"
                                                                 class:btn-loading={isSendingCampaign[campaign.id]}
                                                                 disabled={!!getSendCampaignDisabledReason(campaign)}
                                                                 title={getSendCampaignDisabledReason(campaign) || null}
@@ -1732,7 +1731,7 @@
             <div class="newsletter-modal-wrap" role="dialog" aria-modal="true" aria-label="Confirm send campaign">
                 <button
                     type="button"
-                    aria-label="Close send confirmation"                    class="newsletter-modal-overlay"                    on:click={closeSendCampaignModal}                />                <div class="newsletter-modal panel" on:click|stopPropagation>                    <h4 class="m-t-0 m-b-xs">Send campaign now?</h4>                    <p class="txt-sm txt-hint m-b-sm">                        <strong>{pendingSendCampaign.subject}</strong> will be sent to approximately                        <strong> {pendingSendRecipientsCount}</strong> recipient(s).                    </p>                    <div class="flex gap-5">                        <button type="button" class="btn btn-sm btn-outline" on:click={closeSendCampaignModal}>                            <span class="txt">Cancel</span>                        </button>                        <button                            type="button"                            class="btn btn-sm btn-strong"                            class:btn-loading={isSendingCampaign[pendingSendCampaign.id]}                            disabled={!!isSendingCampaign[pendingSendCampaign.id]}                            on:click={confirmSendCampaign}                        >                            <span class="txt">Confirm send</span>                        </button>                    </div>                </div>
+                    aria-label="Close send confirmation"                    class="newsletter-modal-overlay"                    on:click={closeSendCampaignModal}                />                <div class="newsletter-modal panel" on:click|stopPropagation>                    <h4 class="m-t-0 m-b-xs">Send campaign now?</h4>                    <p class="txt-sm txt-hint m-b-sm">                        <strong>{pendingSendCampaign.subject}</strong> will be sent to approximately                        <strong> {pendingSendRecipientsCount}</strong> recipient(s).                    </p>                    <div class="flex gap-5">                        <button type="button" class="btn btn-sm btn-outline" on:click={closeSendCampaignModal}>                            <span class="txt">Cancel</span>                        </button>                        <button                            type="button"                            class="btn btn-sm"                            class:btn-loading={isSendingCampaign[pendingSendCampaign.id]}                            disabled={!!isSendingCampaign[pendingSendCampaign.id]}                            on:click={confirmSendCampaign}                        >                            <span class="txt">Confirm send</span>                        </button>                    </div>                </div>
             </div>
         {/if}
 
@@ -1773,221 +1772,20 @@
         {/if}
     {/if}
 </PageWrapper>
-<style>    .newsletter-head {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
+<style>
+    .newsletter-head.operations-head .head-selector {
+        width: min(100%, 560px);
+    }
+
+    .newsletter-head.operations-head .head-description {
+        max-width: 460px;
     }
 
     .subscribers-section-panel {
         padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
     }
 
-    .head-main {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-    }
-
-    .summary-title-wrap {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 260px;
-    }
-
-    .title-row {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 0;
-    }
-
-    .head-selector {
-        width: min(100%, 560px);
-    }
-
-    .selector-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .selector-label {
-        white-space: nowrap;
-        min-width: 52px;
-    }
-
-    .selector-row .input {
-        flex: 1 1 auto;
-        min-width: 250px;
-    }
-    .summary-badges {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        justify-content: flex-end;
-        margin-left: auto;
-        flex: 1 1 auto;
-        min-width: 0;
-        overflow: visible;
-    }
-
-    .campaign-workspace-tabs,
-    .campaign-builder-view-tabs {
-        margin: 0;
-        display: inline-flex;
-        align-items: center;
-        align-self: flex-start;
-        width: fit-content !important;
-        max-width: 100%;
-        flex: 0 0 auto;
-        flex-wrap: wrap;
-        gap: 2px;
-        padding: 2px;
-        border: 0 !important;
-        border-radius: calc(var(--baseRadius) + 2px);
-        background: var(--baseAlt1Color);
-        overflow: hidden;
-        box-shadow: none !important;
-    }
-
-    .operations-tabs {
-        margin: 0;
-        display: inline-flex;
-        align-items: center;
-        flex: 0 0 auto;
-        gap: 2px;
-        padding: 2px;
-        border: 0 !important;
-        border-radius: calc(var(--baseRadius) + 2px);
-        background: var(--baseAlt1Color);
-        overflow: hidden;
-        box-shadow: none !important;
-    }
-
-    .operations-tabs .tab-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        min-height: 34px;
-        padding: 0 16px;
-        border: 0 !important;
-        border-radius: calc(var(--baseRadius) - 1px);
-        background: transparent;
-        font-weight: 500;
-        color: color-mix(in srgb, var(--txtPrimaryColor) 76%, var(--txtHintColor));
-        transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-    }
-
-    .operations-tabs .tab-item + .tab-item {
-        box-shadow: none;
-    }
-
-    .operations-tabs .tab-item .tab-icon {
-        font-size: 13px;
-        opacity: 0.72;
-        transition: opacity 140ms ease, color 140ms ease;
-    }
-
-    .operations-tabs .tab-item:hover {
-        background: color-mix(in srgb, var(--baseColor) 75%, var(--baseAlt1Color));
-        color: var(--txtPrimaryColor);
-    }
-
-    .operations-tabs .tab-item:focus-visible {
-        outline: none;
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 50%, transparent);
-    }
-
-    .operations-tabs .tab-item.active {
-        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
-        color: var(--txtPrimaryColor);
-        font-weight: 600;
-        box-shadow: none;
-    }
-
-    .operations-tabs .tab-item.active .tab-icon {
-        opacity: 0.95;
-        color: color-mix(in srgb, var(--txtPrimaryColor) 86%, var(--txtHintColor));
-    }
-
-    .campaign-workspace-tabs .tab-item,
-    .campaign-builder-view-tabs .tab-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        min-height: 34px;
-        border: 0 !important;
-        border-radius: calc(var(--baseRadius) - 1px);
-        background: transparent;
-        color: color-mix(in srgb, var(--txtPrimaryColor) 76%, var(--txtHintColor));
-        padding: 0 14px;
-        font-weight: 500;
-        transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-    }
-
-    .campaign-workspace-tabs .tab-item:hover,
-    .campaign-builder-view-tabs .tab-item:hover {
-        background: color-mix(in srgb, var(--baseColor) 75%, var(--baseAlt1Color));
-        color: var(--txtPrimaryColor);
-    }
-
-    .campaign-workspace-tabs .tab-item:focus-visible,
-    .campaign-builder-view-tabs .tab-item:focus-visible {
-        outline: none;
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 50%, transparent);
-    }
-
-    .campaign-workspace-tabs .tab-item.active,
-    .campaign-builder-view-tabs .tab-item.active {
-        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
-        color: var(--txtPrimaryColor);
-        font-weight: 600;
-        box-shadow: none;
-    }
-
-    .campaign-workspace-tabs .tab-item .tab-icon,
-    .campaign-builder-view-tabs .tab-item .tab-icon {
-        font-size: 13px;
-        opacity: 0.72;
-        transition: opacity 140ms ease, color 140ms ease;
-    }
-
-    .campaign-workspace-tabs .tab-item.active .tab-icon,
-    .campaign-builder-view-tabs .tab-item.active .tab-icon {
-        opacity: 0.95;
-        color: color-mix(in srgb, var(--txtPrimaryColor) 86%, var(--txtHintColor));
-    }
-
-    .head-tools {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        align-items: center;
-        gap: 8px;
-    }
-
-    .summary-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;        border: 1px solid var(--baseAlt2Color);        border-radius: 999px;        background: var(--baseAlt1Color);        color: var(--txtHintColor);        font-size: 12px;
-        padding: 5px 9px;
-        white-space: nowrap;
-        flex: 0 0 auto;
-    }
-
-    .head-description {
-        max-width: 460px;
-    }
-    .summary-pill i {
-        color: var(--txtPrimaryColor);
-        opacity: 0.85;
-        font-size: 13px;
-    }
-.subscriber-controls {
+    .subscriber-controls {
         display: flex;
         align-items: flex-end;
         justify-content: flex-start;
@@ -1997,7 +1795,7 @@
         padding-top: 10px;
     }
 
-.subscribers-panel-header {
+    .subscribers-panel-header {
         display: flex;
         align-items: center;
         gap: 10px;
@@ -2900,10 +2698,6 @@
         min-height: var(--inputHeight);
     }
 
-    .btn-strong {
-        font-weight: 600;
-    }
-
     .campaign-body-input {
         min-height: 170px;
         resize: vertical;
@@ -2953,16 +2747,6 @@
     }
 
     @media (max-width: 980px) {
-        .head-tools {
-            align-items: stretch;
-            grid-template-columns: 1fr;
-        }
-
-        .summary-badges {
-            justify-content: flex-start;
-            margin-left: 0;
-        }
-
         .subscriber-controls {
             align-items: stretch;
         }
@@ -3070,26 +2854,6 @@
     }
 
     @media (max-width: 640px) {
-        .head-main {
-            align-items: stretch;
-        }
-
-        .head-selector {
-            width: 100%;
-        }
-
-        .selector-row {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .selector-label {
-            min-width: 0;
-        }
-
-        .selector-row .input {
-            min-width: 0;
-        }
         .subscriber-create-top {
             grid-template-columns: 1fr;
         }
@@ -3107,7 +2871,7 @@
             width: 100%;
             min-width: 0;
         }
-        .summary-pill {            font-size: 11px;            padding: 5px 9px;        }        .subscriber-filter-grid {
+        .subscriber-filter-grid {
             grid-template-columns: 1fr;
         }
 

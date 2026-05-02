@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import { querystring } from "svelte-spa-router";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
+    import OverlayPanel from "@/components/base/OverlayPanel.svelte";
     import RefreshButton from "@/components/base/RefreshButton.svelte";
     import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
     import { pageTitle } from "@/stores/app";
@@ -38,6 +39,7 @@
     let pageSearch = "";
     let focusedBlockId = "";
     let editingSectionId = "";
+    let sectionEditorPanel;
 
     let isLoadingWebsites = false;
     let isLoadingPages = false;
@@ -1347,7 +1349,7 @@
             </div>
         </div>
     {:else}
-        <section class="cms-head panel m-b-base">
+        <section class="cms-head operations-head panel m-b-base">
             <div class="head-main">
                 <div class="summary-title-wrap">
                     <div class="title-row">
@@ -1383,7 +1385,7 @@
             </div>
 
             <div class="head-tools">
-                <div class="tabs-header compact combined left operations-tabs cms-top-tabs">
+                <div class="tabs-header compact combined left operations-tabs">
                     <button
                         type="button"
                         class="tab-item"
@@ -1503,7 +1505,7 @@
                                         <div class="page-row-main">
                                             <span class="page-row-title">{getPageLabel(page)}</span>
                                             {#if pageEnabledField}
-                                                <span class="page-list-status" class:is-active={isPageActive(page)}>
+                                                <span class="label label-sm page-list-status" class:is-active={isPageActive(page)}>
                                                     {isPageActive(page) ? "Active" : "Inactive"}
                                                 </span>
                                             {/if}
@@ -1525,11 +1527,11 @@
                                 </div>
                                 <div class="page-context-meta">
                                     {#if pageEnabledField}
-                                        <span class="page-status-pill" class:is-active={isPageActive(selectedPage)}>
+                                        <span class="label label-sm page-status-pill" class:is-active={isPageActive(selectedPage)}>
                                             {isPageActive(selectedPage) ? "Active" : "Inactive"}
                                         </span>
                                     {/if}
-                                    <span class="page-status-pill page-count-pill">{blocks.length} sections</span>
+                                    <span class="label label-sm page-status-pill page-count-pill">{blocks.length} sections</span>
                                 </div>
                             </div>
 
@@ -1690,7 +1692,7 @@
                                         <div class="form-actions m-t-sm">
                                             <button
                                                 type="button"
-                                                class="btn btn-sm btn-strong"
+                                                class="btn btn-sm"
                                                 disabled={isSavingPage}
                                                 on:click={savePageSeo}
                                             >
@@ -1804,7 +1806,7 @@
                                 <div class="form-actions m-t-sm">
                                     <button
                                         type="button"
-                                        class="btn btn-sm btn-strong"
+                                        class="btn btn-sm"
                                         disabled={isSavingWebsiteIdentitySeo}
                                         on:click={saveWebsiteIdentitySeo}
                                     >
@@ -1836,7 +1838,7 @@
                             <div class="form-actions m-t-sm">
                                 <button
                                     type="button"
-                                    class="btn btn-sm btn-strong"
+                                    class="btn btn-sm"
                                     disabled={isSavingWebsiteSettings}
                                     on:click={saveWebsiteSettings}
                                 >
@@ -1854,235 +1856,72 @@
         </section>
 
         {#if activeCmsTab === cmsTabPagesKey && selectedEditingSection}
-            <div class="section-drawer-layer" role="dialog" aria-modal="true" aria-label="Edit section">
-                <button
-                    type="button"
-                    class="section-drawer-backdrop"
-                    aria-label="Close section editor"
-                    on:click={closeSectionEditor}
-                />
-
-                <aside class="section-drawer-panel" on:click|stopPropagation>
-                    <header class="section-drawer-header">
-                        <div class="section-drawer-title-wrap">
-                            <strong>{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
-                            <span class="txt-sm txt-hint">Edit section content.</span>
-                            <div class="section-drawer-meta">
-                                <span class="section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
-                                {#each selectedEditingSectionSummaryPills as summaryPill}
-                                    <span class="section-summary-pill">{summaryPill}</span>
-                                {/each}
-                                <span class="section-summary-pill">Page: {getPageLabel(selectedPage)}</span>
-                            </div>
+            <OverlayPanel
+                bind:this={sectionEditorPanel}
+                class="overlay-panel-lg cms-section-editor-panel"
+                active={true}
+                btnClose={false}
+                escClose={false}
+                overlayClose={true}
+                on:hide={closeSectionEditor}
+            >
+                <svelte:fragment slot="header">
+                    <div class="section-drawer-title-wrap">
+                        <span class="txt-xs txt-hint txt-uppercase txt-bold">Edit section</span>
+                        <strong>{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
+                        <span class="txt-sm txt-hint">Edit section content.</span>
+                        <div class="section-drawer-meta">
+                            <span class="label label-sm section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
+                            {#each selectedEditingSectionSummaryPills as summaryPill}
+                                <span class="label label-sm section-summary-pill">{summaryPill}</span>
+                            {/each}
+                            <span class="label label-sm section-summary-pill">Page: {getPageLabel(selectedPage)}</span>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline section-drawer-close-btn" on:click={closeSectionEditor}>
-                            Close
-                        </button>
-                    </header>
-
-                    <div class="section-drawer-body">
-                        {#if selectedEditingSectionFields.length}
-                            <SchemaForm
-                                fields={selectedEditingSectionFields}
-                                value={sectionPropsDraftById[selectedEditingSection.id] || {}}
-                                showImport={false}
-                                path={`sections.${selectedEditingSection.id}`}
-                                on:propsChange={(event) => updateSectionDraft(selectedEditingSection.id, event.detail)}
-                            />
-                        {:else}
-                            <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
-                        {/if}
-
-                        {#if sectionErrorById[selectedEditingSection.id]}
-                            <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[selectedEditingSection.id]}</p>
-                        {/if}
                     </div>
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline section-drawer-close-btn"
+                        on:click={() => sectionEditorPanel?.hide()}
+                    >
+                        Close
+                    </button>
+                </svelte:fragment>
 
-                    <footer class="section-drawer-footer">
-                        <button type="button" class="btn btn-sm btn-outline" on:click={closeSectionEditor}>Cancel</button>
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-strong"
-                            disabled={!!isSavingSectionById[selectedEditingSection.id] || !blockPropsField}
-                            on:click={() => saveSection(selectedEditingSection)}
-                        >
-                            {isSavingSectionById[selectedEditingSection.id] ? "Saving..." : "Save changes"}
-                        </button>
-                    </footer>
-                </aside>
-            </div>
+                <div class="section-drawer-body">
+                    {#if selectedEditingSectionFields.length}
+                        <SchemaForm
+                            fields={selectedEditingSectionFields}
+                            value={sectionPropsDraftById[selectedEditingSection.id] || {}}
+                            showImport={false}
+                            path={`sections.${selectedEditingSection.id}`}
+                            on:propsChange={(event) => updateSectionDraft(selectedEditingSection.id, event.detail)}
+                        />
+                    {:else}
+                        <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
+                    {/if}
+
+                    {#if sectionErrorById[selectedEditingSection.id]}
+                        <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[selectedEditingSection.id]}</p>
+                    {/if}
+                </div>
+
+                <svelte:fragment slot="footer">
+                    <button type="button" class="btn btn-sm btn-outline" on:click={() => sectionEditorPanel?.hide()}>Cancel</button>
+                    <button
+                        type="button"
+                        class="btn btn-sm"
+                        disabled={!!isSavingSectionById[selectedEditingSection.id] || !blockPropsField}
+                        on:click={() => saveSection(selectedEditingSection)}
+                    >
+                        {isSavingSectionById[selectedEditingSection.id] ? "Saving..." : "Save changes"}
+                    </button>
+                </svelte:fragment>
+            </OverlayPanel>
         {/if}
     {/if}
 </PageWrapper>
 
 <style>
-    .cms-head {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
-    }
-
-    .head-main {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-    }
-
-    .summary-title-wrap {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 260px;
-    }
-
-    .title-row {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 0;
-    }
-
-    .head-description {
-        max-width: 520px;
-    }
-
-    .head-selector {
-        width: min(100%, 620px);
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }
-
-    .selector-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .selector-label {
-        white-space: nowrap;
-        min-width: 52px;
-    }
-
-    .selector-row .input {
-        flex: 1 1 auto;
-        min-width: 260px;
-    }
-
-    .selector-row .btn {
-        flex: 0 0 auto;
-    }
-
-    .summary-badges {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        justify-content: flex-end;
-        margin-left: auto;
-        flex: 1 1 auto;
-        min-width: 0;
-        overflow: visible;
-    }
-
-    .head-tools {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        align-items: center;
-        gap: 8px;
-        margin-top: 0;
-    }
-
-    .summary-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: 999px;
-        background: var(--baseAlt1Color);
-        color: var(--txtHintColor);
-        font-size: 12px;
-        padding: 5px 9px;
-        white-space: nowrap;
-    }
-
-    .summary-pill i {
-        color: var(--txtPrimaryColor);
-        opacity: 0.85;
-        font-size: 13px;
-    }
-
-    .summary-pill.warning {
-        color: color-mix(in srgb, var(--dangerColor) 65%, var(--txtHintColor));
-    }
-
-    .operations-tabs {
-        margin: 0;
-        display: inline-flex;
-        align-items: center;
-        flex: 0 0 auto;
-        gap: 2px;
-        padding: 2px;
-        border: 0 !important;
-        border-radius: calc(var(--baseRadius) + 2px);
-        background: var(--baseAlt1Color);
-        overflow: hidden;
-        box-shadow: none !important;
-    }
-
-    .operations-tabs .tab-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        min-height: 34px;
-        padding: 0 16px;
-        border: 0 !important;
-        border-radius: calc(var(--baseRadius) - 1px);
-        background: transparent;
-        font-weight: 500;
-        color: color-mix(in srgb, var(--txtPrimaryColor) 76%, var(--txtHintColor));
-        transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-    }
-
-    .operations-tabs .tab-item + .tab-item {
-        box-shadow: none;
-    }
-
-    .operations-tabs .tab-item .tab-icon {
-        font-size: 13px;
-        opacity: 0.72;
-        transition: opacity 140ms ease, color 140ms ease;
-    }
-
-    .operations-tabs .tab-item:hover {
-        background: color-mix(in srgb, var(--baseColor) 75%, var(--baseAlt1Color));
-        color: var(--txtPrimaryColor);
-    }
-
-    .operations-tabs .tab-item:focus-visible {
-        outline: none;
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 50%, transparent);
-    }
-
-    .operations-tabs .tab-item.active {
-        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
-        color: var(--txtPrimaryColor);
-        font-weight: 600;
-        box-shadow: none;
-    }
-
-    .operations-tabs .tab-item.active .tab-icon {
-        opacity: 0.95;
-        color: color-mix(in srgb, var(--txtPrimaryColor) 86%, var(--txtHintColor));
-    }
-
-    .cms-top-tabs {
-        margin-top: 0;
-        flex: 0 0 auto;
-    }
-
     .page-editor-tabs-row {
         display: flex;
         align-items: center;
@@ -2222,18 +2061,6 @@
 
     .page-list-status,
     .page-status-pill {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 20px;
-        padding: 0 8px;
-        border-radius: 999px;
-        border: 1px solid var(--baseAlt2Color);
-        background: var(--baseAlt1Color);
-        color: var(--txtHintColor);
-        font-size: 11px;
-        line-height: 1;
-        white-space: nowrap;
         font-weight: 600;
     }
 
@@ -2382,54 +2209,6 @@
         min-height: clamp(560px, calc(100vh - 300px), 780px);
     }
 
-    .section-drawer-layer {
-        position: fixed;
-        inset: 0;
-        z-index: 80;
-        display: flex;
-        justify-content: flex-end;
-        pointer-events: none;
-    }
-
-    .section-drawer-backdrop {
-        position: absolute;
-        inset: 0;
-        border: 0;
-        background: rgba(6, 12, 24, 0.36);
-        pointer-events: auto;
-        cursor: default;
-    }
-
-    .section-drawer-panel {
-        position: relative;
-        z-index: 1;
-        width: min(900px, 90vw);
-        height: 100%;
-        border-radius: 0;
-        border-left: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
-        border-top: 0;
-        border-right: 0;
-        border-bottom: 0;
-        background: var(--baseColor);
-        display: flex;
-        flex-direction: column;
-        pointer-events: auto;
-        box-shadow: -8px 0 22px color-mix(in srgb, var(--txtPrimaryColor) 10%, transparent);
-    }
-
-    .section-drawer-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 8px;
-        position: sticky;
-        top: 0;
-        z-index: 2;
-        border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
-        background: var(--baseColor);
-        padding: 8px 12px 7px;
-    }
-
     .section-drawer-title-wrap {
         min-width: 0;
         display: flex;
@@ -2467,18 +2246,6 @@
         min-height: 0;
         overflow: auto;
         padding: 10px 12px 10px;
-    }
-
-    .section-drawer-footer {
-        position: sticky;
-        bottom: 0;
-        z-index: 2;
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
-        background: var(--baseColor);
-        padding: 10px 16px 12px;
     }
 
     .fallback-sections-list {
@@ -2542,13 +2309,10 @@
     }
 
     .section-summary-pill {
-        display: inline-flex;
-        align-items: center;
+        --labelHPadding: 7px;
+        min-height: 18px;
         border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
-        border-radius: 999px;
-        padding: 2px 7px;
-        font-size: 10px;
-        line-height: 1.1;
+        line-height: 1;
         color: var(--txtHintColor);
         background: var(--baseColor);
     }
@@ -2670,32 +2434,8 @@
     }
 
     @media (max-width: 840px) {
-        .cms-head,
         .cms-section-panel {
             padding: calc(var(--baseSpacing) - 12px) calc(var(--baseSpacing) - 10px);
-        }
-
-        .selector-row {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .selector-row .input {
-            min-width: 0;
-        }
-
-        .selector-label {
-            min-width: 0;
-        }
-
-        .summary-badges {
-            justify-content: flex-start;
-            margin-left: 0;
-        }
-
-        .head-tools {
-            align-items: stretch;
-            grid-template-columns: 1fr;
         }
 
         .form-grid.two-col {
@@ -2741,11 +2481,6 @@
 
         .content-preview-iframe {
             min-height: clamp(420px, 58vh, 620px);
-        }
-
-        .section-drawer-header {
-            flex-direction: column;
-            align-items: stretch;
         }
 
         .pages-list-totals {
