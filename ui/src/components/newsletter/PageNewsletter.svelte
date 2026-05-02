@@ -1,4 +1,4 @@
-<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
+<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
     $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
@@ -109,7 +109,7 @@
         campaignForm.recipientsIds,
     );
     $: campaignSubjectValue = `${campaignForm.subject || ""}`.trim();
-    $: campaignBodyValue = `${campaignForm.body || ""}`.trim();
+    $: campaignBodyValue = `${campaignForm.body || ""}`.trim();    $: campaignBodyEditorConfig = {        ...CommonHelper.defaultEditorOptions(),        convert_urls: false,        relative_urls: false,        min_height: 320,        height: 320,    };
     $: shouldShowCampaignSubjectValidation = !campaignSubjectValue && (!!campaignBodyValue || !!campaignFormError);
     $: shouldShowCampaignBodyValidation = !campaignBodyValue && (!!campaignSubjectValue || !!campaignFormError);
     $: filteredCampaigns = campaigns.filter((campaign) => {
@@ -1309,7 +1309,7 @@
 
                                 {#if campaignWorkspace === "builder"}
                                     <div class="campaign-head-row m-b-sm">
-                                        <div class="campaign-head-inline">
+                                        <div class="campaign-head-inline campaign-head-inline--single-line">
                                             <h4 class="m-0">Campaign Builder</h4>
                                             <div class="campaign-step-label txt-xs txt-hint">Step 1 of 2</div>
                                             <p class="txt-sm txt-hint m-b-0 campaign-head-description">
@@ -1348,9 +1348,6 @@
                                     >
                                         {#if campaignBuilderShowEditor}
                                         <div class="campaign-builder-editor">
-                                            <div class="campaign-editor-header m-b-xs">
-                                                <h5 class="m-0">Editor</h5>
-                                            </div>
                                             <label class="txt-sm txt-hint block m-b-5" for="campaign-subject">Subject</label>
                                             <input
                                                 id="campaign-subject"
@@ -1364,15 +1361,16 @@
                                                 <div class="txt-xs txt-danger m-t-5">Subject is required.</div>
                                             {/if}
 
-                                            <label class="txt-sm txt-hint block m-b-5 m-t-sm" for="campaign-body">Body</label>
-                                            <textarea
-                                                id="campaign-body"
-                                                class="input campaign-body-input"
-                                                rows="10"
-                                                placeholder="Campaign HTML or plain text content..."
-                                                bind:value={campaignForm.body}
-                                                on:input={clearCampaignFormError}
-                                            />
+                                            <label class="txt-sm txt-hint block m-b-5 m-t-sm" for="campaign-body-editor">Body</label>
+                                            <div class="campaign-body-editor">
+                                                <TinyMCE
+                                                    id="campaign-body-editor"
+                                                    conf={campaignBodyEditorConfig}
+                                                    bind:value={campaignForm.body}
+                                                    on:change={clearCampaignFormError}
+                                                    on:input={clearCampaignFormError}
+                                                />
+                                            </div>
                                             {#if shouldShowCampaignBodyValidation}
                                                 <div class="txt-xs txt-danger m-t-5">Body is required.</div>
                                             {/if}
@@ -1490,15 +1488,14 @@
                                     <form id="campaign-audience-form" class="grid campaign-audience-form" on:submit|preventDefault={saveCampaignDraftFromComposer}>
                                         <div class="col-12 manual-recipients m-t-sm">
                                             <div class="manual-recipients-head">
-                                                <h5 class="m-0">Recipients</h5>
-                                                <span class="manual-recipients-count txt-xs">
-                                                    {campaignForm.recipientsIds.length} selected / {activeSubscribers.length} active
-                                                </span>
-                                            </div>
-
-                                            <div class="manual-group-tools m-b-sm">
-                                                <div class="manual-group-tools-head">
-                                                    <span class="txt-sm txt-hint">Choose individual recipients, mark everyone, or select by groups.</span>
+                                                <div class="manual-recipients-title-row">
+                                                    <h5 class="m-0">Recipients</h5>
+                                                    <span class="txt-sm txt-hint manual-recipients-help">Choose individual recipients, mark everyone, or select by groups.</span>
+                                                </div>
+                                                <div class="manual-recipients-tools">
+                                                    <span class="manual-recipients-count txt-xs">
+                                                        {campaignForm.recipientsIds.length} selected / {activeSubscribers.length} active
+                                                    </span>
                                                     <div class="manual-group-action-buttons">
                                                         <button type="button" class="btn btn-xs btn-outline" on:click={selectAllManualRecipients}>
                                                             <span class="txt">Mark everyone</span>
@@ -1508,6 +1505,9 @@
                                                         </button>
                                                     </div>
                                                 </div>
+                                            </div>
+
+                                            <div class="manual-group-tools m-b-sm">
                                                 {#if hasSubscriberGroupsFeature && subscriberGroups.length}
                                                     <div class="manual-group-chip-list">
                                                         {#each subscriberGroups as group (group.id)}
@@ -1702,73 +1702,104 @@
         {/if}
 
         {#if isCampaignPreviewExpanded}
-            <div class="newsletter-modal-wrap" role="dialog" aria-modal="true" aria-label="Campaign preview">
-                <button
-                    type="button"
-                    aria-label="Close campaign preview"
-                    class="newsletter-modal-overlay"
-                    on:click={closeCampaignPreviewModal}
-                />
-                <div class="newsletter-modal panel campaign-preview-modal" on:click|stopPropagation>
-                    <div class="campaign-preview-modal-header m-b-sm">
-                        <h4 class="m-0">Campaign Preview</h4>
-                        <button type="button" class="btn btn-xs btn-outline" on:click={closeCampaignPreviewModal}>
-                            <span class="txt">Close</span>
-                        </button>
-                    </div>
-                    <div class="campaign-preview-box campaign-preview-html campaign-preview-modal-box">
-                        {#if campaignBodyValue}
-                            {@html campaignForm.body}
-                        {:else}
-                            <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
-                        {/if}
-                    </div>
+            <OverlayPanel
+                popup
+                class="newsletter-campaign-preview"
+                active={true}
+                overlayClose={true}
+                escClose={false}
+                btnClose={false}
+                on:hide={closeCampaignPreviewModal}
+            >
+                <div slot="header" class="campaign-preview-modal-header">
+                    <h4 class="m-0">Campaign Preview</h4>
+                    <button type="button" class="btn btn-xs btn-outline" on:click={closeCampaignPreviewModal}>
+                        <span class="txt">Close</span>
+                    </button>
                 </div>
-            </div>
+                <div class="campaign-preview-box campaign-preview-html campaign-preview-modal-box">
+                    {#if campaignBodyValue}
+                        {@html campaignForm.body}
+                    {:else}
+                        <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
+                    {/if}
+                </div>
+            </OverlayPanel>
         {/if}
 
         {#if pendingSendCampaign}
-            <div class="newsletter-modal-wrap" role="dialog" aria-modal="true" aria-label="Confirm send campaign">
-                <button
-                    type="button"
-                    aria-label="Close send confirmation"                    class="newsletter-modal-overlay"                    on:click={closeSendCampaignModal}                />                <div class="newsletter-modal panel" on:click|stopPropagation>                    <h4 class="m-t-0 m-b-xs">Send campaign now?</h4>                    <p class="txt-sm txt-hint m-b-sm">                        <strong>{pendingSendCampaign.subject}</strong> will be sent to approximately                        <strong> {pendingSendRecipientsCount}</strong> recipient(s).                    </p>                    <div class="flex gap-5">                        <button type="button" class="btn btn-sm btn-outline" on:click={closeSendCampaignModal}>                            <span class="txt">Cancel</span>                        </button>                        <button                            type="button"                            class="btn btn-sm"                            class:btn-loading={isSendingCampaign[pendingSendCampaign.id]}                            disabled={!!isSendingCampaign[pendingSendCampaign.id]}                            on:click={confirmSendCampaign}                        >                            <span class="txt">Confirm send</span>                        </button>                    </div>                </div>
-            </div>
+            <OverlayPanel
+                popup
+                class="newsletter-send-confirm hide-content overlay-panel-sm"
+                active={true}
+                overlayClose={true}
+                escClose={false}
+                btnClose={false}
+                on:hide={closeSendCampaignModal}
+            >
+                <div slot="header" class="newsletter-send-confirm-head">
+                    <h4 class="m-0">Send campaign now?</h4>
+                </div>
+
+                <p class="txt-sm txt-hint m-0">
+                    <strong>{pendingSendCampaign.subject}</strong> will be sent to approximately
+                    <strong> {pendingSendRecipientsCount}</strong> recipient(s).
+                </p>
+
+                <svelte:fragment slot="footer">
+                    <button type="button" class="btn btn-sm btn-outline" on:click={closeSendCampaignModal}>
+                        <span class="txt">Cancel</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-sm"
+                        class:btn-loading={isSendingCampaign[pendingSendCampaign.id]}
+                        disabled={!!isSendingCampaign[pendingSendCampaign.id]}
+                        on:click={confirmSendCampaign}
+                    >
+                        <span class="txt">Confirm send</span>
+                    </button>
+                </svelte:fragment>
+            </OverlayPanel>
         {/if}
 
         {#if pendingDeleteSubscriber}
-            <div class="newsletter-modal-wrap" role="dialog" aria-modal="true" aria-label="Confirm delete subscriber">
-                <button
-                    type="button"
-                    aria-label="Close delete confirmation"
-                    class="newsletter-modal-overlay"
-                    on:click={closeDeleteSubscriberModal}
-                />
-                <div class="newsletter-modal panel" on:click|stopPropagation>
-                    <h4 class="m-t-0 m-b-xs">Delete subscriber?</h4>
-                    <p class="txt-sm txt-hint m-b-sm">
+            <OverlayPanel
+                popup
+                class="newsletter-delete-confirm hide-content overlay-panel-sm"
+                active={true}
+                overlayClose={!deletingSubscriberId}
+                escClose={false}
+                btnClose={false}
+                on:hide={closeDeleteSubscriberModal}
+            >
+                <div slot="header" class="newsletter-delete-confirm-head">
+                    <h4 class="m-0">Delete subscriber?</h4>
+                    <p class="txt-sm txt-hint m-t-5 m-b-0">
                         <strong>{pendingDeleteSubscriber.email}</strong> will be permanently removed.
                     </p>
-                    <div class="flex gap-5">
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-outline"
-                            disabled={!!deletingSubscriberId}
-                            on:click={closeDeleteSubscriberModal}
-                        >
-                            <span class="txt">Cancel</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="btn btn-sm btn-danger btn-outline"
-                            class:btn-loading={!!deletingSubscriberId}
-                            disabled={!!deletingSubscriberId}
-                            on:click={confirmDeleteSubscriber}
-                        >
-                            <span class="txt">Delete</span>
-                        </button>
-                    </div>
                 </div>
-            </div>
+
+                <svelte:fragment slot="footer">
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline"
+                        disabled={!!deletingSubscriberId}
+                        on:click={closeDeleteSubscriberModal}
+                    >
+                        <span class="txt">Cancel</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-danger btn-outline"
+                        class:btn-loading={!!deletingSubscriberId}
+                        disabled={!!deletingSubscriberId}
+                        on:click={confirmDeleteSubscriber}
+                    >
+                        <span class="txt">Delete</span>
+                    </button>
+                </svelte:fragment>
+            </OverlayPanel>
         {/if}
     {/if}
 </PageWrapper>
@@ -2070,9 +2101,29 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 10px;
         flex-wrap: wrap;
         margin-bottom: 8px;
+    }
+
+    .manual-recipients-title-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .manual-recipients-tools {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
+
+    .manual-recipients-help {
+        white-space: nowrap;
     }
 
     .manual-recipients-count {
@@ -2427,13 +2478,6 @@
         padding-left: 16px;
     }
 
-    .campaign-editor-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        min-height: 30px;
-    }
-
     .campaign-preview-header {
         display: flex;
         align-items: center;
@@ -2532,19 +2576,10 @@
     .manual-group-tools {
         display: flex;
         flex-direction: column;
-        gap: 7px;
+        gap: 6px;
     }
 
-    .manual-group-tools-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin-bottom: 8px;
-    }
-
-    .manual-group-action-buttons {
+        .manual-group-action-buttons {
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -2719,41 +2754,15 @@
         min-width: 96px;
         min-height: var(--smBtnHeight);
     }
-
-    .campaign-body-input {
+    .campaign-body-editor {
         min-height: 170px;
-        resize: vertical;
     }
 
-    .newsletter-modal-wrap {
-        position: fixed;
-        inset: 0;
-        z-index: 60;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-    }
-
-    .newsletter-modal-overlay {
-        position: absolute;
-        inset: 0;
-        border: 0;
-        background: rgba(0, 0, 0, 0.42);
-        cursor: default;
-    }
-
-    .newsletter-modal {
-        position: relative;
-        z-index: 1;
-        width: min(100%, 460px);
-    }
-
-    .campaign-preview-modal {
+    :global(.overlay-panel.newsletter-campaign-preview) {
         width: min(100%, 980px);
         max-height: 90vh;
-        overflow: auto;
     }
+
 
     .campaign-preview-modal-header {
         display: flex;
@@ -2970,8 +2979,14 @@
             align-items: flex-start;
         }
 
-        .manual-group-tools-head {
-            align-items: flex-start;
+        .manual-recipients-tools {
+            width: 100%;
+            justify-content: flex-start;
+            margin-left: 0;
+        }
+
+        .manual-recipients-help {
+            white-space: normal;
         }
 
         .manual-group-action-buttons {
@@ -2999,23 +3014,6 @@
         }
     }
 </style>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
