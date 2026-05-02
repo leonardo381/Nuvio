@@ -1,5 +1,5 @@
 ﻿<script>
-    import { onMount, tick } from "svelte";
+    import { onMount } from "svelte";
     import { querystring } from "svelte-spa-router";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
     import RefreshButton from "@/components/base/RefreshButton.svelte";
@@ -36,8 +36,8 @@
     let activePageEditorTab = pageEditorTabContentKey;
     let pageStatusFilter = pageStatusFilterAllKey;
     let pageSearch = "";
-    let openSectionId = "";
     let focusedBlockId = "";
+    let editingSectionId = "";
 
     let isLoadingWebsites = false;
     let isLoadingPages = false;
@@ -70,7 +70,6 @@
     let sectionErrorById = {};
     let isSavingSectionById = {};
     let pagePreviewReloadToken = 0;
-    const sectionCardElements = new Map();
 
     let lastCollectionsKey = "";
     let lastPersistedContextKey = "";
@@ -180,8 +179,8 @@
 
     $: if (selectedPage?.id && selectedPage.id !== lastPageSeedId) {
         lastPageSeedId = selectedPage.id;
-        openSectionId = "";
         focusedBlockId = "";
+        editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
         pageEditForm = {
             seoTitle: pageSeoTitleField ? `${selectedPage?.[pageSeoTitleField] || ""}` : "",
@@ -192,8 +191,8 @@
 
     $: if (!selectedPage?.id) {
         lastPageSeedId = "";
-        openSectionId = "";
         focusedBlockId = "";
+        editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
     }
 
@@ -208,8 +207,8 @@
         components = [];
         selectedWebsiteId = "";
         selectedPageId = "";
-        openSectionId = "";
         lastCollectionsKey = "";
+        editingSectionId = "";
     } else {
         const nextKey = `${websitesCollection?.id || ""}|${pagesCollection?.id || ""}|${blocksCollection?.id || ""}|${componentsCollection?.id || ""}`;
         if (nextKey !== lastCollectionsKey) {
@@ -249,8 +248,8 @@
             sectionErrorById = nextErrors;
             isSavingSectionById = nextSaving;
 
-            if (openSectionId && !blocks.some((block) => block.id === openSectionId)) {
-                openSectionId = "";
+            if (editingSectionId && !blocks.some((block) => block.id === editingSectionId)) {
+                editingSectionId = "";
             }
         }
     }
@@ -258,6 +257,18 @@
     $: if (focusedBlockId && !blocks.some((block) => `${block?.id || ""}` === `${focusedBlockId}`)) {
         focusedBlockId = "";
     }
+
+    $: selectedEditingSection = blocks.find((block) => `${block?.id || ""}` === `${editingSectionId || ""}`) || null;
+    $: selectedEditingSectionFields = selectedEditingSection ? getSectionSchemaFields(selectedEditingSection) : [];
+    $: selectedEditingSectionIndex = selectedEditingSection
+        ? blocks.findIndex((block) => `${block?.id || ""}` === `${selectedEditingSection?.id || ""}`)
+        : -1;
+    $: selectedEditingSectionSubtitle = selectedEditingSection
+        ? getSectionDescription(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))
+        : "";
+    $: selectedEditingSectionSummaryPills = selectedEditingSection
+        ? getSectionSummaryPills(selectedEditingSection, selectedEditingSectionFields)
+        : [];
 
     $: {
         const nextWebsiteSettingsSeedKey = `${selectedWebsite?.id || ""}|${selectedWebsite?.updated || ""}|${websiteSettingsField || ""}`;
@@ -762,9 +773,14 @@
         return pills;
     }
 
-    function toggleSection(blockId) {
+    function openSectionEditor(blockId, options = {}) {
+        const { forceRefresh = false } = options;
         const normalizedBlockId = normalizeString(blockId);
         if (!normalizedBlockId) {
+            return;
+        }
+
+        if (!blocks.some((block) => `${block?.id || ""}` === normalizedBlockId)) {
             return;
         }
 
@@ -773,13 +789,15 @@
         if (focusedBlockId !== normalizedBlockId) {
             focusedBlockId = normalizedBlockId;
             refreshPagePreview();
+        } else if (forceRefresh) {
+            refreshPagePreview();
         }
 
-        if (openSectionId === normalizedBlockId) {
-            openSectionId = "";
-            return;
-        }
-        openSectionId = normalizedBlockId;
+        editingSectionId = normalizedBlockId;
+    }
+
+    function closeSectionEditor() {
+        editingSectionId = "";
     }
 
     function clearFocusedPreview() {
@@ -849,51 +867,11 @@
         return null;
     }
 
-    function registerSectionCard(node, blockId) {
-        let currentBlockId = normalizeString(blockId);
-
-        if (currentBlockId) {
-            sectionCardElements.set(currentBlockId, node);
-        }
-
-        return {
-            update(nextBlockId) {
-                const normalizedNextBlockId = normalizeString(nextBlockId);
-                if (currentBlockId && currentBlockId !== normalizedNextBlockId) {
-                    sectionCardElements.delete(currentBlockId);
-                }
-                currentBlockId = normalizedNextBlockId;
-                if (currentBlockId) {
-                    sectionCardElements.set(currentBlockId, node);
-                }
-            },
-            destroy() {
-                if (currentBlockId) {
-                    sectionCardElements.delete(currentBlockId);
-                }
-            },
-        };
-    }
-
-    function scrollSectionCardIntoView(blockId) {
-        const normalizedBlockId = normalizeString(blockId);
-        if (!normalizedBlockId) {
+    function handlePreviewIframeEditMessage(event) {
+        if (activeCmsTab !== cmsTabPagesKey || !selectedPageId) {
             return;
         }
 
-        const cardElement = sectionCardElements.get(normalizedBlockId);
-        if (!cardElement || typeof cardElement.scrollIntoView !== "function") {
-            return;
-        }
-
-        cardElement.scrollIntoView({
-            behavior: "smooth",
-            block: "nearest",
-            inline: "nearest",
-        });
-    }
-
-    async function handlePreviewIframeEditMessage(event) {
         const message = parsePreviewMessageData(event?.data);
         if (!message || message.source !== "nuvio-preview" || message.type !== "edit-block") {
             return;
@@ -912,13 +890,7 @@
             return;
         }
 
-        activePageEditorTab = pageEditorTabContentKey;
-        focusedBlockId = nextBlockId;
-        openSectionId = nextBlockId;
-        refreshPagePreview();
-
-        await tick();
-        scrollSectionCardIntoView(nextBlockId);
+        openSectionEditor(nextBlockId, { forceRefresh: true });
     }
 
     onMount(() => {
@@ -927,7 +899,7 @@
         }
 
         const handleWindowMessage = (event) => {
-            void handlePreviewIframeEditMessage(event);
+            handlePreviewIframeEditMessage(event);
         };
 
         window.addEventListener("message", handleWindowMessage);
@@ -1133,7 +1105,7 @@
     async function loadBlocks() {
         if (!blocksCollection?.id || !selectedPageId || !blockPageRelationField) {
             blocks = [];
-            openSectionId = "";
+            editingSectionId = "";
             return;
         }
 
@@ -1151,12 +1123,12 @@
             }
 
             blocks = await ApiClient.collection(blocksCollection.id).getFullList(query);
-            if (openSectionId && !blocks.some((block) => block.id === openSectionId)) {
-                openSectionId = "";
+            if (editingSectionId && !blocks.some((block) => block.id === editingSectionId)) {
+                editingSectionId = "";
             }
         } catch (err) {
             blocks = [];
-            openSectionId = "";
+            editingSectionId = "";
             ApiClient.error(err);
         }
 
@@ -1172,8 +1144,8 @@
         selectedPageId = "";
         pageSearch = "";
         pageStatusFilter = pageStatusFilterAllKey;
-        openSectionId = "";
         focusedBlockId = "";
+        editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
 
         await loadPages();
@@ -1186,8 +1158,8 @@
         }
 
         selectedPageId = `${pageId || ""}`;
-        openSectionId = "";
         focusedBlockId = "";
+        editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
 
         await loadBlocks();
@@ -1585,141 +1557,84 @@
                             </div>
 
                             {#if activePageEditorTab === pageEditorTabContentKey}
-                                <div class="content-tab-grid m-t-sm">
-                                    <div class="sections-wrap content-sections-pane">
-                                        <div class="sections-head">
-                                            <h5 class="m-0">Sections on this page</h5>
-                                            <span class="txt-sm txt-hint">{blocks.length} total</span>
+                                <div class="content-preview-first-wrap m-t-sm">
+                                    <div class="sections-head page-preview-head">
+                                        <div class="page-preview-head-left">
+                                            <h5 class="m-0">Page preview</h5>
+                                            <span class="txt-sm txt-hint page-preview-helper">
+                                                Click Edit section in the preview to edit content. Preview shows saved content only.
+                                            </span>
+                                            {#if focusedBlockId}
+                                                <div class="preview-focus-hint">
+                                                    <span>Highlighting selected section.</span>
+                                                    <button type="button" class="btn-link" on:click={clearFocusedPreview}>
+                                                        Clear highlight
+                                                    </button>
+                                                </div>
+                                            {/if}
+                                        </div>
+                                        <div class="page-preview-actions">
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-outline"
+                                                disabled={!pagePreviewUrl}
+                                                on:click={refreshPagePreview}
+                                            >
+                                                Refresh preview
+                                            </button>
+                                            {#if pagePreviewUrl}
+                                                <a
+                                                    href={pagePreviewFocusedUrl || pagePreviewUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer noopener"
+                                                    class="btn btn-sm btn-outline"
+                                                >
+                                                    Open in new tab
+                                                </a>
+                                            {/if}
+                                        </div>
+                                    </div>
+
+                                    {#if !selectedPageSlug}
+                                        <div class="preview-empty-state m-t-sm">
+                                            This page has no slug yet. Add a page slug to enable preview.
+                                        </div>
+                                    {:else if !pagePreviewUrl}
+                                        <div class="preview-empty-state m-t-sm">
+                                            Preview unavailable. Configure the public preview URL to edit visually.
                                         </div>
 
                                         {#if !blockPageRelationField}
-                                            <p class="txt-sm txt-danger m-t-8 m-b-0">Sections relation to pages was not found.</p>
+                                            <p class="txt-sm txt-danger m-t-sm m-b-0">Sections relation to pages was not found.</p>
                                         {:else if !blockPropsField}
-                                            <p class="txt-sm txt-danger m-t-8 m-b-0">Sections props field was not found.</p>
+                                            <p class="txt-sm txt-danger m-t-sm m-b-0">Sections props field was not found.</p>
                                         {:else if isLoadingBlocks || isLoadingComponents}
-                                            <p class="txt-sm txt-hint m-t-8 m-b-0">Loading sections...</p>
+                                            <p class="txt-sm txt-hint m-t-sm m-b-0">Loading sections...</p>
                                         {:else if !blocks.length}
-                                            <p class="txt-sm txt-hint m-t-8 m-b-0">There are no sections linked to this page.</p>
+                                            <p class="txt-sm txt-hint m-t-sm m-b-0">There are no sections linked to this page.</p>
                                         {:else}
-                                            <div class="sections-list m-t-sm">
+                                            <div class="fallback-sections-list m-t-sm">
                                                 {#each blocks as block, index}
                                                     {@const sectionFields = getSectionSchemaFields(block)}
                                                     {@const sectionSubtitle = getSectionDescription(block, index)}
-                                                    {@const sectionSummaryPills = getSectionSummaryPills(block, sectionFields)}
-                                                    <article
-                                                        class="section-card"
-                                                        class:open={openSectionId === block.id}
-                                                        class:selected={focusedBlockId === block.id}
-                                                        use:registerSectionCard={block.id}
+                                                    <button
+                                                        type="button"
+                                                        class="fallback-section-item"
+                                                        class:selected={editingSectionId === block.id}
+                                                        on:click={() => openSectionEditor(block.id)}
                                                     >
-                                                        <button
-                                                            type="button"
-                                                            class="section-toggle"
-                                                            aria-expanded={openSectionId === block.id}
-                                                            on:click={() => toggleSection(block.id)}
-                                                        >
-                                                            <span class="section-toggle-header">
-                                                                <span class="section-toggle-content">
-                                                                    <strong>{getSectionTitle(block, index)}</strong>
-                                                                    {#if sectionSubtitle}
-                                                                        <small>{sectionSubtitle}</small>
-                                                                    {/if}
-                                                                    <span class="section-summary-row">
-                                                                        <span class="section-summary-pill">{index + 1} of {blocks.length}</span>
-                                                                        {#each sectionSummaryPills as summaryPill}
-                                                                            <span class="section-summary-pill">{summaryPill}</span>
-                                                                        {/each}
-                                                                    </span>
-                                                                </span>
-                                                                <span class="section-toggle-caret" aria-hidden="true">
-                                                                    <i class={openSectionId === block.id ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"} />
-                                                                </span>
-                                                            </span>
-                                                        </button>
-
-                                                        {#if openSectionId === block.id}
-                                                            <div class="section-body">
-                                                                {#if sectionFields.length}
-                                                                    <SchemaForm
-                                                                        fields={sectionFields}
-                                                                        value={sectionPropsDraftById[block.id] || {}}
-                                                                        showImport={false}
-                                                                        path={`sections.${block.id}`}
-                                                                        on:propsChange={(event) => updateSectionDraft(block.id, event.detail)}
-                                                                    />
-                                                                {:else}
-                                                                    <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
-                                                                {/if}
-
-                                                                <div class="form-actions m-t-sm">
-                                                                    <button
-                                                                        type="button"
-                                                                        class="btn btn-sm btn-strong"
-                                                                        disabled={!!isSavingSectionById[block.id] || !blockPropsField}
-                                                                        on:click={() => saveSection(block)}
-                                                                    >
-                                                                        {isSavingSectionById[block.id] ? "Saving..." : "Save section"}
-                                                                    </button>
-                                                                </div>
-
-                                                                {#if sectionErrorById[block.id]}
-                                                                    <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[block.id]}</p>
-                                                                {/if}
-                                                            </div>
-                                                        {/if}
-                                                    </article>
+                                                        <span class="fallback-section-title">{getSectionTitle(block, index)}</span>
+                                                        <span class="fallback-section-subtitle">{sectionSubtitle}</span>
+                                                        <span class="fallback-section-meta">
+                                                            {index + 1} of {blocks.length} · {sectionFields.length} fields
+                                                        </span>
+                                                    </button>
                                                 {/each}
                                             </div>
                                         {/if}
-                                    </div>
-
-                                    <aside class="content-preview-pane">
-                                        <div class="sections-head page-preview-head">
-                                            <div class="page-preview-head-left">
-                                                <h5 class="m-0">Page preview</h5>
-                                                {#if focusedBlockId}
-                                                    <div class="preview-focus-hint">
-                                                        <span>Highlighting selected section.</span>
-                                                        <button type="button" class="btn-link" on:click={clearFocusedPreview}>
-                                                            Clear highlight
-                                                        </button>
-                                                    </div>
-                                                {:else}
-                                                    <span class="txt-sm txt-hint page-preview-helper">
-                                                        Select a section to highlight it in the preview. Preview shows saved content only.
-                                                    </span>
-                                                {/if}
-                                            </div>
-                                            <div class="page-preview-actions">
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-sm btn-outline"
-                                                    disabled={!pagePreviewUrl}
-                                                    on:click={refreshPagePreview}
-                                                >
-                                                    Refresh preview
-                                                </button>
-                                                {#if pagePreviewUrl}
-                                                    <a
-                                                        href={pagePreviewFocusedUrl || pagePreviewUrl}
-                                                        target="_blank"
-                                                        rel="noreferrer noopener"
-                                                        class="btn btn-sm btn-outline"
-                                                    >
-                                                        Open in new tab
-                                                    </a>
-                                                {/if}
-                                            </div>
-                                        </div>
-
-                                        {#if !selectedPageSlug}
-                                            <div class="preview-empty-state m-t-sm">
-                                                This page has no slug yet. Add a page slug to enable preview.
-                                            </div>
-                                        {:else if !pagePreviewUrl}
-                                            <div class="preview-empty-state m-t-sm">Preview unavailable</div>
-                                        {:else}
-                                            <div class="page-preview-iframe-wrap content-preview-iframe-wrap m-t-sm">
+                                    {:else}
+                                        <div class="content-preview-workspace m-t-sm">
+                                            <div class="page-preview-iframe-wrap content-preview-iframe-wrap">
                                                 <iframe
                                                     class="page-preview-iframe content-preview-iframe"
                                                     src={pagePreviewIframeSrc}
@@ -1727,8 +1642,8 @@
                                                     loading="lazy"
                                                 ></iframe>
                                             </div>
-                                        {/if}
-                                    </aside>
+                                        </div>
+                                    {/if}
                                 </div>
                             {:else if activePageEditorTab === pageEditorTabSeoKey}
                                 <div class="seo-page-wrap m-t-sm">
@@ -1937,6 +1852,66 @@
                 </div>
             {/if}
         </section>
+
+        {#if activeCmsTab === cmsTabPagesKey && selectedEditingSection}
+            <div class="section-drawer-layer" role="dialog" aria-modal="true" aria-label="Edit section">
+                <button
+                    type="button"
+                    class="section-drawer-backdrop"
+                    aria-label="Close section editor"
+                    on:click={closeSectionEditor}
+                />
+
+                <aside class="section-drawer-panel" on:click|stopPropagation>
+                    <header class="section-drawer-header">
+                        <div class="section-drawer-title-wrap">
+                            <strong>{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
+                            <span class="txt-sm txt-hint">Edit section content.</span>
+                            <div class="section-drawer-meta">
+                                <span class="section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
+                                {#each selectedEditingSectionSummaryPills as summaryPill}
+                                    <span class="section-summary-pill">{summaryPill}</span>
+                                {/each}
+                                <span class="section-summary-pill">Page: {getPageLabel(selectedPage)}</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline section-drawer-close-btn" on:click={closeSectionEditor}>
+                            Close
+                        </button>
+                    </header>
+
+                    <div class="section-drawer-body">
+                        {#if selectedEditingSectionFields.length}
+                            <SchemaForm
+                                fields={selectedEditingSectionFields}
+                                value={sectionPropsDraftById[selectedEditingSection.id] || {}}
+                                showImport={false}
+                                path={`sections.${selectedEditingSection.id}`}
+                                on:propsChange={(event) => updateSectionDraft(selectedEditingSection.id, event.detail)}
+                            />
+                        {:else}
+                            <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
+                        {/if}
+
+                        {#if sectionErrorById[selectedEditingSection.id]}
+                            <p class="txt-danger m-t-8 m-b-0">{sectionErrorById[selectedEditingSection.id]}</p>
+                        {/if}
+                    </div>
+
+                    <footer class="section-drawer-footer">
+                        <button type="button" class="btn btn-sm btn-outline" on:click={closeSectionEditor}>Cancel</button>
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-strong"
+                            disabled={!!isSavingSectionById[selectedEditingSection.id] || !blockPropsField}
+                            on:click={() => saveSection(selectedEditingSection)}
+                        >
+                            {isSavingSectionById[selectedEditingSection.id] ? "Saving..." : "Save changes"}
+                        </button>
+                    </footer>
+                </aside>
+            </div>
+        {/if}
     {/if}
 </PageWrapper>
 
@@ -2338,23 +2313,21 @@
     .page-preview-head {
         align-items: center;
         gap: 10px;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
     }
 
     .page-preview-head-left {
         min-width: 0;
         flex: 1 1 auto;
-        display: inline-flex;
+        display: flex;
         align-items: center;
         gap: 10px;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
     }
 
     .page-preview-helper {
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        line-height: 1.35;
     }
 
     .page-preview-actions {
@@ -2390,29 +2363,13 @@
         background: white;
     }
 
-    .sections-wrap {
+    .content-preview-first-wrap {
         border-top: 1px solid var(--baseAlt2Color);
         padding-top: 10px;
-        min-width: 0;
     }
 
-    .content-tab-grid {
-        display: grid;
-        grid-template-columns: minmax(240px, 0.68fr) minmax(560px, 1.42fr);
-        gap: 14px;
-        align-items: start;
-    }
-
-    .content-sections-pane {
-        min-width: 0;
-    }
-
-    .content-preview-pane {
-        min-width: 0;
-        border-top: 1px solid var(--baseAlt2Color);
-        padding-top: 10px;
-        display: flex;
-        flex-direction: column;
+    .content-preview-workspace {
+        display: block;
     }
 
     .content-preview-iframe-wrap {
@@ -2425,6 +2382,158 @@
         min-height: clamp(560px, calc(100vh - 300px), 780px);
     }
 
+    .section-drawer-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: flex;
+        justify-content: flex-end;
+        pointer-events: none;
+    }
+
+    .section-drawer-backdrop {
+        position: absolute;
+        inset: 0;
+        border: 0;
+        background: rgba(6, 12, 24, 0.36);
+        pointer-events: auto;
+        cursor: default;
+    }
+
+    .section-drawer-panel {
+        position: relative;
+        z-index: 1;
+        width: min(900px, 90vw);
+        height: 100%;
+        border-radius: 0;
+        border-left: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
+        border-top: 0;
+        border-right: 0;
+        border-bottom: 0;
+        background: var(--baseColor);
+        display: flex;
+        flex-direction: column;
+        pointer-events: auto;
+        box-shadow: -8px 0 22px color-mix(in srgb, var(--txtPrimaryColor) 10%, transparent);
+    }
+
+    .section-drawer-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
+        background: var(--baseColor);
+        padding: 8px 12px 7px;
+    }
+
+    .section-drawer-title-wrap {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .section-drawer-title-wrap strong {
+        font-size: 15px;
+        line-height: 1.18;
+        color: var(--txtPrimaryColor);
+    }
+
+    .section-drawer-title-wrap > .txt-sm {
+        font-size: 11.5px;
+        line-height: 1.15;
+    }
+
+    .section-drawer-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        flex-wrap: wrap;
+        margin-top: 0;
+    }
+
+    .section-drawer-close-btn {
+        min-height: 28px;
+        padding: 0 9px;
+        align-self: flex-start;
+    }
+
+    .section-drawer-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        padding: 10px 12px 10px;
+    }
+
+    .section-drawer-footer {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
+        background: var(--baseColor);
+        padding: 10px 16px 12px;
+    }
+
+    .fallback-sections-list {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
+        overflow: hidden;
+    }
+
+    .fallback-section-item {
+        border: 0;
+        border-bottom: 1px solid var(--baseAlt2Color);
+        background: transparent;
+        text-align: left;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .fallback-section-item:last-child {
+        border-bottom: 0;
+    }
+
+    .fallback-section-item:nth-child(odd) {
+        background: var(--baseColor);
+    }
+
+    .fallback-section-item:nth-child(even) {
+        background: var(--baseAlt1Color);
+    }
+
+    .fallback-section-item:hover {
+        background: color-mix(in srgb, var(--primaryColor) 4%, var(--baseColor));
+    }
+
+    .fallback-section-item.selected {
+        background: color-mix(in srgb, var(--primaryColor) 9%, var(--baseColor));
+        box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primaryColor) 60%, transparent);
+    }
+
+    .fallback-section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--txtPrimaryColor);
+    }
+
+    .fallback-section-subtitle,
+    .fallback-section-meta {
+        font-size: 11px;
+        color: var(--txtHintColor);
+    }
+
     .sections-head {
         display: flex;
         align-items: center;
@@ -2432,125 +2541,16 @@
         gap: 8px;
     }
 
-    .content-sections-pane .sections-head {
-        min-height: 28px;
-    }
-
-    .sections-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .section-card {
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: 8px;
-        background: var(--baseColor);
-        overflow: hidden;
-        box-shadow: 0 1px 1px color-mix(in srgb, var(--baseAlt2Color) 22%, transparent);
-    }
-
-    .section-card.selected {
-        border-color: color-mix(in srgb, var(--primaryColor) 45%, var(--baseAlt2Color));
-        box-shadow:
-            inset 0 0 0 1px color-mix(in srgb, var(--primaryColor) 28%, transparent),
-            0 1px 2px color-mix(in srgb, var(--baseAlt2Color) 30%, transparent);
-    }
-
-    .section-toggle {
-        width: 100%;
-        border: 0;
-        background: var(--baseColor);
-        text-align: left;
-        padding: 9px 10px;
-        display: block;
-        cursor: pointer;
-    }
-
-    .section-toggle:hover {
-        background: color-mix(in srgb, var(--primaryColor) 2.5%, var(--baseColor));
-    }
-
-    .section-card.open .section-toggle {
-        background: color-mix(in srgb, var(--primaryColor) 4%, var(--baseColor));
-    }
-
-    .section-card.selected .section-toggle {
-        background: color-mix(in srgb, var(--primaryColor) 6%, var(--baseColor));
-    }
-
-    .section-toggle-header {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: start;
-        gap: 8px;
-        min-width: 0;
-    }
-
-    .section-toggle-content {
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-        min-width: 0;
-    }
-
-    .section-toggle-content strong {
-        color: var(--txtPrimaryColor);
-        font-size: 13px;
-        line-height: 1.25;
-        white-space: normal;
-        overflow: hidden;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 1;
-    }
-
-    .section-toggle-content small {
-        color: var(--txtHintColor);
-        font-size: 10.5px;
-        line-height: 1.25;
-        display: -webkit-box;
-        overflow: hidden;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 1;
-    }
-
-    .section-summary-row {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        flex-wrap: wrap;
-        margin-top: 0;
-    }
-
     .section-summary-pill {
         display: inline-flex;
         align-items: center;
-        border: 1px solid var(--baseAlt2Color);
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
         border-radius: 999px;
-        padding: 1px 6px;
+        padding: 2px 7px;
         font-size: 10px;
         line-height: 1.1;
         color: var(--txtHintColor);
         background: var(--baseColor);
-    }
-
-    .section-toggle-caret {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 24px;
-        width: 24px;
-        height: 24px;
-        flex: 0 0 auto;
-        border: 0;
-        border-radius: 999px;
-        background: transparent;
-    }
-
-    .section-toggle-caret i {
-        font-size: 18px;
-        color: color-mix(in srgb, var(--txtPrimaryColor) 74%, var(--txtHintColor));
     }
 
     .preview-focus-hint {
@@ -2560,13 +2560,47 @@
         font-size: var(--smFontSize);
         color: var(--txtHintColor);
         min-width: 0;
-        white-space: nowrap;
+        white-space: normal;
     }
 
-    .section-body {
-        border-top: 1px solid var(--baseAlt2Color);
-        background: var(--baseColor);
-        padding: 10px 10px 10px;
+    .section-drawer-body :global(.pb-field) {
+        margin: 10px 0;
+        padding: 8px 10px 10px;
+        border-radius: 8px;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        background: transparent;
+    }
+
+    .section-drawer-body :global(.pb-label) {
+        margin-bottom: 7px;
+        font-size: 11.5px;
+    }
+
+    .section-drawer-body :global(.array-field),
+    .section-drawer-body :global(.object-field) {
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent) !important;
+        background: var(--baseColor) !important;
+        border-radius: 8px !important;
+    }
+
+    .section-drawer-body :global(.array-field__header),
+    .section-drawer-body :global(.object-field__header),
+    .section-drawer-body :global(.array-item__header) {
+        background: color-mix(in srgb, var(--baseAlt1Color) 58%, var(--baseColor)) !important;
+        border-bottom-color: color-mix(in srgb, var(--baseAlt2Color) 82%, transparent) !important;
+    }
+
+    .section-drawer-body :global(.array-field__items),
+    .section-drawer-body :global(.object-field__body),
+    .section-drawer-body :global(.array-item__body) {
+        padding: 10px !important;
+    }
+
+    .section-drawer-body :global(.array-item) {
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent) !important;
+        border-radius: 8px !important;
     }
 
     .seo-page-wrap {
@@ -2621,10 +2655,6 @@
             grid-template-columns: 1fr;
         }
 
-        .content-tab-grid {
-            grid-template-columns: 1fr;
-        }
-
         .content-preview-iframe-wrap {
             min-height: clamp(480px, 62vh, 700px);
         }
@@ -2676,7 +2706,6 @@
             flex-direction: column;
             align-items: stretch;
             gap: 8px;
-            flex-wrap: wrap;
         }
 
         .page-preview-head-left {
@@ -2714,18 +2743,9 @@
             min-height: clamp(420px, 58vh, 620px);
         }
 
-        .section-toggle {
-            align-items: flex-start;
-        }
-
-        .section-toggle-header {
-            width: 100%;
-        }
-
-        .section-toggle-caret {
-            min-width: 32px;
-            width: 32px;
-            height: 32px;
+        .section-drawer-header {
+            flex-direction: column;
+            align-items: stretch;
         }
 
         .pages-list-totals {
