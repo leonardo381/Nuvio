@@ -23,6 +23,10 @@
     const pageStatusFilterAllKey = "all";
     const pageStatusFilterActiveKey = "active";
     const pageStatusFilterInactiveKey = "inactive";
+    const pageSeoFilterAllKey = "all";
+    const pageSeoFilterGoodKey = "good";
+    const pageSeoFilterNeedsAttentionKey = "needs-attention";
+    const pageSeoFilterMissingBasicsKey = "missing-basics";
     const clientSettingsRole = "client";
     const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
     const websiteSettingsAreaIdentitySeoKey = "identity-seo";
@@ -61,6 +65,7 @@
     let activeCmsTab = initialQueryParams.get("cmsTab") === cmsTabSettingsKey ? cmsTabSettingsKey : cmsTabPagesKey;
     let activePageEditorTab = pageEditorTabContentKey;
     let pageStatusFilter = pageStatusFilterAllKey;
+    let pageSeoFilter = pageSeoFilterAllKey;
     let pageSearch = "";
     let focusedBlockId = "";
     let editingSectionId = "";
@@ -122,6 +127,13 @@
     let sectionErrorById = {};
     let isSavingSectionById = {};
     let pagePreviewReloadToken = 0;
+    let pageSeoStatusById = new Map();
+    let pageSeoCoverageCounts = {
+        total: 0,
+        good: 0,
+        needsAttention: 0,
+        missingBasics: 0,
+    };
 
     let lastCollectionsKey = "";
     let lastPersistedContextKey = "";
@@ -134,6 +146,8 @@
     const seoDescriptionShortThreshold = 70;
     const seoSeparatorLongThreshold = 3;
     const defaultSeoTitleSeparator = "|";
+    const faqQuestionSummaryKeys = ["question", "title", "heading", "label", "name"];
+    const faqAnswerSummaryKeys = ["answer", "description", "body", "content", "text", "html"];
 
     $: websitesCollection = findCollection("websites");
     $: pagesCollection = findCollection("pages");
@@ -281,7 +295,9 @@
     $: pageSeoFocusKeywordText = normalizeString(pageEditForm?.seoFocusKeyword);
     $: pageSeoNoindexValue = toBooleanValue(pageEditForm?.seoNoindex);
     $: pageSeoExcludeFromSitemapValue = toBooleanValue(pageEditForm?.seoExcludeFromSitemap);
+    $: pageSeoCanonicalUrlText = normalizeString(pageEditForm?.seoCanonicalUrl);
     $: pageSeoHasSocialImage = !!normalizeString(pageEditForm?.seoSocialImageCurrent) || !!pageEditForm?.seoSocialImageFile;
+    $: pageSeoHasGlobalSocialImage = !!normalizeString(websiteIdentitySeoDraft?.seoImageCurrent) || !!websiteIdentitySeoDraft?.seoImageFile;
     $: globalSeoTitleText = normalizeString(websiteIdentitySeoDraft?.seoTitle);
     $: globalSeoDescriptionText = toSeoPlainText(websiteIdentitySeoDraft?.seoDescription);
     $: globalSeoTitleTemplateText = normalizeString(websiteIdentitySeoDraft?.seoTitleTemplate);
@@ -292,6 +308,9 @@
     $: pageSeoPreviewTitle = pageSeoTitleText || getPageTitleText(selectedPage) || globalSeoTitleText || getWebsiteLabel(selectedWebsite);
     $: pageSeoPreviewPath = getPageSeoPreviewPath(pagePreviewUrl, selectedWebsiteSlug, selectedPageSlug);
     $: pageSeoPreviewDescription = pageSeoDescriptionText || globalSeoDescriptionText || "No SEO description provided yet.";
+    $: pageSeoHasTitleFallback = !!getPageSeoTitleFallbackSource(selectedPage, selectedWebsite, globalSeoTitleText);
+    $: pageSeoHasDescriptionFallback = !!globalSeoDescriptionText;
+    $: pageSeoHasFaqStructuredData = hasFaqStructuredDataCandidate(blocks);
     $: globalSeoSiteName = globalSeoTitleText || getWebsiteNameText(selectedWebsite) || getWebsiteLabel(selectedWebsite) || "Site name";
     $: globalSeoPreviewTitle = buildGlobalSeoPreviewTitle({
         template: globalSeoTitleTemplateText,
@@ -316,6 +335,9 @@
     $: localBusinessSocialProfilesText = normalizeString(websiteIdentitySeoDraft?.businessSocialProfiles);
     $: localBusinessPriceRangeText = normalizeString(websiteIdentitySeoDraft?.businessPriceRange);
     $: localBusinessReviewsExpected = websiteSettingsFullDraft?.featureFlags?.reviews !== false;
+    $: localBusinessHasContactInput = !!websiteBusinessPhoneField || !!websiteBusinessEmailField;
+    $: localBusinessHasLocationInput =
+        (!!websiteBusinessAddressField && !!websiteBusinessCityField && !!websiteBusinessCountryField) || !!websiteBusinessServiceAreaField;
     $: pageSeoChecks = buildPageSeoChecks({
         titleText: pageSeoTitleText,
         descriptionText: pageSeoDescriptionText,
@@ -323,40 +345,104 @@
         descriptionLength: pageSeoDescriptionLength,
         hasTitle: !!pageSeoTitleText,
         hasDescription: !!pageSeoDescriptionText,
+        hasTitleFallback: pageSeoHasTitleFallback,
+        hasDescriptionFallback: pageSeoHasDescriptionFallback,
         hasSocialImage: pageSeoHasSocialImage,
+        hasGlobalSocialImage: pageSeoHasGlobalSocialImage,
         focusKeyword: pageSeoFocusKeywordText,
         noindex: pageSeoNoindexValue,
         excludeFromSitemap: pageSeoExcludeFromSitemapValue,
+        canonicalUrl: pageSeoCanonicalUrlText,
+        hasCanonicalField: !!pageSeoCanonicalUrlField,
+        hasFaqStructuredData: pageSeoHasFaqStructuredData,
     });
     $: globalSeoChecks = buildGlobalSeoChecks({
         titleLength: globalSeoTitleLength,
         descriptionLength: globalSeoDescriptionLength,
         hasTitle: !!globalSeoTitleText,
         hasDescription: !!globalSeoDescriptionText,
+        hasSocialImageField: !!websiteSeoImageField,
+        hasSocialImage: pageSeoHasGlobalSocialImage,
+        hasTitleTemplateField: !!websiteSeoTitleTemplateField,
         titleTemplate: globalSeoTitleTemplateText,
+        hasTitleSeparatorField: !!websiteSeoTitleSeparatorField,
         titleSeparator: globalSeoTitleSeparatorText,
+        hasCanonicalDomainField: !!websiteSeoCanonicalDomainField,
         canonicalDomain: globalSeoCanonicalDomainText,
     });
     $: localBusinessSeoChecks = buildLocalBusinessSeoChecks({
+        hasBusinessNameField: !!websiteBusinessNameField,
         businessName: localBusinessNameText,
+        hasPrimaryCategoryField: !!websiteBusinessPrimaryCategoryField,
         primaryCategory: localBusinessPrimaryCategoryText,
+        hasPhoneField: !!websiteBusinessPhoneField,
         phone: localBusinessPhoneText,
+        hasEmailField: !!websiteBusinessEmailField,
+        email: localBusinessEmailText,
+        hasAddressField: !!websiteBusinessAddressField,
         address: localBusinessAddressText,
+        hasCityField: !!websiteBusinessCityField,
         city: localBusinessCityText,
+        hasCountryField: !!websiteBusinessCountryField,
         country: localBusinessCountryText,
+        hasServiceAreaField: !!websiteBusinessServiceAreaField,
+        serviceArea: localBusinessServiceAreaText,
+        hasOpeningHoursField: !!websiteBusinessOpeningHoursField,
         openingHours: localBusinessOpeningHoursText,
+        hasGooglePlaceIdField: !!websiteBusinessGooglePlaceIdField,
         googlePlaceId: localBusinessGooglePlaceIdText,
+        hasSocialProfilesField: !!websiteBusinessSocialProfilesField,
+        socialProfiles: localBusinessSocialProfilesText,
+        hasPriceRangeField: !!websiteBusinessPriceRangeField,
+        priceRange: localBusinessPriceRangeText,
         expectsGooglePlaceId: localBusinessReviewsExpected,
     });
+    $: pageSeoCheckCounts = getSeoCheckCounts(pageSeoChecks);
+    $: globalSeoCheckCounts = getSeoCheckCounts(globalSeoChecks);
+    $: localBusinessSeoCheckCounts = getSeoCheckCounts(localBusinessSeoChecks);
+    $: pageSeoHealthStatus = getPageSeoHealthStatus({
+        hasTitle: !!pageSeoTitleText,
+        hasDescription: !!pageSeoDescriptionText,
+        hasTitleFallback: pageSeoHasTitleFallback,
+        hasDescriptionFallback: pageSeoHasDescriptionFallback,
+        warningCount: pageSeoCheckCounts.warnings,
+    });
+    $: globalSeoHealthStatus = getGlobalSeoHealthStatus({
+        hasTitle: !!globalSeoTitleText,
+        hasDescription: !!globalSeoDescriptionText,
+        warningCount: globalSeoCheckCounts.warnings,
+    });
+    $: localBusinessSeoHealthStatus = getLocalBusinessSeoHealthStatus({
+        hasBusinessNameField: !!websiteBusinessNameField,
+        hasBusinessName: !!localBusinessNameText,
+        hasContactInputFields: localBusinessHasContactInput,
+        hasContactSignal: !!localBusinessPhoneText || !!localBusinessEmailText,
+        hasLocationInputFields: localBusinessHasLocationInput,
+        hasLocationSignal: (!!localBusinessAddressText && !!localBusinessCityText && !!localBusinessCountryText) || !!localBusinessServiceAreaText,
+        warningCount: localBusinessSeoCheckCounts.warnings,
+        infoCount: localBusinessSeoCheckCounts.infos,
+    });
+    $: pageSeoCheckSummary = getSeoCheckSummaryText(pageSeoCheckCounts);
+    $: globalSeoCheckSummary = getSeoCheckSummaryText(globalSeoCheckCounts);
+    $: localBusinessSeoCheckSummary = getSeoCheckSummaryText(localBusinessSeoCheckCounts);
     $: normalizedPageSearch = normalizeString(pageSearch).toLowerCase();
     $: activePagesCount = pageEnabledField ? pages.filter((record) => isPageActive(record)).length : 0;
     $: inactivePagesCount = pageEnabledField ? Math.max(0, pages.length - activePagesCount) : 0;
+    $: pageSeoStatusById = new Map((pages || []).map((record) => [record?.id || "", getPageSeoCoverageStatus(record)]));
+    $: pageSeoCoverageCounts = getPageSeoCoverageCounts(pages, pageSeoStatusById);
     $: filteredPages = pages.filter((record) => {
         if (pageEnabledField) {
             if (pageStatusFilter === pageStatusFilterActiveKey && !isPageActive(record)) {
                 return false;
             }
             if (pageStatusFilter === pageStatusFilterInactiveKey && isPageActive(record)) {
+                return false;
+            }
+        }
+
+        if (pageSeoFilter !== pageSeoFilterAllKey) {
+            const seoStatus = pageSeoStatusById.get(record?.id || "") || getPageSeoCoverageStatus(record);
+            if (seoStatus.key !== pageSeoFilter) {
                 return false;
             }
         }
@@ -371,6 +457,14 @@
     });
     $: if (!pageEnabledField && pageStatusFilter !== pageStatusFilterAllKey) {
         pageStatusFilter = pageStatusFilterAllKey;
+    }
+    $: if (
+        pageSeoFilter !== pageSeoFilterAllKey &&
+        pageSeoFilter !== pageSeoFilterGoodKey &&
+        pageSeoFilter !== pageSeoFilterNeedsAttentionKey &&
+        pageSeoFilter !== pageSeoFilterMissingBasicsKey
+    ) {
+        pageSeoFilter = pageSeoFilterAllKey;
     }
 
     $: componentsById = new Map(components.map((record) => [record.id, record]));
@@ -689,6 +783,101 @@
         return normalizeString(pageTitleField ? record?.[pageTitleField] : "");
     }
 
+    function getPageSeoTitleFallbackSource(pageRecord, websiteRecord, globalTitleText) {
+        const pageTitle = getPageTitleText(pageRecord);
+        if (pageTitle) {
+            return pageTitle;
+        }
+
+        const globalTitle = normalizeString(globalTitleText);
+        if (globalTitle) {
+            return globalTitle;
+        }
+
+        const websiteName = getWebsiteNameText(websiteRecord);
+        if (websiteName) {
+            return websiteName;
+        }
+
+        return normalizeString(websiteSlugField ? websiteRecord?.[websiteSlugField] : "");
+    }
+
+    function getPageSeoCoverageStatus(record) {
+        const pageId = normalizeString(record?.id);
+        const isEditingPage = !!pageId && pageId === normalizeString(selectedPageId);
+        const seoTitleRaw = isEditingPage ? pageEditForm?.seoTitle : (pageSeoTitleField ? record?.[pageSeoTitleField] : "");
+        const seoDescriptionRaw = isEditingPage ? pageEditForm?.seoDescription : (pageSeoDescriptionField ? record?.[pageSeoDescriptionField] : "");
+        const seoFocusKeywordRaw = isEditingPage ? pageEditForm?.seoFocusKeyword : (pageSeoFocusKeywordField ? record?.[pageSeoFocusKeywordField] : "");
+        const seoCanonicalRaw = isEditingPage ? pageEditForm?.seoCanonicalUrl : (pageSeoCanonicalUrlField ? record?.[pageSeoCanonicalUrlField] : "");
+        const seoNoindexRaw = isEditingPage ? pageEditForm?.seoNoindex : (pageSeoNoindexField ? record?.[pageSeoNoindexField] : false);
+        const seoExcludeFromSitemapRaw = isEditingPage
+            ? pageEditForm?.seoExcludeFromSitemap
+            : (pageSeoExcludeFromSitemapField ? record?.[pageSeoExcludeFromSitemapField] : false);
+        const hasPageSocialImage = pageSeoSocialImageField
+            ? isEditingPage
+                ? (!!normalizeString(pageEditForm?.seoSocialImageCurrent) || !!pageEditForm?.seoSocialImageFile)
+                : !!toSingleFileName(record?.[pageSeoSocialImageField])
+            : false;
+        const hasGlobalSocialImage = !!normalizeString(websiteIdentitySeoDraft?.seoImageCurrent) || !!websiteIdentitySeoDraft?.seoImageFile;
+
+        const titleText = normalizeString(seoTitleRaw);
+        const descriptionText = toSeoPlainText(seoDescriptionRaw);
+        const focusKeyword = normalizeString(seoFocusKeywordRaw);
+        const canonicalUrl = normalizeString(seoCanonicalRaw);
+        const hasTitleFallback = !!getPageSeoTitleFallbackSource(record, selectedWebsite, globalSeoTitleText);
+        const hasDescriptionFallback = !!globalSeoDescriptionText;
+
+        const checks = buildPageSeoChecks({
+            titleText,
+            descriptionText,
+            titleLength: titleText.length,
+            descriptionLength: descriptionText.length,
+            hasTitle: !!titleText,
+            hasDescription: !!descriptionText,
+            hasTitleFallback,
+            hasDescriptionFallback,
+            hasSocialImage: hasPageSocialImage,
+            hasGlobalSocialImage,
+            focusKeyword,
+            noindex: pageSeoNoindexField ? toBooleanValue(seoNoindexRaw) : false,
+            excludeFromSitemap: pageSeoExcludeFromSitemapField ? toBooleanValue(seoExcludeFromSitemapRaw) : false,
+            canonicalUrl,
+            hasCanonicalField: !!pageSeoCanonicalUrlField,
+            hasFaqStructuredData: false,
+        });
+        const checkCounts = getSeoCheckCounts(checks);
+
+        return getPageSeoHealthStatus({
+            hasTitle: !!titleText,
+            hasDescription: !!descriptionText,
+            hasTitleFallback,
+            hasDescriptionFallback,
+            warningCount: checkCounts.warnings,
+        });
+    }
+
+    function getPageSeoCoverageCounts(records = [], statusById = new Map()) {
+        const counts = {
+            total: Array.isArray(records) ? records.length : 0,
+            good: 0,
+            needsAttention: 0,
+            missingBasics: 0,
+        };
+
+        for (const record of records || []) {
+            const key = statusById?.get(record?.id || "")?.key || pageSeoFilterNeedsAttentionKey;
+            if (key === pageSeoFilterGoodKey) {
+                counts.good += 1;
+            } else if (key === pageSeoFilterMissingBasicsKey) {
+                counts.missingBasics += 1;
+            } else {
+                counts.needsAttention += 1;
+            }
+        }
+
+        return counts;
+    }
+
     function formatPageListDate(value) {
         const raw = normalizeString(value);
         if (!raw) {
@@ -876,6 +1065,70 @@
         }
     }
 
+    function getFirstFaqKeyText(source, keys = []) {
+        if (!isPlainObject(source)) {
+            return "";
+        }
+
+        for (const key of keys) {
+            const rawValue = source?.[key];
+            if (typeof rawValue === "string" || typeof rawValue === "number") {
+                const text = toSeoPlainText(`${rawValue}`);
+                if (text) {
+                    return text;
+                }
+            }
+        }
+
+        return "";
+    }
+
+    function hasFaqQuestionAnswerPair(value, depth = 0) {
+        if (depth > 5 || value == null) {
+            return false;
+        }
+
+        if (Array.isArray(value)) {
+            return value.some((entry) => hasFaqQuestionAnswerPair(entry, depth + 1));
+        }
+
+        if (!isPlainObject(value)) {
+            return false;
+        }
+
+        const question = getFirstFaqKeyText(value, faqQuestionSummaryKeys);
+        const answer = getFirstFaqKeyText(value, faqAnswerSummaryKeys);
+        if (question && answer) {
+            return true;
+        }
+
+        return Object.values(value).some((nestedValue) => hasFaqQuestionAnswerPair(nestedValue, depth + 1));
+    }
+
+    function hasFaqStructuredDataCandidate(blocksList = []) {
+        if (!Array.isArray(blocksList) || !blocksList.length) {
+            return false;
+        }
+
+        for (const [index, block] of blocksList.entries()) {
+            const keyText = normalizeString(getBlockComponentKey(block)).toLowerCase();
+            const titleText = normalizeString(getSectionTitle(block, index)).toLowerCase();
+            const descriptionText = normalizeString(getSectionDescription(block, index)).toLowerCase();
+            const looksLikeFaq = /faq|accordion/.test(`${keyText} ${titleText} ${descriptionText}`);
+
+            if (!looksLikeFaq) {
+                continue;
+            }
+
+            const propsValue = getSectionDraftProps(block);
+            if (hasFaqQuestionAnswerPair(propsValue)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     function buildPageSeoChecks({
         titleText,
         descriptionText,
@@ -883,69 +1136,109 @@
         descriptionLength,
         hasTitle,
         hasDescription,
+        hasTitleFallback,
+        hasDescriptionFallback,
         hasSocialImage,
+        hasGlobalSocialImage,
         focusKeyword,
         noindex,
         excludeFromSitemap,
+        canonicalUrl,
+        hasCanonicalField,
+        hasFaqStructuredData,
     }) {
         const checks = [];
+        const addCheck = (level, message) => {
+            checks.push({
+                level,
+                message,
+            });
+        };
+        const normalizedCanonicalUrl = normalizeString(canonicalUrl);
 
-        if (!hasTitle) {
-            checks.push({
-                level: "warning",
-                message: "Missing SEO title. Search results may use page or global fallbacks.",
-            });
-        } else if (titleLength > seoTitleLongThreshold) {
-            checks.push({
-                level: "warning",
-                message: "SEO title is long and may be truncated in search results.",
-            });
-        }
-
-        if (!hasDescription) {
-            checks.push({
-                level: "warning",
-                message: "Missing SEO description. Search results may use fallback text.",
-            });
+        if (hasTitle) {
+            addCheck("pass", "SEO title is set for this page.");
+        } else if (hasTitleFallback) {
+            addCheck("info", "SEO title is missing on this page. Runtime will use title fallback.");
         } else {
+            addCheck("warning", "SEO title is missing and no fallback title was detected.");
+        }
+
+        if (hasDescription) {
+            addCheck("pass", "SEO description is set for this page.");
+        } else if (hasDescriptionFallback) {
+            addCheck("info", "SEO description is missing on this page. Runtime will use global fallback description.");
+        } else {
+            addCheck("warning", "SEO description is missing and no fallback description was detected.");
+        }
+
+        if (hasTitle && titleLength > seoTitleLongThreshold) {
+            addCheck("warning", "SEO title is long and may be truncated in search results.");
+        } else if (hasTitle) {
+            addCheck("pass", "SEO title length is within a healthy range.");
+        }
+
+        if (hasDescription) {
             if (descriptionLength < seoDescriptionShortThreshold) {
-                checks.push({
-                    level: "info",
-                    message: "SEO description is short. Consider adding more useful context.",
-                });
-            }
-            if (descriptionLength > seoDescriptionLongThreshold) {
-                checks.push({
-                    level: "warning",
-                    message: "SEO description is long and may be truncated in search results.",
-                });
+                addCheck("info", "SEO description is short. Consider adding more useful context.");
+            } else if (descriptionLength > seoDescriptionLongThreshold) {
+                addCheck("warning", "SEO description is long and may be truncated in search results.");
+            } else {
+                addCheck("pass", "SEO description length is within a healthy range.");
             }
         }
 
-        if (!hasSocialImage) {
-            checks.push({
-                level: "info",
-                message: "No page social image is set. The global SEO image will be used as fallback.",
-            });
+        if (hasSocialImage) {
+            addCheck("pass", "Page social image is configured.");
+        } else if (hasGlobalSocialImage) {
+            addCheck("info", "Page social image is missing. Runtime will use the global SEO image fallback.");
+        } else {
+            addCheck("warning", "No page or global social image was detected for sharing previews.");
         }
 
         if (focusKeyword) {
             const titleHasKeyword = textContainsKeyword(titleText, focusKeyword);
             const descriptionHasKeyword = textContainsKeyword(descriptionText, focusKeyword);
-            if (!titleHasKeyword && !descriptionHasKeyword) {
-                checks.push({
-                    level: "warning",
-                    message: "Focus keyword is not present in SEO title or SEO description.",
-                });
+            if (titleHasKeyword || descriptionHasKeyword) {
+                addCheck("pass", "Focus keyword appears in SEO title or SEO description.");
+            } else {
+                addCheck("warning", "Focus keyword is not present in SEO title or SEO description.");
             }
+        } else {
+            addCheck("info", "Focus keyword is optional and currently not set.");
+        }
+
+        if (noindex) {
+            addCheck("warning", "This page is marked as noindex and will not be indexed.");
+        } else {
+            addCheck("pass", "This page is indexable (index,follow).");
         }
 
         if (noindex && !excludeFromSitemap) {
-            checks.push({
-                level: "warning",
-                message: "Noindex pages are usually excluded from sitemap.",
-            });
+            addCheck("warning", "Noindex pages are usually excluded from sitemap.");
+        } else if (noindex && excludeFromSitemap) {
+            addCheck("pass", "Noindex and sitemap exclusion settings are aligned.");
         }
+
+        if (!hasCanonicalField) {
+            addCheck("info", "Canonical URL field is not available on this page collection.");
+        } else if (!normalizedCanonicalUrl) {
+            addCheck("info", "Canonical URL is not set. Runtime will apply canonical fallback rules.");
+        } else if (!/^https?:\/\//i.test(normalizedCanonicalUrl) || !isLikelyCanonicalDomain(normalizedCanonicalUrl)) {
+            addCheck("warning", "Canonical URL should start with http:// or https:// and include a valid host.");
+        } else {
+            addCheck("pass", "Canonical URL is configured.");
+        }
+
+        addCheck("pass", "BreadcrumbList structured data will be generated for canonical site pages.");
+
+        if (hasFaqStructuredData) {
+            addCheck("pass", "FAQPage structured data will be generated from detected FAQ/accordion content.");
+        } else {
+            addCheck("info", "FAQPage structured data will be generated when valid FAQ/accordion content exists.");
+        }
+
+        addCheck("info", "LocalBusiness structured data comes from Website Settings, not page SEO fields.");
 
         return checks;
     }
@@ -955,8 +1248,13 @@
         descriptionLength,
         hasTitle,
         hasDescription,
+        hasSocialImageField,
+        hasSocialImage,
+        hasTitleTemplateField,
         titleTemplate,
+        hasTitleSeparatorField,
         titleSeparator,
+        hasCanonicalDomainField,
         canonicalDomain,
     }) {
         const checks = [];
@@ -967,32 +1265,69 @@
         if (!hasTitle) {
             checks.push({
                 level: "warning",
-                message: "Missing global SEO title. Pages without SEO titles will have weaker fallbacks.",
+                message: "Global SEO title is missing. Runtime fallback is weaker for pages without page SEO titles.",
             });
         } else if (titleLength > seoTitleLongThreshold) {
             checks.push({
                 level: "warning",
                 message: "Global SEO title is long and may be truncated in search results.",
             });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Global SEO title is configured.",
+            });
         }
 
         if (!hasDescription) {
             checks.push({
                 level: "warning",
-                message: "Missing global SEO description. Page fallbacks may be incomplete.",
+                message: "Global SEO description is missing. Page fallback descriptions may be incomplete.",
             });
         } else if (descriptionLength > seoDescriptionLongThreshold) {
             checks.push({
                 level: "warning",
                 message: "Global SEO description is long and may be truncated in search results.",
             });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Global SEO description is configured.",
+            });
         }
 
-        if (normalizedTitleTemplate) {
+        if (!hasSocialImageField) {
+            checks.push({
+                level: "info",
+                message: "Global SEO image field is not available on this website collection.",
+            });
+        } else if (hasSocialImage) {
+            checks.push({
+                level: "pass",
+                message: "Global SEO image is configured for social sharing fallbacks.",
+            });
+        } else {
+            checks.push({
+                level: "warning",
+                message: "Global SEO image is missing. Shared links may show inconsistent previews.",
+            });
+        }
+
+        if (!hasTitleTemplateField) {
+            checks.push({
+                level: "info",
+                message: "Title template field is not available on this website collection.",
+            });
+        } else if (normalizedTitleTemplate) {
             if (!/\{page\}/i.test(normalizedTitleTemplate)) {
                 checks.push({
                     level: "warning",
                     message: "Title template should include {page} to represent each page title.",
+                });
+            } else {
+                checks.push({
+                    level: "pass",
+                    message: "Title template includes {page}.",
                 });
             }
 
@@ -1001,20 +1336,60 @@
                     level: "info",
                     message: "Consider including {site} in the title template for clearer branding.",
                 });
+            } else {
+                checks.push({
+                    level: "pass",
+                    message: "Title template includes {site}.",
+                });
             }
-        }
-
-        if (normalizedTitleSeparator && normalizedTitleSeparator.length > seoSeparatorLongThreshold) {
+        } else {
             checks.push({
                 level: "info",
-                message: "Title separator is usually short (1 to 3 characters).",
+                message: "Title template is not set. Runtime fallback uses the title separator pattern.",
             });
         }
 
-        if (normalizedCanonicalDomain && !isLikelyCanonicalDomain(normalizedCanonicalDomain)) {
+        if (!hasTitleSeparatorField) {
+            checks.push({
+                level: "info",
+                message: "Title separator field is not available on this website collection.",
+            });
+        } else if (!normalizedTitleSeparator) {
+            checks.push({
+                level: "info",
+                message: "Title separator is empty. Runtime fallback will use the default separator.",
+            });
+        } else if (normalizedTitleSeparator.length > seoSeparatorLongThreshold) {
             checks.push({
                 level: "warning",
-                message: "Canonical domain should start with http:// or https://",
+                message: "Title separator should stay short (usually 1 to 3 characters).",
+            });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Title separator length is readable.",
+            });
+        }
+
+        if (!hasCanonicalDomainField) {
+            checks.push({
+                level: "info",
+                message: "Canonical domain field is not available on this website collection.",
+            });
+        } else if (!normalizedCanonicalDomain) {
+            checks.push({
+                level: "warning",
+                message: "Canonical domain is missing. Runtime fallback will use website/request host rules.",
+            });
+        } else if (!isLikelyCanonicalDomain(normalizedCanonicalDomain)) {
+            checks.push({
+                level: "warning",
+                message: "Canonical domain should start with http:// or https:// and include a valid host.",
+            });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Canonical domain is configured and looks valid.",
             });
         }
 
@@ -1022,57 +1397,193 @@
     }
 
     function buildLocalBusinessSeoChecks({
+        hasBusinessNameField,
         businessName,
+        hasPrimaryCategoryField,
         primaryCategory,
+        hasPhoneField,
         phone,
+        hasEmailField,
+        email,
+        hasAddressField,
         address,
+        hasCityField,
         city,
+        hasCountryField,
         country,
+        hasServiceAreaField,
+        serviceArea,
+        hasOpeningHoursField,
         openingHours,
+        hasGooglePlaceIdField,
         googlePlaceId,
+        hasSocialProfilesField,
+        socialProfiles,
+        hasPriceRangeField,
+        priceRange,
         expectsGooglePlaceId,
     }) {
         const checks = [];
+        const hasCoreAddressFields = hasAddressField && hasCityField && hasCountryField;
+        const hasCoreAddress = hasCoreAddressFields && !!address && !!city && !!country;
+        const hasServiceArea = hasServiceAreaField && !!serviceArea;
+        const hasLocationSignal = hasCoreAddress || hasServiceArea;
 
-        if (!businessName) {
+        if (!hasBusinessNameField) {
+            checks.push({
+                level: "info",
+                message: "Business name field is not available on this website collection.",
+            });
+        } else if (!businessName) {
             checks.push({
                 level: "warning",
                 message: "Business name is missing. Local search listings are stronger with a clear business identity.",
             });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Business name is configured.",
+            });
         }
 
-        if (!primaryCategory) {
+        if (!hasPrimaryCategoryField) {
+            checks.push({
+                level: "info",
+                message: "Primary category field is not available on this website collection.",
+            });
+        } else if (!primaryCategory) {
             checks.push({
                 level: "warning",
                 message: "Primary category is missing. Add a clear category such as Dental clinic or Gym.",
             });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Primary category is configured.",
+            });
         }
 
-        if (!phone) {
+        if (!hasPhoneField) {
+            checks.push({
+                level: "info",
+                message: "Business phone field is not available on this website collection.",
+            });
+        } else if (!phone) {
             checks.push({
                 level: "info",
                 message: "Business phone is missing. Contact details help local SEO confidence.",
             });
-        }
-
-        if (!address || !city || !country) {
+        } else {
             checks.push({
-                level: "warning",
-                message: "Address, city, and country should be completed for stronger local SEO context.",
+                level: "pass",
+                message: "Business phone is configured.",
             });
         }
 
-        if (!openingHours) {
+        if (!hasEmailField) {
+            checks.push({
+                level: "info",
+                message: "Business email field is not available on this website collection.",
+            });
+        } else if (!email) {
+            checks.push({
+                level: "info",
+                message: "Business email is missing. Add one to strengthen trust/contact signals.",
+            });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Business email is configured.",
+            });
+        }
+
+        if (!hasCoreAddressFields && !hasServiceAreaField) {
+            checks.push({
+                level: "info",
+                message: "Location fields are not available on this website collection.",
+            });
+        } else if (!hasLocationSignal) {
+            checks.push({
+                level: "warning",
+                message: "Add address/city/country or a service area to provide local geography signals.",
+            });
+        } else if (!hasCoreAddress && hasServiceArea) {
+            checks.push({
+                level: "info",
+                message: "Service area is configured. Add full address details for stronger local business context.",
+            });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Location details are configured.",
+            });
+        }
+
+        if (!hasOpeningHoursField) {
+            checks.push({
+                level: "info",
+                message: "Opening hours field is not available on this website collection.",
+            });
+        } else if (!openingHours) {
             checks.push({
                 level: "info",
                 message: "Opening hours are missing. Search engines often use business hours in local listings.",
             });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Opening hours are configured.",
+            });
         }
 
-        if (expectsGooglePlaceId && !googlePlaceId) {
+        if (hasGooglePlaceIdField && expectsGooglePlaceId && !googlePlaceId) {
             checks.push({
                 level: "info",
                 message: "Google Place ID is missing. Add it if you plan to use Google reviews or local integrations.",
+            });
+        } else if (hasGooglePlaceIdField && expectsGooglePlaceId && googlePlaceId) {
+            checks.push({
+                level: "pass",
+                message: "Google Place ID is configured.",
+            });
+        } else if (!hasGooglePlaceIdField && expectsGooglePlaceId) {
+            checks.push({
+                level: "info",
+                message: "Google Place ID field is not available on this website collection.",
+            });
+        }
+
+        if (!hasSocialProfilesField) {
+            checks.push({
+                level: "info",
+                message: "Social profiles field is not available on this website collection.",
+            });
+        } else if (!socialProfiles) {
+            checks.push({
+                level: "info",
+                message: "Social profiles are missing. Add them for future sameAs structured data coverage.",
+            });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Social profiles are configured.",
+            });
+        }
+
+        if (!hasPriceRangeField) {
+            checks.push({
+                level: "info",
+                message: "Price range field is not available on this website collection.",
+            });
+        } else if (!priceRange) {
+            checks.push({
+                level: "info",
+                message: "Price range is optional but useful for richer local listing context.",
+            });
+        } else {
+            checks.push({
+                level: "pass",
+                message: "Price range is configured.",
             });
         }
 
@@ -1239,6 +1750,145 @@
 
     function formatCount(count, singular, plural = `${singular}s`) {
         return `${count} ${count === 1 ? singular : plural}`;
+    }
+
+    function getSeoCheckCounts(checks = []) {
+        let warnings = 0;
+        let infos = 0;
+        let passes = 0;
+
+        for (const check of checks || []) {
+            const level = `${check?.level || ""}`;
+            if (level === "warning") {
+                warnings += 1;
+            } else if (level === "pass") {
+                passes += 1;
+            } else {
+                infos += 1;
+            }
+        }
+
+        return {
+            warnings,
+            infos,
+            passes,
+            total: warnings + infos + passes,
+        };
+    }
+
+    function getSeoCheckSummaryText(counts) {
+        const warnings = Number(counts?.warnings || 0);
+        const infos = Number(counts?.infos || 0);
+
+        if (!warnings && !infos) {
+            return "No issues";
+        }
+
+        const parts = [];
+        if (warnings) {
+            parts.push(formatCount(warnings, "warning"));
+        }
+        if (infos) {
+            parts.push(formatCount(infos, "info"));
+        }
+
+        return parts.join(" · ");
+    }
+
+    function getPageSeoHealthStatus({
+        hasTitle,
+        hasDescription,
+        hasTitleFallback,
+        hasDescriptionFallback,
+        warningCount,
+    } = {}) {
+        const missingWithoutFallback = (!hasTitle && !hasTitleFallback) || (!hasDescription && !hasDescriptionFallback);
+        if (missingWithoutFallback) {
+            return {
+                key: "missing-basics",
+                label: "Missing basics",
+            };
+        }
+
+        const usingFallbackBasics = (!hasTitle && hasTitleFallback) || (!hasDescription && hasDescriptionFallback);
+        if (usingFallbackBasics) {
+            return {
+                key: "needs-attention",
+                label: "Needs attention",
+            };
+        }
+
+        if (Number(warningCount || 0) > 0) {
+            return {
+                key: "needs-attention",
+                label: "Needs attention",
+            };
+        }
+
+        return {
+            key: "good",
+            label: "Good",
+        };
+    }
+
+    function getGlobalSeoHealthStatus({
+        hasTitle,
+        hasDescription,
+        warningCount,
+    } = {}) {
+        if (!hasTitle || !hasDescription) {
+            return {
+                key: "missing-basics",
+                label: "Missing basics",
+            };
+        }
+
+        if (Number(warningCount || 0) > 0) {
+            return {
+                key: "needs-attention",
+                label: "Needs attention",
+            };
+        }
+
+        return {
+            key: "good",
+            label: "Good",
+        };
+    }
+
+    function getLocalBusinessSeoHealthStatus({
+        hasBusinessNameField,
+        hasBusinessName,
+        hasContactInputFields,
+        hasContactSignal,
+        hasLocationInputFields,
+        hasLocationSignal,
+        warningCount,
+        infoCount,
+    } = {}) {
+        const requiresBusinessName = !!hasBusinessNameField;
+        const hasAnyContactOrLocationInputs = !!hasContactInputFields || !!hasLocationInputFields;
+        const missingName = requiresBusinessName && !hasBusinessName;
+        const missingAllSignals = hasAnyContactOrLocationInputs && !hasContactSignal && !hasLocationSignal;
+
+        if (missingName || missingAllSignals) {
+            return {
+                key: "missing-basics",
+                label: "Missing basics",
+            };
+        }
+
+        if (Number(warningCount || 0) > 0 || Number(infoCount || 0) > 0) {
+            return {
+                key: "needs-attention",
+                label: "Needs attention",
+            };
+        }
+
+        return {
+            key: "good",
+            label: "Good",
+        };
     }
 
     function getSectionVariantLabel(block) {
@@ -1748,6 +2398,7 @@
         selectedPageId = "";
         pageSearch = "";
         pageStatusFilter = pageStatusFilterAllKey;
+        pageSeoFilter = pageSeoFilterAllKey;
         focusedBlockId = "";
         editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
@@ -2199,6 +2850,41 @@
                             {/if}
                         </div>
 
+                        <div class="page-filter-chips m-t-8" role="toolbar" aria-label="Filter pages by SEO status">
+                            <button
+                                type="button"
+                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                class:is-active={pageSeoFilter === pageSeoFilterAllKey}
+                                on:click={() => (pageSeoFilter = pageSeoFilterAllKey)}
+                            >
+                                All SEO ({pageSeoCoverageCounts.total})
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                class:is-active={pageSeoFilter === pageSeoFilterGoodKey}
+                                on:click={() => (pageSeoFilter = pageSeoFilterGoodKey)}
+                            >
+                                Good ({pageSeoCoverageCounts.good})
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                class:is-active={pageSeoFilter === pageSeoFilterNeedsAttentionKey}
+                                on:click={() => (pageSeoFilter = pageSeoFilterNeedsAttentionKey)}
+                            >
+                                Needs attention ({pageSeoCoverageCounts.needsAttention})
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                class:is-active={pageSeoFilter === pageSeoFilterMissingBasicsKey}
+                                on:click={() => (pageSeoFilter = pageSeoFilterMissingBasicsKey)}
+                            >
+                                Missing basics ({pageSeoCoverageCounts.missingBasics})
+                            </button>
+                        </div>
+
                         <div class="m-t-sm">
                             <label class="txt-sm txt-hint block m-b-5" for="cms-pages-search">Search</label>
                             <input
@@ -2223,6 +2909,7 @@
                         {:else}
                             <div class="pages-list-body m-t-sm">
                                 {#each filteredPages as page}
+                                    {@const pageSeoStatus = pageSeoStatusById.get(page.id) || getPageSeoCoverageStatus(page)}
                                     <button
                                         type="button"
                                         class="page-row"
@@ -2231,11 +2918,21 @@
                                     >
                                         <div class="page-row-main">
                                             <span class="page-row-title">{getPageLabel(page)}</span>
-                                            {#if pageEnabledField}
-                                                <span class="label label-sm page-list-status" class:is-active={isPageActive(page)}>
-                                                    {isPageActive(page) ? "Active" : "Inactive"}
+                                            <span class="page-row-badges">
+                                                {#if pageEnabledField}
+                                                    <span class="label label-sm page-list-status" class:is-active={isPageActive(page)}>
+                                                        {isPageActive(page) ? "Active" : "Inactive"}
+                                                    </span>
+                                                {/if}
+                                                <span
+                                                    class="label label-sm page-seo-status-pill"
+                                                    class:good={pageSeoStatus.key === pageSeoFilterGoodKey}
+                                                    class:needs-attention={pageSeoStatus.key === pageSeoFilterNeedsAttentionKey}
+                                                    class:missing-basics={pageSeoStatus.key === pageSeoFilterMissingBasicsKey}
+                                                >
+                                                    {pageSeoStatus.label}
                                                 </span>
-                                            {/if}
+                                            </span>
                                         </div>
                                         <div class="page-row-meta">
                                             <span class="txt-xs txt-hint">{getPageListMeta(page)}</span>
@@ -2379,8 +3076,7 @@
                                     <div class="sections-head">
                                         <div>
                                             <h5 class="m-0">Page SEO</h5>
-                                            <p class="txt-sm txt-hint m-b-0 m-t-6">This controls how this page may appear in search results.</p>
-                                            <p class="txt-sm txt-hint m-b-0 m-t-4">If left empty, Nuvio will use fallback metadata where available.</p>
+                                            <p class="txt-sm txt-hint m-b-0 m-t-6">Controls how this page may appear in search results. If empty, fallback metadata is used where available.</p>
                                         </div>
                                     </div>
 
@@ -2389,7 +3085,6 @@
                                             <section class="seo-section">
                                                 <div class="seo-section-head">
                                                     <h6 class="m-0">Search Appearance</h6>
-                                                    <p class="txt-sm txt-hint m-b-0">This controls how this page may appear in search results.</p>
                                                 </div>
 
                                                 <div class="seo-preview-card seo-search-preview-card m-t-sm">
@@ -2504,8 +3199,7 @@
                                                     <h6 class="m-0">Advanced Indexing</h6>
                                                     <span class="label label-sm">Advanced</span>
                                                 </div>
-                                                <p class="txt-sm txt-hint m-b-0 m-t-6">Advanced indexing settings can affect how search engines discover this page.</p>
-                                                <p class="txt-sm txt-hint m-b-0 m-t-4">These settings are stored now and will apply when runtime SEO support is implemented.</p>
+                                                <p class="txt-sm txt-hint m-b-0 m-t-6">Advanced indexing settings can affect discovery. These values are stored now and apply when runtime SEO support is enabled.</p>
 
                                                 <div class="form-grid seo-advanced-grid m-t-sm">
                                                     {#if pageSeoCanonicalUrlField}
@@ -2545,15 +3239,51 @@
                                                 </div>
                                             </section>
 
-                                            {#if pageSeoChecks.length}
-                                                <div class="seo-check-list">
-                                                    {#each pageSeoChecks as check}
-                                                        <div class="seo-check-item" class:warning={check.level === "warning"}>
-                                                            {check.message}
-                                                        </div>
-                                                    {/each}
+                                            <div class="seo-checklist-panel seo-health-panel">
+                                                <div class="seo-checklist-head">
+                                                    <div class="seo-health-main">
+                                                        <h6 class="m-0 seo-checklist-title">SEO health</h6>
+                                                        <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                            Estimated from current draft values and runtime SEO rules.
+                                                        </p>
+                                                    </div>
+                                                    <div class="seo-health-meta">
+                                                        <span
+                                                            class="label label-sm seo-health-status-pill"
+                                                            class:good={pageSeoHealthStatus.key === "good"}
+                                                            class:needs-attention={pageSeoHealthStatus.key === "needs-attention"}
+                                                            class:missing-basics={pageSeoHealthStatus.key === "missing-basics"}
+                                                        >
+                                                            {pageSeoHealthStatus.label}
+                                                        </span>
+                                                        <span
+                                                            class="summary-pill seo-check-summary-pill"
+                                                            class:warning={pageSeoCheckCounts.warnings > 0}
+                                                        >
+                                                            {pageSeoCheckSummary}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            {/if}
+
+                                                {#if pageSeoChecks.length}
+                                                    <div class="seo-check-list m-t-8">
+                                                        {#each pageSeoChecks as check}
+                                                            <div class="seo-check-item" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
+                                                                <span class="label label-sm seo-check-pill" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
+                                                                    {check.level === "warning"
+                                                                        ? "Warning"
+                                                                        : check.level === "pass"
+                                                                            ? "Pass"
+                                                                            : "Info"}
+                                                                </span>
+                                                                <span class="seo-check-message">{check.message}</span>
+                                                            </div>
+                                                        {/each}
+                                                    </div>
+                                                {:else}
+                                                    <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
+                                                {/if}
+                                            </div>
                                         </div>
 
                                         <div class="form-actions m-t-sm">
@@ -2653,8 +3383,7 @@
                                     <div class="settings-pane">
                                         <div class="settings-subhead">
                                             <h5 class="m-0">Global SEO</h5>
-                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Used as fallback metadata when a page does not define its own SEO.</p>
-                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Page-level SEO overrides these global defaults.</p>
+                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Used as fallback metadata when a page does not define its own SEO. Page-level SEO overrides these defaults.</p>
                                         </div>
 
                                         <div class="settings-form-grid two-col m-t-sm">
@@ -2733,15 +3462,51 @@
                                             </div>
                                         </div>
 
-                                        {#if globalSeoChecks.length}
-                                            <div class="seo-check-list m-t-8">
-                                                {#each globalSeoChecks as check}
-                                                    <div class="seo-check-item" class:warning={check.level === "warning"}>
-                                                        {check.message}
-                                                    </div>
-                                                {/each}
+                                        <div class="seo-checklist-panel seo-health-panel m-t-8">
+                                            <div class="seo-checklist-head">
+                                                <div class="seo-health-main">
+                                                    <h6 class="m-0 seo-checklist-title">Global SEO health</h6>
+                                                    <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                        Evaluates global metadata defaults and canonical setup used by runtime fallbacks.
+                                                    </p>
+                                                </div>
+                                                <div class="seo-health-meta">
+                                                    <span
+                                                        class="label label-sm seo-health-status-pill"
+                                                        class:good={globalSeoHealthStatus.key === "good"}
+                                                        class:needs-attention={globalSeoHealthStatus.key === "needs-attention"}
+                                                        class:missing-basics={globalSeoHealthStatus.key === "missing-basics"}
+                                                    >
+                                                        {globalSeoHealthStatus.label}
+                                                    </span>
+                                                    <span
+                                                        class="summary-pill seo-check-summary-pill"
+                                                        class:warning={globalSeoCheckCounts.warnings > 0}
+                                                    >
+                                                        {globalSeoCheckSummary}
+                                                    </span>
+                                                </div>
                                             </div>
-                                        {/if}
+
+                                            {#if globalSeoChecks.length}
+                                                <div class="seo-check-list m-t-8">
+                                                    {#each globalSeoChecks as check}
+                                                        <div class="seo-check-item" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
+                                                            <span class="label label-sm seo-check-pill" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
+                                                                {check.level === "warning"
+                                                                    ? "Warning"
+                                                                    : check.level === "pass"
+                                                                        ? "Pass"
+                                                                        : "Info"}
+                                                            </span>
+                                                            <span class="seo-check-message">{check.message}</span>
+                                                        </div>
+                                                    {/each}
+                                                </div>
+                                            {:else}
+                                                <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
+                                            {/if}
+                                        </div>
                                     </div>
 
                                     <div class="settings-pane">
@@ -2801,11 +3566,8 @@
                                     <div class="settings-pane">
                                         <div class="settings-subhead">
                                             <h5 class="m-0">Local Business SEO</h5>
-                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Helps Nuvio prepare stronger local SEO and structured data for this business.</p>
+                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Helps Nuvio prepare stronger local SEO and structured data for this business when runtime rendering is enabled.</p>
                                         </div>
-                                        <p class="txt-sm txt-hint m-b-0 m-t-8">
-                                            These fields will be used for LocalBusiness structured data when runtime SEO rendering is enabled.
-                                        </p>
 
                                         <div class="local-seo-groups m-t-sm">
                                             <div class="local-seo-group">
@@ -2832,7 +3594,7 @@
                                                                 bind:value={websiteIdentitySeoDraft.businessType}
                                                             />
                                                             <div class="help-block m-t-6">
-                                                                Examples: LocalBusiness, Dentist, HealthClub, Restaurant, ProfessionalService.
+                                                                Example values: LocalBusiness, Dentist, HealthClub, Restaurant, ProfessionalService.
                                                             </div>
                                                         </div>
                                                     {/if}
@@ -2970,7 +3732,7 @@
                                                                 bind:value={websiteIdentitySeoDraft.businessOpeningHours}
                                                             />
                                                             <div class="help-block m-t-6">
-                                                                You can use plain text or a JSON-like schedule format.
+                                                                Use plain text or a JSON-like schedule format.
                                                             </div>
                                                         </div>
                                                     {/if}
@@ -2993,15 +3755,51 @@
                                             </div>
                                         </div>
 
-                                        {#if localBusinessSeoChecks.length}
-                                            <div class="seo-check-list m-t-8">
-                                                {#each localBusinessSeoChecks as check}
-                                                    <div class="seo-check-item" class:warning={check.level === "warning"}>
-                                                        {check.message}
-                                                    </div>
-                                                {/each}
+                                        <div class="seo-checklist-panel seo-health-panel m-t-8">
+                                            <div class="seo-checklist-head">
+                                                <div class="seo-health-main">
+                                                    <h6 class="m-0 seo-checklist-title">Local Business SEO health</h6>
+                                                    <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                        LocalBusiness structured data is generated only when enough business data exists.
+                                                    </p>
+                                                </div>
+                                                <div class="seo-health-meta">
+                                                    <span
+                                                        class="label label-sm seo-health-status-pill"
+                                                        class:good={localBusinessSeoHealthStatus.key === "good"}
+                                                        class:needs-attention={localBusinessSeoHealthStatus.key === "needs-attention"}
+                                                        class:missing-basics={localBusinessSeoHealthStatus.key === "missing-basics"}
+                                                    >
+                                                        {localBusinessSeoHealthStatus.label}
+                                                    </span>
+                                                    <span
+                                                        class="summary-pill seo-check-summary-pill"
+                                                        class:warning={localBusinessSeoCheckCounts.warnings > 0}
+                                                    >
+                                                        {localBusinessSeoCheckSummary}
+                                                    </span>
+                                                </div>
                                             </div>
-                                        {/if}
+
+                                            {#if localBusinessSeoChecks.length}
+                                                <div class="seo-check-list m-t-8">
+                                                    {#each localBusinessSeoChecks as check}
+                                                        <div class="seo-check-item" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
+                                                            <span class="label label-sm seo-check-pill" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
+                                                                {check.level === "warning"
+                                                                    ? "Warning"
+                                                                    : check.level === "pass"
+                                                                        ? "Pass"
+                                                                        : "Info"}
+                                                            </span>
+                                                            <span class="seo-check-message">{check.message}</span>
+                                                        </div>
+                                                    {/each}
+                                                </div>
+                                            {:else}
+                                                <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
+                                            {/if}
+                                        </div>
                                     </div>
 
                                     <div class="settings-section-actions m-t-sm">
@@ -3229,6 +4027,12 @@
         border-color: var(--baseAlt2Color);
     }
 
+    .page-seo-filter-chip.is-active {
+        border-color: color-mix(in srgb, var(--primaryColor) 28%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--primaryColor) 8%, var(--baseColor));
+        color: color-mix(in srgb, var(--primaryColor) 70%, var(--txtPrimaryColor));
+    }
+
     .pages-list-body {
         display: flex;
         flex-direction: column;
@@ -3283,6 +4087,14 @@
         gap: 8px;
     }
 
+    .page-row-badges {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        flex: 0 0 auto;
+    }
+
     .page-row-title {
         color: var(--txtPrimaryColor);
         font-weight: 600;
@@ -3303,6 +4115,31 @@
     .page-list-status,
     .page-status-pill {
         font-weight: 600;
+    }
+
+    .page-seo-status-pill {
+        font-weight: 600;
+        color: var(--txtHintColor);
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
+    }
+
+    .page-seo-status-pill.good {
+        color: color-mix(in srgb, var(--successColor) 84%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--successColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--successColor) 12%, var(--baseColor));
+    }
+
+    .page-seo-status-pill.needs-attention {
+        color: color-mix(in srgb, var(--warningColor) 86%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
+    .page-seo-status-pill.missing-basics {
+        color: color-mix(in srgb, var(--dangerColor) 84%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--dangerColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--dangerColor) 12%, var(--baseColor));
     }
 
     .page-list-status.is-active,
@@ -3629,18 +4466,18 @@
 
     .seo-page-wrap {
         border-top: 1px solid var(--baseAlt2Color);
-        padding-top: 10px;
+        padding-top: 8px;
     }
 
     .seo-sections {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
     }
 
     .seo-section {
         border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-        padding-top: 10px;
+        padding-top: 8px;
     }
 
     .seo-section-head {
@@ -3713,7 +4550,7 @@
 
     .settings-pane + .settings-pane {
         border-top: 1px solid var(--baseAlt2Color);
-        padding-top: 12px;
+        padding-top: 10px;
     }
 
     .settings-form-wrap {
@@ -3751,12 +4588,12 @@
     .local-seo-groups {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
     }
 
     .local-seo-group {
         border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-        padding-top: 10px;
+        padding-top: 8px;
     }
 
     .local-seo-group-title {
@@ -3790,13 +4627,13 @@
     }
 
     .seo-preview-card {
-        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 92%, transparent);
         border-radius: var(--baseRadius);
-        background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
-        padding: 10px 11px;
+        background: var(--baseColor);
+        padding: 9px 10px;
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 4px;
     }
 
     .seo-preview-label {
@@ -3839,20 +4676,139 @@
         color: var(--txtHintColor);
     }
 
+    .seo-checklist-panel {
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
+        padding: 8px 10px;
+    }
+
+    .seo-checklist-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .seo-checklist-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--txtPrimaryColor);
+    }
+
+    .seo-health-main {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .seo-health-helper {
+        font-size: 11px;
+        line-height: 1.35;
+    }
+
+    .seo-health-meta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .seo-health-status-pill {
+        --labelHPadding: 8px;
+        min-height: 20px;
+        color: var(--txtHintColor);
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
+        font-weight: 600;
+    }
+
+    .seo-health-status-pill.good {
+        color: color-mix(in srgb, var(--successColor) 85%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--successColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--successColor) 12%, var(--baseColor));
+    }
+
+    .seo-health-status-pill.needs-attention {
+        color: color-mix(in srgb, var(--warningColor) 86%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
+    .seo-health-status-pill.missing-basics {
+        color: color-mix(in srgb, var(--dangerColor) 84%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--dangerColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--dangerColor) 12%, var(--baseColor));
+    }
+
+    .seo-check-summary-pill {
+        --labelHPadding: 9px;
+        min-height: 20px;
+        color: var(--txtHintColor);
+        background: color-mix(in srgb, var(--baseAlt1Color) 22%, var(--baseColor));
+    }
+
+    .seo-check-summary-pill.warning {
+        color: color-mix(in srgb, var(--warningColor) 84%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
     .seo-check-list {
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 0;
     }
 
     .seo-check-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        padding: 6px 0;
         font-size: var(--smFontSize);
         line-height: var(--smLineHeight);
         color: var(--txtHintColor);
     }
 
+    .seo-check-item + .seo-check-item {
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
     .seo-check-item.warning {
-        color: var(--warningColor);
+        color: color-mix(in srgb, var(--warningColor) 80%, var(--txtPrimaryColor));
+    }
+
+    .seo-check-item.pass {
+        color: color-mix(in srgb, var(--successColor) 82%, var(--txtPrimaryColor));
+    }
+
+    .seo-check-pill {
+        --labelHPadding: 7px;
+        min-height: 18px;
+        flex: 0 0 auto;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        color: var(--txtHintColor);
+        background: var(--baseColor);
+    }
+
+    .seo-check-pill.warning {
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        color: color-mix(in srgb, var(--warningColor) 88%, var(--txtPrimaryColor));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
+    .seo-check-pill.pass {
+        border-color: color-mix(in srgb, var(--successColor) 42%, var(--baseAlt2Color));
+        color: color-mix(in srgb, var(--successColor) 86%, var(--txtPrimaryColor));
+        background: color-mix(in srgb, var(--successColor) 12%, var(--baseColor));
+    }
+
+    .seo-check-message {
+        flex: 1 1 auto;
+        min-width: 0;
     }
 
     .textarea-input {
