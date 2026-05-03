@@ -3141,6 +3141,20 @@
                                                                 </div>
                                                             </div>
                                                         {/if}
+
+                                                        {#if pageSeoFocusKeywordField}
+                                                            <div class="form-field seo-field">
+                                                                <label for="cms-page-seo-focus-keyword">SEO focus keyword</label>
+                                                                <input
+                                                                    id="cms-page-seo-focus-keyword"
+                                                                    class="input form-input"
+                                                                    bind:value={pageEditForm.seoFocusKeyword}
+                                                                />
+                                                                <div class="help-block m-t-6">
+                                                                    Used internally for SEO guidance. This is not rendered as meta keywords.
+                                                                </div>
+                                                            </div>
+                                                        {/if}
                                                     </div>
 
                                                     {#if pageSeoSocialImageField}
@@ -3257,60 +3271,116 @@
                                                 </aside>
                                             </div>
                                         {:else if activePageSeoTab === pageSeoTabAdvancedKey}
-                                            {#if pageSeoCanonicalUrlField || pageSeoNoindexField || pageSeoExcludeFromSitemapField || pageSeoFocusKeywordField}
-                                                <div class="seo-advanced-pane m-t-sm">
-                                                    <p class="txt-sm txt-hint m-b-0">Usually you do not need to change these.</p>
+                                            {#if pageSeoCanonicalUrlField || pageSeoNoindexField || pageSeoExcludeFromSitemapField}
+                                                <div class="seo-editor-grid m-t-sm">
+                                                    <div class="seo-advanced-main">
+                                                        <div class="seo-advanced-pane">
+                                                            {#if pageSeoCanonicalUrlField}
+                                                                <div class="seo-advanced-section">
+                                                                    <h6 class="m-0 seo-advanced-section-title">Canonical</h6>
+                                                                    <div class="form-grid seo-advanced-grid m-t-8">
+                                                                        <div class="form-field seo-field local-seo-full-width">
+                                                                            <label for="cms-page-seo-canonical-url">Canonical URL</label>
+                                                                            <input
+                                                                                id="cms-page-seo-canonical-url"
+                                                                                class="input form-input"
+                                                                                type="url"
+                                                                                placeholder="https://example.com/canonical-path"
+                                                                                bind:value={pageEditForm.seoCanonicalUrl}
+                                                                            />
+                                                                            <div class="help-block m-t-6">
+                                                                                If empty, runtime will apply canonical fallback rules.
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            {/if}
 
-                                                    <div class="form-grid seo-advanced-grid m-t-sm">
-                                                        {#if pageSeoCanonicalUrlField}
-                                                            <div class="form-field seo-field local-seo-full-width">
-                                                                <label for="cms-page-seo-canonical-url">Canonical URL</label>
-                                                                <input
-                                                                    id="cms-page-seo-canonical-url"
-                                                                    class="input form-input"
-                                                                    type="url"
-                                                                    placeholder="https://example.com/canonical-path"
-                                                                    bind:value={pageEditForm.seoCanonicalUrl}
-                                                                />
-                                                            </div>
-                                                        {/if}
+                                                            {#if pageSeoNoindexField || pageSeoExcludeFromSitemapField}
+                                                                <div class="seo-advanced-section">
+                                                                    <h6 class="m-0 seo-advanced-section-title">Indexing</h6>
+                                                                    <div class="form-grid seo-advanced-grid m-t-8">
+                                                                        {#if pageSeoNoindexField}
+                                                                            <div class="form-field form-field-toggle seo-toggle-field">
+                                                                                <input
+                                                                                    id="cms-page-seo-noindex"
+                                                                                    type="checkbox"
+                                                                                    bind:checked={pageEditForm.seoNoindex}
+                                                                                />
+                                                                                <label for="cms-page-seo-noindex">Hide this page from Google</label>
+                                                                            </div>
+                                                                        {/if}
 
-                                                        {#if pageSeoNoindexField}
-                                                            <div class="form-field form-field-toggle seo-toggle-field">
-                                                                <input
-                                                                    id="cms-page-seo-noindex"
-                                                                    type="checkbox"
-                                                                    bind:checked={pageEditForm.seoNoindex}
-                                                                />
-                                                                <label for="cms-page-seo-noindex">Hide this page from Google</label>
-                                                            </div>
-                                                        {/if}
+                                                                        {#if pageSeoExcludeFromSitemapField}
+                                                                            <div class="form-field form-field-toggle seo-toggle-field">
+                                                                                <input
+                                                                                    id="cms-page-seo-exclude-from-sitemap"
+                                                                                    type="checkbox"
+                                                                                    bind:checked={pageEditForm.seoExcludeFromSitemap}
+                                                                                />
+                                                                                <label for="cms-page-seo-exclude-from-sitemap">Remove from sitemap</label>
+                                                                            </div>
+                                                                        {/if}
+                                                                    </div>
+                                                                </div>
+                                                            {/if}
+                                                        </div>
+                                                    </div>
 
-                                                        {#if pageSeoExcludeFromSitemapField}
-                                                            <div class="form-field form-field-toggle seo-toggle-field">
-                                                                <input
-                                                                    id="cms-page-seo-exclude-from-sitemap"
-                                                                    type="checkbox"
-                                                                    bind:checked={pageEditForm.seoExcludeFromSitemap}
-                                                                />
-                                                                <label for="cms-page-seo-exclude-from-sitemap">Remove from sitemap</label>
-                                                            </div>
-                                                        {/if}
-
-                                                        {#if pageSeoFocusKeywordField}
-                                                            <div class="form-field seo-field local-seo-full-width">
-                                                                <label for="cms-page-seo-focus-keyword">SEO focus keyword</label>
-                                                                <input
-                                                                    id="cms-page-seo-focus-keyword"
-                                                                    class="input form-input"
-                                                                    bind:value={pageEditForm.seoFocusKeyword}
-                                                                />
-                                                                <div class="help-block m-t-6">
-                                                                    Used internally for SEO guidance. This is not rendered as meta keywords.
+                                                    <aside class="seo-editor-side">
+                                                        <div class="seo-checklist-panel seo-impact-panel">
+                                                            <div class="seo-checklist-head">
+                                                                <div class="seo-health-main">
+                                                                    <h6 class="m-0 seo-checklist-title">Current impact</h6>
+                                                                    <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                                        Runtime behavior based on current canonical and indexing settings.
+                                                                    </p>
                                                                 </div>
                                                             </div>
-                                                        {/if}
-                                                    </div>
+
+                                                            <div class="seo-check-list m-t-8">
+                                                                {#if pageSeoNoindexField}
+                                                                    {#if pageSeoNoindexValue}
+                                                                        <div class="seo-check-item warning">
+                                                                            <span class="label label-sm seo-check-pill warning">Warning</span>
+                                                                            <span class="seo-check-message">This page is marked as noindex and will not be indexed.</span>
+                                                                        </div>
+                                                                    {:else}
+                                                                        <div class="seo-check-item pass">
+                                                                            <span class="label label-sm seo-check-pill pass">Pass</span>
+                                                                            <span class="seo-check-message">This page is indexable (index,follow).</span>
+                                                                        </div>
+                                                                    {/if}
+                                                                {/if}
+
+                                                                {#if pageSeoNoindexField && pageSeoExcludeFromSitemapField && pageSeoNoindexValue && !pageSeoExcludeFromSitemapValue}
+                                                                    <div class="seo-check-item warning">
+                                                                        <span class="label label-sm seo-check-pill warning">Warning</span>
+                                                                        <span class="seo-check-message">Noindex pages are usually excluded from sitemap.</span>
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if pageSeoCanonicalUrlField}
+                                                                    {#if !pageSeoCanonicalUrlText}
+                                                                        <div class="seo-check-item">
+                                                                            <span class="label label-sm seo-check-pill">Info</span>
+                                                                            <span class="seo-check-message">Canonical URL is not set. Runtime will apply canonical fallback rules.</span>
+                                                                        </div>
+                                                                    {:else if !/^https?:\/\//i.test(pageSeoCanonicalUrlText) || !isLikelyCanonicalDomain(pageSeoCanonicalUrlText)}
+                                                                        <div class="seo-check-item warning">
+                                                                            <span class="label label-sm seo-check-pill warning">Warning</span>
+                                                                            <span class="seo-check-message">Canonical URL should start with http:// or https:// and include a valid host.</span>
+                                                                        </div>
+                                                                    {:else}
+                                                                        <div class="seo-check-item pass">
+                                                                            <span class="label label-sm seo-check-pill pass">Pass</span>
+                                                                            <span class="seo-check-message">Canonical URL is configured.</span>
+                                                                        </div>
+                                                                    {/if}
+                                                                {/if}
+                                                            </div>
+                                                        </div>
+                                                    </aside>
                                                 </div>
                                             {:else}
                                                 <p class="txt-sm txt-hint m-t-8 m-b-0">Advanced SEO fields are not available for this page collection.</p>
@@ -4637,8 +4707,30 @@
     }
 
     .seo-advanced-pane {
-        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-        padding-top: 10px;
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    .seo-advanced-main {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .seo-advanced-section {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    .seo-advanced-section + .seo-advanced-section {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        padding-top: 8px;
+    }
+
+    .seo-advanced-section-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--txtPrimaryColor);
     }
 
     .seo-advanced-grid {
@@ -4648,6 +4740,11 @@
     .seo-toggle-field {
         margin-bottom: 0;
         min-height: 24px;
+    }
+
+    .seo-impact-panel {
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 6%, var(--baseColor));
     }
 
     .seo-health-group-title {
