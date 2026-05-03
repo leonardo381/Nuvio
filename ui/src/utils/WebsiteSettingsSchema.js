@@ -3,7 +3,7 @@ const ROLE_ADMIN = "admin";
 const ROLE_CLIENT = "client";
 const defaultEditableBy = [ROLE_ADMIN];
 const websiteFeatureFlagKeys = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
-const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "i18n"]);
+const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
 
 export const websiteSettingsSchema = {
     fields: [
@@ -370,6 +370,34 @@ function filterFieldsByRole(fields, role) {
     return filtered;
 }
 
+function shouldShowFeatureForClient(featureKey, featureFlags) {
+    if (!websiteFeatureSectionKeys.has(featureKey)) {
+        return true;
+    }
+
+    if (featureFlags?.[featureKey] === false) {
+        return false;
+    }
+
+    return true;
+}
+
+function stripClientFeatureAvailabilityField(field) {
+    if (!field || !websiteFeatureSectionKeys.has(field?.key) || field.type !== "object") {
+        return field;
+    }
+
+    const nextFields = (field.fields || []).filter((childField) => childField?.key !== "enabled");
+    if (!nextFields.length) {
+        return null;
+    }
+
+    return {
+        ...field,
+        fields: nextFields,
+    };
+}
+
 function filterFieldsByClientFeatureFlags(fields, featureFlags) {
     const result = [];
 
@@ -379,9 +407,16 @@ function filterFieldsByClientFeatureFlags(fields, featureFlags) {
             continue;
         }
 
-        if (featureFlags?.[field.key] !== false) {
-            result.push(field);
+        if (!shouldShowFeatureForClient(field.key, featureFlags)) {
+            continue;
         }
+
+        const nextField = stripClientFeatureAvailabilityField(field);
+        if (!nextField) {
+            continue;
+        }
+
+        result.push(nextField);
     }
 
     return result;

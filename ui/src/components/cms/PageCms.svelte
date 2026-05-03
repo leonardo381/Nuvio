@@ -24,7 +24,32 @@
     const pageStatusFilterActiveKey = "active";
     const pageStatusFilterInactiveKey = "inactive";
     const clientSettingsRole = "client";
-    const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "newsletter", "i18n"]);
+    const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
+    const websiteSettingsAreaIdentitySeoKey = "identity-seo";
+    const websiteSettingsAreaFeaturesKey = "features";
+    const websiteSettingsFeatureOrder = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
+    const websiteSettingsFeatureLabelByKey = {
+        whatsapp: "WhatsApp",
+        contactForm: "Contact form",
+        reviews: "Reviews",
+        newsletter: "Newsletter",
+        booking: "Booking",
+        reports: "Reports",
+        i18n: "Internationalization",
+    };
+    const websiteSettingsAreaIconByKey = {
+        [websiteSettingsAreaIdentitySeoKey]: "ri-profile-line",
+        [websiteSettingsAreaFeaturesKey]: "ri-settings-4-line",
+    };
+    const websiteSettingsFeatureIconByKey = {
+        whatsapp: "ri-whatsapp-line",
+        contactForm: "ri-mail-line",
+        reviews: "ri-star-line",
+        newsletter: "ri-megaphone-line",
+        booking: "ri-calendar-line",
+        reports: "ri-bar-chart-2-line",
+        i18n: "ri-global-line",
+    };
 
     let websites = [];
     let pages = [];
@@ -67,6 +92,8 @@
         logoFile: null,
         seoImageFile: null,
     };
+    let activeWebsiteSettingsArea = websiteSettingsAreaIdentitySeoKey;
+    let activeWebsiteSettingsFeatureKey = "";
 
     let sectionPropsDraftById = {};
     let sectionErrorById = {};
@@ -137,6 +164,38 @@
     $: selectedPage = pages.find((record) => record.id === selectedPageId) || null;
     $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
     $: clientWebsiteSettingsFields = filterClientWebsiteSettingsFields(roleScopedSettingsFields);
+    $: availableWebsiteSettingsFeatures = websiteSettingsFeatureOrder
+        .map((key) => {
+            const isAvailable = websiteSettingsFullDraft?.featureFlags?.[key] !== false;
+            if (!isAvailable) {
+                return null;
+            }
+
+            const field = (clientWebsiteSettingsFields || []).find((candidate) => `${candidate?.key || ""}` === key) || null;
+            return {
+                key,
+                label: field?.label || websiteSettingsFeatureLabelByKey?.[key] || "Feature",
+                icon: websiteSettingsFeatureIconByKey?.[key] || "ri-settings-3-line",
+                field,
+                hasEditableFields: !!field,
+            };
+        })
+        .filter(Boolean);
+    $: activeWebsiteSettingsFeature = availableWebsiteSettingsFeatures.find(
+        (feature) => feature.key === activeWebsiteSettingsFeatureKey,
+    ) || null;
+    $: activeWebsiteSettingsFeatureField = activeWebsiteSettingsFeature?.field || null;
+    $: activeWebsiteSettingsFeatureValue = activeWebsiteSettingsFeatureField
+        ? { [activeWebsiteSettingsFeatureField.key]: structuredClone(websiteSettingsDraft?.[activeWebsiteSettingsFeatureField.key] ?? {}) }
+        : {};
+    $: if (!activeWebsiteSettingsFeatureKey && availableWebsiteSettingsFeatures.length) {
+        activeWebsiteSettingsFeatureKey = availableWebsiteSettingsFeatures[0].key;
+    } else if (
+        activeWebsiteSettingsFeatureKey &&
+        !availableWebsiteSettingsFeatures.some((feature) => feature.key === activeWebsiteSettingsFeatureKey)
+    ) {
+        activeWebsiteSettingsFeatureKey = availableWebsiteSettingsFeatures[0]?.key || "";
+    }
 
     $: websitePublicUrl = getWebsitePublicUrl(selectedWebsite);
     $: selectedWebsiteSlug = normalizeString(websiteSlugField ? selectedWebsite?.[websiteSlugField] : "");
@@ -278,6 +337,8 @@
             lastWebsiteSettingsSeedKey = nextWebsiteSettingsSeedKey;
             initializeWebsiteSettingsDraft();
             initializeWebsiteIdentitySeoDraft();
+            activeWebsiteSettingsArea = websiteSettingsAreaIdentitySeoKey;
+            activeWebsiteSettingsFeatureKey = "";
         }
     }
 
@@ -1173,6 +1234,44 @@
         }
     }
 
+    function setActiveWebsiteSettingsArea(nextArea) {
+        if (nextArea === websiteSettingsAreaIdentitySeoKey || nextArea === websiteSettingsAreaFeaturesKey) {
+            activeWebsiteSettingsArea = nextArea;
+        }
+    }
+
+    function setActiveWebsiteSettingsFeature(nextFeatureKey) {
+        const normalizedKey = normalizeString(nextFeatureKey);
+        if (!normalizedKey) {
+            return;
+        }
+
+        if (!availableWebsiteSettingsFeatures.some((feature) => feature.key === normalizedKey)) {
+            return;
+        }
+
+        activeWebsiteSettingsFeatureKey = normalizedKey;
+    }
+
+    function handleWebsiteSettingsFeatureGroupChange(featureKey, event) {
+        const normalizedFeatureKey = normalizeString(featureKey);
+        if (!normalizedFeatureKey) {
+            return;
+        }
+
+        const nextGroupValue = event?.detail?.value?.[normalizedFeatureKey];
+        const nextScopedValue = {
+            ...websiteSettingsDraft,
+            [normalizedFeatureKey]: typeof nextGroupValue === "undefined"
+                ? structuredClone(websiteSettingsDraft?.[normalizedFeatureKey] ?? {})
+                : structuredClone(nextGroupValue),
+        };
+
+        handleWebsiteSettingsChange({
+            detail: { value: nextScopedValue },
+        });
+    }
+
     async function savePageSeo() {
         pageError = "";
 
@@ -1713,139 +1812,224 @@
             {:else if activeCmsTab === cmsTabSettingsKey}
                 <div class="settings-workspace">
                     <div class="settings-head">
-                        <div>
-                            <h4 class="m-0">Website Settings</h4>
-                            <p class="txt-sm txt-hint m-b-0 m-t-6">Edit general settings for the selected website.</p>
-                        </div>
+                        <h4 class="m-0">Website Settings</h4>
+                        <p class="txt-sm txt-hint m-b-0 settings-head-helper">Edit general settings for the selected website.</p>
                     </div>
 
                     {#if !selectedWebsiteId}
                         <p class="txt-hint m-b-0">Select a website to edit settings.</p>
                     {:else}
-                        {#if hasWebsiteIdentitySeoFields}
-                            <div class="settings-form-wrap m-t-sm">
-                                <div class="settings-subhead">
-                                    <h5 class="m-0">Identity & Global SEO</h5>
-                                    <p class="txt-sm txt-hint m-b-0 m-t-6">Edit website logo and global metadata.</p>
-                                </div>
-
-                                <div class="form-grid two-col m-t-sm">
-                                    {#if websiteSeoTitleField}
-                                        <div class="form-field">
-                                            <label for="cms-website-seo-title">SEO Title global</label>
-                                            <input
-                                                id="cms-website-seo-title"
-                                                class="input"
-                                                bind:value={websiteIdentitySeoDraft.seoTitle}
-                                            />
-                                        </div>
-                                    {/if}
-
-                                    {#if websiteSeoDescriptionField}
-                                        <div class="form-field">
-                                            <label for="cms-website-seo-description">
-                                                SEO Description global
-                                            </label>
-                                            <textarea
-                                                id="cms-website-seo-description"
-                                                class="input textarea-input"
-                                                rows="4"
-                                                bind:value={websiteIdentitySeoDraft.seoDescription}
-                                            />
-                                        </div>
-                                    {/if}
-
-                                    {#if websiteLogoField}
-                                        <div class="form-field">
-                                            <label for="cms-website-logo-file">Logo</label>
-                                            <input
-                                                id="cms-website-logo-file"
-                                                class="input file-input"
-                                                type="file"
-                                                on:change={(event) => handleWebsiteSeoFileChange("logo", event)}
-                                            />
-                                            <div class="help-block file-field-hint m-t-6">
-                                                {#if websiteIdentitySeoDraft.logoFile}
-                                                    <span>New: {websiteIdentitySeoDraft.logoFile.name}</span>
-                                                {:else if websiteIdentitySeoDraft.logoCurrent}
-                                                    <span>Current: {websiteIdentitySeoDraft.logoCurrent}</span>
-                                                {:else}
-                                                    <span>No current file.</span>
-                                                {/if}
-                                            </div>
-                                        </div>
-                                    {/if}
-
-                                    {#if websiteSeoImageField}
-                                        <div class="form-field">
-                                            <label for="cms-website-seo-image-file">
-                                                Global SEO Image
-                                            </label>
-                                            <input
-                                                id="cms-website-seo-image-file"
-                                                class="input file-input"
-                                                type="file"
-                                                on:change={(event) => handleWebsiteSeoFileChange("seoImage", event)}
-                                            />
-                                            <div class="help-block file-field-hint m-t-6">
-                                                {#if websiteIdentitySeoDraft.seoImageFile}
-                                                    <span>New: {websiteIdentitySeoDraft.seoImageFile.name}</span>
-                                                {:else if websiteIdentitySeoDraft.seoImageCurrent}
-                                                    <span>Current: {websiteIdentitySeoDraft.seoImageCurrent}</span>
-                                                {:else}
-                                                    <span>No current file.</span>
-                                                {/if}
-                                            </div>
-                                        </div>
-                                    {/if}
-                                </div>
-
-                                <div class="form-actions m-t-sm">
-                                    <button
-                                        type="button"
-                                        class="btn btn-sm"
-                                        disabled={isSavingWebsiteIdentitySeo}
-                                        on:click={saveWebsiteIdentitySeo}
-                                    >
-                                        {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
-                                    </button>
-                                </div>
-
-                                {#if websiteIdentitySeoError}
-                                    <p class="txt-danger m-t-8 m-b-0">{websiteIdentitySeoError}</p>
-                                {/if}
-                            </div>
-                        {/if}
-
-                        {#if !hasWebsiteSettingsField}
-                            <p class="txt-danger m-b-0 m-t-sm">Settings field was not found in websites collection.</p>
-                        {:else if !clientWebsiteSettingsFields.length}
-                            <p class="txt-hint m-b-0 m-t-sm">No settings available for this profile.</p>
-                        {:else}
-                            <div class="settings-form-wrap m-t-sm">
-                                <SchemaForm
-                                    fields={clientWebsiteSettingsFields}
-                                    value={websiteSettingsDraft}
-                                    showImport={false}
-                                    path={`websites.${selectedWebsiteId}.settings`}
-                                    on:change={handleWebsiteSettingsChange}
-                                />
-                            </div>
-
-                            <div class="form-actions m-t-sm">
+                        <div class="settings-nav-row m-t-sm">
+                            <div class="tabs-header compact combined left operations-tabs settings-nav-tabs">
                                 <button
                                     type="button"
-                                    class="btn btn-sm"
-                                    disabled={isSavingWebsiteSettings}
-                                    on:click={saveWebsiteSettings}
+                                    class="tab-item"
+                                    class:active={activeWebsiteSettingsArea === websiteSettingsAreaIdentitySeoKey}
+                                    on:click={() => setActiveWebsiteSettingsArea(websiteSettingsAreaIdentitySeoKey)}
                                 >
-                                    {isSavingWebsiteSettings ? "Saving..." : "Save settings"}
+                                    <i class={`${websiteSettingsAreaIconByKey[websiteSettingsAreaIdentitySeoKey]} tab-icon`} aria-hidden="true" />
+                                    <span class="tab-label">Identity & SEO</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="tab-item"
+                                    class:active={activeWebsiteSettingsArea === websiteSettingsAreaFeaturesKey}
+                                    on:click={() => setActiveWebsiteSettingsArea(websiteSettingsAreaFeaturesKey)}
+                                >
+                                    <i class={`${websiteSettingsAreaIconByKey[websiteSettingsAreaFeaturesKey]} tab-icon`} aria-hidden="true" />
+                                    <span class="tab-label">Features</span>
                                 </button>
                             </div>
+                        </div>
 
-                            {#if websiteSettingsError}
-                                <p class="txt-danger m-t-8 m-b-0">{websiteSettingsError}</p>
-                            {/if}
+                        {#if activeWebsiteSettingsArea === websiteSettingsAreaIdentitySeoKey}
+                            <div class="settings-sections m-t-sm">
+                                {#if hasWebsiteIdentitySeoFields}
+                                    <div class="settings-pane">
+                                        <div class="settings-subhead">
+                                            <h5 class="m-0">Identity</h5>
+                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Manage the visual identity used across this website.</p>
+                                        </div>
+
+                                        {#if websiteLogoField}
+                                            <div class="settings-form-grid one-col m-t-sm">
+                                                <div class="form-field">
+                                                    <label for="cms-website-logo-file">Logo</label>
+                                                    <div class="settings-file-row">
+                                                        <input
+                                                            id="cms-website-logo-file"
+                                                            class="input file-input"
+                                                            type="file"
+                                                            on:change={(event) => handleWebsiteSeoFileChange("logo", event)}
+                                                        />
+                                                    </div>
+                                                    <div class="help-block file-field-hint m-t-6">
+                                                        {#if websiteIdentitySeoDraft.logoFile}
+                                                            <span class="label label-sm settings-file-state">New file: {websiteIdentitySeoDraft.logoFile.name}</span>
+                                                        {:else if websiteIdentitySeoDraft.logoCurrent}
+                                                            <span class="label label-sm settings-file-state">Current file: {websiteIdentitySeoDraft.logoCurrent}</span>
+                                                        {:else}
+                                                            <span class="label label-sm settings-file-state">No current file</span>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {:else}
+                                            <p class="txt-sm txt-hint m-b-0 m-t-sm">Logo field is not available for this website.</p>
+                                        {/if}
+                                    </div>
+
+                                    <div class="settings-pane">
+                                        <div class="settings-subhead">
+                                            <h5 class="m-0">Global SEO</h5>
+                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Used as fallback metadata when a page does not define its own SEO.</p>
+                                        </div>
+
+                                        <div class="settings-form-grid two-col m-t-sm">
+                                            {#if websiteSeoTitleField}
+                                                <div class="form-field">
+                                                    <label for="cms-website-seo-title">Global SEO Title</label>
+                                                    <input
+                                                        id="cms-website-seo-title"
+                                                        class="input"
+                                                        bind:value={websiteIdentitySeoDraft.seoTitle}
+                                                    />
+                                                </div>
+                                            {/if}
+
+                                            {#if websiteSeoDescriptionField}
+                                                <div class="form-field">
+                                                    <label for="cms-website-seo-description">
+                                                        Global SEO Description
+                                                    </label>
+                                                    <textarea
+                                                        id="cms-website-seo-description"
+                                                        class="input textarea-input"
+                                                        rows="4"
+                                                        bind:value={websiteIdentitySeoDraft.seoDescription}
+                                                    />
+                                                </div>
+                                            {/if}
+
+                                            {#if websiteSeoImageField}
+                                                <div class="form-field">
+                                                    <label for="cms-website-seo-image-file">
+                                                        Global SEO Image
+                                                    </label>
+                                                    <div class="settings-file-row">
+                                                        <input
+                                                            id="cms-website-seo-image-file"
+                                                            class="input file-input"
+                                                            type="file"
+                                                            on:change={(event) => handleWebsiteSeoFileChange("seoImage", event)}
+                                                        />
+                                                    </div>
+                                                    <div class="help-block file-field-hint m-t-6">
+                                                        {#if websiteIdentitySeoDraft.seoImageFile}
+                                                            <span class="label label-sm settings-file-state">New file: {websiteIdentitySeoDraft.seoImageFile.name}</span>
+                                                        {:else if websiteIdentitySeoDraft.seoImageCurrent}
+                                                            <span class="label label-sm settings-file-state">Current file: {websiteIdentitySeoDraft.seoImageCurrent}</span>
+                                                        {:else}
+                                                            <span class="label label-sm settings-file-state">No current file</span>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            {/if}
+                                        </div>
+
+                                        <div class="seo-preview-card m-t-sm">
+                                            <div class="seo-preview-title">
+                                                {normalizeString(websiteIdentitySeoDraft.seoTitle) || getWebsiteLabel(selectedWebsite)}
+                                            </div>
+                                            <div class="seo-preview-description">
+                                                {normalizeString(websiteIdentitySeoDraft.seoDescription) || "No global SEO description provided yet."}
+                                            </div>
+                                            <div class="seo-preview-hint">
+                                                {websitePublicUrl || (selectedWebsiteSlug ? `/${selectedWebsiteSlug}` : "Website URL not available")}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-section-actions m-t-sm">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm"
+                                            disabled={isSavingWebsiteIdentitySeo}
+                                            on:click={saveWebsiteIdentitySeo}
+                                        >
+                                            {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
+                                        </button>
+                                    </div>
+
+                                    {#if websiteIdentitySeoError}
+                                        <p class="txt-danger m-t-8 m-b-0">{websiteIdentitySeoError}</p>
+                                    {/if}
+                                {:else}
+                                    <div class="settings-pane">
+                                        <p class="txt-sm txt-hint m-b-0">Identity and global SEO fields are not available for this website.</p>
+                                    </div>
+                                {/if}
+                            </div>
+                        {:else}
+                            <div class="settings-sections m-t-sm">
+                                <div class="settings-pane">
+                                    <div class="settings-subhead">
+                                        <h5 class="m-0">Website Features & Functional Settings</h5>
+                                        <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Configure website features such as WhatsApp, contact forms, newsletter, and languages.</p>
+                                    </div>
+
+                                    {#if !hasWebsiteSettingsField}
+                                        <p class="txt-danger m-b-0 m-t-sm">Settings field was not found in websites collection.</p>
+                                    {:else if !availableWebsiteSettingsFeatures.length}
+                                        <p class="txt-hint m-b-0 m-t-sm">No features are currently available for this website.</p>
+                                    {:else}
+                                        <div class="tabs-header compact combined left operations-tabs settings-feature-tabs m-t-sm">
+                                            {#each availableWebsiteSettingsFeatures as featureTab}
+                                                <button
+                                                    type="button"
+                                                    class="tab-item"
+                                                    class:active={featureTab.key === activeWebsiteSettingsFeatureKey}
+                                                    on:click={() => setActiveWebsiteSettingsFeature(featureTab.key)}
+                                                >
+                                                    <i class={`${featureTab.icon} tab-icon`} aria-hidden="true" />
+                                                    <span class="tab-label">{featureTab.label}</span>
+                                                </button>
+                                            {/each}
+                                        </div>
+
+                                        {#if activeWebsiteSettingsFeatureField}
+                                            <div class="settings-form-wrap m-t-sm">
+                                                <SchemaForm
+                                                    fields={[activeWebsiteSettingsFeatureField]}
+                                                    value={activeWebsiteSettingsFeatureValue}
+                                                    showImport={false}
+                                                    path={`websites.${selectedWebsiteId}.settings.${activeWebsiteSettingsFeatureField.key}`}
+                                                    on:change={(event) => handleWebsiteSettingsFeatureGroupChange(activeWebsiteSettingsFeatureField.key, event)}
+                                                />
+                                            </div>
+                                        {:else if activeWebsiteSettingsFeature}
+                                            <div class="settings-form-wrap m-t-sm">
+                                                <p class="txt-sm txt-hint m-b-0">No client-configurable settings are available for this feature yet.</p>
+                                            </div>
+                                        {/if}
+
+                                        <div class="settings-section-actions m-t-sm">
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm"
+                                                disabled={isSavingWebsiteSettings}
+                                                on:click={saveWebsiteSettings}
+                                            >
+                                                {isSavingWebsiteSettings ? "Saving..." : "Save settings"}
+                                            </button>
+                                        </div>
+
+                                        {#if websiteSettingsError}
+                                            <p class="txt-danger m-t-8 m-b-0">{websiteSettingsError}</p>
+                                        {/if}
+                                    {/if}
+                                </div>
+                            </div>
                         {/if}
                     {/if}
                 </div>
@@ -2115,10 +2299,6 @@
     .form-grid {
         display: grid;
         gap: 10px 12px;
-    }
-
-    .form-grid.two-col {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .form-grid .form-field {
@@ -2399,29 +2579,138 @@
     }
 
     .settings-workspace {
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: var(--baseRadius);
-        background: var(--baseColor);
-        padding: 12px;
-        min-height: 460px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 0;
+        min-height: 0;
     }
 
     .settings-head {
         display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 8px;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: 10px;
+        flex-wrap: wrap;
+        min-width: 0;
     }
 
-    .settings-form-wrap {
+    .settings-head-helper {
+        flex: 1 1 340px;
+        min-width: 240px;
+    }
+
+    .settings-nav-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .settings-nav-tabs,
+    .settings-feature-tabs {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        max-width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .settings-sections {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .settings-pane {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .settings-pane + .settings-pane {
         border-top: 1px solid var(--baseAlt2Color);
         padding-top: 12px;
     }
 
+    .settings-form-wrap {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        padding-top: 10px;
+    }
+
     .settings-subhead {
         display: flex;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: 9px;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .settings-subhead-helper {
+        flex: 1 1 320px;
+        min-width: 220px;
+    }
+
+    .settings-form-grid {
+        display: grid;
+        gap: 10px 12px;
+    }
+
+    .settings-form-grid.two-col {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .settings-form-grid.one-col {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-section-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .settings-file-row {
+        display: block;
+    }
+
+    .settings-file-state {
+        --labelHPadding: 8px;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        color: var(--txtHintColor);
+        background: color-mix(in srgb, var(--baseAlt1Color) 26%, var(--baseColor));
+    }
+
+    .seo-preview-card {
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        border-radius: var(--baseRadius);
+        background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
+        padding: 10px 11px;
+        display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 5px;
+    }
+
+    .seo-preview-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--txtPrimaryColor);
+        line-height: 1.25;
+    }
+
+    .seo-preview-description {
+        font-size: var(--smFontSize);
+        color: var(--txtHintColor);
+        line-height: var(--smLineHeight);
+    }
+
+    .seo-preview-hint {
+        font-size: 11px;
+        color: color-mix(in srgb, var(--txtHintColor) 92%, var(--txtPrimaryColor));
     }
 
     .textarea-input {
@@ -2463,7 +2752,17 @@
             padding: calc(var(--baseSpacing) - 12px) calc(var(--baseSpacing) - 10px);
         }
 
-        .form-grid.two-col {
+        .settings-head,
+        .settings-subhead {
+            align-items: flex-start;
+        }
+
+        .settings-head-helper,
+        .settings-subhead-helper {
+            min-width: 0;
+        }
+
+        .settings-form-grid.two-col {
             grid-template-columns: 1fr;
         }
 
