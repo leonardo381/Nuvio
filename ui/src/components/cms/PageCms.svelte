@@ -93,6 +93,23 @@
     let websiteIdentitySeoDraft = {
         seoTitle: "",
         seoDescription: "",
+        seoTitleTemplate: "",
+        seoTitleSeparator: "",
+        seoCanonicalDomain: "",
+        businessName: "",
+        businessType: "",
+        businessPrimaryCategory: "",
+        businessPhone: "",
+        businessEmail: "",
+        businessAddress: "",
+        businessCity: "",
+        businessPostalCode: "",
+        businessCountry: "",
+        businessServiceArea: "",
+        businessOpeningHours: "",
+        businessGooglePlaceId: "",
+        businessSocialProfiles: "",
+        businessPriceRange: "",
         logoCurrent: "",
         seoImageCurrent: "",
         logoFile: null,
@@ -115,6 +132,8 @@
     const seoTitleLongThreshold = 65;
     const seoDescriptionLongThreshold = 170;
     const seoDescriptionShortThreshold = 70;
+    const seoSeparatorLongThreshold = 3;
+    const defaultSeoTitleSeparator = "|";
 
     $: websitesCollection = findCollection("websites");
     $: pagesCollection = findCollection("pages");
@@ -158,11 +177,45 @@
     $: websiteSeoTitleField = resolveFieldName(websitesCollection, ["seoTitle", "seo_title"]);
     $: websiteSeoDescriptionField = resolveFieldName(websitesCollection, ["seoDescription", "seo_description"]);
     $: websiteSeoImageField = resolveFieldName(websitesCollection, ["seoImage", "seo_image"]);
+    $: websiteSeoTitleTemplateField = resolveFieldName(websitesCollection, ["seo_title_template", "seoTitleTemplate"]);
+    $: websiteSeoTitleSeparatorField = resolveFieldName(websitesCollection, ["seo_title_separator", "seoTitleSeparator"]);
+    $: websiteSeoCanonicalDomainField = resolveFieldName(websitesCollection, ["seo_canonical_domain", "seoCanonicalDomain"]);
+    $: websiteBusinessNameField = resolveFieldName(websitesCollection, ["business_name", "businessName"]);
+    $: websiteBusinessTypeField = resolveFieldName(websitesCollection, ["business_type", "businessType"]);
+    $: websiteBusinessPrimaryCategoryField = resolveFieldName(websitesCollection, ["business_primary_category", "businessPrimaryCategory"]);
+    $: websiteBusinessPhoneField = resolveFieldName(websitesCollection, ["business_phone", "businessPhone"]);
+    $: websiteBusinessEmailField = resolveFieldName(websitesCollection, ["business_email", "businessEmail"]);
+    $: websiteBusinessAddressField = resolveFieldName(websitesCollection, ["business_address", "businessAddress"]);
+    $: websiteBusinessCityField = resolveFieldName(websitesCollection, ["business_city", "businessCity"]);
+    $: websiteBusinessPostalCodeField = resolveFieldName(websitesCollection, ["business_postal_code", "businessPostalCode"]);
+    $: websiteBusinessCountryField = resolveFieldName(websitesCollection, ["business_country", "businessCountry"]);
+    $: websiteBusinessServiceAreaField = resolveFieldName(websitesCollection, ["business_service_area", "businessServiceArea"]);
+    $: websiteBusinessOpeningHoursField = resolveFieldName(websitesCollection, ["business_opening_hours", "businessOpeningHours"]);
+    $: websiteBusinessGooglePlaceIdField = resolveFieldName(websitesCollection, ["business_google_place_id", "businessGooglePlaceId"]);
+    $: websiteBusinessSocialProfilesField = resolveFieldName(websitesCollection, ["business_social_profiles", "businessSocialProfiles"]);
+    $: websiteBusinessPriceRangeField = resolveFieldName(websitesCollection, ["business_price_range", "businessPriceRange"]);
     $: hasWebsiteIdentitySeoFields = !!(
         websiteLogoField ||
         websiteSeoTitleField ||
         websiteSeoDescriptionField ||
-        websiteSeoImageField
+        websiteSeoImageField ||
+        websiteSeoTitleTemplateField ||
+        websiteSeoTitleSeparatorField ||
+        websiteSeoCanonicalDomainField ||
+        websiteBusinessNameField ||
+        websiteBusinessTypeField ||
+        websiteBusinessPrimaryCategoryField ||
+        websiteBusinessPhoneField ||
+        websiteBusinessEmailField ||
+        websiteBusinessAddressField ||
+        websiteBusinessCityField ||
+        websiteBusinessPostalCodeField ||
+        websiteBusinessCountryField ||
+        websiteBusinessServiceAreaField ||
+        websiteBusinessOpeningHoursField ||
+        websiteBusinessGooglePlaceIdField ||
+        websiteBusinessSocialProfilesField ||
+        websiteBusinessPriceRangeField
     );
 
     $: blockTitleField = resolveFieldName(blocksCollection, ["title", "name", "label"]);
@@ -231,14 +284,38 @@
     $: pageSeoHasSocialImage = !!normalizeString(pageEditForm?.seoSocialImageCurrent) || !!pageEditForm?.seoSocialImageFile;
     $: globalSeoTitleText = normalizeString(websiteIdentitySeoDraft?.seoTitle);
     $: globalSeoDescriptionText = toSeoPlainText(websiteIdentitySeoDraft?.seoDescription);
+    $: globalSeoTitleTemplateText = normalizeString(websiteIdentitySeoDraft?.seoTitleTemplate);
+    $: globalSeoTitleSeparatorText = normalizeString(websiteIdentitySeoDraft?.seoTitleSeparator);
+    $: globalSeoCanonicalDomainText = normalizeString(websiteIdentitySeoDraft?.seoCanonicalDomain);
     $: globalSeoTitleLength = globalSeoTitleText.length;
     $: globalSeoDescriptionLength = globalSeoDescriptionText.length;
     $: pageSeoPreviewTitle = pageSeoTitleText || getPageTitleText(selectedPage) || globalSeoTitleText || getWebsiteLabel(selectedWebsite);
     $: pageSeoPreviewPath = getPageSeoPreviewPath(pagePreviewUrl, selectedWebsiteSlug, selectedPageSlug);
     $: pageSeoPreviewDescription = pageSeoDescriptionText || globalSeoDescriptionText || "No SEO description provided yet.";
-    $: globalSeoPreviewTitle = globalSeoTitleText || getWebsiteNameText(selectedWebsite) || getWebsiteLabel(selectedWebsite);
+    $: globalSeoSiteName = globalSeoTitleText || getWebsiteNameText(selectedWebsite) || getWebsiteLabel(selectedWebsite) || "Site name";
+    $: globalSeoPreviewTitle = buildGlobalSeoPreviewTitle({
+        template: globalSeoTitleTemplateText,
+        separator: globalSeoTitleSeparatorText,
+        siteName: globalSeoSiteName,
+        pageName: "Sample page",
+    });
     $: globalSeoPreviewDescription = globalSeoDescriptionText || "No global SEO description provided yet.";
     $: globalSeoPreviewUrl = getWebsiteSeoPreviewUrl(websitePublicUrl, selectedWebsiteSlug);
+    $: localBusinessNameText = normalizeString(websiteIdentitySeoDraft?.businessName);
+    $: localBusinessTypeText = normalizeString(websiteIdentitySeoDraft?.businessType);
+    $: localBusinessPrimaryCategoryText = normalizeString(websiteIdentitySeoDraft?.businessPrimaryCategory);
+    $: localBusinessPhoneText = normalizeString(websiteIdentitySeoDraft?.businessPhone);
+    $: localBusinessEmailText = normalizeString(websiteIdentitySeoDraft?.businessEmail);
+    $: localBusinessAddressText = normalizeString(websiteIdentitySeoDraft?.businessAddress);
+    $: localBusinessCityText = normalizeString(websiteIdentitySeoDraft?.businessCity);
+    $: localBusinessPostalCodeText = normalizeString(websiteIdentitySeoDraft?.businessPostalCode);
+    $: localBusinessCountryText = normalizeString(websiteIdentitySeoDraft?.businessCountry);
+    $: localBusinessServiceAreaText = normalizeString(websiteIdentitySeoDraft?.businessServiceArea);
+    $: localBusinessOpeningHoursText = normalizeString(websiteIdentitySeoDraft?.businessOpeningHours);
+    $: localBusinessGooglePlaceIdText = normalizeString(websiteIdentitySeoDraft?.businessGooglePlaceId);
+    $: localBusinessSocialProfilesText = normalizeString(websiteIdentitySeoDraft?.businessSocialProfiles);
+    $: localBusinessPriceRangeText = normalizeString(websiteIdentitySeoDraft?.businessPriceRange);
+    $: localBusinessReviewsExpected = websiteSettingsFullDraft?.featureFlags?.reviews !== false;
     $: pageSeoChecks = buildPageSeoChecks({
         titleText: pageSeoTitleText,
         descriptionText: pageSeoDescriptionText,
@@ -256,6 +333,20 @@
         descriptionLength: globalSeoDescriptionLength,
         hasTitle: !!globalSeoTitleText,
         hasDescription: !!globalSeoDescriptionText,
+        titleTemplate: globalSeoTitleTemplateText,
+        titleSeparator: globalSeoTitleSeparatorText,
+        canonicalDomain: globalSeoCanonicalDomainText,
+    });
+    $: localBusinessSeoChecks = buildLocalBusinessSeoChecks({
+        businessName: localBusinessNameText,
+        primaryCategory: localBusinessPrimaryCategoryText,
+        phone: localBusinessPhoneText,
+        address: localBusinessAddressText,
+        city: localBusinessCityText,
+        country: localBusinessCountryText,
+        openingHours: localBusinessOpeningHoursText,
+        googlePlaceId: localBusinessGooglePlaceIdText,
+        expectsGooglePlaceId: localBusinessReviewsExpected,
     });
     $: normalizedPageSearch = normalizeString(pageSearch).toLowerCase();
     $: activePagesCount = pageEnabledField ? pages.filter((record) => isPageActive(record)).length : 0;
@@ -747,6 +838,44 @@
         return "Website URL not available";
     }
 
+    function buildGlobalSeoPreviewTitle({ template, separator, siteName, pageName = "Sample page" }) {
+        const normalizedTemplate = normalizeString(template);
+        const normalizedSiteName = normalizeString(siteName) || "Site name";
+        const normalizedPageName = normalizeString(pageName) || "Sample page";
+
+        if (normalizedTemplate) {
+            const rendered = normalizedTemplate
+                .replace(/\{page\}/gi, normalizedPageName)
+                .replace(/\{site\}/gi, normalizedSiteName);
+            return normalizeString(rendered) || normalizedPageName;
+        }
+
+        const normalizedSeparator = normalizeString(separator) || defaultSeoTitleSeparator;
+        if (!normalizedSiteName) {
+            return normalizedPageName;
+        }
+
+        return `${normalizedPageName} ${normalizedSeparator} ${normalizedSiteName}`;
+    }
+
+    function isLikelyCanonicalDomain(value) {
+        const normalized = normalizeString(value);
+        if (!normalized) {
+            return false;
+        }
+
+        if (!/^https?:\/\//i.test(normalized)) {
+            return false;
+        }
+
+        try {
+            const parsed = new URL(normalized);
+            return /^https?:$/i.test(parsed.protocol) && !!normalizeString(parsed.hostname);
+        } catch (_) {
+            return false;
+        }
+    }
+
     function buildPageSeoChecks({
         titleText,
         descriptionText,
@@ -821,8 +950,19 @@
         return checks;
     }
 
-    function buildGlobalSeoChecks({ titleLength, descriptionLength, hasTitle, hasDescription }) {
+    function buildGlobalSeoChecks({
+        titleLength,
+        descriptionLength,
+        hasTitle,
+        hasDescription,
+        titleTemplate,
+        titleSeparator,
+        canonicalDomain,
+    }) {
         const checks = [];
+        const normalizedTitleTemplate = normalizeString(titleTemplate);
+        const normalizedTitleSeparator = normalizeString(titleSeparator);
+        const normalizedCanonicalDomain = normalizeString(canonicalDomain);
 
         if (!hasTitle) {
             checks.push({
@@ -845,6 +985,94 @@
             checks.push({
                 level: "warning",
                 message: "Global SEO description is long and may be truncated in search results.",
+            });
+        }
+
+        if (normalizedTitleTemplate) {
+            if (!/\{page\}/i.test(normalizedTitleTemplate)) {
+                checks.push({
+                    level: "warning",
+                    message: "Title template should include {page} to represent each page title.",
+                });
+            }
+
+            if (!/\{site\}/i.test(normalizedTitleTemplate)) {
+                checks.push({
+                    level: "info",
+                    message: "Consider including {site} in the title template for clearer branding.",
+                });
+            }
+        }
+
+        if (normalizedTitleSeparator && normalizedTitleSeparator.length > seoSeparatorLongThreshold) {
+            checks.push({
+                level: "info",
+                message: "Title separator is usually short (1 to 3 characters).",
+            });
+        }
+
+        if (normalizedCanonicalDomain && !isLikelyCanonicalDomain(normalizedCanonicalDomain)) {
+            checks.push({
+                level: "warning",
+                message: "Canonical domain should start with http:// or https://",
+            });
+        }
+
+        return checks;
+    }
+
+    function buildLocalBusinessSeoChecks({
+        businessName,
+        primaryCategory,
+        phone,
+        address,
+        city,
+        country,
+        openingHours,
+        googlePlaceId,
+        expectsGooglePlaceId,
+    }) {
+        const checks = [];
+
+        if (!businessName) {
+            checks.push({
+                level: "warning",
+                message: "Business name is missing. Local search listings are stronger with a clear business identity.",
+            });
+        }
+
+        if (!primaryCategory) {
+            checks.push({
+                level: "warning",
+                message: "Primary category is missing. Add a clear category such as Dental clinic or Gym.",
+            });
+        }
+
+        if (!phone) {
+            checks.push({
+                level: "info",
+                message: "Business phone is missing. Contact details help local SEO confidence.",
+            });
+        }
+
+        if (!address || !city || !country) {
+            checks.push({
+                level: "warning",
+                message: "Address, city, and country should be completed for stronger local SEO context.",
+            });
+        }
+
+        if (!openingHours) {
+            checks.push({
+                level: "info",
+                message: "Opening hours are missing. Search engines often use business hours in local listings.",
+            });
+        }
+
+        if (expectsGooglePlaceId && !googlePlaceId) {
+            checks.push({
+                level: "info",
+                message: "Google Place ID is missing. Add it if you plan to use Google reviews or local integrations.",
             });
         }
 
@@ -1280,6 +1508,23 @@
             websiteIdentitySeoDraft = {
                 seoTitle: "",
                 seoDescription: "",
+                seoTitleTemplate: "",
+                seoTitleSeparator: "",
+                seoCanonicalDomain: "",
+                businessName: "",
+                businessType: "",
+                businessPrimaryCategory: "",
+                businessPhone: "",
+                businessEmail: "",
+                businessAddress: "",
+                businessCity: "",
+                businessPostalCode: "",
+                businessCountry: "",
+                businessServiceArea: "",
+                businessOpeningHours: "",
+                businessGooglePlaceId: "",
+                businessSocialProfiles: "",
+                businessPriceRange: "",
                 logoCurrent: "",
                 seoImageCurrent: "",
                 logoFile: null,
@@ -1291,6 +1536,23 @@
         websiteIdentitySeoDraft = {
             seoTitle: websiteSeoTitleField ? `${selectedWebsite?.[websiteSeoTitleField] || ""}` : "",
             seoDescription: websiteSeoDescriptionField ? `${selectedWebsite?.[websiteSeoDescriptionField] || ""}` : "",
+            seoTitleTemplate: websiteSeoTitleTemplateField ? `${selectedWebsite?.[websiteSeoTitleTemplateField] || ""}` : "",
+            seoTitleSeparator: websiteSeoTitleSeparatorField ? `${selectedWebsite?.[websiteSeoTitleSeparatorField] || ""}` : "",
+            seoCanonicalDomain: websiteSeoCanonicalDomainField ? `${selectedWebsite?.[websiteSeoCanonicalDomainField] || ""}` : "",
+            businessName: websiteBusinessNameField ? `${selectedWebsite?.[websiteBusinessNameField] || ""}` : "",
+            businessType: websiteBusinessTypeField ? `${selectedWebsite?.[websiteBusinessTypeField] || ""}` : "",
+            businessPrimaryCategory: websiteBusinessPrimaryCategoryField ? `${selectedWebsite?.[websiteBusinessPrimaryCategoryField] || ""}` : "",
+            businessPhone: websiteBusinessPhoneField ? `${selectedWebsite?.[websiteBusinessPhoneField] || ""}` : "",
+            businessEmail: websiteBusinessEmailField ? `${selectedWebsite?.[websiteBusinessEmailField] || ""}` : "",
+            businessAddress: websiteBusinessAddressField ? `${selectedWebsite?.[websiteBusinessAddressField] || ""}` : "",
+            businessCity: websiteBusinessCityField ? `${selectedWebsite?.[websiteBusinessCityField] || ""}` : "",
+            businessPostalCode: websiteBusinessPostalCodeField ? `${selectedWebsite?.[websiteBusinessPostalCodeField] || ""}` : "",
+            businessCountry: websiteBusinessCountryField ? `${selectedWebsite?.[websiteBusinessCountryField] || ""}` : "",
+            businessServiceArea: websiteBusinessServiceAreaField ? `${selectedWebsite?.[websiteBusinessServiceAreaField] || ""}` : "",
+            businessOpeningHours: websiteBusinessOpeningHoursField ? `${selectedWebsite?.[websiteBusinessOpeningHoursField] || ""}` : "",
+            businessGooglePlaceId: websiteBusinessGooglePlaceIdField ? `${selectedWebsite?.[websiteBusinessGooglePlaceIdField] || ""}` : "",
+            businessSocialProfiles: websiteBusinessSocialProfilesField ? `${selectedWebsite?.[websiteBusinessSocialProfilesField] || ""}` : "",
+            businessPriceRange: websiteBusinessPriceRangeField ? `${selectedWebsite?.[websiteBusinessPriceRangeField] || ""}` : "",
             logoCurrent: websiteLogoField ? toSingleFileName(selectedWebsite?.[websiteLogoField]) : "",
             seoImageCurrent: websiteSeoImageField ? toSingleFileName(selectedWebsite?.[websiteSeoImageField]) : "",
             logoFile: null,
@@ -1628,6 +1890,74 @@
 
         if (websiteSeoDescriptionField) {
             setPayloadField(payload, websiteSeoDescriptionField, `${websiteIdentitySeoDraft.seoDescription || ""}`);
+        }
+
+        if (websiteSeoTitleTemplateField) {
+            setPayloadField(payload, websiteSeoTitleTemplateField, normalizeString(websiteIdentitySeoDraft.seoTitleTemplate));
+        }
+
+        if (websiteSeoTitleSeparatorField) {
+            setPayloadField(payload, websiteSeoTitleSeparatorField, normalizeString(websiteIdentitySeoDraft.seoTitleSeparator));
+        }
+
+        if (websiteSeoCanonicalDomainField) {
+            setPayloadField(payload, websiteSeoCanonicalDomainField, normalizeString(websiteIdentitySeoDraft.seoCanonicalDomain));
+        }
+
+        if (websiteBusinessNameField) {
+            setPayloadField(payload, websiteBusinessNameField, normalizeString(websiteIdentitySeoDraft.businessName));
+        }
+
+        if (websiteBusinessTypeField) {
+            setPayloadField(payload, websiteBusinessTypeField, normalizeString(websiteIdentitySeoDraft.businessType));
+        }
+
+        if (websiteBusinessPrimaryCategoryField) {
+            setPayloadField(payload, websiteBusinessPrimaryCategoryField, normalizeString(websiteIdentitySeoDraft.businessPrimaryCategory));
+        }
+
+        if (websiteBusinessPhoneField) {
+            setPayloadField(payload, websiteBusinessPhoneField, normalizeString(websiteIdentitySeoDraft.businessPhone));
+        }
+
+        if (websiteBusinessEmailField) {
+            setPayloadField(payload, websiteBusinessEmailField, normalizeString(websiteIdentitySeoDraft.businessEmail));
+        }
+
+        if (websiteBusinessAddressField) {
+            setPayloadField(payload, websiteBusinessAddressField, normalizeString(websiteIdentitySeoDraft.businessAddress));
+        }
+
+        if (websiteBusinessCityField) {
+            setPayloadField(payload, websiteBusinessCityField, normalizeString(websiteIdentitySeoDraft.businessCity));
+        }
+
+        if (websiteBusinessPostalCodeField) {
+            setPayloadField(payload, websiteBusinessPostalCodeField, normalizeString(websiteIdentitySeoDraft.businessPostalCode));
+        }
+
+        if (websiteBusinessCountryField) {
+            setPayloadField(payload, websiteBusinessCountryField, normalizeString(websiteIdentitySeoDraft.businessCountry));
+        }
+
+        if (websiteBusinessServiceAreaField) {
+            setPayloadField(payload, websiteBusinessServiceAreaField, normalizeString(websiteIdentitySeoDraft.businessServiceArea));
+        }
+
+        if (websiteBusinessOpeningHoursField) {
+            setPayloadField(payload, websiteBusinessOpeningHoursField, `${websiteIdentitySeoDraft.businessOpeningHours || ""}`);
+        }
+
+        if (websiteBusinessGooglePlaceIdField) {
+            setPayloadField(payload, websiteBusinessGooglePlaceIdField, normalizeString(websiteIdentitySeoDraft.businessGooglePlaceId));
+        }
+
+        if (websiteBusinessSocialProfilesField) {
+            setPayloadField(payload, websiteBusinessSocialProfilesField, `${websiteIdentitySeoDraft.businessSocialProfiles || ""}`);
+        }
+
+        if (websiteBusinessPriceRangeField) {
+            setPayloadField(payload, websiteBusinessPriceRangeField, normalizeString(websiteIdentitySeoDraft.businessPriceRange));
         }
 
         if (websiteLogoField && websiteIdentitySeoDraft.logoFile) {
@@ -2414,6 +2744,266 @@
                                         {/if}
                                     </div>
 
+                                    <div class="settings-pane">
+                                        <div class="settings-subhead">
+                                            <h5 class="m-0">SEO Defaults</h5>
+                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Configure default title formatting and canonical domain for future runtime SEO rendering.</p>
+                                        </div>
+
+                                        <div class="settings-form-grid two-col m-t-sm">
+                                            {#if websiteSeoTitleTemplateField}
+                                                <div class="form-field">
+                                                    <label for="cms-website-seo-title-template">Title Template</label>
+                                                    <input
+                                                        id="cms-website-seo-title-template"
+                                                        class="input"
+                                                        placeholder={"{page} | {site}"}
+                                                        bind:value={websiteIdentitySeoDraft.seoTitleTemplate}
+                                                    />
+                                                    <div class="help-block m-t-6">
+                                                        Controls how page titles are combined with the website name. Use {`{page}`} and {`{site}`}.
+                                                    </div>
+                                                </div>
+                                            {/if}
+
+                                            {#if websiteSeoTitleSeparatorField}
+                                                <div class="form-field">
+                                                    <label for="cms-website-seo-title-separator">Title Separator</label>
+                                                    <input
+                                                        id="cms-website-seo-title-separator"
+                                                        class="input"
+                                                        placeholder="|"
+                                                        bind:value={websiteIdentitySeoDraft.seoTitleSeparator}
+                                                    />
+                                                    <div class="help-block m-t-6">
+                                                        Used when no title template is provided.
+                                                    </div>
+                                                </div>
+                                            {/if}
+
+                                            {#if websiteSeoCanonicalDomainField}
+                                                <div class="form-field">
+                                                    <label for="cms-website-seo-canonical-domain">Canonical Domain</label>
+                                                    <input
+                                                        id="cms-website-seo-canonical-domain"
+                                                        class="input"
+                                                        placeholder="https://example.com"
+                                                        bind:value={websiteIdentitySeoDraft.seoCanonicalDomain}
+                                                    />
+                                                    <div class="help-block m-t-6">
+                                                        Used later for canonical URLs and sitemap generation. Example: https://example.com
+                                                    </div>
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-pane">
+                                        <div class="settings-subhead">
+                                            <h5 class="m-0">Local Business SEO</h5>
+                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Helps Nuvio prepare stronger local SEO and structured data for this business.</p>
+                                        </div>
+                                        <p class="txt-sm txt-hint m-b-0 m-t-8">
+                                            These fields will be used for LocalBusiness structured data when runtime SEO rendering is enabled.
+                                        </p>
+
+                                        <div class="local-seo-groups m-t-sm">
+                                            <div class="local-seo-group">
+                                                <div class="local-seo-group-title">Business Identity</div>
+                                                <div class="settings-form-grid two-col m-t-8">
+                                                    {#if websiteBusinessNameField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-name">Business Name</label>
+                                                            <input
+                                                                id="cms-website-business-name"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessName}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessTypeField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-type">Business Type</label>
+                                                            <input
+                                                                id="cms-website-business-type"
+                                                                class="input"
+                                                                placeholder="LocalBusiness"
+                                                                bind:value={websiteIdentitySeoDraft.businessType}
+                                                            />
+                                                            <div class="help-block m-t-6">
+                                                                Examples: LocalBusiness, Dentist, HealthClub, Restaurant, ProfessionalService.
+                                                            </div>
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessPrimaryCategoryField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-primary-category">Primary Category</label>
+                                                            <input
+                                                                id="cms-website-business-primary-category"
+                                                                class="input"
+                                                                placeholder="Dental clinic"
+                                                                bind:value={websiteIdentitySeoDraft.businessPrimaryCategory}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessPriceRangeField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-price-range">Price Range</label>
+                                                            <input
+                                                                id="cms-website-business-price-range"
+                                                                class="input"
+                                                                placeholder="€€"
+                                                                bind:value={websiteIdentitySeoDraft.businessPriceRange}
+                                                            />
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            </div>
+
+                                            <div class="local-seo-group">
+                                                <div class="local-seo-group-title">Contact & Location</div>
+                                                <div class="settings-form-grid two-col m-t-8">
+                                                    {#if websiteBusinessPhoneField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-phone">Phone</label>
+                                                            <input
+                                                                id="cms-website-business-phone"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessPhone}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessEmailField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-email">Email</label>
+                                                            <input
+                                                                id="cms-website-business-email"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessEmail}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessAddressField}
+                                                        <div class="form-field local-seo-full-width">
+                                                            <label for="cms-website-business-address">Address</label>
+                                                            <input
+                                                                id="cms-website-business-address"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessAddress}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessCityField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-city">City</label>
+                                                            <input
+                                                                id="cms-website-business-city"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessCity}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessPostalCodeField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-postal-code">Postal Code</label>
+                                                            <input
+                                                                id="cms-website-business-postal-code"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessPostalCode}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessCountryField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-country">Country</label>
+                                                            <input
+                                                                id="cms-website-business-country"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessCountry}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessServiceAreaField}
+                                                        <div class="form-field local-seo-full-width">
+                                                            <label for="cms-website-business-service-area">Service Area</label>
+                                                            <input
+                                                                id="cms-website-business-service-area"
+                                                                class="input"
+                                                                placeholder="Setúbal, Lisbon District, Almada"
+                                                                bind:value={websiteIdentitySeoDraft.businessServiceArea}
+                                                            />
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            </div>
+
+                                            <div class="local-seo-group">
+                                                <div class="local-seo-group-title">Local SEO Details</div>
+                                                <div class="settings-form-grid two-col m-t-8">
+                                                    {#if websiteBusinessGooglePlaceIdField}
+                                                        <div class="form-field">
+                                                            <label for="cms-website-business-google-place-id">Google Place ID</label>
+                                                            <input
+                                                                id="cms-website-business-google-place-id"
+                                                                class="input"
+                                                                bind:value={websiteIdentitySeoDraft.businessGooglePlaceId}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessOpeningHoursField}
+                                                        <div class="form-field local-seo-full-width">
+                                                            <label for="cms-website-business-opening-hours">Opening Hours</label>
+                                                            <textarea
+                                                                id="cms-website-business-opening-hours"
+                                                                class="input textarea-input"
+                                                                rows="3"
+                                                                bind:value={websiteIdentitySeoDraft.businessOpeningHours}
+                                                            />
+                                                            <div class="help-block m-t-6">
+                                                                You can use plain text or a JSON-like schedule format.
+                                                            </div>
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if websiteBusinessSocialProfilesField}
+                                                        <div class="form-field local-seo-full-width">
+                                                            <label for="cms-website-business-social-profiles">Social Profiles</label>
+                                                            <textarea
+                                                                id="cms-website-business-social-profiles"
+                                                                class="input textarea-input"
+                                                                rows="3"
+                                                                bind:value={websiteIdentitySeoDraft.businessSocialProfiles}
+                                                            />
+                                                            <div class="help-block m-t-6">
+                                                                Add profile URLs (one per line) or JSON data for future sameAs structured data.
+                                                            </div>
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {#if localBusinessSeoChecks.length}
+                                            <div class="seo-check-list m-t-8">
+                                                {#each localBusinessSeoChecks as check}
+                                                    <div class="seo-check-item" class:warning={check.level === "warning"}>
+                                                        {check.message}
+                                                    </div>
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                    </div>
+
                                     <div class="settings-section-actions m-t-sm">
                                         <button
                                             type="button"
@@ -3156,6 +3746,28 @@
 
     .settings-form-grid.one-col {
         grid-template-columns: 1fr;
+    }
+
+    .local-seo-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .local-seo-group {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        padding-top: 10px;
+    }
+
+    .local-seo-group-title {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--txtPrimaryColor);
+    }
+
+    .local-seo-full-width {
+        grid-column: 1 / -1;
     }
 
     .settings-section-actions {
