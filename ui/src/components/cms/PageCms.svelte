@@ -80,6 +80,12 @@
     let pageEditForm = {
         seoTitle: "",
         seoDescription: "",
+        seoSocialImageCurrent: "",
+        seoSocialImageFile: null,
+        seoCanonicalUrl: "",
+        seoNoindex: false,
+        seoExcludeFromSitemap: false,
+        seoFocusKeyword: "",
     };
 
     let websiteSettingsFullDraft = {};
@@ -105,6 +111,10 @@
     let lastPageSeedId = "";
     let lastSectionsSeedKey = "";
     let lastWebsiteSettingsSeedKey = "";
+
+    const seoTitleLongThreshold = 65;
+    const seoDescriptionLongThreshold = 170;
+    const seoDescriptionShortThreshold = 70;
 
     $: websitesCollection = findCollection("websites");
     $: pagesCollection = findCollection("pages");
@@ -135,6 +145,14 @@
     $: pageEnabledField = resolveFieldName(pagesCollection, ["enabled", "published", "active"]);
     $: pageSeoTitleField = resolveFieldName(pagesCollection, ["seo_title", "seoTitle"]);
     $: pageSeoDescriptionField = resolveFieldName(pagesCollection, ["seo_description", "seoDescription"]);
+    $: pageSeoSocialImageField = resolveFieldName(pagesCollection, ["seo_social_image", "seoSocialImage"]);
+    $: pageSeoCanonicalUrlField = resolveFieldName(pagesCollection, ["seo_canonical_url", "seoCanonicalUrl"]);
+    $: pageSeoNoindexField = resolveFieldName(pagesCollection, ["seo_noindex", "seoNoindex"]);
+    $: pageSeoExcludeFromSitemapField = resolveFieldName(
+        pagesCollection,
+        ["seo_exclude_from_sitemap", "seoExcludeFromSitemap"],
+    );
+    $: pageSeoFocusKeywordField = resolveFieldName(pagesCollection, ["seo_focus_keyword", "seoFocusKeyword"]);
 
     $: websiteLogoField = resolveFieldName(websitesCollection, ["logo"]);
     $: websiteSeoTitleField = resolveFieldName(websitesCollection, ["seoTitle", "seo_title"]);
@@ -203,6 +221,42 @@
     $: pagePreviewUrl = buildPagePreviewUrl(selectedWebsiteSlug, selectedPageSlug);
     $: pagePreviewFocusedUrl = buildPagePreviewFocusedUrl(pagePreviewUrl, focusedBlockId);
     $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewFocusedUrl, pagePreviewReloadToken);
+    $: pageSeoTitleText = normalizeString(pageEditForm?.seoTitle);
+    $: pageSeoDescriptionText = toSeoPlainText(pageEditForm?.seoDescription);
+    $: pageSeoTitleLength = pageSeoTitleText.length;
+    $: pageSeoDescriptionLength = pageSeoDescriptionText.length;
+    $: pageSeoFocusKeywordText = normalizeString(pageEditForm?.seoFocusKeyword);
+    $: pageSeoNoindexValue = toBooleanValue(pageEditForm?.seoNoindex);
+    $: pageSeoExcludeFromSitemapValue = toBooleanValue(pageEditForm?.seoExcludeFromSitemap);
+    $: pageSeoHasSocialImage = !!normalizeString(pageEditForm?.seoSocialImageCurrent) || !!pageEditForm?.seoSocialImageFile;
+    $: globalSeoTitleText = normalizeString(websiteIdentitySeoDraft?.seoTitle);
+    $: globalSeoDescriptionText = toSeoPlainText(websiteIdentitySeoDraft?.seoDescription);
+    $: globalSeoTitleLength = globalSeoTitleText.length;
+    $: globalSeoDescriptionLength = globalSeoDescriptionText.length;
+    $: pageSeoPreviewTitle = pageSeoTitleText || getPageTitleText(selectedPage) || globalSeoTitleText || getWebsiteLabel(selectedWebsite);
+    $: pageSeoPreviewPath = getPageSeoPreviewPath(pagePreviewUrl, selectedWebsiteSlug, selectedPageSlug);
+    $: pageSeoPreviewDescription = pageSeoDescriptionText || globalSeoDescriptionText || "No SEO description provided yet.";
+    $: globalSeoPreviewTitle = globalSeoTitleText || getWebsiteNameText(selectedWebsite) || getWebsiteLabel(selectedWebsite);
+    $: globalSeoPreviewDescription = globalSeoDescriptionText || "No global SEO description provided yet.";
+    $: globalSeoPreviewUrl = getWebsiteSeoPreviewUrl(websitePublicUrl, selectedWebsiteSlug);
+    $: pageSeoChecks = buildPageSeoChecks({
+        titleText: pageSeoTitleText,
+        descriptionText: pageSeoDescriptionText,
+        titleLength: pageSeoTitleLength,
+        descriptionLength: pageSeoDescriptionLength,
+        hasTitle: !!pageSeoTitleText,
+        hasDescription: !!pageSeoDescriptionText,
+        hasSocialImage: pageSeoHasSocialImage,
+        focusKeyword: pageSeoFocusKeywordText,
+        noindex: pageSeoNoindexValue,
+        excludeFromSitemap: pageSeoExcludeFromSitemapValue,
+    });
+    $: globalSeoChecks = buildGlobalSeoChecks({
+        titleLength: globalSeoTitleLength,
+        descriptionLength: globalSeoDescriptionLength,
+        hasTitle: !!globalSeoTitleText,
+        hasDescription: !!globalSeoDescriptionText,
+    });
     $: normalizedPageSearch = normalizeString(pageSearch).toLowerCase();
     $: activePagesCount = pageEnabledField ? pages.filter((record) => isPageActive(record)).length : 0;
     $: inactivePagesCount = pageEnabledField ? Math.max(0, pages.length - activePagesCount) : 0;
@@ -246,6 +300,14 @@
         pageEditForm = {
             seoTitle: pageSeoTitleField ? `${selectedPage?.[pageSeoTitleField] || ""}` : "",
             seoDescription: pageSeoDescriptionField ? `${selectedPage?.[pageSeoDescriptionField] || ""}` : "",
+            seoSocialImageCurrent: pageSeoSocialImageField ? toSingleFileName(selectedPage?.[pageSeoSocialImageField]) : "",
+            seoSocialImageFile: null,
+            seoCanonicalUrl: pageSeoCanonicalUrlField ? `${selectedPage?.[pageSeoCanonicalUrlField] || ""}` : "",
+            seoNoindex: pageSeoNoindexField ? toBooleanValue(selectedPage?.[pageSeoNoindexField]) : false,
+            seoExcludeFromSitemap: pageSeoExcludeFromSitemapField
+                ? toBooleanValue(selectedPage?.[pageSeoExcludeFromSitemapField])
+                : false,
+            seoFocusKeyword: pageSeoFocusKeywordField ? `${selectedPage?.[pageSeoFocusKeywordField] || ""}` : "",
         };
         pageError = "";
     }
@@ -391,6 +453,60 @@
         return `${value || ""}`.trim();
     }
 
+    function toBooleanValue(value) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (typeof value === "string") {
+            if (value.toLowerCase() === "true") {
+                return true;
+            }
+            if (value.toLowerCase() === "false") {
+                return false;
+            }
+        }
+
+        return !!value;
+    }
+
+    function decodeBasicHtmlEntities(value) {
+        return `${value || ""}`
+            .replace(/&nbsp;/gi, " ")
+            .replace(/&amp;/gi, "&")
+            .replace(/&quot;/gi, "\"")
+            .replace(/&#39;/gi, "'")
+            .replace(/&lt;/gi, "<")
+            .replace(/&gt;/gi, ">");
+    }
+
+    function toSeoPlainText(value) {
+        const raw = `${value ?? ""}`;
+        if (!raw) {
+            return "";
+        }
+
+        const withoutMarkup = raw
+            .replace(/<style[\s\S]*?<\/style>/gi, " ")
+            .replace(/<script[\s\S]*?<\/script>/gi, " ")
+            .replace(/<\/(p|div|h[1-6]|li|blockquote|section|article)>/gi, " ")
+            .replace(/<br\s*\/?>/gi, " ")
+            .replace(/<[^>]+>/g, " ");
+
+        return normalizeString(
+            decodeBasicHtmlEntities(withoutMarkup).replace(/\s+/g, " "),
+        );
+    }
+
+    function textContainsKeyword(text, keyword) {
+        const normalizedText = normalizeString(text).toLowerCase();
+        const normalizedKeyword = normalizeString(keyword).toLowerCase();
+        if (!normalizedText || !normalizedKeyword) {
+            return false;
+        }
+        return normalizedText.includes(normalizedKeyword);
+    }
+
     function toPropsObject(value) {
         if (value && typeof value === "object" && !Array.isArray(value)) {
             return structuredClone(value);
@@ -460,6 +576,10 @@
         return `${CommonHelper.displayValue(record || {}, [websiteNameField, websiteSlugField, websiteDomainField], "") || ""}`.trim() || record?.id || "-";
     }
 
+    function getWebsiteNameText(record) {
+        return normalizeString(websiteNameField ? record?.[websiteNameField] : "");
+    }
+
     function getPageLabel(record) {
         const title = normalizeString(pageTitleField ? record?.[pageTitleField] : "");
         if (title) {
@@ -472,6 +592,10 @@
         }
 
         return record?.id || "-";
+    }
+
+    function getPageTitleText(record) {
+        return normalizeString(pageTitleField ? record?.[pageTitleField] : "");
     }
 
     function formatPageListDate(value) {
@@ -583,6 +707,148 @@
         }
 
         return `${baseUrl}/site/${encodeURIComponent(normalizedWebsiteSlug)}/${encodeURIComponent(normalizedPageSlug)}`;
+    }
+
+    function getPageSeoPreviewPath(previewUrl, websiteSlug, pageSlug) {
+        const normalizedPreviewUrl = normalizeString(previewUrl);
+        if (normalizedPreviewUrl) {
+            try {
+                return new URL(normalizedPreviewUrl).pathname || "/";
+            } catch (_) {
+                // no-op
+            }
+        }
+
+        const normalizedWebsiteSlug = normalizeString(websiteSlug);
+        const normalizedPageSlug = normalizeString(pageSlug);
+        if (normalizedWebsiteSlug && normalizedPageSlug) {
+            return `/site/${normalizedWebsiteSlug}/${normalizedPageSlug}`;
+        }
+
+        return "/site/{website}/{page}";
+    }
+
+    function getWebsiteSeoPreviewUrl(websiteUrl, websiteSlug) {
+        const normalizedWebsiteUrl = normalizeString(websiteUrl);
+        if (normalizedWebsiteUrl) {
+            try {
+                const parsed = new URL(normalizedWebsiteUrl);
+                return `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`;
+            } catch (_) {
+                return normalizedWebsiteUrl.replace(/^https?:\/\//i, "");
+            }
+        }
+
+        const normalizedWebsiteSlug = normalizeString(websiteSlug);
+        if (normalizedWebsiteSlug) {
+            return `/site/${normalizedWebsiteSlug}`;
+        }
+
+        return "Website URL not available";
+    }
+
+    function buildPageSeoChecks({
+        titleText,
+        descriptionText,
+        titleLength,
+        descriptionLength,
+        hasTitle,
+        hasDescription,
+        hasSocialImage,
+        focusKeyword,
+        noindex,
+        excludeFromSitemap,
+    }) {
+        const checks = [];
+
+        if (!hasTitle) {
+            checks.push({
+                level: "warning",
+                message: "Missing SEO title. Search results may use page or global fallbacks.",
+            });
+        } else if (titleLength > seoTitleLongThreshold) {
+            checks.push({
+                level: "warning",
+                message: "SEO title is long and may be truncated in search results.",
+            });
+        }
+
+        if (!hasDescription) {
+            checks.push({
+                level: "warning",
+                message: "Missing SEO description. Search results may use fallback text.",
+            });
+        } else {
+            if (descriptionLength < seoDescriptionShortThreshold) {
+                checks.push({
+                    level: "info",
+                    message: "SEO description is short. Consider adding more useful context.",
+                });
+            }
+            if (descriptionLength > seoDescriptionLongThreshold) {
+                checks.push({
+                    level: "warning",
+                    message: "SEO description is long and may be truncated in search results.",
+                });
+            }
+        }
+
+        if (!hasSocialImage) {
+            checks.push({
+                level: "info",
+                message: "No page social image is set. The global SEO image will be used as fallback.",
+            });
+        }
+
+        if (focusKeyword) {
+            const titleHasKeyword = textContainsKeyword(titleText, focusKeyword);
+            const descriptionHasKeyword = textContainsKeyword(descriptionText, focusKeyword);
+            if (!titleHasKeyword && !descriptionHasKeyword) {
+                checks.push({
+                    level: "warning",
+                    message: "Focus keyword is not present in SEO title or SEO description.",
+                });
+            }
+        }
+
+        if (noindex && !excludeFromSitemap) {
+            checks.push({
+                level: "warning",
+                message: "Noindex pages are usually excluded from sitemap.",
+            });
+        }
+
+        return checks;
+    }
+
+    function buildGlobalSeoChecks({ titleLength, descriptionLength, hasTitle, hasDescription }) {
+        const checks = [];
+
+        if (!hasTitle) {
+            checks.push({
+                level: "warning",
+                message: "Missing global SEO title. Pages without SEO titles will have weaker fallbacks.",
+            });
+        } else if (titleLength > seoTitleLongThreshold) {
+            checks.push({
+                level: "warning",
+                message: "Global SEO title is long and may be truncated in search results.",
+            });
+        }
+
+        if (!hasDescription) {
+            checks.push({
+                level: "warning",
+                message: "Missing global SEO description. Page fallbacks may be incomplete.",
+            });
+        } else if (descriptionLength > seoDescriptionLongThreshold) {
+            checks.push({
+                level: "warning",
+                message: "Global SEO description is long and may be truncated in search results.",
+            });
+        }
+
+        return checks;
     }
 
     function buildPagePreviewFocusedUrl(pagePreviewUrl, blockId) {
@@ -1071,6 +1337,19 @@
         }
     }
 
+    function handlePageSeoFileChange(event) {
+        const file = event.currentTarget?.files?.[0] || null;
+
+        pageEditForm = {
+            ...pageEditForm,
+            seoSocialImageFile: file,
+        };
+
+        if (event.currentTarget) {
+            event.currentTarget.value = "";
+        }
+    }
+
     async function reload() {
         if (!hasCmsCollections) {
             return;
@@ -1286,6 +1565,25 @@
         }
         if (pageSeoDescriptionField) {
             setPayloadField(payload, pageSeoDescriptionField, `${pageEditForm.seoDescription || ""}`);
+        }
+        if (pageSeoCanonicalUrlField) {
+            setPayloadField(payload, pageSeoCanonicalUrlField, normalizeString(pageEditForm.seoCanonicalUrl));
+        }
+        if (pageSeoNoindexField) {
+            setPayloadField(payload, pageSeoNoindexField, toBooleanValue(pageEditForm.seoNoindex));
+        }
+        if (pageSeoExcludeFromSitemapField) {
+            setPayloadField(
+                payload,
+                pageSeoExcludeFromSitemapField,
+                toBooleanValue(pageEditForm.seoExcludeFromSitemap),
+            );
+        }
+        if (pageSeoFocusKeywordField) {
+            setPayloadField(payload, pageSeoFocusKeywordField, normalizeString(pageEditForm.seoFocusKeyword));
+        }
+        if (pageSeoSocialImageField && pageEditForm.seoSocialImageFile) {
+            setPayloadField(payload, pageSeoSocialImageField, pageEditForm.seoSocialImageFile);
         }
 
         if (!Object.keys(payload).length) {
@@ -1751,36 +2049,179 @@
                                     <div class="sections-head">
                                         <div>
                                             <h5 class="m-0">Page SEO</h5>
-                                            <p class="txt-sm txt-hint m-b-0 m-t-6">Control how this page appears in search results.</p>
+                                            <p class="txt-sm txt-hint m-b-0 m-t-6">This controls how this page may appear in search results.</p>
+                                            <p class="txt-sm txt-hint m-b-0 m-t-4">If left empty, Nuvio will use fallback metadata where available.</p>
                                         </div>
                                     </div>
 
-                                    {#if pageSeoTitleField || pageSeoDescriptionField}
-                                        <div class="form-grid m-t-sm">
-                                            {#if pageSeoTitleField}
-                                                <div class="form-field">
-                                                    <label for="cms-page-seo-title-content">
-                                                        SEO Title
-                                                    </label>
-                                                    <input
-                                                        id="cms-page-seo-title-content"
-                                                        class="input"
-                                                        bind:value={pageEditForm.seoTitle}
-                                                    />
+                                    {#if pageSeoTitleField || pageSeoDescriptionField || pageSeoSocialImageField || pageSeoCanonicalUrlField || pageSeoNoindexField || pageSeoExcludeFromSitemapField || pageSeoFocusKeywordField}
+                                        <div class="seo-sections m-t-sm">
+                                            <section class="seo-section">
+                                                <div class="seo-section-head">
+                                                    <h6 class="m-0">Search Appearance</h6>
+                                                    <p class="txt-sm txt-hint m-b-0">This controls how this page may appear in search results.</p>
                                                 </div>
-                                            {/if}
 
-                                            {#if pageSeoDescriptionField}
-                                                <div class="form-field">
-                                                    <label for="cms-page-seo-description-content">
-                                                        SEO Description
-                                                    </label>
-                                                    <textarea
-                                                        id="cms-page-seo-description-content"
-                                                        class="input textarea-input"
-                                                        rows="4"
-                                                        bind:value={pageEditForm.seoDescription}
-                                                    />
+                                                <div class="seo-preview-card seo-search-preview-card m-t-sm">
+                                                    <div class="seo-preview-label">Search Preview</div>
+                                                    <div class="seo-preview-title">{pageSeoPreviewTitle}</div>
+                                                    <div class="seo-preview-hint">{pageSeoPreviewPath}</div>
+                                                    <div class="seo-preview-description">
+                                                        {pageSeoPreviewDescription}
+                                                    </div>
+                                                </div>
+
+                                                <div class="form-grid m-t-sm">
+                                                    {#if pageSeoTitleField}
+                                                        <div class="form-field">
+                                                            <label for="cms-page-seo-title-content">
+                                                                SEO Title
+                                                            </label>
+                                                            <input
+                                                                id="cms-page-seo-title-content"
+                                                                class="input"
+                                                                bind:value={pageEditForm.seoTitle}
+                                                            />
+                                                            <div class="help-block m-t-6 seo-field-helper">
+                                                                <span class="label label-sm seo-count-pill">{pageSeoTitleLength} characters</span>
+                                                                <span>Recommended: keep it clear and specific.</span>
+                                                            </div>
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if pageSeoDescriptionField}
+                                                        <div class="form-field">
+                                                            <label for="cms-page-seo-description-content">
+                                                                SEO Description
+                                                            </label>
+                                                            <textarea
+                                                                id="cms-page-seo-description-content"
+                                                                class="input textarea-input"
+                                                                rows="4"
+                                                                bind:value={pageEditForm.seoDescription}
+                                                            />
+                                                            <div class="help-block m-t-6 seo-field-helper">
+                                                                <span class="label label-sm seo-count-pill">{pageSeoDescriptionLength} characters</span>
+                                                                <span>Recommended: summarize the page in one or two useful sentences.</span>
+                                                            </div>
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            </section>
+
+                                            <section class="seo-section">
+                                                <div class="seo-section-head">
+                                                    <h6 class="m-0">Social Sharing</h6>
+                                                </div>
+
+                                                {#if pageSeoSocialImageField}
+                                                    <div class="form-grid m-t-sm">
+                                                        <div class="form-field">
+                                                            <label for="cms-page-seo-social-image-file">Page Social Image</label>
+                                                            <div class="settings-file-row">
+                                                                <input
+                                                                    id="cms-page-seo-social-image-file"
+                                                                    class="input file-input"
+                                                                    type="file"
+                                                                    on:change={handlePageSeoFileChange}
+                                                                />
+                                                            </div>
+                                                            <div class="help-block file-field-hint m-t-6">
+                                                                {#if pageEditForm.seoSocialImageFile}
+                                                                    <span class="label label-sm settings-file-state">New file: {pageEditForm.seoSocialImageFile.name}</span>
+                                                                {:else if pageEditForm.seoSocialImageCurrent}
+                                                                    <span class="label label-sm settings-file-state">Current file: {pageEditForm.seoSocialImageCurrent}</span>
+                                                                {:else}
+                                                                    <span class="label label-sm settings-file-state">No current file</span>
+                                                                {/if}
+                                                            </div>
+                                                            <div class="help-block m-t-6">
+                                                                Used when this page is shared. If empty, the global SEO image is used.
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                {:else}
+                                                    <p class="txt-sm txt-hint m-b-0 m-t-sm">Page social image field is not available for this page collection.</p>
+                                                {/if}
+                                            </section>
+
+                                            <section class="seo-section">
+                                                <div class="seo-section-head">
+                                                    <h6 class="m-0">SEO Guidance</h6>
+                                                </div>
+
+                                                {#if pageSeoFocusKeywordField}
+                                                    <div class="form-grid m-t-sm">
+                                                        <div class="form-field">
+                                                            <label for="cms-page-seo-focus-keyword">Focus Keyword</label>
+                                                            <input
+                                                                id="cms-page-seo-focus-keyword"
+                                                                class="input"
+                                                                bind:value={pageEditForm.seoFocusKeyword}
+                                                            />
+                                                            <div class="help-block m-t-6">
+                                                                Used internally for SEO guidance. This is not rendered as meta keywords.
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                {:else}
+                                                    <p class="txt-sm txt-hint m-b-0 m-t-sm">Focus keyword field is not available for this page collection.</p>
+                                                {/if}
+                                            </section>
+
+                                            <section class="seo-section">
+                                                <div class="seo-section-head">
+                                                    <h6 class="m-0">Advanced Indexing</h6>
+                                                    <span class="label label-sm">Advanced</span>
+                                                </div>
+                                                <p class="txt-sm txt-hint m-b-0 m-t-6">Advanced indexing settings can affect how search engines discover this page.</p>
+                                                <p class="txt-sm txt-hint m-b-0 m-t-4">These settings are stored now and will apply when runtime SEO support is implemented.</p>
+
+                                                <div class="form-grid seo-advanced-grid m-t-sm">
+                                                    {#if pageSeoCanonicalUrlField}
+                                                        <div class="form-field">
+                                                            <label for="cms-page-seo-canonical-url">Canonical URL</label>
+                                                            <input
+                                                                id="cms-page-seo-canonical-url"
+                                                                class="input"
+                                                                type="url"
+                                                                placeholder="https://example.com/canonical-path"
+                                                                bind:value={pageEditForm.seoCanonicalUrl}
+                                                            />
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if pageSeoNoindexField}
+                                                        <div class="form-field form-field-toggle seo-toggle-field">
+                                                            <input
+                                                                id="cms-page-seo-noindex"
+                                                                type="checkbox"
+                                                                bind:checked={pageEditForm.seoNoindex}
+                                                            />
+                                                            <label for="cms-page-seo-noindex">Noindex</label>
+                                                        </div>
+                                                    {/if}
+
+                                                    {#if pageSeoExcludeFromSitemapField}
+                                                        <div class="form-field form-field-toggle seo-toggle-field">
+                                                            <input
+                                                                id="cms-page-seo-exclude-from-sitemap"
+                                                                type="checkbox"
+                                                                bind:checked={pageEditForm.seoExcludeFromSitemap}
+                                                            />
+                                                            <label for="cms-page-seo-exclude-from-sitemap">Exclude from sitemap</label>
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                            </section>
+
+                                            {#if pageSeoChecks.length}
+                                                <div class="seo-check-list">
+                                                    {#each pageSeoChecks as check}
+                                                        <div class="seo-check-item" class:warning={check.level === "warning"}>
+                                                            {check.message}
+                                                        </div>
+                                                    {/each}
                                                 </div>
                                             {/if}
                                         </div>
@@ -1883,6 +2324,7 @@
                                         <div class="settings-subhead">
                                             <h5 class="m-0">Global SEO</h5>
                                             <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Used as fallback metadata when a page does not define its own SEO.</p>
+                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Page-level SEO overrides these global defaults.</p>
                                         </div>
 
                                         <div class="settings-form-grid two-col m-t-sm">
@@ -1894,6 +2336,10 @@
                                                         class="input"
                                                         bind:value={websiteIdentitySeoDraft.seoTitle}
                                                     />
+                                                    <div class="help-block m-t-6 seo-field-helper">
+                                                        <span class="label label-sm seo-count-pill">{globalSeoTitleLength} characters</span>
+                                                        <span>Recommended: keep it clear and specific.</span>
+                                                    </div>
                                                 </div>
                                             {/if}
 
@@ -1908,6 +2354,10 @@
                                                         rows="4"
                                                         bind:value={websiteIdentitySeoDraft.seoDescription}
                                                     />
+                                                    <div class="help-block m-t-6 seo-field-helper">
+                                                        <span class="label label-sm seo-count-pill">{globalSeoDescriptionLength} characters</span>
+                                                        <span>Recommended: summarize the website in one or two useful sentences.</span>
+                                                    </div>
                                                 </div>
                                             {/if}
 
@@ -1933,21 +2383,35 @@
                                                             <span class="label label-sm settings-file-state">No current file</span>
                                                         {/if}
                                                     </div>
+                                                    <div class="help-block m-t-6">
+                                                        Used as the default image when pages are shared, unless a page-specific image is added later.
+                                                    </div>
                                                 </div>
                                             {/if}
                                         </div>
 
                                         <div class="seo-preview-card m-t-sm">
+                                            <div class="seo-preview-label">Global Search Preview</div>
                                             <div class="seo-preview-title">
-                                                {normalizeString(websiteIdentitySeoDraft.seoTitle) || getWebsiteLabel(selectedWebsite)}
-                                            </div>
-                                            <div class="seo-preview-description">
-                                                {normalizeString(websiteIdentitySeoDraft.seoDescription) || "No global SEO description provided yet."}
+                                                {globalSeoPreviewTitle}
                                             </div>
                                             <div class="seo-preview-hint">
-                                                {websitePublicUrl || (selectedWebsiteSlug ? `/${selectedWebsiteSlug}` : "Website URL not available")}
+                                                {globalSeoPreviewUrl}
+                                            </div>
+                                            <div class="seo-preview-description">
+                                                {globalSeoPreviewDescription}
                                             </div>
                                         </div>
+
+                                        {#if globalSeoChecks.length}
+                                            <div class="seo-check-list m-t-8">
+                                                {#each globalSeoChecks as check}
+                                                    <div class="seo-check-item" class:warning={check.level === "warning"}>
+                                                        {check.message}
+                                                    </div>
+                                                {/each}
+                                            </div>
+                                        {/if}
                                     </div>
 
                                     <div class="settings-section-actions m-t-sm">
@@ -2578,6 +3042,34 @@
         padding-top: 10px;
     }
 
+    .seo-sections {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .seo-section {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        padding-top: 10px;
+    }
+
+    .seo-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .seo-advanced-grid {
+        align-items: start;
+    }
+
+    .seo-toggle-field {
+        margin-bottom: 0;
+        min-height: 24px;
+    }
+
     .settings-workspace {
         border: 0;
         border-radius: 0;
@@ -2695,6 +3187,14 @@
         gap: 5px;
     }
 
+    .seo-preview-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--txtHintColor);
+    }
+
     .seo-preview-title {
         font-size: 14px;
         font-weight: 600;
@@ -2711,6 +3211,36 @@
     .seo-preview-hint {
         font-size: 11px;
         color: color-mix(in srgb, var(--txtHintColor) 92%, var(--txtPrimaryColor));
+    }
+
+    .seo-field-helper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .seo-count-pill {
+        --labelHPadding: 7px;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 26%, var(--baseColor));
+        color: var(--txtHintColor);
+    }
+
+    .seo-check-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .seo-check-item {
+        font-size: var(--smFontSize);
+        line-height: var(--smLineHeight);
+        color: var(--txtHintColor);
+    }
+
+    .seo-check-item.warning {
+        color: var(--warningColor);
     }
 
     .textarea-input {
