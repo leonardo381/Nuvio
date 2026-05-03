@@ -26,6 +26,9 @@
     const pageSeoFilterMissingBasicsKey = "missing-basics";
     const pageSeoTabBasicKey = "basic";
     const pageSeoTabAdvancedKey = "advanced";
+    const websiteIdentitySeoTabBasicKey = "basic";
+    const websiteIdentitySeoTabLocalBusinessKey = "local-business";
+    const websiteIdentitySeoTabAdvancedKey = "advanced";
     const clientSettingsRole = "client";
     const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
     const websiteSettingsAreaIdentitySeoKey = "identity-seo";
@@ -120,6 +123,7 @@
         seoImageFile: null,
     };
     let activeWebsiteSettingsArea = websiteSettingsAreaIdentitySeoKey;
+    let activeWebsiteIdentitySeoTab = websiteIdentitySeoTabBasicKey;
     let activeWebsiteSettingsFeatureKey = "";
 
     let sectionPropsDraftById = {};
@@ -298,6 +302,8 @@
     $: pageSeoHasSocialImage = !!normalizeString(pageEditForm?.seoSocialImageCurrent) || !!pageEditForm?.seoSocialImageFile;
     $: pageSeoHasGlobalSocialImage = !!normalizeString(websiteIdentitySeoDraft?.seoImageCurrent) || !!websiteIdentitySeoDraft?.seoImageFile;
     $: pageSeoSocialImagePreviewUrl = getCollectionFileUrl(selectedPage, pageEditForm?.seoSocialImageCurrent);
+    $: websiteLogoPreviewUrl = getCollectionFileUrl(selectedWebsite, websiteIdentitySeoDraft?.logoCurrent);
+    $: websiteSeoImagePreviewUrl = getCollectionFileUrl(selectedWebsite, websiteIdentitySeoDraft?.seoImageCurrent);
     $: globalSeoTitleText = normalizeString(websiteIdentitySeoDraft?.seoTitle);
     $: globalSeoDescriptionText = toSeoPlainText(websiteIdentitySeoDraft?.seoDescription);
     $: globalSeoTitleTemplateText = normalizeString(websiteIdentitySeoDraft?.seoTitleTemplate);
@@ -402,7 +408,13 @@
     $: localBusinessSeoCheckCounts = getSeoCheckCounts(localBusinessSeoChecks);
     $: pageSeoWarningChecks = (pageSeoChecks || []).filter((check) => `${check?.level || ""}` === "warning");
     $: pageSeoSuggestionChecks = (pageSeoChecks || []).filter((check) => `${check?.level || ""}` === "info");
+    $: globalSeoWarningChecks = (globalSeoChecks || []).filter((check) => `${check?.level || ""}` === "warning");
+    $: globalSeoSuggestionChecks = (globalSeoChecks || []).filter((check) => `${check?.level || ""}` === "info");
+    $: localBusinessSeoWarningChecks = (localBusinessSeoChecks || []).filter((check) => `${check?.level || ""}` === "warning");
+    $: localBusinessSeoSuggestionChecks = (localBusinessSeoChecks || []).filter((check) => `${check?.level || ""}` === "info");
     $: pageSeoHealthCompactSummary = getSeoHealthCompactSummary(pageSeoCheckCounts);
+    $: globalSeoHealthCompactSummary = getSeoHealthCompactSummary(globalSeoCheckCounts);
+    $: localBusinessSeoHealthCompactSummary = getSeoHealthCompactSummary(localBusinessSeoCheckCounts);
     $: pageSeoHealthStatus = getPageSeoHealthStatus({
         hasTitle: !!pageSeoTitleText,
         hasDescription: !!pageSeoDescriptionText,
@@ -427,6 +439,20 @@
     });
     $: globalSeoCheckSummary = getSeoCheckSummaryText(globalSeoCheckCounts);
     $: localBusinessSeoCheckSummary = getSeoCheckSummaryText(localBusinessSeoCheckCounts);
+    $: websiteSeoAdvancedImpactChecks = buildWebsiteSeoAdvancedImpactChecks({
+        hasTitleTemplateField: !!websiteSeoTitleTemplateField,
+        titleTemplate: globalSeoTitleTemplateText,
+        hasTitleSeparatorField: !!websiteSeoTitleSeparatorField,
+        titleSeparator: globalSeoTitleSeparatorText,
+        hasCanonicalDomainField: !!websiteSeoCanonicalDomainField,
+        canonicalDomain: globalSeoCanonicalDomainText,
+    });
+    $: websiteSeoAdvancedImpactWarningChecks = (websiteSeoAdvancedImpactChecks || []).filter(
+        (check) => `${check?.level || ""}` === "warning",
+    );
+    $: websiteSeoAdvancedImpactInfoChecks = (websiteSeoAdvancedImpactChecks || []).filter(
+        (check) => `${check?.level || ""}` === "info",
+    );
     $: normalizedPageSearch = normalizeString(pageSearch).toLowerCase();
     $: activePagesCount = pageEnabledField ? pages.filter((record) => isPageActive(record)).length : 0;
     $: inactivePagesCount = pageEnabledField ? Math.max(0, pages.length - activePagesCount) : 0;
@@ -1380,6 +1406,82 @@
             checks.push({
                 level: "pass",
                 message: "Canonical domain is configured and looks valid.",
+            });
+        }
+
+        return checks;
+    }
+
+    function buildWebsiteSeoAdvancedImpactChecks({
+        hasTitleTemplateField,
+        titleTemplate,
+        hasTitleSeparatorField,
+        titleSeparator,
+        hasCanonicalDomainField,
+        canonicalDomain,
+    }) {
+        const checks = [];
+        const normalizedTitleTemplate = normalizeString(titleTemplate);
+        const normalizedTitleSeparator = normalizeString(titleSeparator);
+        const normalizedCanonicalDomain = normalizeString(canonicalDomain);
+
+        if (!hasTitleTemplateField) {
+            checks.push({
+                level: "info",
+                message: "Title template field is not available on this website collection.",
+            });
+        } else if (!normalizedTitleTemplate) {
+            checks.push({
+                level: "info",
+                message: "Title template is not set. Runtime fallback uses the title separator pattern.",
+            });
+        } else {
+            if (!/\{page\}/i.test(normalizedTitleTemplate)) {
+                checks.push({
+                    level: "warning",
+                    message: "Title template should include {page} to represent each page title.",
+                });
+            }
+
+            if (!/\{site\}/i.test(normalizedTitleTemplate)) {
+                checks.push({
+                    level: "info",
+                    message: "Consider including {site} in the title template for clearer branding.",
+                });
+            }
+        }
+
+        if (!hasTitleSeparatorField) {
+            checks.push({
+                level: "info",
+                message: "Title separator field is not available on this website collection.",
+            });
+        } else if (!normalizedTitleSeparator) {
+            checks.push({
+                level: "info",
+                message: "Title separator is empty. Runtime fallback will use the default separator.",
+            });
+        } else if (normalizedTitleSeparator.length > seoSeparatorLongThreshold) {
+            checks.push({
+                level: "warning",
+                message: "Title separator should stay short (usually 1 to 3 characters).",
+            });
+        }
+
+        if (!hasCanonicalDomainField) {
+            checks.push({
+                level: "info",
+                message: "Canonical domain field is not available on this website collection.",
+            });
+        } else if (!normalizedCanonicalDomain) {
+            checks.push({
+                level: "info",
+                message: "Canonical domain is not set. Runtime fallback will use website/request host rules.",
+            });
+        } else if (!isLikelyCanonicalDomain(normalizedCanonicalDomain)) {
+            checks.push({
+                level: "warning",
+                message: "Canonical domain should start with http:// or https:// and include a valid host.",
             });
         }
 
@@ -2421,6 +2523,7 @@
         pageSearch = "";
         pageSeoFilter = pageSeoFilterAllKey;
         activePageSeoTab = pageSeoTabBasicKey;
+        activeWebsiteIdentitySeoTab = websiteIdentitySeoTabBasicKey;
         focusedBlockId = "";
         editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
@@ -2452,6 +2555,16 @@
     function setActiveWebsiteSettingsArea(nextArea) {
         if (nextArea === websiteSettingsAreaIdentitySeoKey || nextArea === websiteSettingsAreaFeaturesKey) {
             activeWebsiteSettingsArea = nextArea;
+        }
+    }
+
+    function setActiveWebsiteIdentitySeoTab(nextTab) {
+        if (
+            nextTab === websiteIdentitySeoTabBasicKey ||
+            nextTab === websiteIdentitySeoTabLocalBusinessKey ||
+            nextTab === websiteIdentitySeoTabAdvancedKey
+        ) {
+            activeWebsiteIdentitySeoTab = nextTab;
         }
     }
 
@@ -3080,7 +3193,7 @@
                                     </div>
 
                                     {#if pageSeoTitleField || pageSeoDescriptionField || pageSeoSocialImageField || pageSeoCanonicalUrlField || pageSeoNoindexField || pageSeoExcludeFromSitemapField || pageSeoFocusKeywordField}
-                                        <div class="page-seo-tabs-row m-t-sm">
+                                        <div class="page-seo-tabs-row page-seo-tabs-row--compact">
                                             <div class="tabs-header compact combined left operations-tabs operations-tabs--nested page-seo-tabs">
                                                 <button
                                                     type="button"
@@ -3421,7 +3534,7 @@
                     {#if !selectedWebsiteId}
                         <p class="txt-hint m-b-0">Select a website to edit settings.</p>
                     {:else}
-                        <div class="settings-nav-row m-t-sm">
+                        <div class="settings-nav-row settings-nav-row--compact">
                             <div class="tabs-header compact combined left operations-tabs settings-nav-tabs">
                                 <button
                                     type="button"
@@ -3447,476 +3560,623 @@
                         {#if activeWebsiteSettingsArea === websiteSettingsAreaIdentitySeoKey}
                             <div class="settings-sections m-t-sm">
                                 {#if hasWebsiteIdentitySeoFields}
-                                    <div class="settings-pane">
-                                        <div class="settings-subhead">
-                                            <h5 class="m-0">Identity</h5>
-                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Manage the visual identity used across this website.</p>
+                                    <div class="settings-pane settings-identity-pane">
+                                        <div class="seo-page-head">
+                                            <h5 class="m-0">Identity & SEO</h5>
+                                            <p class="txt-sm txt-hint m-b-0 seo-page-head-helper">Manage global fallback metadata and local business SEO signals.</p>
                                         </div>
 
-                                        {#if websiteLogoField}
-                                            <div class="settings-form-grid one-col m-t-sm">
-                                                <div class="form-field">
-                                                    <label for="cms-website-logo-file">Logo</label>
-                                                    <div class="settings-file-row">
-                                                        <input
-                                                            id="cms-website-logo-file"
-                                                            class="input file-input"
-                                                            type="file"
-                                                            on:change={(event) => handleWebsiteSeoFileChange("logo", event)}
-                                                        />
-                                                    </div>
-                                                    <div class="help-block file-field-hint m-t-6">
-                                                        {#if websiteIdentitySeoDraft.logoFile}
-                                                            <span class="label label-sm settings-file-state">New file: {websiteIdentitySeoDraft.logoFile.name}</span>
-                                                        {:else if websiteIdentitySeoDraft.logoCurrent}
-                                                            <span class="label label-sm settings-file-state">Current file: {websiteIdentitySeoDraft.logoCurrent}</span>
+                                        <div class="page-seo-tabs-row page-seo-tabs-row--compact">
+                                            <div class="tabs-header compact combined left operations-tabs operations-tabs--nested page-seo-tabs settings-identity-seo-tabs">
+                                                <button
+                                                    type="button"
+                                                    class="tab-item"
+                                                    class:active={activeWebsiteIdentitySeoTab === websiteIdentitySeoTabBasicKey}
+                                                    on:click={() => setActiveWebsiteIdentitySeoTab(websiteIdentitySeoTabBasicKey)}
+                                                >
+                                                    <i class="ri-earth-line tab-icon" aria-hidden="true" />
+                                                    <span class="tab-label">Basic</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="tab-item"
+                                                    class:active={activeWebsiteIdentitySeoTab === websiteIdentitySeoTabLocalBusinessKey}
+                                                    on:click={() => setActiveWebsiteIdentitySeoTab(websiteIdentitySeoTabLocalBusinessKey)}
+                                                >
+                                                    <i class="ri-store-3-line tab-icon" aria-hidden="true" />
+                                                    <span class="tab-label">Local Business</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="tab-item"
+                                                    class:active={activeWebsiteIdentitySeoTab === websiteIdentitySeoTabAdvancedKey}
+                                                    on:click={() => setActiveWebsiteIdentitySeoTab(websiteIdentitySeoTabAdvancedKey)}
+                                                >
+                                                    <i class="ri-tools-line tab-icon" aria-hidden="true" />
+                                                    <span class="tab-label">Advanced</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {#if activeWebsiteIdentitySeoTab === websiteIdentitySeoTabBasicKey}
+                                            <div class="seo-editor-grid m-t-sm">
+                                                <div class="seo-editor-main">
+                                                    <div class="settings-identity-section">
+                                                        <div class="settings-subhead">
+                                                            <h6 class="m-0">Identity</h6>
+                                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Fallback defaults are used when a page does not define its own SEO.</p>
+                                                        </div>
+
+                                                        {#if websiteLogoField}
+                                                            <div class="form-field seo-field m-t-8">
+                                                                <label for="cms-website-logo-file">Logo</label>
+                                                                <div class="page-seo-file-control">
+                                                                    {#if websiteLogoPreviewUrl}
+                                                                        <a
+                                                                            class="page-seo-file-thumb"
+                                                                            href={websiteLogoPreviewUrl}
+                                                                            target="_blank"
+                                                                            rel="noreferrer noopener"
+                                                                            title="Open current logo"
+                                                                        >
+                                                                            <img src={websiteLogoPreviewUrl} alt="Current logo preview" loading="lazy" />
+                                                                        </a>
+                                                                    {/if}
+                                                                    <div class="settings-file-row">
+                                                                        <input
+                                                                            id="cms-website-logo-file"
+                                                                            class="input form-input file-input page-seo-file-input"
+                                                                            type="file"
+                                                                            on:change={(event) => handleWebsiteSeoFileChange("logo", event)}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <div class="help-block file-field-hint m-t-6">
+                                                                    {#if websiteIdentitySeoDraft.logoFile}
+                                                                        <span class="label label-sm settings-file-state">New file: {websiteIdentitySeoDraft.logoFile.name}</span>
+                                                                    {:else if websiteIdentitySeoDraft.logoCurrent}
+                                                                        <span class="label label-sm settings-file-state">Current file: {websiteIdentitySeoDraft.logoCurrent}</span>
+                                                                    {:else}
+                                                                        <span class="label label-sm settings-file-state">No current file</span>
+                                                                    {/if}
+                                                                </div>
+                                                            </div>
                                                         {:else}
-                                                            <span class="label label-sm settings-file-state">No current file</span>
+                                                            <p class="txt-sm txt-hint m-b-0 m-t-8">Logo field is not available for this website.</p>
+                                                        {/if}
+                                                    </div>
+
+                                                    <div class="settings-identity-section m-t-sm">
+                                                        <div class="settings-subhead">
+                                                            <h6 class="m-0">Global SEO</h6>
+                                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Fallback metadata for pages without page-level SEO values.</p>
+                                                        </div>
+
+                                                        <div class="form-grid m-t-8">
+                                                            {#if websiteSeoTitleField}
+                                                                <div class="form-field seo-field">
+                                                                    <label for="cms-website-seo-title">Global title for Google</label>
+                                                                    <input
+                                                                        id="cms-website-seo-title"
+                                                                        class="input form-input"
+                                                                        bind:value={websiteIdentitySeoDraft.seoTitle}
+                                                                    />
+                                                                    <div class="help-block m-t-6 seo-field-helper">
+                                                                        <span class="label label-sm seo-count-pill">{globalSeoTitleLength} characters</span>
+                                                                        <span>Used as fallback when page SEO title is empty.</span>
+                                                                    </div>
+                                                                </div>
+                                                            {/if}
+
+                                                            {#if websiteSeoDescriptionField}
+                                                                <div class="form-field seo-field">
+                                                                    <label for="cms-website-seo-description">Global description for Google</label>
+                                                                    <textarea
+                                                                        id="cms-website-seo-description"
+                                                                        class="input form-textarea textarea-input"
+                                                                        rows="4"
+                                                                        bind:value={websiteIdentitySeoDraft.seoDescription}
+                                                                    />
+                                                                    <div class="help-block m-t-6 seo-field-helper">
+                                                                        <span class="label label-sm seo-count-pill">{globalSeoDescriptionLength} characters</span>
+                                                                        <span>Used as fallback when page SEO description is empty.</span>
+                                                                    </div>
+                                                                </div>
+                                                            {/if}
+                                                        </div>
+
+                                                        {#if websiteSeoImageField}
+                                                            <div class="form-field seo-field m-t-sm">
+                                                                <label for="cms-website-seo-image-file">Default image used when sharing</label>
+                                                                <div class="page-seo-file-control">
+                                                                    {#if websiteSeoImagePreviewUrl}
+                                                                        <a
+                                                                            class="page-seo-file-thumb"
+                                                                            href={websiteSeoImagePreviewUrl}
+                                                                            target="_blank"
+                                                                            rel="noreferrer noopener"
+                                                                            title="Open current SEO image"
+                                                                        >
+                                                                            <img src={websiteSeoImagePreviewUrl} alt="Current global SEO image preview" loading="lazy" />
+                                                                        </a>
+                                                                    {/if}
+                                                                    <div class="settings-file-row">
+                                                                        <input
+                                                                            id="cms-website-seo-image-file"
+                                                                            class="input form-input file-input page-seo-file-input"
+                                                                            type="file"
+                                                                            on:change={(event) => handleWebsiteSeoFileChange("seoImage", event)}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <div class="help-block file-field-hint m-t-6">
+                                                                    {#if websiteIdentitySeoDraft.seoImageFile}
+                                                                        <span class="label label-sm settings-file-state">New file: {websiteIdentitySeoDraft.seoImageFile.name}</span>
+                                                                    {:else if websiteIdentitySeoDraft.seoImageCurrent}
+                                                                        <span class="label label-sm settings-file-state">Current file: {websiteIdentitySeoDraft.seoImageCurrent}</span>
+                                                                    {:else}
+                                                                        <span class="label label-sm settings-file-state">No current file</span>
+                                                                    {/if}
+                                                                </div>
+                                                                <div class="help-block m-t-6">
+                                                                    Used when pages are shared. If empty, runtime fallback applies.
+                                                                </div>
+                                                            </div>
+                                                        {:else}
+                                                            <p class="txt-sm txt-hint m-b-0 m-t-sm">Global SEO image field is not available for this website.</p>
                                                         {/if}
                                                     </div>
                                                 </div>
+
+                                                <aside class="seo-editor-side">
+                                                    <div class="seo-preview-card seo-search-preview-card">
+                                                        <div class="seo-preview-label">Global Search Preview</div>
+                                                        <div class="seo-preview-title">{globalSeoPreviewTitle}</div>
+                                                        <div class="seo-preview-hint">{globalSeoPreviewUrl}</div>
+                                                        <div class="seo-preview-description">{globalSeoPreviewDescription}</div>
+                                                    </div>
+
+                                                    <div class="seo-checklist-panel seo-health-panel m-t-sm">
+                                                        <div class="seo-checklist-head">
+                                                            <div class="seo-health-main">
+                                                                <h6 class="m-0 seo-checklist-title">Global SEO health</h6>
+                                                                <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                                    Estimated from current draft values and runtime SEO defaults.
+                                                                </p>
+                                                            </div>
+                                                            <div class="seo-health-meta">
+                                                                <span
+                                                                    class="label label-sm seo-health-status-pill"
+                                                                    class:good={globalSeoHealthStatus.key === "good"}
+                                                                    class:needs-attention={globalSeoHealthStatus.key === "needs-attention"}
+                                                                    class:missing-basics={globalSeoHealthStatus.key === "missing-basics"}
+                                                                >
+                                                                    {globalSeoHealthStatus.label}
+                                                                </span>
+                                                                <span
+                                                                    class="summary-pill seo-check-summary-pill"
+                                                                    class:warning={globalSeoCheckCounts.warnings > 0}
+                                                                >
+                                                                    {globalSeoHealthCompactSummary}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {#if globalSeoWarningChecks.length}
+                                                            <div class="seo-health-group m-t-8">
+                                                                <div class="seo-health-group-title">Warnings</div>
+                                                                <div class="seo-check-list">
+                                                                    {#each globalSeoWarningChecks as check}
+                                                                        <div class="seo-check-item warning">
+                                                                            <span class="label label-sm seo-check-pill warning">Warning</span>
+                                                                            <span class="seo-check-message">{check.message}</span>
+                                                                        </div>
+                                                                    {/each}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if globalSeoSuggestionChecks.length}
+                                                            <div class="seo-health-group m-t-8">
+                                                                <div class="seo-health-group-title">Suggestions</div>
+                                                                <div class="seo-check-list">
+                                                                    {#each globalSeoSuggestionChecks as check}
+                                                                        <div class="seo-check-item">
+                                                                            <span class="label label-sm seo-check-pill">Info</span>
+                                                                            <span class="seo-check-message">{check.message}</span>
+                                                                        </div>
+                                                                    {/each}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if !globalSeoWarningChecks.length && !globalSeoSuggestionChecks.length}
+                                                            <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
+                                                        {/if}
+                                                    </div>
+                                                </aside>
                                             </div>
-                                        {:else}
-                                            <p class="txt-sm txt-hint m-b-0 m-t-sm">Logo field is not available for this website.</p>
+                                        {:else if activeWebsiteIdentitySeoTab === websiteIdentitySeoTabLocalBusinessKey}
+                                            <div class="seo-editor-grid m-t-sm">
+                                                <div class="seo-editor-main">
+                                                    <div class="local-seo-groups">
+                                                        <div class="local-seo-group">
+                                                            <div class="local-seo-group-title">Business Identity</div>
+                                                            <div class="settings-form-grid two-col m-t-8">
+                                                                {#if websiteBusinessNameField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-name">Business Name</label>
+                                                                        <input
+                                                                            id="cms-website-business-name"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessName}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessTypeField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-type">Business Type</label>
+                                                                        <input
+                                                                            id="cms-website-business-type"
+                                                                            class="input form-input"
+                                                                            placeholder="LocalBusiness"
+                                                                            bind:value={websiteIdentitySeoDraft.businessType}
+                                                                        />
+                                                                        <div class="help-block m-t-6">
+                                                                            Example values: LocalBusiness, Dentist, HealthClub, Restaurant, ProfessionalService.
+                                                                        </div>
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessPrimaryCategoryField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-primary-category">Primary Category</label>
+                                                                        <input
+                                                                            id="cms-website-business-primary-category"
+                                                                            class="input form-input"
+                                                                            placeholder="Dental clinic"
+                                                                            bind:value={websiteIdentitySeoDraft.businessPrimaryCategory}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessPriceRangeField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-price-range">Price Range</label>
+                                                                        <input
+                                                                            id="cms-website-business-price-range"
+                                                                            class="input form-input"
+                                                                            placeholder="€€"
+                                                                            bind:value={websiteIdentitySeoDraft.businessPriceRange}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="local-seo-group">
+                                                            <div class="local-seo-group-title">Contact & Location</div>
+                                                            <div class="settings-form-grid two-col m-t-8">
+                                                                {#if websiteBusinessPhoneField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-phone">Phone</label>
+                                                                        <input
+                                                                            id="cms-website-business-phone"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessPhone}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessEmailField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-email">Email</label>
+                                                                        <input
+                                                                            id="cms-website-business-email"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessEmail}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessAddressField}
+                                                                    <div class="form-field local-seo-full-width">
+                                                                        <label for="cms-website-business-address">Address</label>
+                                                                        <input
+                                                                            id="cms-website-business-address"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessAddress}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessCityField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-city">City</label>
+                                                                        <input
+                                                                            id="cms-website-business-city"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessCity}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessPostalCodeField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-postal-code">Postal Code</label>
+                                                                        <input
+                                                                            id="cms-website-business-postal-code"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessPostalCode}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessCountryField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-country">Country</label>
+                                                                        <input
+                                                                            id="cms-website-business-country"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessCountry}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessServiceAreaField}
+                                                                    <div class="form-field local-seo-full-width">
+                                                                        <label for="cms-website-business-service-area">Service Area</label>
+                                                                        <input
+                                                                            id="cms-website-business-service-area"
+                                                                            class="input form-input"
+                                                                            placeholder="Setúbal, Lisbon District, Almada"
+                                                                            bind:value={websiteIdentitySeoDraft.businessServiceArea}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="local-seo-group">
+                                                            <div class="local-seo-group-title">Local SEO Details</div>
+                                                            <div class="settings-form-grid two-col m-t-8">
+                                                                {#if websiteBusinessGooglePlaceIdField}
+                                                                    <div class="form-field">
+                                                                        <label for="cms-website-business-google-place-id">Google Place ID</label>
+                                                                        <input
+                                                                            id="cms-website-business-google-place-id"
+                                                                            class="input form-input"
+                                                                            bind:value={websiteIdentitySeoDraft.businessGooglePlaceId}
+                                                                        />
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessOpeningHoursField}
+                                                                    <div class="form-field local-seo-full-width">
+                                                                        <label for="cms-website-business-opening-hours">Opening Hours</label>
+                                                                        <textarea
+                                                                            id="cms-website-business-opening-hours"
+                                                                            class="input form-textarea textarea-input"
+                                                                            rows="3"
+                                                                            bind:value={websiteIdentitySeoDraft.businessOpeningHours}
+                                                                        />
+                                                                        <div class="help-block m-t-6">
+                                                                            Use plain text or a JSON-like schedule format.
+                                                                        </div>
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteBusinessSocialProfilesField}
+                                                                    <div class="form-field local-seo-full-width">
+                                                                        <label for="cms-website-business-social-profiles">Social Profiles</label>
+                                                                        <textarea
+                                                                            id="cms-website-business-social-profiles"
+                                                                            class="input form-textarea textarea-input"
+                                                                            rows="3"
+                                                                            bind:value={websiteIdentitySeoDraft.businessSocialProfiles}
+                                                                        />
+                                                                        <div class="help-block m-t-6">
+                                                                            Add profile URLs (one per line) or JSON data for future sameAs structured data.
+                                                                        </div>
+                                                                    </div>
+                                                                {/if}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <aside class="seo-editor-side">
+                                                    <div class="seo-checklist-panel seo-health-panel">
+                                                        <div class="seo-checklist-head">
+                                                            <div class="seo-health-main">
+                                                                <h6 class="m-0 seo-checklist-title">Local Business SEO health</h6>
+                                                                <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                                    Estimated from current draft values and runtime SEO defaults.
+                                                                </p>
+                                                            </div>
+                                                            <div class="seo-health-meta">
+                                                                <span
+                                                                    class="label label-sm seo-health-status-pill"
+                                                                    class:good={localBusinessSeoHealthStatus.key === "good"}
+                                                                    class:needs-attention={localBusinessSeoHealthStatus.key === "needs-attention"}
+                                                                    class:missing-basics={localBusinessSeoHealthStatus.key === "missing-basics"}
+                                                                >
+                                                                    {localBusinessSeoHealthStatus.label}
+                                                                </span>
+                                                                <span
+                                                                    class="summary-pill seo-check-summary-pill"
+                                                                    class:warning={localBusinessSeoCheckCounts.warnings > 0}
+                                                                >
+                                                                    {localBusinessSeoHealthCompactSummary}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {#if localBusinessSeoWarningChecks.length}
+                                                            <div class="seo-health-group m-t-8">
+                                                                <div class="seo-health-group-title">Warnings</div>
+                                                                <div class="seo-check-list">
+                                                                    {#each localBusinessSeoWarningChecks as check}
+                                                                        <div class="seo-check-item warning">
+                                                                            <span class="label label-sm seo-check-pill warning">Warning</span>
+                                                                            <span class="seo-check-message">{check.message}</span>
+                                                                        </div>
+                                                                    {/each}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if localBusinessSeoSuggestionChecks.length}
+                                                            <div class="seo-health-group m-t-8">
+                                                                <div class="seo-health-group-title">Suggestions</div>
+                                                                <div class="seo-check-list">
+                                                                    {#each localBusinessSeoSuggestionChecks as check}
+                                                                        <div class="seo-check-item">
+                                                                            <span class="label label-sm seo-check-pill">Info</span>
+                                                                            <span class="seo-check-message">{check.message}</span>
+                                                                        </div>
+                                                                    {/each}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if !localBusinessSeoWarningChecks.length && !localBusinessSeoSuggestionChecks.length}
+                                                            <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
+                                                        {/if}
+                                                    </div>
+
+                                                    <div class="seo-checklist-panel seo-impact-panel m-t-sm">
+                                                        <div class="seo-checklist-head">
+                                                            <div class="seo-health-main">
+                                                                <h6 class="m-0 seo-checklist-title">Structured data note</h6>
+                                                                <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                                    LocalBusiness structured data is generated only when enough business data exists.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </aside>
+                                            </div>
+                                        {:else if activeWebsiteIdentitySeoTab === websiteIdentitySeoTabAdvancedKey}
+                                            {#if websiteSeoTitleTemplateField || websiteSeoTitleSeparatorField || websiteSeoCanonicalDomainField}
+                                                <div class="seo-editor-grid m-t-sm">
+                                                    <div class="seo-advanced-main">
+                                                        <div class="seo-advanced-pane">
+                                                            <div class="form-grid">
+                                                                {#if websiteSeoTitleTemplateField}
+                                                                    <div class="form-field seo-field">
+                                                                        <label for="cms-website-seo-title-template">Title Template</label>
+                                                                        <input
+                                                                            id="cms-website-seo-title-template"
+                                                                            class="input form-input"
+                                                                            placeholder={"{page} | {site}"}
+                                                                            bind:value={websiteIdentitySeoDraft.seoTitleTemplate}
+                                                                        />
+                                                                        <div class="help-block m-t-6">
+                                                                            Controls how page titles are combined with the website name. Use {`{page}`} and {`{site}`}.
+                                                                        </div>
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteSeoTitleSeparatorField}
+                                                                    <div class="form-field seo-field">
+                                                                        <label for="cms-website-seo-title-separator">Title Separator</label>
+                                                                        <input
+                                                                            id="cms-website-seo-title-separator"
+                                                                            class="input form-input"
+                                                                            placeholder="|"
+                                                                            bind:value={websiteIdentitySeoDraft.seoTitleSeparator}
+                                                                        />
+                                                                        <div class="help-block m-t-6">
+                                                                            Used when no title template is provided.
+                                                                        </div>
+                                                                    </div>
+                                                                {/if}
+
+                                                                {#if websiteSeoCanonicalDomainField}
+                                                                    <div class="form-field seo-field">
+                                                                        <label for="cms-website-seo-canonical-domain">Canonical Domain</label>
+                                                                        <input
+                                                                            id="cms-website-seo-canonical-domain"
+                                                                            class="input form-input"
+                                                                            placeholder="https://example.com"
+                                                                            bind:value={websiteIdentitySeoDraft.seoCanonicalDomain}
+                                                                        />
+                                                                        <div class="help-block m-t-6">
+                                                                            Used later for canonical URLs and sitemap generation. Example: https://example.com
+                                                                        </div>
+                                                                    </div>
+                                                                {/if}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <aside class="seo-editor-side">
+                                                        <div class="seo-checklist-panel seo-impact-panel">
+                                                            <div class="seo-checklist-head">
+                                                                <div class="seo-health-main">
+                                                                    <h6 class="m-0 seo-checklist-title">Current impact</h6>
+                                                                    <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                                        Runtime behavior based on current title defaults and canonical domain settings.
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {#if websiteSeoAdvancedImpactWarningChecks.length}
+                                                                <div class="seo-health-group m-t-8">
+                                                                    <div class="seo-health-group-title">Warnings</div>
+                                                                    <div class="seo-check-list">
+                                                                        {#each websiteSeoAdvancedImpactWarningChecks as check}
+                                                                            <div class="seo-check-item warning">
+                                                                                <span class="label label-sm seo-check-pill warning">Warning</span>
+                                                                                <span class="seo-check-message">{check.message}</span>
+                                                                            </div>
+                                                                        {/each}
+                                                                    </div>
+                                                                </div>
+                                                            {/if}
+
+                                                            {#if websiteSeoAdvancedImpactInfoChecks.length}
+                                                                <div class="seo-health-group m-t-8">
+                                                                    <div class="seo-health-group-title">Notes</div>
+                                                                    <div class="seo-check-list">
+                                                                        {#each websiteSeoAdvancedImpactInfoChecks as check}
+                                                                            <div class="seo-check-item">
+                                                                                <span class="label label-sm seo-check-pill">Info</span>
+                                                                                <span class="seo-check-message">{check.message}</span>
+                                                                            </div>
+                                                                        {/each}
+                                                                    </div>
+                                                                </div>
+                                                            {/if}
+
+                                                            {#if !websiteSeoAdvancedImpactWarningChecks.length && !websiteSeoAdvancedImpactInfoChecks.length}
+                                                                <p class="txt-sm txt-hint m-t-8 m-b-0">Advanced SEO defaults look healthy.</p>
+                                                            {/if}
+                                                        </div>
+                                                    </aside>
+                                                </div>
+                                            {:else}
+                                                <p class="txt-sm txt-hint m-t-8 m-b-0">Advanced SEO fields are not available for this website collection.</p>
+                                            {/if}
+                                        {/if}
+
+                                        <div class="settings-section-actions m-t-sm">
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm"
+                                                disabled={isSavingWebsiteIdentitySeo}
+                                                on:click={saveWebsiteIdentitySeo}
+                                            >
+                                                {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
+                                            </button>
+                                        </div>
+
+                                        {#if websiteIdentitySeoError}
+                                            <p class="txt-danger m-t-8 m-b-0">{websiteIdentitySeoError}</p>
                                         {/if}
                                     </div>
-
-                                    <div class="settings-pane">
-                                        <div class="settings-subhead">
-                                            <h5 class="m-0">Global SEO</h5>
-                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Used as fallback metadata when a page does not define its own SEO. Page-level SEO overrides these defaults.</p>
-                                        </div>
-
-                                        <div class="settings-form-grid two-col m-t-sm">
-                                            {#if websiteSeoTitleField}
-                                                <div class="form-field">
-                                                    <label for="cms-website-seo-title">Global SEO Title</label>
-                                                    <input
-                                                        id="cms-website-seo-title"
-                                                        class="input"
-                                                        bind:value={websiteIdentitySeoDraft.seoTitle}
-                                                    />
-                                                    <div class="help-block m-t-6 seo-field-helper">
-                                                        <span class="label label-sm seo-count-pill">{globalSeoTitleLength} characters</span>
-                                                        <span>Recommended: keep it clear and specific.</span>
-                                                    </div>
-                                                </div>
-                                            {/if}
-
-                                            {#if websiteSeoDescriptionField}
-                                                <div class="form-field">
-                                                    <label for="cms-website-seo-description">
-                                                        Global SEO Description
-                                                    </label>
-                                                    <textarea
-                                                        id="cms-website-seo-description"
-                                                        class="input textarea-input"
-                                                        rows="4"
-                                                        bind:value={websiteIdentitySeoDraft.seoDescription}
-                                                    />
-                                                    <div class="help-block m-t-6 seo-field-helper">
-                                                        <span class="label label-sm seo-count-pill">{globalSeoDescriptionLength} characters</span>
-                                                        <span>Recommended: summarize the website in one or two useful sentences.</span>
-                                                    </div>
-                                                </div>
-                                            {/if}
-
-                                            {#if websiteSeoImageField}
-                                                <div class="form-field">
-                                                    <label for="cms-website-seo-image-file">
-                                                        Global SEO Image
-                                                    </label>
-                                                    <div class="settings-file-row">
-                                                        <input
-                                                            id="cms-website-seo-image-file"
-                                                            class="input file-input"
-                                                            type="file"
-                                                            on:change={(event) => handleWebsiteSeoFileChange("seoImage", event)}
-                                                        />
-                                                    </div>
-                                                    <div class="help-block file-field-hint m-t-6">
-                                                        {#if websiteIdentitySeoDraft.seoImageFile}
-                                                            <span class="label label-sm settings-file-state">New file: {websiteIdentitySeoDraft.seoImageFile.name}</span>
-                                                        {:else if websiteIdentitySeoDraft.seoImageCurrent}
-                                                            <span class="label label-sm settings-file-state">Current file: {websiteIdentitySeoDraft.seoImageCurrent}</span>
-                                                        {:else}
-                                                            <span class="label label-sm settings-file-state">No current file</span>
-                                                        {/if}
-                                                    </div>
-                                                    <div class="help-block m-t-6">
-                                                        Used as the default image when pages are shared, unless a page-specific image is added later.
-                                                    </div>
-                                                </div>
-                                            {/if}
-                                        </div>
-
-                                        <div class="seo-preview-card m-t-sm">
-                                            <div class="seo-preview-label">Global Search Preview</div>
-                                            <div class="seo-preview-title">
-                                                {globalSeoPreviewTitle}
-                                            </div>
-                                            <div class="seo-preview-hint">
-                                                {globalSeoPreviewUrl}
-                                            </div>
-                                            <div class="seo-preview-description">
-                                                {globalSeoPreviewDescription}
-                                            </div>
-                                        </div>
-
-                                        <div class="seo-checklist-panel seo-health-panel m-t-8">
-                                            <div class="seo-checklist-head">
-                                                <div class="seo-health-main">
-                                                    <h6 class="m-0 seo-checklist-title">Global SEO health</h6>
-                                                    <p class="txt-sm txt-hint m-b-0 seo-health-helper">
-                                                        Evaluates global metadata defaults and canonical setup used by runtime fallbacks.
-                                                    </p>
-                                                </div>
-                                                <div class="seo-health-meta">
-                                                    <span
-                                                        class="label label-sm seo-health-status-pill"
-                                                        class:good={globalSeoHealthStatus.key === "good"}
-                                                        class:needs-attention={globalSeoHealthStatus.key === "needs-attention"}
-                                                        class:missing-basics={globalSeoHealthStatus.key === "missing-basics"}
-                                                    >
-                                                        {globalSeoHealthStatus.label}
-                                                    </span>
-                                                    <span
-                                                        class="summary-pill seo-check-summary-pill"
-                                                        class:warning={globalSeoCheckCounts.warnings > 0}
-                                                    >
-                                                        {globalSeoCheckSummary}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {#if globalSeoChecks.length}
-                                                <div class="seo-check-list m-t-8">
-                                                    {#each globalSeoChecks as check}
-                                                        <div class="seo-check-item" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
-                                                            <span class="label label-sm seo-check-pill" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
-                                                                {check.level === "warning"
-                                                                    ? "Warning"
-                                                                    : check.level === "pass"
-                                                                        ? "Pass"
-                                                                        : "Info"}
-                                                            </span>
-                                                            <span class="seo-check-message">{check.message}</span>
-                                                        </div>
-                                                    {/each}
-                                                </div>
-                                            {:else}
-                                                <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
-                                            {/if}
-                                        </div>
-                                    </div>
-
-                                    <div class="settings-pane">
-                                        <div class="settings-subhead">
-                                            <h5 class="m-0">SEO Defaults</h5>
-                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Configure default title formatting and canonical domain for future runtime SEO rendering.</p>
-                                        </div>
-
-                                        <div class="settings-form-grid two-col m-t-sm">
-                                            {#if websiteSeoTitleTemplateField}
-                                                <div class="form-field">
-                                                    <label for="cms-website-seo-title-template">Title Template</label>
-                                                    <input
-                                                        id="cms-website-seo-title-template"
-                                                        class="input"
-                                                        placeholder={"{page} | {site}"}
-                                                        bind:value={websiteIdentitySeoDraft.seoTitleTemplate}
-                                                    />
-                                                    <div class="help-block m-t-6">
-                                                        Controls how page titles are combined with the website name. Use {`{page}`} and {`{site}`}.
-                                                    </div>
-                                                </div>
-                                            {/if}
-
-                                            {#if websiteSeoTitleSeparatorField}
-                                                <div class="form-field">
-                                                    <label for="cms-website-seo-title-separator">Title Separator</label>
-                                                    <input
-                                                        id="cms-website-seo-title-separator"
-                                                        class="input"
-                                                        placeholder="|"
-                                                        bind:value={websiteIdentitySeoDraft.seoTitleSeparator}
-                                                    />
-                                                    <div class="help-block m-t-6">
-                                                        Used when no title template is provided.
-                                                    </div>
-                                                </div>
-                                            {/if}
-
-                                            {#if websiteSeoCanonicalDomainField}
-                                                <div class="form-field">
-                                                    <label for="cms-website-seo-canonical-domain">Canonical Domain</label>
-                                                    <input
-                                                        id="cms-website-seo-canonical-domain"
-                                                        class="input"
-                                                        placeholder="https://example.com"
-                                                        bind:value={websiteIdentitySeoDraft.seoCanonicalDomain}
-                                                    />
-                                                    <div class="help-block m-t-6">
-                                                        Used later for canonical URLs and sitemap generation. Example: https://example.com
-                                                    </div>
-                                                </div>
-                                            {/if}
-                                        </div>
-                                    </div>
-
-                                    <div class="settings-pane">
-                                        <div class="settings-subhead">
-                                            <h5 class="m-0">Local Business SEO</h5>
-                                            <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">Helps Nuvio prepare stronger local SEO and structured data for this business when runtime rendering is enabled.</p>
-                                        </div>
-
-                                        <div class="local-seo-groups m-t-sm">
-                                            <div class="local-seo-group">
-                                                <div class="local-seo-group-title">Business Identity</div>
-                                                <div class="settings-form-grid two-col m-t-8">
-                                                    {#if websiteBusinessNameField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-name">Business Name</label>
-                                                            <input
-                                                                id="cms-website-business-name"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessName}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessTypeField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-type">Business Type</label>
-                                                            <input
-                                                                id="cms-website-business-type"
-                                                                class="input"
-                                                                placeholder="LocalBusiness"
-                                                                bind:value={websiteIdentitySeoDraft.businessType}
-                                                            />
-                                                            <div class="help-block m-t-6">
-                                                                Example values: LocalBusiness, Dentist, HealthClub, Restaurant, ProfessionalService.
-                                                            </div>
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessPrimaryCategoryField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-primary-category">Primary Category</label>
-                                                            <input
-                                                                id="cms-website-business-primary-category"
-                                                                class="input"
-                                                                placeholder="Dental clinic"
-                                                                bind:value={websiteIdentitySeoDraft.businessPrimaryCategory}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessPriceRangeField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-price-range">Price Range</label>
-                                                            <input
-                                                                id="cms-website-business-price-range"
-                                                                class="input"
-                                                                placeholder="€€"
-                                                                bind:value={websiteIdentitySeoDraft.businessPriceRange}
-                                                            />
-                                                        </div>
-                                                    {/if}
-                                                </div>
-                                            </div>
-
-                                            <div class="local-seo-group">
-                                                <div class="local-seo-group-title">Contact & Location</div>
-                                                <div class="settings-form-grid two-col m-t-8">
-                                                    {#if websiteBusinessPhoneField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-phone">Phone</label>
-                                                            <input
-                                                                id="cms-website-business-phone"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessPhone}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessEmailField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-email">Email</label>
-                                                            <input
-                                                                id="cms-website-business-email"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessEmail}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessAddressField}
-                                                        <div class="form-field local-seo-full-width">
-                                                            <label for="cms-website-business-address">Address</label>
-                                                            <input
-                                                                id="cms-website-business-address"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessAddress}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessCityField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-city">City</label>
-                                                            <input
-                                                                id="cms-website-business-city"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessCity}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessPostalCodeField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-postal-code">Postal Code</label>
-                                                            <input
-                                                                id="cms-website-business-postal-code"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessPostalCode}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessCountryField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-country">Country</label>
-                                                            <input
-                                                                id="cms-website-business-country"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessCountry}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessServiceAreaField}
-                                                        <div class="form-field local-seo-full-width">
-                                                            <label for="cms-website-business-service-area">Service Area</label>
-                                                            <input
-                                                                id="cms-website-business-service-area"
-                                                                class="input"
-                                                                placeholder="Setúbal, Lisbon District, Almada"
-                                                                bind:value={websiteIdentitySeoDraft.businessServiceArea}
-                                                            />
-                                                        </div>
-                                                    {/if}
-                                                </div>
-                                            </div>
-
-                                            <div class="local-seo-group">
-                                                <div class="local-seo-group-title">Local SEO Details</div>
-                                                <div class="settings-form-grid two-col m-t-8">
-                                                    {#if websiteBusinessGooglePlaceIdField}
-                                                        <div class="form-field">
-                                                            <label for="cms-website-business-google-place-id">Google Place ID</label>
-                                                            <input
-                                                                id="cms-website-business-google-place-id"
-                                                                class="input"
-                                                                bind:value={websiteIdentitySeoDraft.businessGooglePlaceId}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessOpeningHoursField}
-                                                        <div class="form-field local-seo-full-width">
-                                                            <label for="cms-website-business-opening-hours">Opening Hours</label>
-                                                            <textarea
-                                                                id="cms-website-business-opening-hours"
-                                                                class="input textarea-input"
-                                                                rows="3"
-                                                                bind:value={websiteIdentitySeoDraft.businessOpeningHours}
-                                                            />
-                                                            <div class="help-block m-t-6">
-                                                                Use plain text or a JSON-like schedule format.
-                                                            </div>
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if websiteBusinessSocialProfilesField}
-                                                        <div class="form-field local-seo-full-width">
-                                                            <label for="cms-website-business-social-profiles">Social Profiles</label>
-                                                            <textarea
-                                                                id="cms-website-business-social-profiles"
-                                                                class="input textarea-input"
-                                                                rows="3"
-                                                                bind:value={websiteIdentitySeoDraft.businessSocialProfiles}
-                                                            />
-                                                            <div class="help-block m-t-6">
-                                                                Add profile URLs (one per line) or JSON data for future sameAs structured data.
-                                                            </div>
-                                                        </div>
-                                                    {/if}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="seo-checklist-panel seo-health-panel m-t-8">
-                                            <div class="seo-checklist-head">
-                                                <div class="seo-health-main">
-                                                    <h6 class="m-0 seo-checklist-title">Local Business SEO health</h6>
-                                                    <p class="txt-sm txt-hint m-b-0 seo-health-helper">
-                                                        LocalBusiness structured data is generated only when enough business data exists.
-                                                    </p>
-                                                </div>
-                                                <div class="seo-health-meta">
-                                                    <span
-                                                        class="label label-sm seo-health-status-pill"
-                                                        class:good={localBusinessSeoHealthStatus.key === "good"}
-                                                        class:needs-attention={localBusinessSeoHealthStatus.key === "needs-attention"}
-                                                        class:missing-basics={localBusinessSeoHealthStatus.key === "missing-basics"}
-                                                    >
-                                                        {localBusinessSeoHealthStatus.label}
-                                                    </span>
-                                                    <span
-                                                        class="summary-pill seo-check-summary-pill"
-                                                        class:warning={localBusinessSeoCheckCounts.warnings > 0}
-                                                    >
-                                                        {localBusinessSeoCheckSummary}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {#if localBusinessSeoChecks.length}
-                                                <div class="seo-check-list m-t-8">
-                                                    {#each localBusinessSeoChecks as check}
-                                                        <div class="seo-check-item" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
-                                                            <span class="label label-sm seo-check-pill" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
-                                                                {check.level === "warning"
-                                                                    ? "Warning"
-                                                                    : check.level === "pass"
-                                                                        ? "Pass"
-                                                                        : "Info"}
-                                                            </span>
-                                                            <span class="seo-check-message">{check.message}</span>
-                                                        </div>
-                                                    {/each}
-                                                </div>
-                                            {:else}
-                                                <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
-                                            {/if}
-                                        </div>
-                                    </div>
-
-                                    <div class="settings-section-actions m-t-sm">
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm"
-                                            disabled={isSavingWebsiteIdentitySeo}
-                                            on:click={saveWebsiteIdentitySeo}
-                                        >
-                                            {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
-                                        </button>
-                                    </div>
-
-                                    {#if websiteIdentitySeoError}
-                                        <p class="txt-danger m-t-8 m-b-0">{websiteIdentitySeoError}</p>
-                                    {/if}
                                 {:else}
                                     <div class="settings-pane">
                                         <p class="txt-sm txt-hint m-b-0">Identity and global SEO fields are not available for this website.</p>
@@ -4619,6 +4879,10 @@
         width: auto;
     }
 
+    .page-seo-tabs-row--compact {
+        margin-top: 4px;
+    }
+
     .page-seo-tabs {
         display: inline-flex;
         align-items: center;
@@ -4785,6 +5049,10 @@
         flex-wrap: wrap;
     }
 
+    .settings-nav-row--compact {
+        margin-top: 4px;
+    }
+
     .settings-nav-tabs,
     .settings-feature-tabs {
         display: inline-flex;
@@ -4806,8 +5074,23 @@
         gap: 0;
     }
 
-    .settings-pane + .settings-pane {
-        border-top: 1px solid var(--baseAlt2Color);
+    .settings-identity-pane {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        padding-top: 8px;
+    }
+
+    .settings-identity-seo-tabs {
+        width: fit-content;
+    }
+
+    .settings-identity-section {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .settings-identity-section + .settings-identity-section {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
         padding-top: 10px;
     }
 
@@ -4852,6 +5135,11 @@
     .local-seo-group {
         border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
         padding-top: 8px;
+    }
+
+    .local-seo-group:first-child {
+        border-top: 0;
+        padding-top: 0;
     }
 
     .local-seo-group-title {
