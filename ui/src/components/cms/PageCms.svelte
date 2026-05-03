@@ -20,13 +20,12 @@
     const cmsTabSettingsKey = "settings";
     const pageEditorTabContentKey = "content";
     const pageEditorTabSeoKey = "seo";
-    const pageStatusFilterAllKey = "all";
-    const pageStatusFilterActiveKey = "active";
-    const pageStatusFilterInactiveKey = "inactive";
     const pageSeoFilterAllKey = "all";
     const pageSeoFilterGoodKey = "good";
     const pageSeoFilterNeedsAttentionKey = "needs-attention";
     const pageSeoFilterMissingBasicsKey = "missing-basics";
+    const pageSeoTabBasicKey = "basic";
+    const pageSeoTabAdvancedKey = "advanced";
     const clientSettingsRole = "client";
     const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
     const websiteSettingsAreaIdentitySeoKey = "identity-seo";
@@ -64,8 +63,8 @@
     let selectedPageId = initialQueryParams.get("cmsPage") || "";
     let activeCmsTab = initialQueryParams.get("cmsTab") === cmsTabSettingsKey ? cmsTabSettingsKey : cmsTabPagesKey;
     let activePageEditorTab = pageEditorTabContentKey;
-    let pageStatusFilter = pageStatusFilterAllKey;
     let pageSeoFilter = pageSeoFilterAllKey;
+    let activePageSeoTab = pageSeoTabBasicKey;
     let pageSearch = "";
     let focusedBlockId = "";
     let editingSectionId = "";
@@ -298,6 +297,7 @@
     $: pageSeoCanonicalUrlText = normalizeString(pageEditForm?.seoCanonicalUrl);
     $: pageSeoHasSocialImage = !!normalizeString(pageEditForm?.seoSocialImageCurrent) || !!pageEditForm?.seoSocialImageFile;
     $: pageSeoHasGlobalSocialImage = !!normalizeString(websiteIdentitySeoDraft?.seoImageCurrent) || !!websiteIdentitySeoDraft?.seoImageFile;
+    $: pageSeoSocialImagePreviewUrl = getCollectionFileUrl(selectedPage, pageEditForm?.seoSocialImageCurrent);
     $: globalSeoTitleText = normalizeString(websiteIdentitySeoDraft?.seoTitle);
     $: globalSeoDescriptionText = toSeoPlainText(websiteIdentitySeoDraft?.seoDescription);
     $: globalSeoTitleTemplateText = normalizeString(websiteIdentitySeoDraft?.seoTitleTemplate);
@@ -400,6 +400,9 @@
     $: pageSeoCheckCounts = getSeoCheckCounts(pageSeoChecks);
     $: globalSeoCheckCounts = getSeoCheckCounts(globalSeoChecks);
     $: localBusinessSeoCheckCounts = getSeoCheckCounts(localBusinessSeoChecks);
+    $: pageSeoWarningChecks = (pageSeoChecks || []).filter((check) => `${check?.level || ""}` === "warning");
+    $: pageSeoSuggestionChecks = (pageSeoChecks || []).filter((check) => `${check?.level || ""}` === "info");
+    $: pageSeoHealthCompactSummary = getSeoHealthCompactSummary(pageSeoCheckCounts);
     $: pageSeoHealthStatus = getPageSeoHealthStatus({
         hasTitle: !!pageSeoTitleText,
         hasDescription: !!pageSeoDescriptionText,
@@ -422,7 +425,6 @@
         warningCount: localBusinessSeoCheckCounts.warnings,
         infoCount: localBusinessSeoCheckCounts.infos,
     });
-    $: pageSeoCheckSummary = getSeoCheckSummaryText(pageSeoCheckCounts);
     $: globalSeoCheckSummary = getSeoCheckSummaryText(globalSeoCheckCounts);
     $: localBusinessSeoCheckSummary = getSeoCheckSummaryText(localBusinessSeoCheckCounts);
     $: normalizedPageSearch = normalizeString(pageSearch).toLowerCase();
@@ -431,15 +433,6 @@
     $: pageSeoStatusById = new Map((pages || []).map((record) => [record?.id || "", getPageSeoCoverageStatus(record)]));
     $: pageSeoCoverageCounts = getPageSeoCoverageCounts(pages, pageSeoStatusById);
     $: filteredPages = pages.filter((record) => {
-        if (pageEnabledField) {
-            if (pageStatusFilter === pageStatusFilterActiveKey && !isPageActive(record)) {
-                return false;
-            }
-            if (pageStatusFilter === pageStatusFilterInactiveKey && isPageActive(record)) {
-                return false;
-            }
-        }
-
         if (pageSeoFilter !== pageSeoFilterAllKey) {
             const seoStatus = pageSeoStatusById.get(record?.id || "") || getPageSeoCoverageStatus(record);
             if (seoStatus.key !== pageSeoFilter) {
@@ -455,9 +448,6 @@
         const pageSlug = normalizeString(pageSlugField ? record?.[pageSlugField] : "").toLowerCase();
         return pageLabel.includes(normalizedPageSearch) || pageSlug.includes(normalizedPageSearch);
     });
-    $: if (!pageEnabledField && pageStatusFilter !== pageStatusFilterAllKey) {
-        pageStatusFilter = pageStatusFilterAllKey;
-    }
     $: if (
         pageSeoFilter !== pageSeoFilterAllKey &&
         pageSeoFilter !== pageSeoFilterGoodKey &&
@@ -1795,6 +1785,25 @@
         return parts.join(" · ");
     }
 
+    function getSeoHealthCompactSummary(counts) {
+        const warnings = Number(counts?.warnings || 0);
+        const suggestions = Number(counts?.infos || 0);
+
+        if (!warnings && !suggestions) {
+            return "No warnings";
+        }
+
+        const parts = [];
+        if (warnings) {
+            parts.push(formatCount(warnings, "warning"));
+        }
+        if (suggestions) {
+            parts.push(formatCount(suggestions, "suggestion"));
+        }
+
+        return parts.join(" · ");
+    }
+
     function getPageSeoHealthStatus({
         hasTitle,
         hasDescription,
@@ -2134,6 +2143,19 @@
         return normalizeString(value);
     }
 
+    function getCollectionFileUrl(record, fileName) {
+        const normalizedFile = toSingleFileName(fileName);
+        if (!record || !normalizedFile) {
+            return "";
+        }
+
+        try {
+            return ApiClient.files.getURL?.(record, normalizedFile) || "";
+        } catch (_) {
+            return "";
+        }
+    }
+
     function initializeWebsiteSettingsDraft() {
         websiteSettingsError = "";
 
@@ -2397,8 +2419,8 @@
         selectedWebsiteId = `${websiteId || ""}`;
         selectedPageId = "";
         pageSearch = "";
-        pageStatusFilter = pageStatusFilterAllKey;
         pageSeoFilter = pageSeoFilterAllKey;
+        activePageSeoTab = pageSeoTabBasicKey;
         focusedBlockId = "";
         editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
@@ -2416,6 +2438,7 @@
         focusedBlockId = "";
         editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
+        activePageSeoTab = pageSeoTabBasicKey;
 
         await loadBlocks();
     }
@@ -2809,84 +2832,21 @@
                     <aside class="panel pages-list-panel">
                         <div class="pages-list-head">
                             <div class="pages-list-title-wrap">
-                                <h4 class="m-0">Pages</h4>
-                                <p class="txt-sm txt-hint m-b-0 m-t-6">Find and open a page to edit content and SEO.</p>
+                                <div class="pages-list-title-head">
+                                    <h4 class="m-0">Pages</h4>
+                                    <p class="txt-sm txt-hint m-b-0 pages-list-subtitle">Edit content & SEO.</p>
+                                </div>
+                                <p class="txt-sm txt-hint m-b-0 pages-list-totals">
+                                    {#if pageEnabledField}
+                                        {pages.length} pages · {activePagesCount} active · {inactivePagesCount} inactive
+                                    {:else}
+                                        {pages.length} pages
+                                    {/if}
+                                </p>
                             </div>
-                            <span class="txt-sm txt-hint pages-list-totals">
-                                {#if pageEnabledField}
-                                    {pages.length} total | {activePagesCount} active | {inactivePagesCount} inactive
-                                {:else}
-                                    {pages.length} total
-                                {/if}
-                            </span>
                         </div>
 
-                        <div class="page-filter-chips m-t-sm" role="toolbar" aria-label="Filter pages by status">
-                            <button
-                                type="button"
-                                class="btn btn-xs btn-outline page-filter-chip"
-                                class:is-active={pageStatusFilter === pageStatusFilterAllKey}
-                                on:click={() => (pageStatusFilter = pageStatusFilterAllKey)}
-                            >
-                                All ({pages.length})
-                            </button>
-                            {#if pageEnabledField}
-                                <button
-                                    type="button"
-                                    class="btn btn-xs btn-outline page-filter-chip"
-                                    class:is-active={pageStatusFilter === pageStatusFilterActiveKey}
-                                    on:click={() => (pageStatusFilter = pageStatusFilterActiveKey)}
-                                >
-                                    Active ({activePagesCount})
-                                </button>
-                                <button
-                                    type="button"
-                                    class="btn btn-xs btn-outline page-filter-chip"
-                                    class:is-active={pageStatusFilter === pageStatusFilterInactiveKey}
-                                    on:click={() => (pageStatusFilter = pageStatusFilterInactiveKey)}
-                                >
-                                    Inactive ({inactivePagesCount})
-                                </button>
-                            {/if}
-                        </div>
-
-                        <div class="page-filter-chips m-t-8" role="toolbar" aria-label="Filter pages by SEO status">
-                            <button
-                                type="button"
-                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
-                                class:is-active={pageSeoFilter === pageSeoFilterAllKey}
-                                on:click={() => (pageSeoFilter = pageSeoFilterAllKey)}
-                            >
-                                All SEO ({pageSeoCoverageCounts.total})
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
-                                class:is-active={pageSeoFilter === pageSeoFilterGoodKey}
-                                on:click={() => (pageSeoFilter = pageSeoFilterGoodKey)}
-                            >
-                                Good ({pageSeoCoverageCounts.good})
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
-                                class:is-active={pageSeoFilter === pageSeoFilterNeedsAttentionKey}
-                                on:click={() => (pageSeoFilter = pageSeoFilterNeedsAttentionKey)}
-                            >
-                                Needs attention ({pageSeoCoverageCounts.needsAttention})
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
-                                class:is-active={pageSeoFilter === pageSeoFilterMissingBasicsKey}
-                                on:click={() => (pageSeoFilter = pageSeoFilterMissingBasicsKey)}
-                            >
-                                Missing basics ({pageSeoCoverageCounts.missingBasics})
-                            </button>
-                        </div>
-
-                        <div class="m-t-sm">
-                            <label class="txt-sm txt-hint block m-b-5" for="cms-pages-search">Search</label>
+                        <div class="pages-search-row">
                             <input
                                 id="cms-pages-search"
                                 class="input input-sm"
@@ -2894,6 +2854,45 @@
                                 placeholder="Search by page title..."
                                 bind:value={pageSearch}
                             />
+                        </div>
+
+                        <div class="pages-filter-toolbar">
+                            <div class="pages-filter-group pages-filter-group-seo" role="toolbar" aria-label="Filter pages by SEO status">
+                                <div class="page-filter-chips">
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                        class:is-active={pageSeoFilter === pageSeoFilterAllKey}
+                                        on:click={() => (pageSeoFilter = pageSeoFilterAllKey)}
+                                    >
+                                        All SEO ({pageSeoCoverageCounts.total})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                        class:is-active={pageSeoFilter === pageSeoFilterGoodKey}
+                                        on:click={() => (pageSeoFilter = pageSeoFilterGoodKey)}
+                                    >
+                                        Good ({pageSeoCoverageCounts.good})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                        class:is-active={pageSeoFilter === pageSeoFilterNeedsAttentionKey}
+                                        on:click={() => (pageSeoFilter = pageSeoFilterNeedsAttentionKey)}
+                                    >
+                                        Needs attention ({pageSeoCoverageCounts.needsAttention})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline page-filter-chip page-seo-filter-chip"
+                                        class:is-active={pageSeoFilter === pageSeoFilterMissingBasicsKey}
+                                        on:click={() => (pageSeoFilter = pageSeoFilterMissingBasicsKey)}
+                                    >
+                                        Missing basics ({pageSeoCoverageCounts.missingBasics})
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         {#if !selectedWebsiteId}
@@ -3073,83 +3072,101 @@
                                 </div>
                             {:else if activePageEditorTab === pageEditorTabSeoKey}
                                 <div class="seo-page-wrap m-t-sm">
-                                    <div class="sections-head">
-                                        <div>
-                                            <h5 class="m-0">Page SEO</h5>
-                                            <p class="txt-sm txt-hint m-b-0 m-t-6">Controls how this page may appear in search results. If empty, fallback metadata is used where available.</p>
-                                        </div>
+                                    <div class="seo-page-head">
+                                        <h5 class="m-0">Google Search & Sharing</h5>
+                                        <span class="txt-sm txt-hint seo-page-head-helper">
+                                            Control how this page appears in Google and when shared.
+                                        </span>
                                     </div>
 
                                     {#if pageSeoTitleField || pageSeoDescriptionField || pageSeoSocialImageField || pageSeoCanonicalUrlField || pageSeoNoindexField || pageSeoExcludeFromSitemapField || pageSeoFocusKeywordField}
-                                        <div class="seo-sections m-t-sm">
-                                            <section class="seo-section">
-                                                <div class="seo-section-head">
-                                                    <h6 class="m-0">Search Appearance</h6>
-                                                </div>
+                                        <div class="page-seo-tabs-row m-t-sm">
+                                            <div class="tabs-header compact combined left operations-tabs operations-tabs--nested page-seo-tabs">
+                                                <button
+                                                    type="button"
+                                                    class="tab-item"
+                                                    class:active={activePageSeoTab === pageSeoTabBasicKey}
+                                                    on:click={() => (activePageSeoTab = pageSeoTabBasicKey)}
+                                                >
+                                                    <i class="ri-layout-left-line tab-icon" aria-hidden="true" />
+                                                    <span class="tab-label">Basic</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="tab-item"
+                                                    class:active={activePageSeoTab === pageSeoTabAdvancedKey}
+                                                    on:click={() => (activePageSeoTab = pageSeoTabAdvancedKey)}
+                                                >
+                                                    <i class="ri-tools-line tab-icon" aria-hidden="true" />
+                                                    <span class="tab-label">Advanced</span>
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                                <div class="seo-preview-card seo-search-preview-card m-t-sm">
-                                                    <div class="seo-preview-label">Search Preview</div>
-                                                    <div class="seo-preview-title">{pageSeoPreviewTitle}</div>
-                                                    <div class="seo-preview-hint">{pageSeoPreviewPath}</div>
-                                                    <div class="seo-preview-description">
-                                                        {pageSeoPreviewDescription}
-                                                    </div>
-                                                </div>
-
-                                                <div class="form-grid m-t-sm">
-                                                    {#if pageSeoTitleField}
-                                                        <div class="form-field">
-                                                            <label for="cms-page-seo-title-content">
-                                                                SEO Title
-                                                            </label>
-                                                            <input
-                                                                id="cms-page-seo-title-content"
-                                                                class="input"
-                                                                bind:value={pageEditForm.seoTitle}
-                                                            />
-                                                            <div class="help-block m-t-6 seo-field-helper">
-                                                                <span class="label label-sm seo-count-pill">{pageSeoTitleLength} characters</span>
-                                                                <span>Recommended: keep it clear and specific.</span>
-                                                            </div>
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if pageSeoDescriptionField}
-                                                        <div class="form-field">
-                                                            <label for="cms-page-seo-description-content">
-                                                                SEO Description
-                                                            </label>
-                                                            <textarea
-                                                                id="cms-page-seo-description-content"
-                                                                class="input textarea-input"
-                                                                rows="4"
-                                                                bind:value={pageEditForm.seoDescription}
-                                                            />
-                                                            <div class="help-block m-t-6 seo-field-helper">
-                                                                <span class="label label-sm seo-count-pill">{pageSeoDescriptionLength} characters</span>
-                                                                <span>Recommended: summarize the page in one or two useful sentences.</span>
-                                                            </div>
-                                                        </div>
-                                                    {/if}
-                                                </div>
-                                            </section>
-
-                                            <section class="seo-section">
-                                                <div class="seo-section-head">
-                                                    <h6 class="m-0">Social Sharing</h6>
-                                                </div>
-
-                                                {#if pageSeoSocialImageField}
-                                                    <div class="form-grid m-t-sm">
-                                                        <div class="form-field">
-                                                            <label for="cms-page-seo-social-image-file">Page Social Image</label>
-                                                            <div class="settings-file-row">
+                                        {#if activePageSeoTab === pageSeoTabBasicKey}
+                                            <div class="seo-editor-grid m-t-sm">
+                                                <div class="seo-editor-main">
+                                                    <div class="form-grid">
+                                                        {#if pageSeoTitleField}
+                                                            <div class="form-field seo-field">
+                                                                <label for="cms-page-seo-title-content">
+                                                                    Page title for Google
+                                                                </label>
                                                                 <input
-                                                                    id="cms-page-seo-social-image-file"
-                                                                    class="input file-input"
-                                                                    type="file"
-                                                                    on:change={handlePageSeoFileChange}
+                                                                    id="cms-page-seo-title-content"
+                                                                    class="input form-input"
+                                                                    bind:value={pageEditForm.seoTitle}
                                                                 />
+                                                                <div class="help-block m-t-6 seo-field-helper">
+                                                                    <span class="label label-sm seo-count-pill">{pageSeoTitleLength} characters</span>
+                                                                    <span>Shown in search results. If empty, the page title is used.</span>
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if pageSeoDescriptionField}
+                                                            <div class="form-field seo-field">
+                                                                <label for="cms-page-seo-description-content">
+                                                                    Page description for Google
+                                                                </label>
+                                                                <textarea
+                                                                    id="cms-page-seo-description-content"
+                                                                    class="input form-textarea textarea-input"
+                                                                    rows="4"
+                                                                    bind:value={pageEditForm.seoDescription}
+                                                                />
+                                                                <div class="help-block m-t-6 seo-field-helper">
+                                                                    <span class="label label-sm seo-count-pill">{pageSeoDescriptionLength} characters</span>
+                                                                    <span>Short summary shown in search results.</span>
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+
+                                                    {#if pageSeoSocialImageField}
+                                                        <div class="form-field seo-field m-t-sm">
+                                                            <label for="cms-page-seo-social-image-file">Image used when sharing</label>
+                                                            <div class="page-seo-file-control">
+                                                                {#if pageSeoSocialImagePreviewUrl}
+                                                                    <a
+                                                                        class="page-seo-file-thumb"
+                                                                        href={pageSeoSocialImagePreviewUrl}
+                                                                        target="_blank"
+                                                                        rel="noreferrer noopener"
+                                                                        title="Open current image"
+                                                                    >
+                                                                        <img src={pageSeoSocialImagePreviewUrl} alt="Current social image preview" loading="lazy" />
+                                                                    </a>
+                                                                {/if}
+
+                                                                <div class="settings-file-row">
+                                                                    <input
+                                                                        id="cms-page-seo-social-image-file"
+                                                                        class="input form-input file-input page-seo-file-input"
+                                                                        type="file"
+                                                                        on:change={handlePageSeoFileChange}
+                                                                    />
+                                                                </div>
                                                             </div>
                                                             <div class="help-block file-field-hint m-t-6">
                                                                 {#if pageEditForm.seoSocialImageFile}
@@ -3164,127 +3181,141 @@
                                                                 Used when this page is shared. If empty, the global SEO image is used.
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                {:else}
-                                                    <p class="txt-sm txt-hint m-b-0 m-t-sm">Page social image field is not available for this page collection.</p>
-                                                {/if}
-                                            </section>
-
-                                            <section class="seo-section">
-                                                <div class="seo-section-head">
-                                                    <h6 class="m-0">SEO Guidance</h6>
+                                                    {:else}
+                                                        <p class="txt-sm txt-hint m-b-0">Page social image field is not available for this page collection.</p>
+                                                    {/if}
                                                 </div>
 
-                                                {#if pageSeoFocusKeywordField}
-                                                    <div class="form-grid m-t-sm">
-                                                        <div class="form-field">
-                                                            <label for="cms-page-seo-focus-keyword">Focus Keyword</label>
-                                                            <input
-                                                                id="cms-page-seo-focus-keyword"
-                                                                class="input"
-                                                                bind:value={pageEditForm.seoFocusKeyword}
-                                                            />
-                                                            <div class="help-block m-t-6">
-                                                                Used internally for SEO guidance. This is not rendered as meta keywords.
+                                                <aside class="seo-editor-side">
+                                                    <div class="seo-preview-card seo-search-preview-card">
+                                                        <div class="seo-preview-label">Search Preview</div>
+                                                        <div class="seo-preview-title">{pageSeoPreviewTitle}</div>
+                                                        <div class="seo-preview-hint">{pageSeoPreviewPath}</div>
+                                                        <div class="seo-preview-description">
+                                                            {pageSeoPreviewDescription}
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="seo-checklist-panel seo-health-panel m-t-sm">
+                                                        <div class="seo-checklist-head">
+                                                            <div class="seo-health-main">
+                                                                <h6 class="m-0 seo-checklist-title">SEO health</h6>
+                                                                <p class="txt-sm txt-hint m-b-0 seo-health-helper">
+                                                                    Estimated from current draft values and runtime SEO rules.
+                                                                </p>
                                                             </div>
-                                                        </div>
-                                                    </div>
-                                                {:else}
-                                                    <p class="txt-sm txt-hint m-b-0 m-t-sm">Focus keyword field is not available for this page collection.</p>
-                                                {/if}
-                                            </section>
-
-                                            <section class="seo-section">
-                                                <div class="seo-section-head">
-                                                    <h6 class="m-0">Advanced Indexing</h6>
-                                                    <span class="label label-sm">Advanced</span>
-                                                </div>
-                                                <p class="txt-sm txt-hint m-b-0 m-t-6">Advanced indexing settings can affect discovery. These values are stored now and apply when runtime SEO support is enabled.</p>
-
-                                                <div class="form-grid seo-advanced-grid m-t-sm">
-                                                    {#if pageSeoCanonicalUrlField}
-                                                        <div class="form-field">
-                                                            <label for="cms-page-seo-canonical-url">Canonical URL</label>
-                                                            <input
-                                                                id="cms-page-seo-canonical-url"
-                                                                class="input"
-                                                                type="url"
-                                                                placeholder="https://example.com/canonical-path"
-                                                                bind:value={pageEditForm.seoCanonicalUrl}
-                                                            />
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if pageSeoNoindexField}
-                                                        <div class="form-field form-field-toggle seo-toggle-field">
-                                                            <input
-                                                                id="cms-page-seo-noindex"
-                                                                type="checkbox"
-                                                                bind:checked={pageEditForm.seoNoindex}
-                                                            />
-                                                            <label for="cms-page-seo-noindex">Noindex</label>
-                                                        </div>
-                                                    {/if}
-
-                                                    {#if pageSeoExcludeFromSitemapField}
-                                                        <div class="form-field form-field-toggle seo-toggle-field">
-                                                            <input
-                                                                id="cms-page-seo-exclude-from-sitemap"
-                                                                type="checkbox"
-                                                                bind:checked={pageEditForm.seoExcludeFromSitemap}
-                                                            />
-                                                            <label for="cms-page-seo-exclude-from-sitemap">Exclude from sitemap</label>
-                                                        </div>
-                                                    {/if}
-                                                </div>
-                                            </section>
-
-                                            <div class="seo-checklist-panel seo-health-panel">
-                                                <div class="seo-checklist-head">
-                                                    <div class="seo-health-main">
-                                                        <h6 class="m-0 seo-checklist-title">SEO health</h6>
-                                                        <p class="txt-sm txt-hint m-b-0 seo-health-helper">
-                                                            Estimated from current draft values and runtime SEO rules.
-                                                        </p>
-                                                    </div>
-                                                    <div class="seo-health-meta">
-                                                        <span
-                                                            class="label label-sm seo-health-status-pill"
-                                                            class:good={pageSeoHealthStatus.key === "good"}
-                                                            class:needs-attention={pageSeoHealthStatus.key === "needs-attention"}
-                                                            class:missing-basics={pageSeoHealthStatus.key === "missing-basics"}
-                                                        >
-                                                            {pageSeoHealthStatus.label}
-                                                        </span>
-                                                        <span
-                                                            class="summary-pill seo-check-summary-pill"
-                                                            class:warning={pageSeoCheckCounts.warnings > 0}
-                                                        >
-                                                            {pageSeoCheckSummary}
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                {#if pageSeoChecks.length}
-                                                    <div class="seo-check-list m-t-8">
-                                                        {#each pageSeoChecks as check}
-                                                            <div class="seo-check-item" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
-                                                                <span class="label label-sm seo-check-pill" class:warning={check.level === "warning"} class:pass={check.level === "pass"}>
-                                                                    {check.level === "warning"
-                                                                        ? "Warning"
-                                                                        : check.level === "pass"
-                                                                            ? "Pass"
-                                                                            : "Info"}
+                                                            <div class="seo-health-meta">
+                                                                <span
+                                                                    class="label label-sm seo-health-status-pill"
+                                                                    class:good={pageSeoHealthStatus.key === "good"}
+                                                                    class:needs-attention={pageSeoHealthStatus.key === "needs-attention"}
+                                                                    class:missing-basics={pageSeoHealthStatus.key === "missing-basics"}
+                                                                >
+                                                                    {pageSeoHealthStatus.label}
                                                                 </span>
-                                                                <span class="seo-check-message">{check.message}</span>
+                                                                <span
+                                                                    class="summary-pill seo-check-summary-pill"
+                                                                    class:warning={pageSeoCheckCounts.warnings > 0}
+                                                                >
+                                                                    {pageSeoHealthCompactSummary}
+                                                                </span>
                                                             </div>
-                                                        {/each}
+                                                        </div>
+
+                                                        {#if pageSeoWarningChecks.length}
+                                                            <div class="seo-health-group m-t-8">
+                                                                <div class="seo-health-group-title">Warnings</div>
+                                                                <div class="seo-check-list">
+                                                                    {#each pageSeoWarningChecks as check}
+                                                                        <div class="seo-check-item warning">
+                                                                            <span class="label label-sm seo-check-pill warning">Warning</span>
+                                                                            <span class="seo-check-message">{check.message}</span>
+                                                                        </div>
+                                                                    {/each}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if pageSeoSuggestionChecks.length}
+                                                            <div class="seo-health-group m-t-8">
+                                                                <div class="seo-health-group-title">Suggestions</div>
+                                                                <div class="seo-check-list">
+                                                                    {#each pageSeoSuggestionChecks as check}
+                                                                        <div class="seo-check-item">
+                                                                            <span class="label label-sm seo-check-pill">Info</span>
+                                                                            <span class="seo-check-message">{check.message}</span>
+                                                                        </div>
+                                                                    {/each}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if !pageSeoWarningChecks.length && !pageSeoSuggestionChecks.length}
+                                                            <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
+                                                        {/if}
                                                     </div>
-                                                {:else}
-                                                    <p class="txt-sm txt-hint m-t-8 m-b-0">No SEO issues found in this section.</p>
-                                                {/if}
+                                                </aside>
                                             </div>
-                                        </div>
+                                        {:else if activePageSeoTab === pageSeoTabAdvancedKey}
+                                            {#if pageSeoCanonicalUrlField || pageSeoNoindexField || pageSeoExcludeFromSitemapField || pageSeoFocusKeywordField}
+                                                <div class="seo-advanced-pane m-t-sm">
+                                                    <p class="txt-sm txt-hint m-b-0">Usually you do not need to change these.</p>
+
+                                                    <div class="form-grid seo-advanced-grid m-t-sm">
+                                                        {#if pageSeoCanonicalUrlField}
+                                                            <div class="form-field seo-field local-seo-full-width">
+                                                                <label for="cms-page-seo-canonical-url">Canonical URL</label>
+                                                                <input
+                                                                    id="cms-page-seo-canonical-url"
+                                                                    class="input form-input"
+                                                                    type="url"
+                                                                    placeholder="https://example.com/canonical-path"
+                                                                    bind:value={pageEditForm.seoCanonicalUrl}
+                                                                />
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if pageSeoNoindexField}
+                                                            <div class="form-field form-field-toggle seo-toggle-field">
+                                                                <input
+                                                                    id="cms-page-seo-noindex"
+                                                                    type="checkbox"
+                                                                    bind:checked={pageEditForm.seoNoindex}
+                                                                />
+                                                                <label for="cms-page-seo-noindex">Hide this page from Google</label>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if pageSeoExcludeFromSitemapField}
+                                                            <div class="form-field form-field-toggle seo-toggle-field">
+                                                                <input
+                                                                    id="cms-page-seo-exclude-from-sitemap"
+                                                                    type="checkbox"
+                                                                    bind:checked={pageEditForm.seoExcludeFromSitemap}
+                                                                />
+                                                                <label for="cms-page-seo-exclude-from-sitemap">Remove from sitemap</label>
+                                                            </div>
+                                                        {/if}
+
+                                                        {#if pageSeoFocusKeywordField}
+                                                            <div class="form-field seo-field local-seo-full-width">
+                                                                <label for="cms-page-seo-focus-keyword">SEO focus keyword</label>
+                                                                <input
+                                                                    id="cms-page-seo-focus-keyword"
+                                                                    class="input form-input"
+                                                                    bind:value={pageEditForm.seoFocusKeyword}
+                                                                />
+                                                                <div class="help-block m-t-6">
+                                                                    Used internally for SEO guidance. This is not rendered as meta keywords.
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            {:else}
+                                                <p class="txt-sm txt-hint m-t-8 m-b-0">Advanced SEO fields are not available for this page collection.</p>
+                                            {/if}
+                                        {/if}
 
                                         <div class="form-actions m-t-sm">
                                             <button
@@ -3900,9 +3931,6 @@
             >
                 <svelte:fragment slot="header">
                     <div class="section-drawer-head">
-                        <div class="section-drawer-head-top">
-                            <span class="txt-xs txt-hint txt-uppercase txt-bold">Edit section</span>
-                        </div>
                         <strong class="section-drawer-name">{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
                         <div class="section-drawer-support-row">
                             <span class="txt-sm txt-hint section-drawer-helper">{selectedEditingSectionSubtitle || "Edit section content."}</span>
@@ -3997,24 +4025,65 @@
     .pages-list-head {
         display: flex;
         align-items: flex-start;
-        justify-content: space-between;
+        justify-content: flex-start;
         gap: 8px;
         flex-wrap: wrap;
     }
 
     .pages-list-title-wrap {
         min-width: 0;
+        width: 100%;
+    }
+
+    .pages-list-title-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: flex-start;
+        gap: 8px;
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+
+    .pages-list-subtitle {
+        flex: 0 1 auto;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .pages-list-totals {
-        text-align: right;
-        white-space: nowrap;
+        font-size: var(--smFontSize);
+        line-height: 1.35;
+        margin-top: 4px;
+    }
+
+    .pages-search-row {
+        margin-top: 10px;
+    }
+
+    .pages-search-row .input {
+        width: 100%;
+    }
+
+    .pages-filter-toolbar {
+        margin-top: 9px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
+    }
+
+    .pages-filter-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
     .page-filter-chips {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 8px;
         flex-wrap: wrap;
     }
 
@@ -4310,19 +4379,6 @@
         gap: 4px;
     }
 
-    .section-drawer-head-top {
-        min-width: 0;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-
-    .section-drawer-head-top > .txt-xs {
-        flex: 0 0 auto;
-        white-space: nowrap;
-    }
-
     .section-drawer-name {
         min-width: 0;
         display: block;
@@ -4469,23 +4525,120 @@
         padding-top: 8px;
     }
 
-    .seo-sections {
+    .seo-page-head {
         display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .seo-section {
-        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-        padding-top: 8px;
-    }
-
-    .seo-section-head {
-        display: flex;
-        align-items: center;
+        align-items: baseline;
         justify-content: flex-start;
         gap: 8px;
         flex-wrap: wrap;
+    }
+
+    .seo-page-head-helper {
+        flex: 1 1 340px;
+        min-width: 240px;
+    }
+
+    .seo-field.form-field {
+        margin-bottom: 0;
+    }
+
+    .page-seo-tabs-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        width: auto;
+    }
+
+    .page-seo-tabs {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content !important;
+        max-width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .seo-editor-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+        gap: 12px;
+        align-items: start;
+    }
+
+    .seo-editor-main {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .seo-editor-side {
+        position: sticky;
+        top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .page-seo-file-control {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .page-seo-file-control .settings-file-row {
+        flex: 1 1 260px;
+        min-width: 0;
+    }
+
+    .page-seo-file-thumb {
+        width: 58px;
+        height: 58px;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        border-radius: var(--baseRadius);
+        overflow: hidden;
+        background: var(--baseAlt1Color);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .page-seo-file-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .page-seo-file-input {
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 10px;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
+    }
+
+    .page-seo-file-input::file-selector-button {
+        height: 28px;
+        padding: 0 12px;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--baseAlt1Color) 16%, var(--baseColor));
+        color: var(--txtPrimaryColor);
+        font-size: var(--smFontSize);
+        font-weight: 500;
+        margin-right: 8px;
+        cursor: pointer;
+        transition: background-color var(--baseAnimationSpeed), border-color var(--baseAnimationSpeed);
+    }
+
+    .page-seo-file-input:hover::file-selector-button,
+    .page-seo-file-input:focus-visible::file-selector-button {
+        border-color: color-mix(in srgb, var(--baseAlt3Color) 90%, transparent);
+        background: color-mix(in srgb, var(--baseAlt2Color) 60%, var(--baseColor));
+    }
+
+    .seo-advanced-pane {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        padding-top: 10px;
     }
 
     .seo-advanced-grid {
@@ -4495,6 +4648,14 @@
     .seo-toggle-field {
         margin-bottom: 0;
         min-height: 24px;
+    }
+
+    .seo-health-group-title {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--txtHintColor);
     }
 
     .settings-workspace {
@@ -4831,6 +4992,14 @@
             grid-template-columns: 1fr;
         }
 
+        .seo-editor-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .seo-editor-side {
+            position: static;
+        }
+
         .content-preview-iframe-wrap {
             min-height: clamp(480px, 62vh, 700px);
         }
@@ -4848,6 +5017,19 @@
     @media (max-width: 840px) {
         .cms-section-panel {
             padding: calc(var(--baseSpacing) - 12px) calc(var(--baseSpacing) - 10px);
+        }
+
+        .pages-filter-group {
+            align-items: flex-start;
+            gap: 6px;
+        }
+
+        .seo-page-head {
+            align-items: flex-start;
+        }
+
+        .page-seo-file-control {
+            align-items: flex-start;
         }
 
         .settings-head,
