@@ -1,6 +1,7 @@
 import PageIndex from "@/components/PageIndex.svelte";
 import PageLogs from "@/components/logs/PageLogs.svelte";
 import PageCms from "@/components/cms/PageCms.svelte";
+import PageLeads from "@/components/leads/PageLeads.svelte";
 import PageNewsletter from "@/components/newsletter/PageNewsletter.svelte";
 import PageRecords from "@/components/records/PageRecords.svelte";
 import PageReports from "@/components/reports/PageReports.svelte";
@@ -54,7 +55,7 @@ const routes = {
 
     "/collections": wrap({
         component: PageRecords,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 
@@ -79,6 +80,12 @@ const routes = {
     "/reports": wrap({
         component: PageReports,
         conditions: [(_) => isSuperuserAuth()],
+        userData: { showAppSidebar: true },
+    }),
+
+    "/leads": wrap({
+        component: PageLeads,
+        conditions: [(_) => isAdminSuperuser()],
         userData: { showAppSidebar: true },
     }),
 

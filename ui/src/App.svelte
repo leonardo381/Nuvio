@@ -94,16 +94,18 @@
             </a>
 
             <nav class="main-menu">
-                <a
-                    href="/collections"
-                    class="menu-item"
-                    aria-label="Collections"
-                    use:link
-                    use:active={{ path: "/collections/?.*", className: "current-route" }}
-                    use:tooltip={{ text: "Collections", position: "right" }}
-                >
-                    <i class="ri-database-2-line" />
-                </a>
+                {#if canAccessAdminAreas}
+                    <a
+                        href="/collections"
+                        class="menu-item"
+                        aria-label="Collections"
+                        use:link
+                        use:active={{ path: "/collections/?.*", className: "current-route" }}
+                        use:tooltip={{ text: "Collections", position: "right" }}
+                    >
+                        <i class="ri-database-2-line" />
+                    </a>
+                {/if}
                 <!-- NUVIO CUSTOM START: Dedicated Reviews section entry in app sidebar. -->
                 <a
                     href="/reviews"
@@ -153,6 +155,16 @@
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Reports section entry in app sidebar. -->
                 {#if canAccessAdminAreas}
+                    <a
+                        href="/leads"
+                        class="menu-item"
+                        aria-label="Leads"
+                        use:link
+                        use:active={{ path: "/leads/?.*", className: "current-route" }}
+                        use:tooltip={{ text: "Leads", position: "right" }}
+                    >
+                        <i class="ri-contacts-line" />
+                    </a>
                     <a
                         href="/logs"
                         class="menu-item"

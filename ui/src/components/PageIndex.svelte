@@ -5,8 +5,10 @@
     handler();
 
     function handler() {
-        if (ApiClient.isSuperuserAuth()) {
+        if (ApiClient.isAdminSuperuser()) {
             replace("/collections");
+        } else if (ApiClient.isClientSuperuser()) {
+            replace("/cms");
         } else {
             ApiClient.logout();
         }
