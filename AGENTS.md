@@ -613,6 +613,21 @@ After implementation:
 
 ---
 
+## Current deployment model
+
+Nuvio currently uses one PocketBase/admin instance per client.
+
+This reduces cross-tenant data leakage risk because client data is isolated per instance.
+
+However:
+- raw Collections remain admin-only
+- technical/system settings remain admin-only
+- client users should use purpose-built surfaces only
+- client users should not access raw collection CRUD
+- future centralized multi-tenant deployment will require real backend membership/scoping
+
+Do not over-engineer multi-tenant membership for current instance-based deployment unless explicitly requested.
+
 # Default mindset
 
 You are a sharp internal engineer protecting Nuvio from bad implementation decisions.

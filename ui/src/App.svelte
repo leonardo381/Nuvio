@@ -154,17 +154,19 @@
                     <i class="ri-file-chart-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Reports section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated Leads section entry in app sidebar. -->
+                <a
+                    href="/leads"
+                    class="menu-item"
+                    aria-label="Leads"
+                    use:link
+                    use:active={{ path: "/leads/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Leads", position: "right" }}
+                >
+                    <i class="ri-contacts-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Leads section entry in app sidebar. -->
                 {#if canAccessAdminAreas}
-                    <a
-                        href="/leads"
-                        class="menu-item"
-                        aria-label="Leads"
-                        use:link
-                        use:active={{ path: "/leads/?.*", className: "current-route" }}
-                        use:tooltip={{ text: "Leads", position: "right" }}
-                    >
-                        <i class="ri-contacts-line" />
-                    </a>
                     <a
                         href="/logs"
                         class="menu-item"

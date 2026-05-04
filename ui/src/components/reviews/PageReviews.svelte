@@ -17,13 +17,19 @@
 </script>
 
 <PageWrapper>
-    <header class="page-header">
-        <nav class="breadcrumbs">
-            <div class="breadcrumb-item">Reviews</div>
-        </nav>
-
-        <RefreshButton on:refresh={() => reviewsCollectionDashboard?.reload?.()} />
-    </header>
+    <section class="reviews-page-head operations-head panel m-b-base">
+        <div class="head-main">
+            <div class="summary-title-wrap">
+                <div class="title-row">
+                    <h2 class="m-0">Reviews</h2>
+                    <RefreshButton class="btn-sm" tooltip={"Refresh"} on:refresh={() => reviewsCollectionDashboard?.reload?.()} />
+                </div>
+                <p class="txt-sm txt-hint m-b-0 head-description">
+                    Monitor customer reviews and social proof for this website.
+                </p>
+            </div>
+        </div>
+    </section>
 
     {#if $isCollectionsLoading && !websitesCollection}
         <div class="placeholder-section m-b-base">
@@ -41,3 +47,9 @@
         <ReviewsCollectionDashboard bind:this={reviewsCollectionDashboard} {websitesCollection} />
     {/if}
 </PageWrapper>
+
+<style>
+    .reviews-page-head.operations-head .head-description {
+        max-width: 520px;
+    }
+</style>

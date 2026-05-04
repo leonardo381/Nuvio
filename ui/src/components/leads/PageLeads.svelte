@@ -9,8 +9,7 @@
     import CommonHelper from "@/utils/CommonHelper";
     import { normalizeWebsiteSettingsValue } from "@/utils/WebsiteSettingsSchema";
 
-    // NUVIO CUSTOM START: Internal/admin-only unified Leads operations page.
-    // Keep this page restricted to admin users until backend tenant scoping is fully enforced.
+    // NUVIO CUSTOM START: Unified Leads operations page for purpose-built backoffice workflows.
     $pageTitle = "Leads";
 
     const sourceFilterOptions = [
@@ -73,6 +72,8 @@
     $: websiteOptionMap = new Map(
         websites.map((website) => [website.id, resolveWebsiteLabel(website)]),
     );
+    $: hasMultipleWebsites = websites.length > 1;
+    $: singleWebsiteLabel = websites.length === 1 ? resolveWebsiteLabel(websites[0]) : "";
 
     $: if (selectedWebsiteId !== ALL_WEBSITES_KEY && !websiteOptionMap.has(selectedWebsiteId)) {
         selectedWebsiteId = ALL_WEBSITES_KEY;
@@ -138,7 +139,7 @@
     $: totalThisMonthLeads = normalizedLeads.filter((lead) => isCurrentMonth(lead.created)).length;
     $: totalContactFormLeads = normalizedLeads.filter((lead) => lead.sourceKey === "contact").length;
     $: totalWhatsAppLeads = normalizedLeads.filter((lead) => lead.sourceKey === "whatsapp").length;
-    // NUVIO CUSTOM END: Internal/admin-only unified Leads operations page.
+    // NUVIO CUSTOM END: Unified Leads operations page for purpose-built backoffice workflows.
 
     function normalizeString(value) {
         return `${value || ""}`.trim();
@@ -460,6 +461,66 @@
         return truncate(normalizedSubject || normalizedMessage);
     }
 
+    function resolveLeadAttributionDetail(lead) {
+        const sourceLabel = normalizeLower(resolveSourceLabel(lead?.sourceKey));
+        const candidates = [lead?.originSource, lead?.page];
+
+        for (const candidate of candidates) {
+            const value = normalizeString(candidate);
+            if (!value) {
+                continue;
+            }
+
+            if (normalizeLower(value) === sourceLabel) {
+                continue;
+            }
+
+            return value;
+        }
+
+        return "";
+    }
+
+    function resolveLeadAttribution(lead) {
+        const sourceLabel = resolveSourceLabel(lead?.sourceKey);
+        const detail = resolveLeadAttributionDetail(lead);
+
+        if (!detail) {
+            return sourceLabel;
+        }
+
+        return `${sourceLabel} · ${detail}`;
+    }
+
+    function resolveLeadLocationHint(lead) {
+        const parts = [];
+        const usedDetail = normalizeLower(resolveLeadAttributionDetail(lead));
+
+        const websiteName = normalizeString(lead?.websiteName);
+        if (websiteName) {
+            parts.push(websiteName);
+        }
+
+        for (const candidate of [lead?.page, lead?.originSource]) {
+            const value = normalizeString(candidate);
+            if (!value) {
+                continue;
+            }
+
+            if (normalizeLower(value) === usedDetail) {
+                continue;
+            }
+
+            if (parts.some((part) => normalizeLower(part) === normalizeLower(value))) {
+                continue;
+            }
+
+            parts.push(value);
+        }
+
+        return parts.join(" · ");
+    }
+
     function resolveLeadNotificationSourceKey(lead) {
         const sourceKey = normalizeLower(lead?.sourceKey);
         if (sourceKey === "contact" || sourceKey === "booking") {
@@ -735,7 +796,7 @@
         try {
             return await ApiClient.collection(collection.id).getFullList(requestOptions);
         } catch (err) {
-            ApiClient.error(err);
+            ApiClient.error(err, false);
             return [];
         }
     }
@@ -755,7 +816,7 @@
             });
         } catch (err) {
             websites = [];
-            ApiClient.error(err);
+            ApiClient.error(err, false);
         }
 
         isLoadingWebsites = false;
@@ -782,7 +843,7 @@
             whatsappRecords = nextWhatsApp;
         } catch (err) {
             leadsError = "Unable to load leads right now. Please refresh and try again.";
-            ApiClient.error(err);
+            ApiClient.error(err, false);
             contactsRecords = [];
             whatsappRecords = [];
         }
@@ -841,7 +902,7 @@
 
             addSuccessToast(`${label} copied.`);
         } catch (err) {
-            ApiClient.error(err);
+            ApiClient.error(err, false);
             addErrorToast(`Unable to copy ${label.toLowerCase()}.`);
         }
     }
@@ -929,7 +990,7 @@
                     : "updated";
             addSuccessToast(`Lead marked as ${nextLabel}.`);
         } catch (err) {
-            ApiClient.error(err);
+            ApiClient.error(err, false);
             addErrorToast("Unable to update lead status right now.");
         } finally {
             isUpdatingLeadStatus = false;
@@ -1017,19 +1078,48 @@
     </section>
 
     <section class="panel leads-filters m-b-base">
-        <div class="leads-filter-row">
-            <label class="txt-sm txt-hint" for="leads-website-filter">Website</label>
-            <select
-                id="leads-website-filter"
+        {#if hasMultipleWebsites}
+            <div class="leads-filter-row">
+                <label class="txt-sm txt-hint" for="leads-website-filter">Website</label>
+                <select
+                    id="leads-website-filter"
+                    class="input input-sm"
+                    bind:value={selectedWebsiteId}
+                    disabled={isLoadingWebsites}
+                >
+                    <option value={ALL_WEBSITES_KEY}>All websites</option>
+                    {#each websites as website (website.id)}
+                        <option value={website.id}>{resolveWebsiteLabel(website)}</option>
+                    {/each}
+                </select>
+            </div>
+        {:else if singleWebsiteLabel}
+            <div class="leads-filter-row">
+                <span class="txt-sm txt-hint">Website</span>
+                <span class="summary-pill">
+                    <i class="ri-global-line" />
+                    {singleWebsiteLabel}
+                </span>
+            </div>
+        {/if}
+
+        <div class="leads-filter-row leads-filter-row--controls m-t-sm">
+            <label class="txt-sm txt-hint" for="leads-search-filter">Search</label>
+            <input
+                id="leads-search-filter"
                 class="input input-sm"
-                bind:value={selectedWebsiteId}
-                disabled={isLoadingWebsites}
-            >
-                <option value={ALL_WEBSITES_KEY}>All websites</option>
-                {#each websites as website (website.id)}
-                    <option value={website.id}>{resolveWebsiteLabel(website)}</option>
-                {/each}
+                type="text"
+                placeholder="Search by name, email, phone, subject, or message..."
+                bind:value={searchTerm}
+            />
+            <label class="txt-sm txt-hint leads-sort-label" for="leads-sort-filter">Sort</label>
+            <select id="leads-sort-filter" class="input input-sm" bind:value={sortOrder}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
             </select>
+            <button type="button" class="btn btn-sm btn-outline" on:click={clearFilters}>
+                <span class="txt">Reset filters</span>
+            </button>
         </div>
 
         <div class="leads-filter-grid m-t-sm">
@@ -1065,28 +1155,6 @@
                 </div>
             </div>
         </div>
-
-        <div class="leads-filter-row m-t-sm">
-            <label class="txt-sm txt-hint" for="leads-search-filter">Search</label>
-            <input
-                id="leads-search-filter"
-                class="input input-sm"
-                type="text"
-                placeholder="Search by name, email, phone, subject, or message..."
-                bind:value={searchTerm}
-            />
-        </div>
-
-        <div class="leads-filter-row m-t-sm">
-            <label class="txt-sm txt-hint" for="leads-sort-filter">Sort</label>
-            <select id="leads-sort-filter" class="input input-sm" bind:value={sortOrder}>
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-            </select>
-            <button type="button" class="btn btn-sm btn-outline" on:click={clearFilters}>
-                <span class="txt">Reset filters</span>
-            </button>
-        </div>
     </section>
 
     {#if !hasAnyLeadCollections}
@@ -1095,7 +1163,7 @@
                 <i class="ri-information-line" />
             </div>
             <div>
-                Leads data collections were not found. This page expects Contacts and a WhatsApp interactions collection.
+                Leads data sources were not found. This page expects contact and WhatsApp interactions.
             </div>
         </div>
     {:else if !hasRequiredCollections}
@@ -1104,7 +1172,7 @@
                 <i class="ri-information-line" />
             </div>
             <div>
-                One leads source collection is missing. Contacts and WhatsApp interactions may be partially available.
+                One leads source is missing. Contact and WhatsApp interactions may be partially available.
             </div>
         </div>
     {/if}
@@ -1162,19 +1230,25 @@
                             <div class="txt-sm txt-hint leads-item-secondary">{lead.secondaryIdentity}</div>
                         {/if}
 
-                        {#if lead.preview}
-                            <p class="txt-sm m-b-0 leads-item-preview">{lead.preview}</p>
+                        {#if (lead.email && lead.email !== lead.identity) || (lead.phone && lead.phone !== lead.identity)}
+                            <div class="leads-item-contact txt-xs txt-hint">
+                                {#if lead.email && lead.email !== lead.identity}
+                                    <span><i class="ri-mail-line" /> {lead.email}</span>
+                                {/if}
+                                {#if lead.phone && lead.phone !== lead.identity}
+                                    <span><i class="ri-phone-line" /> {lead.phone}</span>
+                                {/if}
+                            </div>
                         {/if}
 
+                        <p class="txt-sm m-b-0 leads-item-preview">
+                            {lead.preview || "No message preview available yet."}
+                        </p>
+
                         <div class="leads-item-meta txt-xs txt-hint">
-                            {#if lead.websiteName}
-                                <span>{lead.websiteName}</span>
-                            {/if}
-                            {#if lead.page}
-                                <span>{lead.page}</span>
-                            {/if}
-                            {#if lead.originSource}
-                                <span>{lead.originSource}</span>
+                            <span class="leads-item-attribution">{resolveLeadAttribution(lead)}</span>
+                            {#if resolveLeadLocationHint(lead)}
+                                <span>{resolveLeadLocationHint(lead)}</span>
                             {/if}
                         </div>
                     </article>
@@ -1207,75 +1281,100 @@
                     {/if}
                 </div>
 
-                <div class="lead-detail-grid">
-                    <div class="lead-detail-row">
-                        <span class="txt-xs txt-hint">Created</span>
-                        <span class="txt-sm">{formatDateTime(selectedLead.created)}</span>
+                <section class="lead-detail-section">
+                    <div class="lead-detail-section-head">
+                        <h5 class="m-0">Contact</h5>
                     </div>
-                    {#if selectedLead.websiteName}
+                    <div class="lead-detail-grid">
                         <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Website</span>
-                            <span class="txt-sm">{selectedLead.websiteName}</span>
+                            <span class="txt-xs txt-hint">Identity</span>
+                            <span class="txt-sm">{selectedLead.identity}</span>
                         </div>
-                    {/if}
-                    {#if selectedLead.page}
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Page</span>
-                            <span class="txt-sm">{selectedLead.page}</span>
-                        </div>
-                    {/if}
-                    {#if selectedLead.originSource}
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Source detail</span>
-                            <span class="txt-sm">{selectedLead.originSource}</span>
-                        </div>
-                    {/if}
-                    {#if selectedLead.name}
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Name</span>
-                            <span class="txt-sm">{selectedLead.name}</span>
-                        </div>
-                    {/if}
-                    {#if selectedLead.email}
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Email</span>
-                            <span class="txt-sm">{selectedLead.email}</span>
-                        </div>
-                    {/if}
-                    {#if selectedLead.phone}
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Phone</span>
-                            <span class="txt-sm">{selectedLead.phone}</span>
-                        </div>
-                    {/if}
-                    {#if selectedLead.subject}
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Subject</span>
-                            <span class="txt-sm">{selectedLead.subject}</span>
-                        </div>
-                    {/if}
-                    {#if selectedLead.message}
-                        <div class="lead-detail-row lead-detail-row-block">
-                            <span class="txt-xs txt-hint">Message</span>
-                            <p class="txt-sm m-b-0">{selectedLead.message}</p>
-                        </div>
-                    {/if}
-                    {#if selectedLead.whatsappTargetPhone}
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">WhatsApp target phone</span>
-                            <span class="txt-sm">{selectedLead.whatsappTargetPhone}</span>
-                        </div>
-                    {/if}
-                    {#if selectedLead.whatsappTargetMessage}
-                        <div class="lead-detail-row lead-detail-row-block">
-                            <span class="txt-xs txt-hint">WhatsApp target message</span>
-                            <p class="txt-sm m-b-0">{selectedLead.whatsappTargetMessage}</p>
-                        </div>
-                    {/if}
-                </div>
+                        {#if selectedLead.name && selectedLead.name !== selectedLead.identity}
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Name</span>
+                                <span class="txt-sm">{selectedLead.name}</span>
+                            </div>
+                        {/if}
+                        {#if selectedLead.email}
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Email</span>
+                                <span class="txt-sm">{selectedLead.email}</span>
+                            </div>
+                        {/if}
+                        {#if selectedLead.phone}
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Phone</span>
+                                <span class="txt-sm">{selectedLead.phone}</span>
+                            </div>
+                        {/if}
+                    </div>
+                </section>
 
-                <div class="lead-detail-actions-block">
-                    <div class="txt-xs txt-hint txt-uppercase">Notification setup</div>
+                <section class="lead-detail-section">
+                    <div class="lead-detail-section-head">
+                        <h5 class="m-0">Message</h5>
+                    </div>
+                    <div class="lead-detail-grid">
+                        {#if selectedLead.subject}
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Subject</span>
+                                <span class="txt-sm">{selectedLead.subject}</span>
+                            </div>
+                        {/if}
+                        {#if selectedLead.message}
+                            <div class="lead-detail-row lead-detail-row-block">
+                                <span class="txt-xs txt-hint">Message</span>
+                                <p class="txt-sm m-b-0">{selectedLead.message}</p>
+                            </div>
+                        {/if}
+                        {#if selectedLead.whatsappTargetMessage}
+                            <div class="lead-detail-row lead-detail-row-block">
+                                <span class="txt-xs txt-hint">WhatsApp target message</span>
+                                <p class="txt-sm m-b-0">{selectedLead.whatsappTargetMessage}</p>
+                            </div>
+                        {/if}
+                        {#if !selectedLead.subject && !selectedLead.message && !selectedLead.whatsappTargetMessage}
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Message</span>
+                                <span class="txt-sm txt-hint">No message details are available for this lead yet.</span>
+                            </div>
+                        {/if}
+                    </div>
+                </section>
+
+                <section class="lead-detail-section">
+                    <div class="lead-detail-section-head">
+                        <h5 class="m-0">Source</h5>
+                    </div>
+                    <div class="lead-detail-grid">
+                        <div class="lead-detail-row">
+                            <span class="txt-xs txt-hint">Attribution</span>
+                            <span class="txt-sm">{resolveLeadAttribution(selectedLead)}</span>
+                        </div>
+                        <div class="lead-detail-row">
+                            <span class="txt-xs txt-hint">Created</span>
+                            <span class="txt-sm">{formatDateTime(selectedLead.created)}</span>
+                        </div>
+                        {#if resolveLeadLocationHint(selectedLead)}
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Context</span>
+                                <span class="txt-sm">{resolveLeadLocationHint(selectedLead)}</span>
+                            </div>
+                        {/if}
+                        {#if selectedLead.whatsappTargetPhone}
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">WhatsApp target phone</span>
+                                <span class="txt-sm">{selectedLead.whatsappTargetPhone}</span>
+                            </div>
+                        {/if}
+                    </div>
+                </section>
+
+                <section class="lead-detail-section">
+                    <div class="lead-detail-section-head">
+                        <h5 class="m-0">Notification setup</h5>
+                    </div>
                     <p class="txt-sm txt-hint m-b-0">
                         Based on current Website Settings. Per-lead delivery status is not stored yet.
                     </p>
@@ -1315,84 +1414,90 @@
                             {selectedLeadNotificationSetup.unavailableMessage}
                         </p>
                     {/if}
-                </div>
+                </section>
 
-                <div class="lead-detail-actions-block">
-                    <div class="txt-xs txt-hint txt-uppercase">Status actions</div>
-                    <div class="lead-detail-actions">
-                        {#if canToggleSelectedLeadStatus}
-                            <button
-                                type="button"
-                                class="btn btn-sm"
-                                class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
-                                disabled={isUpdatingLeadStatus}
-                                on:click={() => setSelectedLeadStatus(selectedLeadToggleActionTarget)}
-                            >
-                                <span class="txt">{selectedLeadToggleActionLabel}</span>
-                            </button>
-                        {/if}
-                        {#if canArchiveSelectedLead}
-                            <button
-                                type="button"
-                                class="btn btn-outline btn-sm"
-                                class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
-                                disabled={isUpdatingLeadStatus}
-                                on:click={archiveSelectedLead}
-                            >
-                                <span class="txt">Archive</span>
-                            </button>
+                <section class="lead-detail-section">
+                    <div class="lead-detail-section-head">
+                        <h5 class="m-0">Actions</h5>
+                    </div>
+
+                    <div class="lead-detail-actions-block">
+                        <div class="txt-xs txt-hint txt-uppercase">Status actions</div>
+                        <div class="lead-detail-actions">
+                            {#if canToggleSelectedLeadStatus}
+                                <button
+                                    type="button"
+                                    class="btn btn-sm"
+                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                    disabled={isUpdatingLeadStatus}
+                                    on:click={() => setSelectedLeadStatus(selectedLeadToggleActionTarget)}
+                                >
+                                    <span class="txt">{selectedLeadToggleActionLabel}</span>
+                                </button>
+                            {/if}
+                            {#if canArchiveSelectedLead}
+                                <button
+                                    type="button"
+                                    class="btn btn-outline btn-sm"
+                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                    disabled={isUpdatingLeadStatus}
+                                    on:click={archiveSelectedLead}
+                                >
+                                    <span class="txt">Archive</span>
+                                </button>
+                            {/if}
+                        </div>
+
+                        {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                            <p class="txt-sm txt-hint m-b-0">
+                                Status actions are not available for WhatsApp interactions yet.
+                            </p>
+                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                            <p class="txt-sm txt-hint m-b-0">
+                                Status actions are not available for this lead source yet.
+                            </p>
+                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
+                            <p class="txt-sm txt-hint m-b-0">
+                                Archive is not available for this source yet.
+                            </p>
                         {/if}
                     </div>
 
-                    {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                        <p class="txt-sm txt-hint m-b-0">
-                            Status actions are not available for WhatsApp interactions yet.
-                        </p>
-                    {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                        <p class="txt-sm txt-hint m-b-0">
-                            Status actions are not available for this lead source yet.
-                        </p>
-                    {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
-                        <p class="txt-sm txt-hint m-b-0">
-                            Archive requires schema support.
-                        </p>
-                    {/if}
-                </div>
-
-                <div class="lead-detail-actions-block">
-                    <div class="txt-xs txt-hint txt-uppercase">Utilities</div>
-                    <div class="lead-detail-actions">
-                        {#if selectedLead.email}
-                            <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
-                                <span class="txt">Copy email</span>
-                            </button>
-                        {/if}
-                        {#if selectedLead.phone}
-                            <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.phone, "Phone")}>
-                                <span class="txt">Copy phone</span>
-                            </button>
-                        {/if}
-                        {#if selectedLead.message || selectedLead.whatsappTargetMessage}
-                            <button
-                                type="button"
-                                class="btn btn-outline btn-sm"
-                                on:click={() => copyValue(selectedLead.whatsappTargetMessage || selectedLead.message, "Message")}
-                            >
-                                <span class="txt">Copy message</span>
-                            </button>
-                        {/if}
-                        {#if selectedLeadMailto}
-                            <a href={selectedLeadMailto} class="btn btn-sm">
-                                <span class="txt">Open email</span>
-                            </a>
-                        {/if}
-                        {#if selectedLeadWhatsAppLink}
-                            <a href={selectedLeadWhatsAppLink} target="_blank" rel="noopener noreferrer" class="btn btn-sm">
-                                <span class="txt">Open WhatsApp</span>
-                            </a>
-                        {/if}
+                    <div class="lead-detail-actions-block">
+                        <div class="txt-xs txt-hint txt-uppercase">Utilities</div>
+                        <div class="lead-detail-actions">
+                            {#if selectedLead.email}
+                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
+                                    <span class="txt">Copy email</span>
+                                </button>
+                            {/if}
+                            {#if selectedLead.phone}
+                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.phone, "Phone")}>
+                                    <span class="txt">Copy phone</span>
+                                </button>
+                            {/if}
+                            {#if selectedLead.message || selectedLead.whatsappTargetMessage}
+                                <button
+                                    type="button"
+                                    class="btn btn-outline btn-sm"
+                                    on:click={() => copyValue(selectedLead.whatsappTargetMessage || selectedLead.message, "Message")}
+                                >
+                                    <span class="txt">Copy message</span>
+                                </button>
+                            {/if}
+                            {#if selectedLeadMailto}
+                                <a href={selectedLeadMailto} class="btn btn-sm">
+                                    <span class="txt">Open email</span>
+                                </a>
+                            {/if}
+                            {#if selectedLeadWhatsAppLink}
+                                <a href={selectedLeadWhatsAppLink} target="_blank" rel="noopener noreferrer" class="btn btn-sm">
+                                    <span class="txt">Open WhatsApp</span>
+                                </a>
+                            {/if}
+                        </div>
                     </div>
-                </div>
+                </section>
             </div>
         {:else}
             <div class="empty-state m-b-0">
@@ -1443,6 +1548,21 @@
 
     .leads-filter-row label {
         min-width: 58px;
+    }
+
+    .leads-filter-row--controls .input[type="text"] {
+        flex: 1 1 420px;
+        min-width: 260px;
+    }
+
+    .leads-filter-row--controls select {
+        min-width: 170px;
+        max-width: 190px;
+        flex: 0 0 auto;
+    }
+
+    .leads-sort-label {
+        min-width: 34px;
     }
 
     .leads-list-panel {
@@ -1502,6 +1622,18 @@
         margin-top: -2px;
     }
 
+    .leads-item-contact {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .leads-item-contact span {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
     .leads-item-preview {
         color: var(--txtPrimaryColor);
     }
@@ -1511,6 +1643,11 @@
         flex-wrap: wrap;
         gap: 8px;
         padding-top: 2px;
+    }
+
+    .leads-item-attribution {
+        color: var(--txtPrimaryColor);
+        font-weight: 500;
     }
 
     .leads-item-meta span + span::before {
@@ -1527,6 +1664,23 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
+    }
+
+    .lead-detail-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .lead-detail-section + .lead-detail-section {
+        padding-top: 8px;
+        border-top: 1px solid var(--baseAlt2Color);
+    }
+
+    .lead-detail-section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
     }
 
     .lead-detail-badges {
@@ -1586,6 +1740,11 @@
     @media (max-width: 840px) {
         .leads-filter-grid {
             grid-template-columns: 1fr;
+        }
+
+        .leads-filter-row--controls select {
+            max-width: 100%;
+            min-width: 140px;
         }
     }
 </style>

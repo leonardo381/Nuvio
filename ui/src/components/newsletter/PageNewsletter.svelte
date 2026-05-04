@@ -181,6 +181,29 @@
         }
         return `${status || ""}`.trim() || "Unknown";
     }
+
+    function getSubscriberStatusLabelClass(status) {
+        const normalized = normalizeStatus(status);
+        if (normalized === "active") {
+            return "label-success";
+        }
+        if (normalized === "pending") {
+            return "label-warning";
+        }
+        if (normalized === "unsubscribed") {
+            return "label-danger";
+        }
+        return "label-info";
+    }
+
+    function resolveSubscriberSourceLabel(source) {
+        const normalized = `${source || ""}`.trim();
+        if (!normalized) {
+            return "";
+        }
+
+        return CommonHelper.sentenize(normalized.replace(/_/g, " "), false);
+    }
     function normalizeGroupName(value) {
         return `${value || ""}`.trim().replace(/\s+/g, " ");
     }
@@ -310,7 +333,183 @@
 
         return "";
     }
-    function resolveCampaignRecipientsCount(campaign) {        if (!campaign) {            return 0;        }        const recipientsType = `${campaign.recipientsType || "all"}`.toLowerCase();        if (recipientsType === "manual") {            return Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean).length : 0;        }        return activeSubscribers.length;    }    function getSendCampaignDisabledReason(campaign) {        if (!campaign?.id) {            return "Invalid campaign.";        }        if (isSendingCampaign[campaign.id]) {            return "Sending campaign...";        }        if (normalizeStatus(campaign.status) === "sent") {            return "Campaign already sent.";        }        if (resolveCampaignRecipientsCount(campaign) < 1) {            return "No eligible recipients.";        }        return "";    }    function clearSubscriberFormError() {
+    function resolveCampaignRecipientsCount(campaign) {        if (!campaign) {            return 0;        }        const recipientsType = `${campaign.recipientsType || "all"}`.toLowerCase();        if (recipientsType === "manual") {            return Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean).length : 0;        }        return activeSubscribers.length;    }    function getSendCampaignDisabledReason(campaign) {        if (!campaign?.id) {            return "Invalid campaign.";        }        if (isSendingCampaign[campaign.id]) {            return "Sending campaign...";        }        if (normalizeStatus(campaign.status) === "sent") {            return "Campaign already sent.";        }        if (resolveCampaignRecipientsCount(campaign) < 1) {            return "No eligible recipients.";        }        return "";    }    function resolveCampaignStatusLabelClass(status) {
+        const normalized = normalizeStatus(status);
+        if (normalized === "sent") {
+            return "label-success";
+        }
+        if (normalized === "draft") {
+            return "label-warning";
+        }
+        return "label-info";
+    }
+
+    function resolveCampaignStatusLabel(status) {
+        const normalized = normalizeStatus(status);
+        if (normalized === "sent") {
+            return "Sent";
+        }
+        if (normalized === "draft") {
+            return "Draft";
+        }
+        return CommonHelper.sentenize(`${status || ""}`, false) || "Unknown";
+    }
+
+    function resolveCampaignAudienceLabel(campaign) {
+        const recipientsType = normalizeStatus(campaign?.recipientsType || "all");
+        return recipientsType === "manual" ? "Manual" : "All active";
+    }
+
+    function resolveCampaignTimelineLabel(campaign) {
+        const sent = normalizeStatus(campaign?.status) === "sent";
+        const timestamp = sent
+            ? (campaign?.sentAt || campaign?.updated || campaign?.created)
+            : (campaign?.updated || campaign?.created);
+        return `${sent ? "Sent" : "Updated"}: ${formatDateTime(timestamp)}`;
+    }
+
+    function resolveCampaignRecipientsSummary(campaign) {
+        return `${resolveCampaignRecipientsCount(campaign)} est.`;
+    }
+
+    function resolveCampaignDeliveredSummary(campaign) {
+        return `${campaign?.recipientsCount || 0} sent`;
+    }
+
+    function resolveCampaignAudienceSummary(campaign) {
+        return `${resolveCampaignAudienceLabel(campaign)} audience`;
+    }
+
+    function resolveCampaignSendPreviewLabel(campaign) {
+        return resolveCampaignRecipientsSummary(campaign);
+    }
+
+    function resolveCampaignSentDate(campaign) {
+        return formatDateTime(campaign?.sentAt || campaign?.updated || campaign?.created);
+    }
+
+    function resolveCampaignUpdatedDate(campaign) {
+        return formatDateTime(campaign?.updated || campaign?.created);
+    }
+
+    function resolveCampaignSendConfirmationCount(campaign) {
+        return resolveCampaignRecipientsCount(campaign);
+    }
+
+    function resolveCampaignSendActionLabel(campaign) {
+        return normalizeStatus(campaign?.status) === "sent" ? "Sent" : "Send";
+    }
+
+    function resolveCampaignPrimaryMeta(campaign) {
+        return `${resolveCampaignAudienceSummary(campaign)} - ${resolveCampaignRecipientsSummary(campaign)}`;
+    }
+
+    function resolveCampaignSecondaryMeta(campaign) {
+        return `${resolveCampaignDeliveredSummary(campaign)} - ${resolveCampaignTimelineLabel(campaign)}`;
+    }
+
+    function resolveCampaignSentMeta(campaign) {
+        return `Sent: ${resolveCampaignSentDate(campaign)}`;
+    }
+
+    function resolveCampaignDraftMeta(campaign) {
+        return `Updated: ${resolveCampaignUpdatedDate(campaign)}`;
+    }
+
+    function resolveCampaignMetaDate(campaign) {
+        return normalizeStatus(campaign?.status) === "sent"
+            ? resolveCampaignSentMeta(campaign)
+            : resolveCampaignDraftMeta(campaign);
+    }
+
+    function resolveCampaignMetaLine(campaign) {
+        return `${resolveCampaignPrimaryMeta(campaign)} - ${resolveCampaignDeliveredSummary(campaign)} - ${resolveCampaignMetaDate(campaign)}`;
+    }
+
+    function resolveCampaignSubject(campaign) {
+        return `${campaign?.subject || ""}`.trim() || "(No subject)";
+    }
+
+    function resolveCampaignEmptyStateHint() {
+        return "Create your first draft in Builder, then select audience and send.";
+    }
+
+    function resolveSubscriberEmptyStateHint() {
+        return "Add your first subscriber to start building campaigns.";
+    }
+
+    function resolveSubscriberFilterEmptyHint() {
+        return "Try adjusting search, status, or group filters.";
+    }
+
+    function resolveAudienceStepHint() {
+        return "Finalize recipients, then save or send from your drafts list.";
+    }
+
+    function resolveBuilderStepHint() {
+        return "Write your subject and content, then review the preview.";
+    }
+
+    function resolveCampaignsSectionHint() {
+        return "Review drafts and sent campaigns. Open a draft to edit or send.";
+    }
+
+    function resolveSubscribersSectionHint() {
+        return "Add, edit, and organize subscribers for this website.";
+    }
+
+    function resolveSubscribersTableConfirmedLabel() {
+        return "Subscribed";
+    }
+
+    function resolveSubscriberConfirmedValue(subscriber) {
+        if (subscriber?.confirmedAt) {
+            return formatDateTime(subscriber.confirmedAt);
+        }
+        return "Pending confirmation";
+    }
+
+    function resolveSubscribersTableAddedLabel() {
+        return "Created";
+    }
+
+    function resolveSubscriberCreatedValue(subscriber) {
+        return formatDateTime(subscriber?.created);
+    }
+
+    function resolveSubscriberCreateEmptyStateActionLabel() {
+        return "Add subscriber";
+    }
+
+    function resolveCampaignListStats() {
+        return `${campaigns.length} total - ${draftCampaigns.length} drafts - ${sentCampaigns.length} sent`;
+    }
+
+    function resolveSubscribersListStats() {
+        return `${filteredSubscribers.length} shown - ${subscribers.length} total`;
+    }
+
+    function resolveSendConfirmationRecipients(campaign) {
+        return resolveCampaignSendConfirmationCount(campaign);
+    }
+
+    function resolveSendConfirmationTitle(campaign) {
+        return resolveCampaignSubject(campaign);
+    }
+
+    function resolveSendConfirmationHint() {
+        return "This action sends the campaign immediately.";
+    }
+
+    function resolveCampaignFilterEmptyHint() {
+        return "Try another status filter to view more campaigns.";
+    }
+
+    function resolveCampaignNoItemsHint() {
+        return resolveCampaignEmptyStateHint();
+    }
+
+    function clearSubscriberFormError() {
         if (subscriberFormError) {
             subscriberFormError = "";
         }
@@ -844,7 +1043,7 @@
                             <div class="subscribers-panel-header m-b-sm">
                                 <div class="section-head section-head-inline m-b-0">
                                     <h4 class="m-0">Subscribers</h4>
-                                    <span class="txt-sm txt-hint">Create and manage subscribers directly in the table.</span>
+                                    <span class="txt-sm txt-hint">{resolveSubscribersSectionHint()}</span>
                                 </div>
                                 <div class="flex-fill" />
                                 <div class="subscribers-panel-header-actions">
@@ -858,7 +1057,7 @@
                                         <span class="txt">{isSubscriberCreateOpen ? "Hide form" : "Add form"}</span>
                                     </button>
                                     <span class="txt-sm txt-hint">
-                                        {filteredSubscribers.length} shown | {subscribers.length} total
+                                        {resolveSubscribersListStats()}
                                     </span>
                                 </div>
                             </div>
@@ -1010,19 +1209,45 @@
                                     {/if}
                                 </div>
                             </div>
-                            {#if isLoadingSubscribers}                                <div class="loading-state">                                    <span class="loader loader-sm" />                                    <span class="txt-hint">Loading subscribers...</span>                                </div>                            {:else if !subscribers.length}
+                            {#if isLoadingSubscribers}
+                                <div class="loading-state">
+                                    <span class="loader loader-sm" />
+                                    <span class="txt-hint">Loading subscribers...</span>
+                                </div>
+                            {:else if !subscribers.length}
                                 <div class="empty-state empty-state-stack">
                                     <span>No subscribers yet for this website.</span>
-                                    <span class="txt-sm txt-hint">Use “Add subscriber” to create your first contact.</span>
+                                    <span class="txt-sm txt-hint">{resolveSubscriberEmptyStateHint()}</span>
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline"
+                                        on:click={() => {
+                                            isSubscriberCreateOpen = true;
+                                            focusSubscriberEmailInput();
+                                        }}
+                                    >
+                                        <span class="txt">{resolveSubscriberCreateEmptyStateActionLabel()}</span>
+                                    </button>
                                 </div>
-                            {:else if !filteredSubscribers.length}                                <div class="empty-state empty-state-stack">                                    <span>No subscribers match the current filters.</span>                                    <button                                        type="button"                                        class="btn btn-xs btn-outline"                                        on:click={() => {
+                            {:else if !filteredSubscribers.length}
+                                <div class="empty-state empty-state-stack">
+                                    <span>No subscribers match the current filters.</span>
+                                    <span class="txt-sm txt-hint">{resolveSubscriberFilterEmptyHint()}</span>
+                                    <button
+                                        type="button"
+                                        class="btn btn-xs btn-outline"
+                                        on:click={() => {
                                             subscriberSearch = "";
                                             subscriberStatusFilter = "all";
                                             subscriberGroupFilter = "all";
                                             subscriberSort = "newest";
                                         }}
                                     >
-                                        <span class="txt">Clear filters</span>                                    </button>                                </div>                            {:else}                                <div class="list list-compact subscriber-table-list">
+                                        <span class="txt">Clear filters</span>
+                                    </button>
+                                </div>
+                            {:else}
+                                <div class="list list-compact subscriber-table-list">
                                     <div class="subscriber-table-head txt-xs txt-hint">
                                         <div class="selection-cell subscriber-col-select subscriber-col-select-head">
                                             <input
@@ -1036,8 +1261,8 @@
                                         <div class="subscriber-col-name">Name</div>
                                         <div class="subscriber-col-email">Email</div>
                                         <div class="subscriber-col-status">Status</div>
-                                        <div class="subscriber-col-confirmed">Confirmed</div>
-                                        <div class="subscriber-col-added">Added</div>
+                                        <div class="subscriber-col-confirmed">{resolveSubscribersTableConfirmedLabel()}</div>
+                                        <div class="subscriber-col-added">{resolveSubscribersTableAddedLabel()}</div>
                                         <div class="subscriber-col-groups">Groups</div>
                                         <div class="subscriber-col-actions">Actions</div>
                                     </div>
@@ -1118,29 +1343,25 @@
                                                             <span class="txt subscriber-primary-label">
                                                                 {resolveSubscriberDisplayName(subscriber) || "-"}
                                                             </span>
+                                                            {#if subscribersSupportsSourceField && subscriber.source}
+                                                                <span class="txt-xs txt-hint subscriber-secondary-line">
+                                                                    Source: {resolveSubscriberSourceLabel(subscriber.source)}
+                                                                </span>
+                                                            {/if}
                                                         </div>
                                                         <div class="subscriber-col-email">
                                                             <span class="txt subscriber-primary-label">{subscriber.email}</span>
                                                         </div>
                                                         <div class="subscriber-col-status">
-                                                            <span
-                                                                class="status-chip"
-                                                                class:is-active={normalizeStatus(subscriber.status) === "active"}
-                                                                class:is-pending={normalizeStatus(subscriber.status) === "pending"}
-                                                                class:is-unsubscribed={normalizeStatus(subscriber.status) === "unsubscribed"}
-                                                            >
+                                                            <span class={`label label-sm ${getSubscriberStatusLabelClass(subscriber.status)}`}>
                                                                 {getSubscriberStatusLabel(subscriber.status)}
                                                             </span>
                                                         </div>
                                                         <div class="subscriber-col-confirmed txt-xs txt-hint">
-                                                            {#if subscriber.confirmedAt}
-                                                                {formatDateTime(subscriber.confirmedAt)}
-                                                            {:else}
-                                                                -
-                                                            {/if}
+                                                            {resolveSubscriberConfirmedValue(subscriber)}
                                                         </div>
                                                         <div class="subscriber-col-added txt-xs txt-hint">
-                                                            {formatDateTime(subscriber.created)}
+                                                            {resolveSubscriberCreatedValue(subscriber)}
                                                         </div>
                                                         <div class="subscriber-col-groups">
                                                             {#if hasSubscriberGroupsFeature}
@@ -1203,7 +1424,6 @@
                                                                     type="button"
                                                                     class="btn btn-sm btn-outline action-btn"
                                                                     disabled={!!editingSubscriberId}
-                                                                    title="Testing status override"
                                                                     on:click={() => setSubscriberStatus(subscriber, "active")}
                                                                 >
                                                                     <span class="txt">Activate</span>
@@ -1214,7 +1434,6 @@
                                                                     type="button"
                                                                     class="btn btn-sm action-btn"
                                                                     disabled={!!editingSubscriberId}
-                                                                    title="Testing status override"
                                                                     on:click={() => setSubscriberStatus(subscriber, "unsubscribed")}
                                                                 >
                                                                     <span class="txt">Unsubscribe</span>
@@ -1313,7 +1532,7 @@
                                             <h4 class="m-0">Campaign Builder</h4>
                                             <div class="campaign-step-label txt-xs txt-hint">Step 1 of 2</div>
                                             <p class="txt-sm txt-hint m-b-0 campaign-head-description">
-                                                Write your campaign and review the preview before moving to audience.
+                                                {resolveBuilderStepHint()}
                                             </p>
                                         </div>
                                         <div class="tabs-header compact combined left operations-tabs operations-tabs--nested campaign-builder-view-tabs">
@@ -1431,7 +1650,7 @@
                                             <h4 class="m-0">Audience & Send</h4>
                                             <div class="campaign-step-label txt-xs txt-hint">Step 2 of 2</div>
                                             <p class="txt-sm txt-hint m-b-0 campaign-head-description">
-                                                Finalize the audience and save the draft ready to send.
+                                                {resolveAudienceStepHint()}
                                             </p>
                                         </div>
                                         <div class="campaign-audience-actions-wrap">
@@ -1490,7 +1709,7 @@
                                             <div class="manual-recipients-head">
                                                 <div class="manual-recipients-title-row">
                                                     <h5 class="m-0">Recipients</h5>
-                                                    <span class="txt-sm txt-hint manual-recipients-help">Choose individual recipients, mark everyone, or select by groups.</span>
+                                                    <span class="txt-sm txt-hint manual-recipients-help">Choose recipients manually, select all active, or select by groups.</span>
                                                 </div>
                                                 <div class="manual-recipients-tools">
                                                     <span class="manual-recipients-count txt-xs">
@@ -1498,7 +1717,7 @@
                                                     </span>
                                                     <div class="manual-group-action-buttons">
                                                         <button type="button" class="btn btn-xs btn-outline" on:click={selectAllManualRecipients}>
-                                                            <span class="txt">Mark everyone</span>
+                                                            <span class="txt">Select all active</span>
                                                         </button>
                                                         <button type="button" class="btn btn-xs btn-outline" on:click={clearManualRecipients}>
                                                             <span class="txt">Clear selection</span>
@@ -1577,10 +1796,10 @@
                                 <div class="campaigns-header-row m-b-sm">
                                     <div class="section-head m-b-0">
                                         <h4 class="m-0">Campaigns</h4>
-                                        <p class="txt-sm txt-hint m-b-0">Edit drafts from here, then finalize audience and send.</p>
+                                        <p class="txt-sm txt-hint m-b-0">{resolveCampaignsSectionHint()}</p>
                                     </div>
                                     <div class="campaign-list-header-actions">
-                                        <span class="txt-sm txt-hint">{campaigns.length} total | {draftCampaigns.length} drafts | {sentCampaigns.length} sent</span>
+                                        <span class="txt-sm txt-hint">{resolveCampaignListStats()}</span>
                                         {#if editingCampaignId}
                                             <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
                                                 <span class="txt">Clear Edit</span>
@@ -1627,12 +1846,30 @@
                                 {:else if !campaigns.length}
                                     <div class="empty-state empty-state-stack">
                                         <span>No campaigns yet for this website.</span>
-                                        <span class="txt-sm txt-hint">Create your first draft in Builder to start sending newsletters.</span>
+                                        <span class="txt-sm txt-hint">{resolveCampaignNoItemsHint()}</span>
+                                        <button
+                                            type="button"
+                                            class="btn btn-xs btn-outline"
+                                            on:click={() => {
+                                                campaignWorkspace = "builder";
+                                                campaignBuilderShowEditor = true;
+                                                campaignBuilderShowPreview = false;
+                                            }}
+                                        >
+                                            <span class="txt">Start draft</span>
+                                        </button>
                                     </div>
                                 {:else if !filteredCampaigns.length}
                                     <div class="empty-state empty-state-stack">
                                         <span>No campaigns match this filter.</span>
-                                        <span class="txt-sm txt-hint">Try another status filter to view more campaigns.</span>
+                                        <span class="txt-sm txt-hint">{resolveCampaignFilterEmptyHint()}</span>
+                                        <button
+                                            type="button"
+                                            class="btn btn-xs btn-outline"
+                                            on:click={() => (campaignStatusFilter = "all")}
+                                        >
+                                            <span class="txt">Show all campaigns</span>
+                                        </button>
                                     </div>
                                 {:else}
                                     <div class="list list-compact">
@@ -1644,24 +1881,19 @@
                                                 >
                                                     <div class="content campaign-row-content">
                                                         <div class="campaign-row-top">
-                                                            <span class="txt campaign-row-subject">{campaign.subject || "(No subject)"}</span>
-                                                            <span
-                                                                class="status-chip"
-                                                                class:is-active={normalizeStatus(campaign.status) === "sent"}
-                                                                class:is-pending={normalizeStatus(campaign.status) === "draft"}
-                                                                class:is-unsubscribed={normalizeStatus(campaign.status) !== "sent" && normalizeStatus(campaign.status) !== "draft"}
-                                                            >
-                                                                {campaign.status}
+                                                            <span class="txt campaign-row-subject">{resolveCampaignSubject(campaign)}</span>
+                                                            <span class={`label label-sm ${resolveCampaignStatusLabelClass(campaign.status)}`}>
+                                                                {resolveCampaignStatusLabel(campaign.status)}
                                                             </span>
                                                         </div>
                                                         <div class="txt-xs txt-hint meta-line campaign-row-meta">
-                                                            <span><strong>Recipients:</strong> {campaign.recipientsType || "all"}</span>
+                                                            <span><strong>Audience:</strong> {resolveCampaignAudienceLabel(campaign)}</span>
                                                             <span class="meta-sep">|</span>
-                                                            <span><strong>Est.:</strong> {resolveCampaignRecipientsCount(campaign)}</span>
+                                                            <span><strong>Est. recipients:</strong> {resolveCampaignRecipientsSummary(campaign)}</span>
                                                             <span class="meta-sep">|</span>
-                                                            <span><strong>Sent:</strong> {campaign.recipientsCount || 0}</span>
+                                                            <span><strong>Delivered:</strong> {resolveCampaignDeliveredSummary(campaign)}</span>
                                                             <span class="meta-sep">|</span>
-                                                            <span><strong>Updated:</strong> {formatDateTime(campaign.updated || campaign.created)}</span>
+                                                            <span><strong>{normalizeStatus(campaign.status) === "sent" ? "Sent" : "Updated"}:</strong> {normalizeStatus(campaign.status) === "sent" ? resolveCampaignSentDate(campaign) : resolveCampaignUpdatedDate(campaign)}</span>
                                                         </div>
                                                     </div>
 
@@ -1745,6 +1977,7 @@
                     <strong>{pendingSendCampaign.subject}</strong> will be sent to approximately
                     <strong> {pendingSendRecipientsCount}</strong> recipient(s).
                 </p>
+                <p class="txt-xs txt-hint m-t-xs m-b-0">{resolveSendConfirmationHint()}</p>
 
                 <svelte:fragment slot="footer">
                     <button type="button" class="btn btn-sm btn-outline" on:click={closeSendCampaignModal}>
@@ -1820,10 +2053,10 @@
         display: flex;
         align-items: flex-end;
         justify-content: flex-start;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
         border-top: 1px solid var(--baseAlt2Color);
-        padding-top: 10px;
+        padding-top: 8px;
     }
 
     .subscribers-panel-header {
@@ -1918,7 +2151,7 @@
 
     .subscriber-filter-grid {
         display: grid;
-        gap: 8px;
+        gap: 7px;
         grid-template-columns: repeat(3, minmax(170px, 1fr));
         flex: 1 1 620px;
         min-width: 260px;
@@ -2288,6 +2521,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 100%;
+    }
+
+    .subscriber-secondary-line {
+        display: block;
+        margin-top: 1px;
     }
 
     .subscriber-col-groups .group-pill-list {
@@ -2687,6 +2925,9 @@
     }
 
     .campaign-row-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
         gap: 6px;
     }
 
@@ -2707,35 +2948,6 @@
         align-items: baseline;
         flex-wrap: wrap;
         gap: 8px;
-    }
-
-    .status-chip {
-        display: inline-flex;
-        align-items: center;
-        border: 1px solid transparent;
-        border-radius: 999px;
-        font-size: 11px;
-        line-height: 1;
-        text-transform: capitalize;
-        padding: 4px 8px;
-    }
-
-    .status-chip.is-active {
-        background: color-mix(in srgb, var(--successColor) 12%, transparent);
-        border-color: color-mix(in srgb, var(--successColor) 40%, transparent);
-        color: var(--successColor);
-    }
-
-    .status-chip.is-pending {
-        background: color-mix(in srgb, var(--warningColor) 14%, transparent);
-        border-color: color-mix(in srgb, var(--warningColor) 40%, transparent);
-        color: var(--warningColor);
-    }
-
-    .status-chip.is-unsubscribed {
-        background: color-mix(in srgb, var(--dangerColor) 12%, transparent);
-        border-color: color-mix(in srgb, var(--dangerColor) 38%, transparent);
-        color: var(--dangerColor);
     }
 
     .meta-line {
@@ -3014,6 +3226,9 @@
         }
     }
 </style>
+
+
+
 
 
 

@@ -85,7 +85,7 @@ const routes = {
 
     "/leads": wrap({
         component: PageLeads,
-        conditions: [(_) => isAdminSuperuser()],
+        conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),
 
