@@ -861,7 +861,7 @@
         try {
             const payload = {
                 email,
-                status: normalizeStatus(editingSubscriberForm.status) || "pending",
+                status: normalizeStatus(subscriber?.status) || "pending",
             };
             if (subscribersSupportsNameField) {
                 payload.name = normalizeSubscriberName(editingSubscriberForm.name);
@@ -1392,18 +1392,6 @@
                                                                         bind:value={editingSubscriberForm.email}
                                                                         on:input={clearEditingSubscriberError}
                                                                     />
-                                                                </div>
-                                                                <div class="subscriber-edit-field">
-                                                                    <label class="txt-xs txt-hint block m-b-5">Status</label>
-                                                                    <select
-                                                                        class="input input-sm"
-                                                                        bind:value={editingSubscriberForm.status}
-                                                                        on:change={clearEditingSubscriberError}
-                                                                    >
-                                                                        {#each subscriberStatuses as status}
-                                                                            <option value={status}>{status}</option>
-                                                                        {/each}
-                                                                    </select>
                                                                 </div>
                                                                 {#if hasSubscriberGroupsFeature}
                                                                     <div class="subscriber-edit-groups">
@@ -2175,7 +2163,7 @@
     .subscriber-create-form {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 9px;
         width: 100%;
     }
 
@@ -2188,7 +2176,7 @@
 
     .subscriber-create-row {
         display: grid;
-        gap: 10px 12px;
+        gap: 8px 10px;
         align-items: end;
     }
 
@@ -2238,7 +2226,7 @@
     }
 
     .subscriber-groups-action .btn {
-        min-height: var(--smBtnHeight);
+        min-height: var(--inputHeight);
         white-space: nowrap;
         min-width: 102px;
     }
@@ -2304,11 +2292,12 @@
         border-radius: var(--baseRadius);
         background: transparent;
         padding: 5px 6px;
+        min-height: var(--inputHeight);
     }
 
     .form-group-pill-list .group-pill-btn {
-        padding: 4px 8px;
-        font-size: 10px;
+        padding: 5px 10px;
+        font-size: 11px;
     }
 
     .row-group-pill-list {
@@ -2631,7 +2620,7 @@
     .subscriber-edit-grid {
         display: grid;
         gap: 8px 10px;
-        grid-template-columns: minmax(220px, 1fr) minmax(140px, 190px);
+        grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
     }
 
     .subscriber-edit-field {
