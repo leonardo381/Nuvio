@@ -14,6 +14,7 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 const (
@@ -239,10 +240,7 @@ func parseNuvioRecipientIDs(raw any) []string {
 	switch typed := raw.(type) {
 	case []any:
 		for _, item := range typed {
-			value := strings.TrimSpace(parseStringValue(item))
-			if value != "" {
-				result = append(result, value)
-			}
+			result = append(result, parseNuvioRecipientIDs(item)...)
 		}
 	case []string:
 		for _, item := range typed {
@@ -251,6 +249,20 @@ func parseNuvioRecipientIDs(raw any) []string {
 				result = append(result, value)
 			}
 		}
+	case types.JSONRaw:
+		result = append(result, parseNuvioRecipientIDs([]byte(typed))...)
+	case []byte:
+		trimmed := strings.TrimSpace(string(typed))
+		if trimmed == "" {
+			return result
+		}
+
+		decoded := any(nil)
+		if err := json.Unmarshal(typed, &decoded); err != nil {
+			return result
+		}
+
+		result = append(result, parseNuvioRecipientIDs(decoded)...)
 	case string:
 		trimmed := strings.TrimSpace(typed)
 		if trimmed == "" {
@@ -258,15 +270,18 @@ func parseNuvioRecipientIDs(raw any) []string {
 		}
 
 		if strings.HasPrefix(trimmed, "[") {
-			parsed := []string{}
-			if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
-				for _, item := range parsed {
-					value := strings.TrimSpace(item)
-					if value != "" {
-						result = append(result, value)
-					}
-				}
+			decoded := any(nil)
+			if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
+				result = append(result, parseNuvioRecipientIDs(decoded)...)
+				return result
 			}
+		} else {
+			result = append(result, trimmed)
+		}
+	default:
+		value := strings.TrimSpace(parseStringValue(typed))
+		if value != "" {
+			result = append(result, value)
 		}
 	}
 
