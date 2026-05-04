@@ -227,7 +227,7 @@ export const websiteSettingsSchema = {
             key: "reviews",
             label: "Reviews",
             type: "object",
-            editableBy: [ROLE_ADMIN],
+            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
             fields: [
                 {
                     key: "enabled",
@@ -248,6 +248,76 @@ export const websiteSettingsSchema = {
                     label: "Google review link",
                     type: "text",
                     default: "",
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "displayEnabled",
+                    label: "Show reviews on website",
+                    type: "bool",
+                    default: false,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "maxReviews",
+                    label: "Maximum reviews shown",
+                    type: "text",
+                    default: "6",
+                    editableBy: [ROLE_ADMIN],
+                    options: {
+                        pattern: "^[0-9]+$",
+                    },
+                },
+                {
+                    key: "minRating",
+                    label: "Minimum rating",
+                    type: "select",
+                    default: "4",
+                    editableBy: [ROLE_ADMIN],
+                    options: [
+                        { label: "1", value: "1" },
+                        { label: "2", value: "2" },
+                        { label: "3", value: "3" },
+                        { label: "4", value: "4" },
+                        { label: "5", value: "5" },
+                    ],
+                },
+                {
+                    key: "sortOrder",
+                    label: "Sort reviews by",
+                    type: "select",
+                    default: "newest",
+                    editableBy: [ROLE_ADMIN],
+                    options: [
+                        { label: "Newest first", value: "newest" },
+                        { label: "Highest rating", value: "highestRating" },
+                    ],
+                },
+                {
+                    key: "showRating",
+                    label: "Show rating",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "showDate",
+                    label: "Show date",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "showSource",
+                    label: "Show source",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "showReviewerPhoto",
+                    label: "Show reviewer photo",
+                    type: "bool",
+                    default: true,
                     editableBy: [ROLE_ADMIN],
                 },
             ],
@@ -508,12 +578,29 @@ function normalizeFieldValue(field, value) {
 
 function normalizeReviewsSettings(reviewsSettings) {
     const source = isPlainObject(reviewsSettings) ? reviewsSettings : {};
+    const normalizedMinRating = `${source.minRating ?? ""}`.trim();
+    const minRating = ["1", "2", "3", "4", "5"].includes(normalizedMinRating) ? normalizedMinRating : "4";
+    const normalizedSortOrder = `${source.sortOrder ?? ""}`.trim();
+    const sortOrder = ["newest", "highestRating"].includes(normalizedSortOrder) ? normalizedSortOrder : "newest";
+    const rawMaxReviews = `${source.maxReviews ?? ""}`.trim();
+    const parsedMaxReviews = Number.parseInt(rawMaxReviews, 10);
+    const maxReviews = Number.isFinite(parsedMaxReviews) && parsedMaxReviews > 0
+        ? `${Math.min(50, parsedMaxReviews)}`
+        : "6";
 
     return {
         ...source,
         enabled: !!source.enabled,
         googlePlaceId: typeof source.googlePlaceId === "string" ? source.googlePlaceId.trim() : "",
         reviewLink: typeof source.reviewLink === "string" ? source.reviewLink.trim() : "",
+        displayEnabled: !!source.displayEnabled,
+        maxReviews,
+        minRating,
+        sortOrder,
+        showRating: typeof source.showRating === "boolean" ? source.showRating : true,
+        showDate: typeof source.showDate === "boolean" ? source.showDate : true,
+        showSource: typeof source.showSource === "boolean" ? source.showSource : true,
+        showReviewerPhoto: typeof source.showReviewerPhoto === "boolean" ? source.showReviewerPhoto : true,
     };
 }
 

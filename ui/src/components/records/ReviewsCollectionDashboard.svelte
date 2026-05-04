@@ -1,5 +1,6 @@
 <script>
     // NUVIO CUSTOM START: Collection-backed dashboard Reviews module UI.
+    import OverlayPanel from "@/components/base/OverlayPanel.svelte";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
     import { addErrorToast, addInfoToast, addSuccessToast } from "@/stores/toasts";
@@ -8,7 +9,6 @@
 
     const tabKeys = {
         reviews: "reviews",
-        display: "display",
         sources: "sources",
     };
 
@@ -45,6 +45,8 @@
     let sourceFilter = "all";
     let ratingFilter = "all";
     let searchTerm = "";
+    let selectedReviewId = "";
+    let isReviewDetailsActive = false;
 
     let lastWebsitesCollectionId = "";
     let lastDashboardWebsiteId = "";
@@ -66,6 +68,11 @@
     }
 
     $: dashboardState = dashboard?.state || "";
+    $: dashboardSummary = dashboard?.summary || {
+        averageRating: null,
+        totalReviews: 0,
+        lastSyncAt: "",
+    };
     $: allReviews = Array.isArray(dashboard?.reviews) ? dashboard.reviews : [];
     $: normalizedSearchTerm = normalizeLower(searchTerm);
     $: sourceOptions = Array.from(
@@ -97,6 +104,21 @@
 
         return haystack.includes(normalizedSearchTerm);
     });
+    $: selectedReview = allReviews.find((review) => normalizeString(review?.id) === selectedReviewId) || null;
+    $: selectedReviewVisible = selectedReviewId
+        ? filteredReviews.some((review) => normalizeString(review?.id) === selectedReviewId)
+        : false;
+    $: selectedReviewPhotoUrl = resolveReviewerPhotoUrl(selectedReview);
+    $: selectedReviewText = normalizeString(selectedReview?.text);
+    $: selectedReviewAuthorName = resolveReviewAuthorName(selectedReview);
+    $: selectedReviewReviewUrl = normalizeString(selectedReview?.reviewUrl);
+    $: selectedReviewSourceUrl = resolveReviewSourceUrl(selectedReview, dashboard);
+    $: if (isReviewDetailsActive && selectedReviewId && !selectedReviewVisible) {
+        closeReviewDetails();
+    }
+    $: if (isReviewDetailsActive && activeTab !== tabKeys.reviews) {
+        closeReviewDetails();
+    }
 
     export function reload() {
         if (!selectedWebsiteId) {
@@ -106,8 +128,12 @@
         return loadDashboard();
     }
 
+    function normalizeString(value) {
+        return `${value || ""}`.trim();
+    }
+
     function normalizeLower(value) {
-        return `${value || ""}`.trim().toLowerCase();
+        return normalizeString(value).toLowerCase();
     }
 
     function resolveWebsitesSort(collection) {
@@ -206,7 +232,8 @@
 
             addSuccessToast("Reviews synced successfully.");
         } catch (err) {
-            syncError = err?.response?.message || err?.message || "Failed to sync reviews.";
+            ApiClient.error(err);
+            syncError = "Failed to sync reviews right now. Please try again.";
             addErrorToast(syncError);
         }
 
@@ -380,17 +407,90 @@
     function resolveReviewTimeline(review) {
         const parts = [];
 
-        if (`${review?.relativeTime || ""}`.trim()) {
-            parts.push(`${review.relativeTime}`.trim());
+        if (normalizeString(review?.relativeTime)) {
+            parts.push(normalizeString(review.relativeTime));
         }
 
-        if (`${review?.publishedAt || ""}`.trim()) {
+        if (normalizeString(review?.publishedAt)) {
             parts.push(formatDateTime(review.publishedAt));
-        } else if (`${review?.syncedAt || ""}`.trim()) {
+        } else if (normalizeString(review?.syncedAt)) {
             parts.push(`Synced ${formatDateTime(review.syncedAt)}`);
         }
 
-        return parts.join(" · ") || "No date information";
+        return parts.join(" - ") || "No date information";
+    }
+
+    function resolveReviewAuthorName(review) {
+        return normalizeString(review?.authorName) || "Google user";
+    }
+
+    function resolveReviewerPhotoUrl(review) {
+        if (!review || typeof review !== "object") {
+            return "";
+        }
+
+        const reviewer = review?.reviewer && typeof review.reviewer === "object"
+            ? review.reviewer
+            : {};
+        const candidates = [
+            review?.reviewerPhotoUrl,
+            review?.profilePhotoUrl,
+            review?.authorPhotoUrl,
+            review?.authorAvatarUrl,
+            review?.avatarUrl,
+            review?.photoUrl,
+            reviewer?.photoUrl,
+            reviewer?.profilePhotoUrl,
+            reviewer?.avatarUrl,
+        ];
+
+        for (const candidate of candidates) {
+            const value = normalizeString(candidate);
+            if (value) {
+                return value;
+            }
+        }
+
+        return "";
+    }
+
+    function resolveReviewSourceUrl(review, currentDashboard) {
+        const candidates = [currentDashboard?.openOnGoogle, review?.sourceUrl, review?.authorUrl];
+        for (const candidate of candidates) {
+            const value = normalizeString(candidate);
+            if (value) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    function openReviewDetails(review) {
+        const reviewId = normalizeString(review?.id);
+        if (!reviewId) {
+            return;
+        }
+
+        selectedReviewId = reviewId;
+        isReviewDetailsActive = true;
+    }
+
+    function closeReviewDetails() {
+        isReviewDetailsActive = false;
+        selectedReviewId = "";
+    }
+
+    function handleReviewCardKeyDown(event, review) {
+        if (event.target !== event.currentTarget) {
+            return;
+        }
+
+        if (event.key !== "Enter" && event.key !== " ") {
+            return;
+        }
+
+        event.preventDefault();
+        openReviewDetails(review);
     }
 
     function clearReviewsFilters() {
@@ -475,7 +575,7 @@
             <span class="txt-hint">Loading websites...</span>
         </div>
     {:else if !websites.length}
-        <div class="empty-state">No website records are available yet.</div>
+        <div class="empty-state">No websites are available yet.</div>
     {:else if isLoadingDashboard}
         <div class="loading-state">
             <span class="loader loader-sm" />
@@ -515,15 +615,6 @@
             <button
                 type="button"
                 class="tab-item"
-                class:active={activeTab === tabKeys.display}
-                on:click={() => (activeTab = tabKeys.display)}
-            >
-                <i class="ri-layout-grid-line tab-icon" aria-hidden="true" />
-                <span class="tab-label">Display Settings</span>
-            </button>
-            <button
-                type="button"
-                class="tab-item"
                 class:active={activeTab === tabKeys.sources}
                 on:click={() => (activeTab = tabKeys.sources)}
             >
@@ -537,15 +628,15 @@
                 <div class="summary-badges">
                     <span class="summary-pill">
                         <i class="ri-star-smile-line" />
-                        Average rating: <strong>{dashboard.summary.averageRating === null ? "-" : formatRating(dashboard.summary.averageRating)}</strong>
+                        Average rating: <strong>{dashboardSummary.averageRating === null ? "-" : formatRating(dashboardSummary.averageRating)}</strong>
                     </span>
                     <span class="summary-pill">
                         <i class="ri-chat-quote-line" />
-                        Total reviews: <strong>{dashboard.summary.totalReviews}</strong>
+                        Total reviews: <strong>{dashboardSummary.totalReviews}</strong>
                     </span>
                     <span class="summary-pill">
                         <i class="ri-time-line" />
-                        Last sync: <strong>{formatDateTime(dashboard.summary.lastSyncAt)}</strong>
+                        Last sync: <strong>{formatDateTime(dashboardSummary.lastSyncAt)}</strong>
                     </span>
                     <span class="summary-pill">
                         <i class="ri-google-line" />
@@ -553,12 +644,15 @@
                     </span>
                     <span class={`label label-sm ${resolveStateLabelClass(dashboardState)}`}>{resolveStateLabel(dashboardState)}</span>
                 </div>
+                <p class="txt-xs txt-hint m-b-0 reviews-usage-note">
+                    Synced reviews can be used as reference or copied into website content sections. Public testimonials are managed through page content blocks.
+                </p>
             </section>
 
             <section class="panel reviews-filters-panel">
                 <div class="reviews-filters-head">
                     <h5 class="m-0">Reviews list</h5>
-                    <span class="txt-sm txt-hint">{filteredReviews.length} shown · {allReviews.length} total</span>
+                    <span class="txt-sm txt-hint">{filteredReviews.length} shown - {allReviews.length} total</span>
                 </div>
                 <div class="reviews-filter-grid">
                     <div class="control-item">
@@ -607,10 +701,20 @@
                     <div class="list list-compact">
                         <div class="list-content">
                             {#each filteredReviews as review (review.id)}
-                                <article class="list-item review-row-item">
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <article
+                                    class="list-item review-row-item"
+                                    class:selected={isReviewDetailsActive && selectedReviewId === normalizeString(review.id)}
+                                    role="button"
+                                    tabindex="0"
+                                    aria-label={`Open review details from ${resolveReviewAuthorName(review)}`}
+                                    on:click={() => openReviewDetails(review)}
+                                    on:keydown={(event) => handleReviewCardKeyDown(event, review)}
+                                >
                                     <div class="content review-row-main">
                                         <div class="review-row-head">
-                                            <h6 class="m-0 review-author">{review.authorName || "Google user"}</h6>
+                                            <h6 class="m-0 review-author">{resolveReviewAuthorName(review)}</h6>
                                             <span class="label label-sm label-info">{resolveSourceLabel(review.source)}</span>
                                         </div>
 
@@ -631,8 +735,8 @@
                                         <button
                                             type="button"
                                             class="btn btn-xs btn-outline"
-                                            disabled={!`${review.text || ""}`.trim()}
-                                            on:click={() => copyText(review.text, "Review text")}
+                                            disabled={!normalizeString(review.text)}
+                                            on:click|stopPropagation={() => copyText(review.text, "Review text")}
                                         >
                                             <i class="ri-file-copy-line" />
                                             <span class="txt">Copy text</span>
@@ -641,7 +745,7 @@
                                             <button
                                                 type="button"
                                                 class="btn btn-xs btn-outline"
-                                                on:click={() => openExternal(review.reviewUrl)}
+                                                on:click|stopPropagation={() => openExternal(review.reviewUrl)}
                                             >
                                                 <i class="ri-external-link-line" />
                                                 <span class="txt">Open</span>
@@ -653,14 +757,6 @@
                         </div>
                     </div>
                 {/if}
-            </section>
-        {:else if activeTab === tabKeys.display}
-            <section class="panel placeholder-tab-panel">
-                <h5 class="m-0 m-b-xs">Display settings</h5>
-                <p class="txt-sm txt-hint m-b-0">Display settings are not configured yet.</p>
-                <p class="txt-sm txt-hint m-b-0">
-                    Review display controls will be available once the public reviews widget is enabled.
-                </p>
             </section>
         {:else}
             <section class="panel sources-tab-panel">
@@ -684,7 +780,7 @@
                     </div>
                     <div class="source-item">
                         <span class="source-label">Last sync</span>
-                        <span class="source-value">{formatDateTime(dashboard.summary.lastSyncAt)}</span>
+                        <span class="source-value">{formatDateTime(dashboardSummary.lastSyncAt)}</span>
                     </div>
                 </div>
 
@@ -767,6 +863,148 @@
     {/if}
 </section>
 
+<OverlayPanel
+    bind:active={isReviewDetailsActive}
+    class="overlay-panel-lg review-details-panel"
+    overlayClose={true}
+    escClose={true}
+    on:hide={closeReviewDetails}
+>
+    <svelte:fragment slot="header">
+        <h4>Review details</h4>
+    </svelte:fragment>
+
+    {#if selectedReview}
+        <div class="review-detail-layout">
+            <div class="review-detail-badges">
+                <span class="label label-sm label-info">{resolveSourceLabel(selectedReview.source)}</span>
+                <span class="label label-sm label-warning">Rating {formatRating(selectedReview.rating)}</span>
+            </div>
+
+            <section class="review-detail-section">
+                <div class="review-detail-section-head">
+                    <h5 class="m-0">Review</h5>
+                </div>
+                <div class="review-detail-grid">
+                    <div class="review-detail-row">
+                        <span class="txt-xs txt-hint">Author</span>
+                        <span class="txt-sm">{selectedReviewAuthorName}</span>
+                    </div>
+
+                    <div class="review-detail-row">
+                        <span class="txt-xs txt-hint">Rating</span>
+                        <div class="review-rating-row">
+                            <span class="review-stars" aria-label={`Rating ${formatRating(selectedReview.rating)} out of 5`}>
+                                {#each buildStarSlots(selectedReview.rating) as isFilled, index (`${selectedReview.id}_detail_star_${index}`)}
+                                    <i class={isFilled ? "ri-star-fill" : "ri-star-line"} aria-hidden="true" />
+                                {/each}
+                            </span>
+                            <span class="txt-sm review-rating-value">{formatRating(selectedReview.rating)}</span>
+                        </div>
+                    </div>
+
+                    {#if selectedReviewPhotoUrl}
+                        <div class="review-detail-row review-detail-row-photo">
+                            <span class="txt-xs txt-hint">Reviewer photo</span>
+                            <div class="reviewer-photo-wrap">
+                                <img src={selectedReviewPhotoUrl} alt={`Photo of ${selectedReviewAuthorName}`} loading="lazy" />
+                            </div>
+                        </div>
+                    {/if}
+
+                    <div class="review-detail-row review-detail-row-block">
+                        <span class="txt-xs txt-hint">Review text</span>
+                        <p class="txt-sm m-b-0">{selectedReviewText || "No review text was provided."}</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="review-detail-section">
+                <div class="review-detail-section-head">
+                    <h5 class="m-0">Source</h5>
+                </div>
+                <div class="review-detail-grid">
+                    <div class="review-detail-row">
+                        <span class="txt-xs txt-hint">Source</span>
+                        <span class="txt-sm">{resolveSourceLabel(selectedReview.source)}</span>
+                    </div>
+                    {#if normalizeString(selectedReview.relativeTime)}
+                        <div class="review-detail-row">
+                            <span class="txt-xs txt-hint">Relative time</span>
+                            <span class="txt-sm">{normalizeString(selectedReview.relativeTime)}</span>
+                        </div>
+                    {/if}
+                    {#if normalizeString(selectedReview.publishedAt)}
+                        <div class="review-detail-row">
+                            <span class="txt-xs txt-hint">Published</span>
+                            <span class="txt-sm">{formatDateTime(selectedReview.publishedAt)}</span>
+                        </div>
+                    {/if}
+                    {#if normalizeString(selectedReview.syncedAt)}
+                        <div class="review-detail-row">
+                            <span class="txt-xs txt-hint">Synced at</span>
+                            <span class="txt-sm">{formatDateTime(selectedReview.syncedAt)}</span>
+                        </div>
+                    {/if}
+                    {#if selectedReviewReviewUrl}
+                        <div class="review-detail-row">
+                            <span class="txt-xs txt-hint">Review URL</span>
+                            <span class="txt-sm review-detail-url">{selectedReviewReviewUrl}</span>
+                        </div>
+                    {/if}
+                </div>
+            </section>
+
+            <section class="review-detail-section">
+                <div class="review-detail-section-head">
+                    <h5 class="m-0">Actions</h5>
+                </div>
+                <div class="review-detail-actions">
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline"
+                        disabled={!selectedReviewText}
+                        on:click={() => copyText(selectedReviewText, "Review text")}
+                    >
+                        <i class="ri-file-copy-line" />
+                        <span class="txt">Copy review text</span>
+                    </button>
+                    {#if selectedReviewReviewUrl}
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-outline"
+                            on:click={() => openExternal(selectedReviewReviewUrl)}
+                        >
+                            <i class="ri-external-link-line" />
+                            <span class="txt">Open review URL</span>
+                        </button>
+                    {/if}
+                    {#if selectedReviewSourceUrl}
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-outline"
+                            on:click={() => openExternal(selectedReviewSourceUrl)}
+                        >
+                            <i class="ri-google-line" />
+                            <span class="txt">Open on Google</span>
+                        </button>
+                    {/if}
+                </div>
+            </section>
+        </div>
+    {:else}
+        <div class="empty-state m-b-0">
+            Review details are no longer available. Close this drawer and choose another review.
+        </div>
+    {/if}
+
+    <svelte:fragment slot="footer">
+        <button type="button" class="btn btn-outline btn-sm" on:click={closeReviewDetails}>
+            <span class="txt">Close</span>
+        </button>
+    </svelte:fragment>
+</OverlayPanel>
+
 <style>
     .reviews-dashboard-module {
         display: flex;
@@ -843,6 +1081,20 @@
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: flex-start;
         gap: 10px;
+        cursor: pointer;
+        transition: border-color var(--baseAnimationSpeed), box-shadow var(--baseAnimationSpeed);
+    }
+
+    .review-row-item:hover,
+    .review-row-item:focus-visible {
+        border-color: var(--baseAlt3Color);
+        box-shadow: 0 0 0 2px var(--baseAltColor);
+        outline: none;
+    }
+
+    .review-row-item.selected {
+        border-color: var(--baseAlt3Color);
+        box-shadow: 0 0 0 2px var(--baseAltColor);
     }
 
     .review-row-main {
@@ -898,10 +1150,8 @@
         flex-wrap: wrap;
     }
 
-    .placeholder-tab-panel {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
+    .reviews-usage-note {
+        margin-top: 8px;
     }
 
     .sources-head {
@@ -991,6 +1241,93 @@
         margin-bottom: 0;
     }
 
+    :global(.review-details-panel .panel-content) {
+        padding: calc(var(--baseSpacing) - 8px);
+    }
+
+    .review-detail-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .review-detail-badges {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .review-detail-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .review-detail-section + .review-detail-section {
+        padding-top: 8px;
+        border-top: 1px solid var(--baseAlt2Color);
+    }
+
+    .review-detail-section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+    }
+
+    .review-detail-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .review-detail-row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 10px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
+    }
+
+    .review-detail-row-block p {
+        white-space: pre-wrap;
+    }
+
+    .review-detail-row-photo {
+        align-items: flex-start;
+    }
+
+    .reviewer-photo-wrap {
+        display: inline-flex;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        overflow: hidden;
+        width: 56px;
+        height: 56px;
+    }
+
+    .reviewer-photo-wrap img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .review-detail-url {
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    .review-detail-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding-top: 2px;
+    }
+
     @media (max-width: 900px) {
         .reviews-filter-grid {
             grid-template-columns: repeat(2, minmax(180px, 1fr));
@@ -1021,3 +1358,4 @@
         }
     }
 </style>
+

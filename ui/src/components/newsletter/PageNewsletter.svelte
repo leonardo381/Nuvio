@@ -1,5 +1,5 @@
 <script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
-    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
+    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    const subscriberGroupsFieldAliases = ["groups", "groupIds", "subscriberGroups", "subscriber_groups"];    const campaignRecipientsTypeFieldAliases = ["recipientsType", "recipientType", "recipients_type"];    const campaignRecipientsIdsFieldAliases = ["recipientsIds", "recipientIds", "recipients_ids"];    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
     let isLoadingWebsites = false;    let isLoadingSubscribers = false;
@@ -48,11 +48,14 @@
     $: subscriberGroupsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribergroups") || null;
     $: missingCollectionNames = [];    $: if (!subscribersCollection?.id) {        missingCollectionNames.push("Subscribers");    }    $: if (!campaignsCollection?.id) {        missingCollectionNames.push("Campaigns");    };    $: hasNewsletterCollections = missingCollectionNames.length === 0;
     $: subscriberFieldKeys = new Set(
-        !!subscribersCollection?.id
-            ? CommonHelper.getAllCollectionIdentifiers(subscribersCollection).map((field) => `${field || ""}`.trim().toLowerCase())
+        Array.isArray(subscribersCollection?.fields)
+            ? subscribersCollection.fields.map((field) => `${field?.name || ""}`.trim().toLowerCase()).filter(Boolean)
             : [],
     );
-    $: subscribersSupportsGroupsField = subscriberFieldKeys.has("groups");
+    $: subscriberGroupsFieldName = resolveCollectionFieldNameForMultiSelectAlias(subscribersCollection, subscriberGroupsFieldAliases);
+    $: campaignRecipientsTypeFieldName = resolveCollectionFieldName(campaignsCollection, campaignRecipientsTypeFieldAliases) || "recipientsType";
+    $: campaignRecipientsIdsFieldName = resolveCollectionFieldName(campaignsCollection, campaignRecipientsIdsFieldAliases) || "recipientsIds";
+    $: subscribersSupportsGroupsField = !!subscriberGroupsFieldName;
     $: subscribersSupportsNameField = subscriberFieldKeys.has("name");
     $: subscribersSupportsSourceField = subscriberFieldKeys.has("source");
     $: hasSubscriberGroupsFeature = !!subscriberGroupsCollection?.id && subscribersSupportsGroupsField;
@@ -160,7 +163,7 @@
         cancelEditSubscriber();
     }
     // Keep context in URL query so refresh/navigation preserves website and active tab.
-    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function normalizeSubscriberName(name) {
+    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function resolveCollectionFieldName(collection, aliases = []) {        if (!collection || !Array.isArray(collection.fields)) {            return "";        }        const normalizedAliases = aliases.map((alias) => `${alias || ""}`.trim().toLowerCase()).filter(Boolean);        for (const field of collection.fields) {            const fieldName = `${field?.name || ""}`.trim();            if (!fieldName) {                continue;            }            if (normalizedAliases.includes(fieldName.toLowerCase())) {                return fieldName;            }        }        return "";    }    function normalizeIdList(value) {        if (Array.isArray(value)) {            return [...new Set(                value                    .map((item) => `${item || ""}`.trim())                    .filter(Boolean),            )];        }        if (typeof value === "string") {            const trimmed = value.trim();            if (!trimmed) {                return [];            }            if (trimmed.startsWith("[")) {                try {                    const parsed = JSON.parse(trimmed);                    return normalizeIdList(parsed);                } catch (err) {                    return [];                }            }            return [trimmed];        }        return [];    }    function getCampaignRecipientsType(campaign) {        const rawType = campaign?.[campaignRecipientsTypeFieldName] ?? campaign?.recipientsType ?? "all";        return normalizeStatus(rawType || "all");    }    function getCampaignRecipientIds(campaign) {        const rawIds = campaign?.[campaignRecipientsIdsFieldName] ?? campaign?.recipientsIds;        return normalizeIdList(rawIds);    }    function normalizeSubscriberName(name) {
         return `${name || ""}`.trim().replace(/\s+/g, " ");
     }    function resolveSubscriberDisplayName(subscriber) {
         return normalizeSubscriberName(subscriber?.name);
@@ -221,7 +224,10 @@
     }
 
     function getSubscriberGroupIds(subscriber) {
-        return Array.isArray(subscriber?.groups) ? subscriber.groups.filter(Boolean) : [];
+        if (!subscriberGroupsFieldName) {
+            return [];
+        }
+        return normalizeIdList(subscriber?.[subscriberGroupsFieldName]);
     }
 
     function hasSubscriberGroup(subscriber, groupId) {
@@ -235,6 +241,11 @@
         return activeSubscribers
             .filter((subscriber) => hasSubscriberGroup(subscriber, groupId))
             .map((subscriber) => subscriber.id);
+    }
+
+    function normalizeManualAudienceRecipientIds(ids) {
+        const activeIds = new Set(activeSubscribers.map((subscriber) => subscriber.id));
+        return normalizeIdList(ids).filter((id) => activeIds.has(id));
     }
 
     function isManualGroupFullySelected(groupId) {
@@ -327,13 +338,13 @@
             return "Campaign body is required.";
         }
 
-        if (!Array.isArray(recipientsIds) || !recipientsIds.length) {
+        if (!normalizeManualAudienceRecipientIds(recipientsIds).length) {
             return "Select at least one recipient.";
         }
 
         return "";
     }
-    function resolveCampaignRecipientsCount(campaign) {        if (!campaign) {            return 0;        }        const recipientsType = `${campaign.recipientsType || "all"}`.toLowerCase();        if (recipientsType === "manual") {            return Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean).length : 0;        }        return activeSubscribers.length;    }    function getSendCampaignDisabledReason(campaign) {        if (!campaign?.id) {            return "Invalid campaign.";        }        if (isSendingCampaign[campaign.id]) {            return "Sending campaign...";        }        if (normalizeStatus(campaign.status) === "sent") {            return "Campaign already sent.";        }        if (resolveCampaignRecipientsCount(campaign) < 1) {            return "No eligible recipients.";        }        return "";    }    function resolveCampaignStatusLabelClass(status) {
+    function resolveCampaignRecipientsCount(campaign) {        if (!campaign) {            return 0;        }        const recipientsType = getCampaignRecipientsType(campaign);        if (recipientsType === "manual") {            return normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign)).length;        }        return activeSubscribers.length;    }    function campaignHasUnsavedComposerChanges(campaign) {        if (!campaign?.id || campaign.id !== editingCampaignId) {            return false;        }        if (`${campaignForm.subject || ""}`.trim() !== `${campaign?.subject || ""}`.trim()) {            return true;        }        if (`${campaignForm.body || ""}`.trim() !== `${campaign?.body || ""}`.trim()) {            return true;        }        const composerRecipients = normalizeManualAudienceRecipientIds(campaignForm.recipientsIds);        const persistedRecipients = normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign));        if (composerRecipients.length !== persistedRecipients.length) {            return true;        }        const persistedSet = new Set(persistedRecipients);        return composerRecipients.some((id) => !persistedSet.has(id));    }    function getSendCampaignDisabledReason(campaign) {        if (!campaign?.id) {            return "Invalid campaign.";        }        if (isSendingCampaign[campaign.id]) {            return "Sending campaign...";        }        if (normalizeStatus(campaign.status) === "sent") {            return "Campaign already sent.";        }        if (campaignHasUnsavedComposerChanges(campaign)) {            return "Update draft before sending to save latest audience changes.";        }        if (resolveCampaignRecipientsCount(campaign) < 1) {            return "No eligible recipients.";        }        return "";    }    function resolveCampaignStatusLabelClass(status) {
         const normalized = normalizeStatus(status);
         if (normalized === "sent") {
             return "label-success";
@@ -356,7 +367,7 @@
     }
 
     function resolveCampaignAudienceLabel(campaign) {
-        const recipientsType = normalizeStatus(campaign?.recipientsType || "all");
+        const recipientsType = getCampaignRecipientsType(campaign);
         return recipientsType === "manual" ? "Manual" : "All active";
     }
 
@@ -531,6 +542,75 @@
             editingSubscriberError = "";
         }
     }
+
+    function resolveCollectionFieldNameByAliasPriority(collection, aliases = []) {
+        if (!collection || !Array.isArray(collection.fields)) {
+            return "";
+        }
+
+        const normalizedAliases = aliases.map((alias) => `${alias || ""}`.trim().toLowerCase()).filter(Boolean);
+        if (!normalizedAliases.length) {
+            return "";
+        }
+
+        const fieldsByNormalizedName = new Map(
+            collection.fields
+                .map((field) => {
+                    const fieldName = `${field?.name || ""}`.trim();
+                    if (!fieldName) {
+                        return null;
+                    }
+                    return [fieldName.toLowerCase(), fieldName];
+                })
+                .filter(Boolean),
+        );
+
+        for (const alias of normalizedAliases) {
+            const resolvedName = fieldsByNormalizedName.get(alias);
+            if (resolvedName) {
+                return resolvedName;
+            }
+        }
+
+        return "";
+    }
+
+    function resolveCollectionFieldNameForMultiSelectAlias(collection, aliases = []) {
+        if (!collection || !Array.isArray(collection.fields)) {
+            return "";
+        }
+
+        const normalizedAliases = aliases.map((alias) => `${alias || ""}`.trim().toLowerCase()).filter(Boolean);
+        if (!normalizedAliases.length) {
+            return "";
+        }
+
+        const aliasCandidates = collection.fields.filter((field) => {
+            const fieldName = `${field?.name || ""}`.trim().toLowerCase();
+            return fieldName && normalizedAliases.includes(fieldName);
+        });
+
+        const multiValueCandidate = aliasCandidates.find((field) => {
+            const fieldType = `${field?.type || ""}`.trim().toLowerCase();
+            const maxSelect = Number(field?.maxSelect ?? 1);
+            return ["relation", "select", "file"].includes(fieldType) && maxSelect !== 1;
+        });
+
+        if (multiValueCandidate?.name) {
+            return `${multiValueCandidate.name}`.trim();
+        }
+
+        return resolveCollectionFieldNameByAliasPriority(collection, aliases);
+    }
+
+    function hasSelectedGroup(selectedGroupIds, groupId) {
+        const normalizedGroupId = `${groupId || ""}`.trim();
+        if (!normalizedGroupId) {
+            return false;
+        }
+        return normalizeIdList(selectedGroupIds).includes(normalizedGroupId);
+    }
+
     function focusSubscriberEmailInput() {
         subscriberEmailInput?.focus();
     }
@@ -542,10 +622,15 @@
 
         clearSubscriberFormError();
 
-        const currentGroupIds = Array.isArray(subscriberForm.groupIds) ? subscriberForm.groupIds : [];
-        const nextGroupIds = currentGroupIds.includes(groupId)
-            ? currentGroupIds.filter((id) => id !== groupId)
-            : [...currentGroupIds, groupId];
+        const normalizedGroupId = `${groupId || ""}`.trim();
+        if (!normalizedGroupId) {
+            return;
+        }
+
+        const currentGroupIds = normalizeIdList(subscriberForm.groupIds);
+        const nextGroupIds = currentGroupIds.includes(normalizedGroupId)
+            ? currentGroupIds.filter((id) => id !== normalizedGroupId)
+            : [...currentGroupIds, normalizedGroupId];
 
         subscriberForm = { ...subscriberForm, groupIds: nextGroupIds };
     }
@@ -583,12 +668,34 @@
 
         clearEditingSubscriberError();
 
-        const currentGroupIds = Array.isArray(editingSubscriberForm.groupIds) ? editingSubscriberForm.groupIds : [];
-        const nextGroupIds = currentGroupIds.includes(groupId)
-            ? currentGroupIds.filter((id) => id !== groupId)
-            : [...currentGroupIds, groupId];
+        const normalizedGroupId = `${groupId || ""}`.trim();
+        if (!normalizedGroupId) {
+            return;
+        }
+
+        const currentGroupIds = normalizeIdList(editingSubscriberForm.groupIds);
+        const nextGroupIds = currentGroupIds.includes(normalizedGroupId)
+            ? currentGroupIds.filter((id) => id !== normalizedGroupId)
+            : [...currentGroupIds, normalizedGroupId];
 
         editingSubscriberForm = { ...editingSubscriberForm, groupIds: nextGroupIds };
+    }
+
+    function autoSelectCreatedGroupForCurrentFlow(groupId) {
+        if (!groupId || !hasSubscriberGroupsFeature) {
+            return;
+        }
+
+        if (editingSubscriberId) {
+            const nextEditingGroupIds = new Set(normalizeIdList(editingSubscriberForm.groupIds));
+            nextEditingGroupIds.add(groupId);
+            editingSubscriberForm = { ...editingSubscriberForm, groupIds: [...nextEditingGroupIds] };
+            return;
+        }
+
+        const nextCreateGroupIds = new Set(normalizeIdList(subscriberForm.groupIds));
+        nextCreateGroupIds.add(groupId);
+        subscriberForm = { ...subscriberForm, groupIds: [...nextCreateGroupIds] };
     }
     function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return campaignForm.recipientsIds.includes(subscriberId);    }    function toggleManualRecipient(subscriberId) {        clearCampaignFormError();        if (campaignForm.recipientsIds.includes(subscriberId)) {            campaignForm.recipientsIds = campaignForm.recipientsIds.filter((id) => id !== subscriberId);        } else {            campaignForm.recipientsIds = [...campaignForm.recipientsIds, subscriberId];        }    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
@@ -711,7 +818,7 @@
         const email = normalizedSubscriberFormEmail;        if (!isValidEmail(email)) {            subscriberFormError = "Please provide a valid subscriber email.";            return;        }        if (subscriberAlreadyExists) {            subscriberFormError = "This email is already subscribed for this website.";            return;        }        subscriberFormError = "";        isCreatingSubscriber = true;        try {            const payload = {
                 website: selectedWebsiteId,
                 email,
-                status: subscriberForm.status,
+                status: "pending",
             };
             if (subscribersSupportsNameField) {
                 payload.name = normalizeSubscriberName(subscriberForm.name);
@@ -720,11 +827,7 @@
                 payload.source = subscriberLeadSource;
             }
             if (hasSubscriberGroupsFeature && Array.isArray(subscriberForm.groupIds) && subscriberForm.groupIds.length) {
-                payload.groups = subscriberForm.groupIds;
-            }
-
-            if (subscriberForm.status === "active") {
-                payload.confirmedAt = new Date().toISOString();
+                payload[subscriberGroupsFieldName] = normalizeIdList(subscriberForm.groupIds);
             }
             await ApiClient.collection(subscribersCollection.id).create(payload);            subscriberForm = {
                 name: "",
@@ -765,7 +868,7 @@
             }
 
             if (hasSubscriberGroupsFeature) {
-                payload.groups = Array.isArray(editingSubscriberForm.groupIds) ? editingSubscriberForm.groupIds : [];
+                payload[subscriberGroupsFieldName] = normalizeIdList(editingSubscriberForm.groupIds);
             }
 
             if (payload.status === "active" && !subscriber.confirmedAt) {
@@ -829,13 +932,14 @@
         isCreatingSubscriberGroup = true;
 
         try {
-            await ApiClient.collection(subscriberGroupsCollection.id).create({
+            const createdGroup = await ApiClient.collection(subscriberGroupsCollection.id).create({
                 website: selectedWebsiteId,
                 name,
                 slug: slugifyGroupName(name),
             });
 
             subscriberGroupForm = { name: "" };
+            autoSelectCreatedGroupForCurrentFlow(createdGroup?.id);
             await loadSubscriberGroups();
             addSuccessToast("Subscriber group added.");
         } catch (err) {
@@ -869,9 +973,9 @@
             return;
         }
 
-        const previousRecipientsType = `${campaign.recipientsType || "all"}`.toLowerCase();
+        const previousRecipientsType = getCampaignRecipientsType(campaign);
         const resolvedRecipientsIds = previousRecipientsType === "manual"
-            ? (Array.isArray(campaign.recipientsIds) ? campaign.recipientsIds.filter(Boolean) : [])
+            ? normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign))
             : activeSubscribers.map((subscriber) => subscriber.id);
 
         editingCampaignId = campaign.id;
@@ -906,14 +1010,17 @@
         }
 
         campaignFormError = "";
+        const normalizedRecipientsIds = normalizeManualAudienceRecipientIds(campaignForm.recipientsIds);
         const payload = {
             website: selectedWebsiteId,
             subject: `${campaignForm.subject || ""}`.trim(),
             body: `${campaignForm.body || ""}`.trim(),
             status: "draft",
             recipientsType: "manual",
-            recipientsIds: Array.isArray(campaignForm.recipientsIds) ? campaignForm.recipientsIds : [],
+            recipientsIds: normalizedRecipientsIds,
         };
+        payload[campaignRecipientsTypeFieldName] = "manual";
+        payload[campaignRecipientsIdsFieldName] = normalizedRecipientsIds;
 
         if (editingCampaignId) {
             isSavingCampaign = true;
@@ -1064,8 +1171,7 @@
 
                             {#if isSubscriberCreateOpen}
                                 <form class="subscriber-create-form subscriber-inline-create m-b-sm" on:submit|preventDefault={createSubscriber}>
-                                <div class="subscriber-create-top">
-                                    <div class="create-email-field" class:with-name={subscribersSupportsNameField}>
+                                    <div class="subscriber-create-row subscriber-create-row-primary" class:no-name={!subscribersSupportsNameField}>
                                         {#if subscribersSupportsNameField}
                                             <div class="create-name-field">
                                                 <label class="txt-sm txt-hint block m-b-5" for="subscriber-name">Name (optional)</label>
@@ -1079,7 +1185,7 @@
                                                 />
                                             </div>
                                         {/if}
-                                        <div class="create-email-inline-field">
+                                        <div class="create-email-field">
                                             <label class="txt-sm txt-hint block m-b-5" for="subscriber-email">Email</label>
                                             <input
                                                 id="subscriber-email"
@@ -1091,59 +1197,44 @@
                                                 on:input={clearSubscriberFormError}
                                             />
                                         </div>
-                                    </div>
-                                    <div class="create-status-field">
-                                        <label class="txt-sm txt-hint block m-b-5" for="subscriber-status">Status</label>
-                                        <select
-                                            id="subscriber-status"
-                                            class="input input-sm"
-                                            bind:value={subscriberForm.status}
-                                            on:change={clearSubscriberFormError}
-                                        >
-                                            {#each subscriberStatuses as status}
-                                                <option value={status}>{status}</option>
-                                            {/each}
-                                        </select>
-                                    </div>
-                                    <div class="create-action-field">
-                                        <button
-                                            type="submit"
-                                            class="btn add-subscriber-btn"
-                                            class:btn-loading={isCreatingSubscriber}
-                                            disabled={!!createSubscriberDisabledReason}
-                                            title={createSubscriberDisabledReason || null}
-                                        >
-                                            <span class="txt">Add subscriber</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                {#if hasSubscriberGroupsFeature}
-                                    <div class="subscriber-groups-row">
-                                        <div class="subscriber-groups-select">
-                                            <label class="txt-sm txt-hint block m-b-5">Assign groups (optional)</label>
-                                            <div class="group-pill-list form-group-pill-list">
-                                                {#if isLoadingSubscriberGroups}
-                                                    <span class="txt-sm txt-hint">Loading groups...</span>
-                                                {:else if !subscriberGroups.length}
-                                                    <span class="txt-sm txt-hint">No groups yet. Create your first group.</span>
-                                                {:else}
-                                                    {#each subscriberGroups as group (group.id)}
-                                                        <button
-                                                            type="button"
-                                                            class="group-pill-btn"
-                                                            class:is-selected={subscriberForm.groupIds.includes(group.id)}
-                                                            on:click={() => toggleSubscriberFormGroup(group.id)}
-                                                        >
-                                                            {group.name}
-                                                        </button>
-                                                    {/each}
-                                                {/if}
-                                            </div>
+                                        <div class="create-action-field">
+                                            <button
+                                                type="submit"
+                                                class="btn add-subscriber-btn"
+                                                class:btn-loading={isCreatingSubscriber}
+                                                disabled={!!createSubscriberDisabledReason}
+                                                title={createSubscriberDisabledReason || null}
+                                            >
+                                                <span class="txt">Add subscriber</span>
+                                            </button>
                                         </div>
+                                    </div>
+                                    {#if hasSubscriberGroupsFeature}
+                                        <div class="subscriber-create-row subscriber-create-row-groups">
+                                            <div class="subscriber-groups-select">
+                                                <label class="txt-sm txt-hint block m-b-5">Assign groups (optional)</label>
+                                                <div class="group-pill-list form-group-pill-list">
+                                                    {#if isLoadingSubscriberGroups}
+                                                        <span class="txt-sm txt-hint">Loading groups...</span>
+                                                    {:else if !subscriberGroups.length}
+                                                        <span class="txt-sm txt-hint">No groups yet. Create your first group.</span>
+                                                    {:else}
+                                                        {#each subscriberGroups as group (group.id)}
+                                                            <button
+                                                                type="button"
+                                                                class="group-pill-btn"
+                                                                class:is-selected={hasSelectedGroup(subscriberForm.groupIds, group.id)}
+                                                                on:click={() => toggleSubscriberFormGroup(group.id)}
+                                                            >
+                                                                {group.name}
+                                                            </button>
+                                                        {/each}
+                                                    {/if}
+                                                </div>
+                                            </div>
 
-                                        <div class="subscriber-groups-create">
-                                            <label class="txt-sm txt-hint block m-b-5" for="subscriber-group-name">Create group</label>
-                                            <div class="group-create-row">
+                                            <div class="subscriber-groups-input">
+                                                <label class="txt-sm txt-hint block m-b-5" for="subscriber-group-name">Create group</label>
                                                 <input
                                                     id="subscriber-group-name"
                                                     type="text"
@@ -1152,6 +1243,9 @@
                                                     bind:value={subscriberGroupForm.name}
                                                     on:input={clearSubscriberGroupFormError}
                                                 />
+                                            </div>
+
+                                            <div class="subscriber-groups-action">
                                                 <button
                                                     type="button"
                                                     class="btn btn-sm btn-outline"
@@ -1164,8 +1258,7 @@
                                                 </button>
                                             </div>
                                         </div>
-                                    </div>
-                                {/if}
+                                    {/if}
                                 {#if subscriberFormError}
                                     <div>
                                         <div class="txt-sm txt-danger">{subscriberFormError}</div>
@@ -1315,15 +1408,15 @@
                                                                 {#if hasSubscriberGroupsFeature}
                                                                     <div class="subscriber-edit-groups">
                                                                         <label class="txt-xs txt-hint block m-b-5">Groups</label>
-                                                                        <div class="group-pill-list row-group-pill-list">
+                                                                        <div class="group-pill-list form-group-pill-list">
                                                                             {#if !subscriberGroups.length}
                                                                                 <span class="txt-xs txt-hint">No groups created yet.</span>
                                                                             {:else}
                                                                                 {#each subscriberGroups as group (group.id)}
                                                                                     <button
                                                                                         type="button"
-                                                                                        class="group-pill-btn row-group-pill-btn"
-                                                                                        class:is-selected={editingSubscriberForm.groupIds.includes(group.id)}
+                                                                                        class="group-pill-btn"
+                                                                                        class:is-selected={hasSelectedGroup(editingSubscriberForm.groupIds, group.id)}
                                                                                         on:click={() => toggleEditingSubscriberGroup(group.id)}
                                                                                     >
                                                                                         {group.name}
@@ -2083,6 +2176,7 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
+        width: 100%;
     }
 
     .subscriber-inline-create {
@@ -2092,37 +2186,33 @@
         padding: 0;
     }
 
-    .subscriber-create-top {
+    .subscriber-create-row {
         display: grid;
-        grid-template-columns: minmax(260px, 1fr) minmax(160px, 220px) minmax(140px, 170px);
         gap: 10px 12px;
         align-items: end;
     }
 
+    .subscriber-create-row-primary {
+        grid-template-columns: minmax(200px, 1fr) minmax(260px, 1fr) minmax(140px, 170px);
+    }
+
+    .subscriber-create-row-primary.no-name {
+        grid-template-columns: minmax(340px, 1fr) minmax(140px, 170px);
+    }
+
+    .subscriber-create-row-groups {
+        grid-template-columns: minmax(0, 1fr) minmax(180px, 260px) auto;
+        padding-top: 4px;
+    }
+
+    .create-name-field,
     .create-email-field,
-    .create-status-field,
     .create-action-field {
         min-width: 0;
     }
 
-    .create-email-field {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 10px;
-        align-items: end;
-    }
-
-    .create-email-field.with-name {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    }
-
-    .create-name-field,
-    .create-email-inline-field {
-        min-width: 0;
-    }
-
     .create-name-field .input,
-    .create-email-inline-field .input {
+    .create-email-field .input {
         width: 100%;
     }
 
@@ -2136,17 +2226,21 @@
         justify-content: flex-end;
     }
 
-    .subscriber-groups-row {
-        display: grid;
-        grid-template-columns: minmax(260px, 1fr) minmax(260px, 340px);
-        gap: 10px 12px;
-        align-items: end;
-        padding-top: 4px;
+    .subscriber-groups-select,
+    .subscriber-groups-input,
+    .subscriber-groups-action {
+        min-width: 0;
     }
 
-    .subscriber-groups-select,
-    .subscriber-groups-create {
-        min-width: 0;
+    .subscriber-groups-action {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .subscriber-groups-action .btn {
+        min-height: var(--smBtnHeight);
+        white-space: nowrap;
+        min-width: 102px;
     }
 
     .subscriber-filter-grid {
@@ -2163,22 +2257,6 @@
 
     .control-item {
         min-width: 0;
-    }
-
-    .group-create-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    .group-create-row .input {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .group-create-row .btn {
-        flex: 0 0 auto;
-        min-height: var(--smBtnHeight);
     }
 
     .group-pill-list {
@@ -3004,25 +3082,20 @@
             justify-content: space-between;
         }
 
-        .subscriber-create-top {
-            grid-template-columns: minmax(220px, 1fr) minmax(150px, 200px);
+        .subscriber-create-row-primary {
+            grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(140px, 170px);
         }
 
-        .create-email-field {
-            grid-template-columns: 1fr;
+        .subscriber-create-row-primary.no-name {
+            grid-template-columns: minmax(220px, 1fr) minmax(140px, 170px);
         }
 
-        .create-email-field.with-name {
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        .subscriber-create-row-groups {
+            grid-template-columns: minmax(0, 1fr) minmax(180px, 230px) auto;
         }
 
         .create-action-field {
-            grid-column: 1 / -1;
             justify-content: flex-end;
-        }
-
-        .subscriber-groups-row {
-            grid-template-columns: 1fr;
         }
 
         .subscriber-edit-grid {
@@ -3107,13 +3180,14 @@
     }
 
     @media (max-width: 640px) {
-        .subscriber-create-top {
+        .subscriber-create-row-primary,
+        .subscriber-create-row-primary.no-name,
+        .subscriber-create-row-groups {
             grid-template-columns: 1fr;
         }
 
-        .create-email-field,
-        .create-email-field.with-name {
-            grid-template-columns: 1fr;
+        .subscriber-groups-action {
+            justify-content: stretch;
         }
 
         .create-action-field {
@@ -3132,12 +3206,7 @@
             grid-template-columns: 1fr;
         }
 
-        .group-create-row {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .group-create-row .btn {
+        .subscriber-groups-action .btn {
             width: 100%;
         }
 

@@ -41,7 +41,7 @@
             <div class="icon">
                 <i class="ri-error-warning-line" />
             </div>
-            <div>Websites collection not found. Reviews module requires Websites to be available.</div>
+            <div>Website data is unavailable. Reviews requires website setup.</div>
         </div>
     {:else}
         <ReviewsCollectionDashboard bind:this={reviewsCollectionDashboard} {websitesCollection} />
