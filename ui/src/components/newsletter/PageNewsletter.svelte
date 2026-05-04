@@ -43,6 +43,13 @@
     let editingSubscriberError = "";
     let subscriberEmailInput;
     let subscriberGroupCountById = {};
+    let activeSubscriberIds = [];
+    let activeSubscriberIdsSet = new Set();
+    let normalizedCampaignManualRecipientIds = [];
+    let normalizedCampaignManualRecipientIdsSet = new Set();
+    let normalizedCampaignManualRecipientsCount = 0;
+    let activeSubscriberIdsByGroupId = new Map();
+    let groupSelectionMetaById = new Map();
     let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastPersistedContextKey = "";    loadCollections();    $: websitesCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "websites") || null;    $: subscribersCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribers") || null;
     $: campaignsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "campaigns") || null;
     $: subscriberGroupsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribergroups") || null;
@@ -53,8 +60,8 @@
             : [],
     );
     $: subscriberGroupsFieldName = resolveCollectionFieldNameForMultiSelectAlias(subscribersCollection, subscriberGroupsFieldAliases);
-    $: campaignRecipientsTypeFieldName = resolveCollectionFieldName(campaignsCollection, campaignRecipientsTypeFieldAliases) || "recipientsType";
-    $: campaignRecipientsIdsFieldName = resolveCollectionFieldName(campaignsCollection, campaignRecipientsIdsFieldAliases) || "recipientsIds";
+    $: campaignRecipientsTypeFieldName = resolveCollectionFieldNameByAliasPriority(campaignsCollection, campaignRecipientsTypeFieldAliases) || "recipientsType";
+    $: campaignRecipientsIdsFieldName = resolveCollectionFieldNameByAliasPriority(campaignsCollection, campaignRecipientsIdsFieldAliases) || "recipientsIds";
     $: subscribersSupportsGroupsField = !!subscriberGroupsFieldName;
     $: subscribersSupportsNameField = subscriberFieldKeys.has("name");
     $: subscribersSupportsSourceField = subscriberFieldKeys.has("source");
@@ -136,6 +143,40 @@
             return byStatus && byGroup && bySearch;
         }),
     );
+    $: activeSubscriberIds = activeSubscribers.map((subscriber) => subscriber.id);
+    $: activeSubscriberIdsSet = new Set(activeSubscriberIds);
+    $: normalizedCampaignManualRecipientIds = normalizeManualRecipientIds(campaignForm.recipientsIds);
+    $: normalizedCampaignManualRecipientIdsSet = new Set(normalizedCampaignManualRecipientIds);
+    $: normalizedCampaignManualRecipientsCount = normalizedCampaignManualRecipientIds.length;
+    $: activeSubscriberIdsByGroupId = new Map(
+        subscriberGroups.map((group) => {
+            const ids = activeSubscribers
+                .filter((subscriber) => normalizeIdList(subscriber?.[subscriberGroupsFieldName]).includes(group.id))
+                .map((subscriber) => subscriber.id);
+            return [group.id, ids];
+        }),
+    );
+    $: groupSelectionMetaById = new Map(
+        subscriberGroups.map((group) => {
+            const groupActiveRecipientIds = [...(activeSubscriberIdsByGroupId.get(group.id) || [])];
+            const totalCount = groupActiveRecipientIds.length;
+            let selectedCount = 0;
+            groupActiveRecipientIds.forEach((id) => {
+                if (normalizedCampaignManualRecipientIdsSet.has(id)) {
+                    selectedCount += 1;
+                }
+            });
+            let state = "none";
+            if (totalCount > 0) {
+                if (selectedCount === totalCount) {
+                    state = "full";
+                } else if (selectedCount > 0) {
+                    state = "partial";
+                }
+            }
+            return [group.id, { state, selectedCount, totalCount }];
+        }),
+    );
     $: subscribersTotalPages = Math.max(1, Math.ceil(filteredSubscribers.length / subscribersPageSize));    $: if (subscribersPage > subscribersTotalPages) {        subscribersPage = subscribersTotalPages;    };    $: subscribersPageStart = (subscribersPage - 1) * subscribersPageSize;    $: pagedSubscribers = filteredSubscribers.slice(subscribersPageStart, subscribersPageStart + subscribersPageSize);    $: visibleSubscriberIds = pagedSubscribers.map((subscriber) => subscriber.id);    $: areAllVisibleSubscribersSelected = visibleSubscriberIds.length > 0        && visibleSubscriberIds.every((id) => selectedSubscriberIds.includes(id));    $: selectedSubscribersCount = selectedSubscriberIds.length;    $: pendingSendRecipientsCount = resolveCampaignRecipientsCount(pendingSendCampaign);    $: {
         const nextFilterKey = `${selectedWebsiteId}|${subscriberSearch}|${subscriberStatusFilter}|${subscriberGroupFilter}|${subscriberSort}|${subscribers.length}`;
         if (nextFilterKey !== lastSubscribersFilterKey) {
@@ -163,7 +204,7 @@
         cancelEditSubscriber();
     }
     // Keep context in URL query so refresh/navigation preserves website and active tab.
-    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function resolveCollectionFieldName(collection, aliases = []) {        if (!collection || !Array.isArray(collection.fields)) {            return "";        }        const normalizedAliases = aliases.map((alias) => `${alias || ""}`.trim().toLowerCase()).filter(Boolean);        for (const field of collection.fields) {            const fieldName = `${field?.name || ""}`.trim();            if (!fieldName) {                continue;            }            if (normalizedAliases.includes(fieldName.toLowerCase())) {                return fieldName;            }        }        return "";    }    function normalizeIdList(value) {        if (Array.isArray(value)) {            return [...new Set(                value                    .map((item) => `${item || ""}`.trim())                    .filter(Boolean),            )];        }        if (typeof value === "string") {            const trimmed = value.trim();            if (!trimmed) {                return [];            }            if (trimmed.startsWith("[")) {                try {                    const parsed = JSON.parse(trimmed);                    return normalizeIdList(parsed);                } catch (err) {                    return [];                }            }            return [trimmed];        }        return [];    }    function getCampaignRecipientsType(campaign) {        const rawType = campaign?.[campaignRecipientsTypeFieldName] ?? campaign?.recipientsType ?? "all";        return normalizeStatus(rawType || "all");    }    function getCampaignRecipientIds(campaign) {        const rawIds = campaign?.[campaignRecipientsIdsFieldName] ?? campaign?.recipientsIds;        return normalizeIdList(rawIds);    }    function normalizeSubscriberName(name) {
+    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function resolveCollectionFieldName(collection, aliases = []) {        if (!collection || !Array.isArray(collection.fields)) {            return "";        }        const normalizedAliases = aliases.map((alias) => `${alias || ""}`.trim().toLowerCase()).filter(Boolean);        for (const field of collection.fields) {            const fieldName = `${field?.name || ""}`.trim();            if (!fieldName) {                continue;            }            if (normalizedAliases.includes(fieldName.toLowerCase())) {                return fieldName;            }        }        return "";    }    function normalizeIdList(value) {        if (Array.isArray(value)) {            return [...new Set(                value                    .map((item) => `${item || ""}`.trim())                    .filter(Boolean),            )];        }        if (typeof value === "string") {            const trimmed = value.trim();            if (!trimmed) {                return [];            }            if (trimmed.startsWith("[")) {                try {                    const parsed = JSON.parse(trimmed);                    return normalizeIdList(parsed);                } catch (err) {                    return [];                }            }            return [trimmed];        }        return [];    }    function getCampaignRecipientsType(campaign) {        const rawType = campaign?.recipientsType            ?? campaign?.[campaignRecipientsTypeFieldName]            ?? campaign?.recipientType            ?? campaign?.recipients_type            ?? "all";        return normalizeStatus(rawType || "all");    }    function getCampaignRecipientIds(campaign) {        const rawIds = campaign?.recipientsIds            ?? campaign?.[campaignRecipientsIdsFieldName]            ?? campaign?.recipientIds            ?? campaign?.recipients_ids;        return normalizeIdList(rawIds);    }    function normalizeSubscriberName(name) {
         return `${name || ""}`.trim().replace(/\s+/g, " ");
     }    function resolveSubscriberDisplayName(subscriber) {
         return normalizeSubscriberName(subscriber?.name);
@@ -234,54 +275,77 @@
         return getSubscriberGroupIds(subscriber).includes(groupId);
     }
 
-    function getActiveSubscriberIdsForGroup(groupId) {
+    function getActiveSubscriberIds() {
+        return activeSubscribers.map((subscriber) => subscriber.id);
+    }
+
+    function normalizeManualRecipientIds(ids) {
+        const activeIds = getActiveSubscriberIds();
+        if (!activeIds.length) {
+            return [];
+        }
+
+        const selectedIdsSet = new Set(normalizeIdList(ids));
+        return activeIds.filter((id) => selectedIdsSet.has(id));
+    }
+
+    function areIdListsEqual(left = [], right = []) {
+        if (left.length !== right.length) {
+            return false;
+        }
+        return left.every((value, index) => value === right[index]);
+    }
+
+    function setManualRecipientIds(ids, options = {}) {
+        const { clearError = true } = options;
+        if (clearError) {
+            clearCampaignFormError();
+        }
+        const normalizedIds = normalizeManualRecipientIds(ids);
+        campaignForm = { ...campaignForm, recipientsIds: normalizedIds };
+        return normalizedIds;
+    }
+
+    function getGroupActiveRecipientIds(groupId) {
         if (!groupId) {
             return [];
         }
-        return activeSubscribers
-            .filter((subscriber) => hasSubscriberGroup(subscriber, groupId))
-            .map((subscriber) => subscriber.id);
+        return [...(activeSubscriberIdsByGroupId?.get(groupId) || [])];
     }
 
-    function normalizeManualAudienceRecipientIds(ids) {
-        const activeIds = new Set(activeSubscribers.map((subscriber) => subscriber.id));
-        return normalizeIdList(ids).filter((id) => activeIds.has(id));
+    function getGroupSelectionMeta(groupId) {
+        if (!groupId) {
+            return { state: "none", selectedCount: 0, totalCount: 0 };
+        }
+        return groupSelectionMetaById?.get(groupId) || { state: "none", selectedCount: 0, totalCount: 0 };
     }
 
-    function isManualGroupFullySelected(groupId) {
-        const groupIds = getActiveSubscriberIdsForGroup(groupId);
-        return groupIds.length > 0 && groupIds.every((id) => campaignForm.recipientsIds.includes(id));
-    }
-
-    function toggleManualRecipientsForGroup(groupId) {
-        clearCampaignFormError();
-        const groupIds = getActiveSubscriberIdsForGroup(groupId);
-        if (!groupIds.length) {
+    function toggleGroupRecipients(groupId) {
+        const groupActiveRecipientIds = getGroupActiveRecipientIds(groupId);
+        if (!groupActiveRecipientIds.length) {
             return;
         }
 
-        const next = new Set(campaignForm.recipientsIds);
-        const shouldUnselect = groupIds.every((id) => next.has(id));
-
-        groupIds.forEach((id) => {
-            if (shouldUnselect) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
-        });
-
-        campaignForm.recipientsIds = [...next];
+        const nextSelection = new Set(normalizedCampaignManualRecipientIds);
+        const groupState = getGroupSelectionMeta(groupId).state;
+        if (groupState === "full") {
+            groupActiveRecipientIds.forEach((id) => nextSelection.delete(id));
+        } else {
+            groupActiveRecipientIds.forEach((id) => nextSelection.add(id));
+        }
+        setManualRecipientIds([...nextSelection]);
     }
 
-    function selectAllManualRecipients() {
-        clearCampaignFormError();
-        campaignForm.recipientsIds = activeSubscribers.map((subscriber) => subscriber.id);
+    function selectAllActiveRecipients() {
+        setManualRecipientIds(getActiveSubscriberIds());
     }
 
     function clearManualRecipients() {
-        clearCampaignFormError();
-        campaignForm.recipientsIds = [];
+        setManualRecipientIds([]);
+    }
+
+    function normalizeManualAudienceRecipientIds(ids) {
+        return normalizeManualRecipientIds(ids);
     }
 
     function toTimestamp(value) {        const raw = `${value || ""}`.trim();        if (!raw) {            return 0;        }        const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");        const parsed = new Date(normalized).getTime();        return Number.isNaN(parsed) ? 0 : parsed;    }    function isWithinLastDays(value, days) {        const ts = toTimestamp(value);        if (!ts) {            return false;        }        const diff = Date.now() - ts;        return diff >= 0 && diff <= (days * 24 * 60 * 60 * 1000);    }    function formatDateTime(value) {        const raw = `${value || ""}`.trim();        if (!raw) {            return "-";        }        const normalized = raw.includes("T") ? raw : raw.replace(" ", "T");        const parsed = new Date(normalized);        if (Number.isNaN(parsed.getTime())) {            return raw;        }        return parsed.toLocaleString();    }    function sortSubscribers(list) {        const sorted = [...list];        sorted.sort((a, b) => {            if (subscriberSort === "oldest") {                return toTimestamp(a?.created) - toTimestamp(b?.created);            }            if (subscriberSort === "emailAsc") {                return `${a?.email || ""}`.localeCompare(`${b?.email || ""}`);            }            if (subscriberSort === "emailDesc") {                return `${b?.email || ""}`.localeCompare(`${a?.email || ""}`);            }            if (subscriberSort === "status") {                const statusCompare = normalizeStatus(a?.status).localeCompare(normalizeStatus(b?.status));                if (statusCompare !== 0) {                    return statusCompare;                }            }            // newest/default
@@ -344,7 +408,7 @@
 
         return "";
     }
-    function resolveCampaignRecipientsCount(campaign) {        if (!campaign) {            return 0;        }        const recipientsType = getCampaignRecipientsType(campaign);        if (recipientsType === "manual") {            return normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign)).length;        }        return activeSubscribers.length;    }    function campaignHasUnsavedComposerChanges(campaign) {        if (!campaign?.id || campaign.id !== editingCampaignId) {            return false;        }        if (`${campaignForm.subject || ""}`.trim() !== `${campaign?.subject || ""}`.trim()) {            return true;        }        if (`${campaignForm.body || ""}`.trim() !== `${campaign?.body || ""}`.trim()) {            return true;        }        const composerRecipients = normalizeManualAudienceRecipientIds(campaignForm.recipientsIds);        const persistedRecipients = normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign));        if (composerRecipients.length !== persistedRecipients.length) {            return true;        }        const persistedSet = new Set(persistedRecipients);        return composerRecipients.some((id) => !persistedSet.has(id));    }    function getSendCampaignDisabledReason(campaign) {        if (!campaign?.id) {            return "Invalid campaign.";        }        if (isSendingCampaign[campaign.id]) {            return "Sending campaign...";        }        if (normalizeStatus(campaign.status) === "sent") {            return "Campaign already sent.";        }        if (campaignHasUnsavedComposerChanges(campaign)) {            return "Update draft before sending to save latest audience changes.";        }        if (resolveCampaignRecipientsCount(campaign) < 1) {            return "No eligible recipients.";        }        return "";    }    function resolveCampaignStatusLabelClass(status) {
+    function resolveCampaignRecipientsCount(campaign) {        if (!campaign) {            return 0;        }        const recipientsType = getCampaignRecipientsType(campaign);        if (recipientsType === "manual") {            return normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign)).length;        }        return activeSubscribers.length;    }    function campaignHasUnsavedComposerChanges(campaign) {        if (!campaign?.id || campaign.id !== editingCampaignId) {            return false;        }        if (`${campaignForm.subject || ""}`.trim() !== `${campaign?.subject || ""}`.trim()) {            return true;        }        if (`${campaignForm.body || ""}`.trim() !== `${campaign?.body || ""}`.trim()) {            return true;        }        const composerRecipients = normalizeManualAudienceRecipientIds(campaignForm.recipientsIds);        const persistedRecipients = normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign));        if (composerRecipients.length !== persistedRecipients.length) {            return true;        }        const persistedSet = new Set(persistedRecipients);        return composerRecipients.some((id) => !persistedSet.has(id));    }    function getSendCampaignDisabledReason(campaign) {        if (!campaign?.id) {            return "Invalid campaign.";        }        if (isSendingCampaign[campaign.id]) {            return "Sending campaign...";        }        if (normalizeStatus(campaign.status) === "sent") {            return "Campaign already sent.";        }        if (campaignHasUnsavedComposerChanges(campaign)) {            return "Update the draft before sending this audience.";        }        if (resolveCampaignRecipientsCount(campaign) < 1) {            return "Select at least one active recipient before sending.";        }        return "";    }    function resolveCampaignStatusLabelClass(status) {
         const normalized = normalizeStatus(status);
         if (normalized === "sent") {
             return "label-success";
@@ -697,7 +761,7 @@
         nextCreateGroupIds.add(groupId);
         subscriberForm = { ...subscriberForm, groupIds: [...nextCreateGroupIds] };
     }
-    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return campaignForm.recipientsIds.includes(subscriberId);    }    function toggleManualRecipient(subscriberId) {        clearCampaignFormError();        if (campaignForm.recipientsIds.includes(subscriberId)) {            campaignForm.recipientsIds = campaignForm.recipientsIds.filter((id) => id !== subscriberId);        } else {            campaignForm.recipientsIds = [...campaignForm.recipientsIds, subscriberId];        }    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
+    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
     }
 
@@ -975,15 +1039,15 @@
 
         const previousRecipientsType = getCampaignRecipientsType(campaign);
         const resolvedRecipientsIds = previousRecipientsType === "manual"
-            ? normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign))
-            : activeSubscribers.map((subscriber) => subscriber.id);
+            ? normalizeManualRecipientIds(getCampaignRecipientIds(campaign))
+            : getActiveSubscriberIds();
 
         editingCampaignId = campaign.id;
         campaignForm = {
             subject: `${campaign.subject || ""}`,
             body: `${campaign.body || ""}`,
             recipientsType: "manual",
-            recipientsIds: [...new Set(resolvedRecipientsIds)],
+            recipientsIds: normalizeManualRecipientIds(resolvedRecipientsIds),
         };
         campaignBuilderShowEditor = true;
         campaignBuilderShowPreview = false;
@@ -1010,7 +1074,7 @@
         }
 
         campaignFormError = "";
-        const normalizedRecipientsIds = normalizeManualAudienceRecipientIds(campaignForm.recipientsIds);
+        const normalizedRecipientsIds = normalizeManualRecipientIds(campaignForm.recipientsIds);
         const payload = {
             website: selectedWebsiteId,
             subject: `${campaignForm.subject || ""}`.trim(),
@@ -1774,7 +1838,7 @@
                                         <div class="campaign-audience-stat">
                                             <span class="audience-stat-label">Recipients</span>
                                             <span class="audience-stat-value">
-                                                {campaignForm.recipientsIds.length} selected / {activeSubscribers.length} active
+                                                {normalizedCampaignManualRecipientsCount} selected / {activeSubscribers.length} active
                                             </span>
                                         </div>
                                         <div class="campaign-audience-stat">
@@ -1790,14 +1854,14 @@
                                             <div class="manual-recipients-head">
                                                 <div class="manual-recipients-title-row">
                                                     <h5 class="m-0">Recipients</h5>
-                                                    <span class="txt-sm txt-hint manual-recipients-help">Choose recipients manually, select all active, or select by groups.</span>
+                                                    <span class="txt-sm txt-hint manual-recipients-help">Choose recipients manually. Group chips are shortcuts for manual selection.</span>
                                                 </div>
                                                 <div class="manual-recipients-tools">
                                                     <span class="manual-recipients-count txt-xs">
-                                                        {campaignForm.recipientsIds.length} selected / {activeSubscribers.length} active
+                                                        {normalizedCampaignManualRecipientsCount} selected / {activeSubscribers.length} active
                                                     </span>
                                                     <div class="manual-group-action-buttons">
-                                                        <button type="button" class="btn btn-xs btn-outline" on:click={selectAllManualRecipients}>
+                                                        <button type="button" class="btn btn-xs btn-outline" on:click={selectAllActiveRecipients}>
                                                             <span class="txt">Select all active</span>
                                                         </button>
                                                         <button type="button" class="btn btn-xs btn-outline" on:click={clearManualRecipients}>
@@ -1811,14 +1875,22 @@
                                                 {#if hasSubscriberGroupsFeature && subscriberGroups.length}
                                                     <div class="manual-group-chip-list">
                                                         {#each subscriberGroups as group (group.id)}
+                                                            {@const groupSelectionMeta = getGroupSelectionMeta(group.id)}
                                                             <button
                                                                 type="button"
                                                                 class="manual-group-chip"
-                                                                class:is-active={isManualGroupFullySelected(group.id)}
-                                                                on:click={() => toggleManualRecipientsForGroup(group.id)}
+                                                                class:is-active={groupSelectionMeta.state === "full"}
+                                                                class:is-partial={groupSelectionMeta.state === "partial"}
+                                                                on:click={() => toggleGroupRecipients(group.id)}
                                                             >
                                                                 <span class="manual-group-chip-name">{group.name}</span>
-                                                                <span class="manual-group-chip-count">{getActiveSubscriberIdsForGroup(group.id).length}</span>
+                                                                <span class="manual-group-chip-count">
+                                                                    {#if groupSelectionMeta.state === "none"}
+                                                                        {groupSelectionMeta.totalCount}
+                                                                    {:else}
+                                                                        {groupSelectionMeta.selectedCount}/{groupSelectionMeta.totalCount}
+                                                                    {/if}
+                                                                </span>
                                                             </button>
                                                         {/each}
                                                     </div>
@@ -1832,10 +1904,13 @@
                                             {:else}
                                                 <div class="manual-recipients-grid">
                                                     {#each activeSubscribers as subscriber (subscriber.id)}
-                                                        <label class="manual-recipient-item">
+                                                        <label
+                                                            class="manual-recipient-item"
+                                                            class:is-selected={normalizedCampaignManualRecipientIdsSet.has(subscriber.id)}
+                                                        >
                                                             <input
                                                                 type="checkbox"
-                                                                checked={isManualRecipientSelected(subscriber.id)}
+                                                                checked={normalizedCampaignManualRecipientIdsSet.has(subscriber.id)}
                                                                 on:change={() => toggleManualRecipient(subscriber.id)}
                                                             />
                                                             <span class="manual-recipient-content">
@@ -2460,9 +2535,16 @@
         background: color-mix(in srgb, var(--baseAlt1Color) 78%, var(--baseAlt2Color));
     }
 
+    .manual-recipient-item.is-selected {
+        border-color: color-mix(in srgb, var(--primaryColor) 44%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--primaryColor) 9%, var(--baseColor));
+        box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primaryColor) 50%, transparent);
+    }
+
     .manual-recipient-item input {
         margin-top: 2px;
         flex: 0 0 auto;
+        accent-color: var(--primaryColor);
     }
 
     .manual-recipient-content {
@@ -2496,6 +2578,10 @@
     }
 
     .manual-recipient-item input:checked + .manual-recipient-content .manual-recipient-title {
+        font-weight: 600;
+    }
+
+    .manual-recipient-item.is-selected .manual-recipient-title {
         font-weight: 600;
     }
 
@@ -2921,6 +3007,12 @@
         color: var(--txtPrimaryColor);
     }
 
+    .manual-group-chip.is-partial {
+        border-color: color-mix(in srgb, var(--warningColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 10%, var(--baseColor));
+        color: var(--txtPrimaryColor);
+    }
+
     .manual-group-chip-name {
         font-size: 12px;
         max-width: 180px;
@@ -2940,7 +3032,18 @@
         background: var(--baseColor);
         color: var(--txtHintColor);
         font-size: 11px;
-        padding: 0 4px;
+        font-variant-numeric: tabular-nums;
+        padding: 0 6px;
+    }
+
+    .manual-group-chip.is-active .manual-group-chip-count {
+        border-color: color-mix(in srgb, var(--primaryColor) 38%, var(--baseAlt2Color));
+        color: var(--txtPrimaryColor);
+    }
+
+    .manual-group-chip.is-partial .manual-group-chip-count {
+        border-color: color-mix(in srgb, var(--warningColor) 40%, var(--baseAlt2Color));
+        color: var(--txtPrimaryColor);
     }
 
     .campaigns-header-row {
