@@ -2,6 +2,7 @@
     import OverlayPanel from "@/components/base/OverlayPanel.svelte";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
     import RefreshButton from "@/components/base/RefreshButton.svelte";
+    import { onMount } from "svelte";
     import { pageTitle } from "@/stores/app";
     import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";
     import { addErrorToast, addSuccessToast } from "@/stores/toasts";
@@ -27,6 +28,7 @@
 
     const ALL_WEBSITES_KEY = "all";
     const whatsappCollectionAliases = ["whatsapp", "whatsapp_interactions", "whatsapp_clicks"];
+    const desktopMasterDetailMinWidth = 1060;
 
     let websites = [];
     let selectedWebsiteId = ALL_WEBSITES_KEY;
@@ -39,6 +41,7 @@
     let sortOrder = "newest";
     let selectedLeadKey = "";
     let isLeadDetailsActive = false;
+    let isDesktopMasterDetail = false;
     let isUpdatingLeadStatus = false;
     let updatingLeadStatusKey = "";
 
@@ -102,12 +105,20 @@
     });
 
     $: filteredLeads = filterAndSortLeads(normalizedLeads);
+    $: if (filteredLeads.length) {
+        const isSelectedLeadVisible = selectedLeadKey
+            ? filteredLeads.some((lead) => lead.key === selectedLeadKey)
+            : false;
+        if (!isSelectedLeadVisible) {
+            selectedLeadKey = filteredLeads[0].key;
+        }
+    } else if (selectedLeadKey) {
+        selectedLeadKey = "";
+        isLeadDetailsActive = false;
+    }
     $: selectedLead = normalizedLeads.find((lead) => lead.key === selectedLeadKey) || null;
-    $: selectedLeadVisible = selectedLeadKey
-        ? filteredLeads.some((lead) => lead.key === selectedLeadKey)
-        : false;
-    $: if (isLeadDetailsActive && selectedLeadKey && !selectedLeadVisible) {
-        closeLeadDetails();
+    $: if (isDesktopMasterDetail && isLeadDetailsActive) {
+        isLeadDetailsActive = false;
     }
     $: selectedLeadMailto = buildMailtoLink(selectedLead?.email);
     $: selectedLeadWhatsAppPhone = normalizeString(selectedLead?.whatsappTargetPhone || selectedLead?.phone);
@@ -134,6 +145,23 @@
     $: canArchiveSelectedLead = !!selectedLead?.recordId
         && selectedLeadStatusSupport?.supportsArchive
         && selectedLeadCurrentStatusNormalized !== normalizeLower(selectedLeadStatusSupport?.archiveValue);
+    $: selectedLeadPrimaryMessage = normalizeString(selectedLead?.whatsappTargetMessage || selectedLead?.message);
+    $: selectedLeadMissingContact = !!selectedLead && !normalizeString(selectedLead?.email) && !normalizeString(selectedLead?.phone);
+    $: selectedLeadMissingMessage = !!selectedLead && !selectedLeadPrimaryMessage;
+    $: selectedLeadNeedsFollowUp = normalizeLower(selectedLead?.statusKey) === "new";
+    $: selectedLeadHealthWarnings = buildLeadHealthWarnings({
+        selectedLead,
+        selectedLeadMissingContact,
+        selectedLeadMissingMessage,
+        selectedLeadNeedsFollowUp,
+    });
+    $: selectedLeadHealthSuggestions = buildLeadHealthSuggestions({
+        selectedLead,
+        selectedLeadMissingContact,
+        selectedLeadMissingMessage,
+        selectedLeadNeedsFollowUp,
+    });
+    $: selectedLeadHealthState = resolveLeadHealthState(selectedLeadHealthWarnings, selectedLeadHealthSuggestions);
 
     $: totalNewLeads = normalizedLeads.filter((lead) => lead.statusKey === "new").length;
     $: totalThisMonthLeads = normalizedLeads.filter((lead) => isCurrentMonth(lead.created)).length;
@@ -521,6 +549,92 @@
         return parts.join(" · ");
     }
 
+    function resolveLeadPreviewText(lead) {
+        const preview = normalizeString(lead?.preview);
+        if (preview) {
+            return preview;
+        }
+
+        if (normalizeLower(lead?.sourceKey) === "whatsapp") {
+            return "No message captured for this interaction.";
+        }
+
+        return "No message preview available yet.";
+    }
+
+    function buildLeadHealthWarnings({
+        selectedLead,
+        selectedLeadMissingContact,
+        selectedLeadMissingMessage,
+        selectedLeadNeedsFollowUp,
+    }) {
+        if (!selectedLead) {
+            return [];
+        }
+
+        const warnings = [];
+        if (selectedLeadMissingContact) {
+            warnings.push("Contact details are incomplete for this lead.");
+        }
+        if (selectedLeadMissingMessage) {
+            warnings.push("No message was captured for this lead.");
+        }
+        if (selectedLeadNeedsFollowUp) {
+            warnings.push("This lead is still marked as new.");
+        }
+
+        return warnings;
+    }
+
+    function buildLeadHealthSuggestions({
+        selectedLead,
+        selectedLeadMissingContact,
+        selectedLeadMissingMessage,
+        selectedLeadNeedsFollowUp,
+    }) {
+        if (!selectedLead) {
+            return [];
+        }
+
+        const suggestions = [];
+        if (!selectedLeadMissingContact) {
+            suggestions.push("Use copy actions to follow up quickly.");
+        }
+        if (!selectedLeadMissingMessage) {
+            suggestions.push("Review the message before responding.");
+        }
+        if (selectedLeadNeedsFollowUp) {
+            suggestions.push("Mark this lead as read after handling it.");
+        }
+
+        if (!suggestions.length) {
+            suggestions.push("Lead details are complete and ready for follow-up.");
+        }
+
+        return suggestions;
+    }
+
+    function resolveLeadHealthState(warnings = [], suggestions = []) {
+        if (warnings.length) {
+            return {
+                label: "Needs attention",
+                badgeClass: "label-warning",
+            };
+        }
+
+        if (suggestions.length) {
+            return {
+                label: "Ready for follow-up",
+                badgeClass: "label-success",
+            };
+        }
+
+        return {
+            label: "No data",
+            badgeClass: "label-info",
+        };
+    }
+
     function resolveLeadNotificationSourceKey(lead) {
         const sourceKey = normalizeLower(lead?.sourceKey);
         if (sourceKey === "contact" || sourceKey === "booking") {
@@ -744,6 +858,7 @@
             const searchable = [
                 lead.identity,
                 lead.secondaryIdentity,
+                lead.websiteName,
                 lead.subject,
                 lead.message,
                 lead.whatsappTargetMessage,
@@ -1012,12 +1127,13 @@
         }
 
         selectedLeadKey = lead.key;
-        isLeadDetailsActive = true;
+        if (!isDesktopMasterDetail) {
+            isLeadDetailsActive = true;
+        }
     }
 
     function closeLeadDetails() {
         isLeadDetailsActive = false;
-        selectedLeadKey = "";
     }
 
     function handleLeadCardKeyDown(event, lead) {
@@ -1035,6 +1151,33 @@
         searchTerm = "";
         sortOrder = "newest";
     }
+
+    onMount(() => {
+        if (typeof window === "undefined" || !window.matchMedia) {
+            return undefined;
+        }
+
+        const query = window.matchMedia(`(min-width: ${desktopMasterDetailMinWidth}px)`);
+        const updateLayoutMode = () => {
+            isDesktopMasterDetail = !!query.matches;
+        };
+
+        updateLayoutMode();
+
+        if (query.addEventListener) {
+            query.addEventListener("change", updateLayoutMode);
+        } else if (query.addListener) {
+            query.addListener(updateLayoutMode);
+        }
+
+        return () => {
+            if (query.removeEventListener) {
+                query.removeEventListener("change", updateLayoutMode);
+            } else if (query.removeListener) {
+                query.removeListener(updateLayoutMode);
+            }
+        };
+    });
 
     export function reload() {
         return loadLeads();
@@ -1054,6 +1197,30 @@
             </div>
 
             <div class="head-tools">
+                <div class="head-context">
+                    {#if hasMultipleWebsites}
+                        <div class="head-context-item">
+                            <label class="txt-xs txt-hint" for="leads-website-filter">Website</label>
+                            <select
+                                id="leads-website-filter"
+                                class="input input-sm"
+                                bind:value={selectedWebsiteId}
+                                disabled={isLoadingWebsites}
+                            >
+                                <option value={ALL_WEBSITES_KEY}>All websites</option>
+                                {#each websites as website (website.id)}
+                                    <option value={website.id}>{resolveWebsiteLabel(website)}</option>
+                                {/each}
+                            </select>
+                        </div>
+                    {:else if singleWebsiteLabel}
+                        <span class="summary-pill">
+                            <i class="ri-global-line" />
+                            {singleWebsiteLabel}
+                        </span>
+                    {/if}
+                </div>
+
                 <RefreshButton class="btn-sm" tooltip={"Refresh"} on:refresh={reload} />
                 <div class="summary-badges">
                     <span class="summary-pill">
@@ -1077,440 +1244,674 @@
         </div>
     </section>
 
-    <section class="panel leads-filters m-b-base">
-        {#if hasMultipleWebsites}
-            <div class="leads-filter-row">
-                <label class="txt-sm txt-hint" for="leads-website-filter">Website</label>
-                <select
-                    id="leads-website-filter"
-                    class="input input-sm"
-                    bind:value={selectedWebsiteId}
-                    disabled={isLoadingWebsites}
-                >
-                    <option value={ALL_WEBSITES_KEY}>All websites</option>
-                    {#each websites as website (website.id)}
-                        <option value={website.id}>{resolveWebsiteLabel(website)}</option>
-                    {/each}
-                </select>
-            </div>
-        {:else if singleWebsiteLabel}
-            <div class="leads-filter-row">
-                <span class="txt-sm txt-hint">Website</span>
-                <span class="summary-pill">
-                    <i class="ri-global-line" />
-                    {singleWebsiteLabel}
-                </span>
-            </div>
-        {/if}
-
-        <div class="leads-filter-row leads-filter-row--controls m-t-sm">
-            <label class="txt-sm txt-hint" for="leads-search-filter">Search</label>
-            <input
-                id="leads-search-filter"
-                class="input input-sm"
-                type="text"
-                placeholder="Search by name, email, phone, subject, or message..."
-                bind:value={searchTerm}
-            />
-            <label class="txt-sm txt-hint leads-sort-label" for="leads-sort-filter">Sort</label>
-            <select id="leads-sort-filter" class="input input-sm" bind:value={sortOrder}>
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-            </select>
-            <button type="button" class="btn btn-sm btn-outline" on:click={clearFilters}>
-                <span class="txt">Reset filters</span>
-            </button>
-        </div>
-
-        <div class="leads-filter-grid m-t-sm">
-            <div class="leads-filter-group">
-                <span class="txt-sm txt-hint">Source</span>
-                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
-                    {#each sourceFilterOptions as option (option.key)}
-                        <button
-                            type="button"
-                            class="tab-item"
-                            class:active={sourceFilter === option.key}
-                            on:click={() => (sourceFilter = option.key)}
-                        >
-                            <span class="txt">{option.label}</span>
-                        </button>
-                    {/each}
-                </div>
-            </div>
-
-            <div class="leads-filter-group">
-                <span class="txt-sm txt-hint">Status</span>
-                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
-                    {#each statusFilterOptions as option (option.key)}
-                        <button
-                            type="button"
-                            class="tab-item"
-                            class:active={statusFilter === option.key}
-                            on:click={() => (statusFilter = option.key)}
-                        >
-                            <span class="txt">{option.label}</span>
-                        </button>
-                    {/each}
-                </div>
-            </div>
-        </div>
-    </section>
-
-    {#if !hasAnyLeadCollections}
-        <div class="alert alert-warning">
-            <div class="icon">
-                <i class="ri-information-line" />
-            </div>
-            <div>
-                Leads data sources were not found. This page expects contact and WhatsApp interactions.
-            </div>
-        </div>
-    {:else if !hasRequiredCollections}
-        <div class="alert alert-warning">
-            <div class="icon">
-                <i class="ri-information-line" />
-            </div>
-            <div>
-                One leads source is missing. Contact and WhatsApp interactions may be partially available.
-            </div>
-        </div>
-    {/if}
-
-    {#if leadsError}
-        <div class="alert alert-danger m-b-base">
-            <div class="icon">
-                <i class="ri-error-warning-line" />
-            </div>
-            <div>{leadsError}</div>
-        </div>
-    {/if}
-
-    <section class="panel leads-list-panel">
-        {#if $isCollectionsLoading || isLoadingLeads}
-            <div class="placeholder-section m-b-0">
-                <span class="loader loader-lg" />
-                <h1>Loading leads...</h1>
-            </div>
-        {:else if !normalizedLeads.length}
-            <div class="empty-state m-b-0">
-                No leads yet. Contact form submissions and WhatsApp interactions will appear here.
-            </div>
-        {:else if !filteredLeads.length}
-            <div class="empty-state m-b-0">
-                No leads match these filters.
-            </div>
-        {:else}
-            <div class="leads-list">
-                {#each filteredLeads as lead (lead.key)}
-                    <!-- svelte-ignore a11y-click-events-have-key-events -->
-                    <!-- svelte-ignore a11y-no-static-element-interactions -->
-                    <article
-                        class="leads-item"
-                        class:selected={isLeadDetailsActive && selectedLeadKey === lead.key}
-                        role="button"
-                        tabindex="0"
-                        aria-label={`Open ${lead.sourceLabel} lead details`}
-                        on:click={() => openLeadDetails(lead)}
-                        on:keydown={(event) => handleLeadCardKeyDown(event, lead)}
-                    >
-                        <div class="leads-item-head">
-                            <div class="leads-item-badges">
-                                <span class={`label label-sm ${lead.sourceBadgeClass}`}>{lead.sourceLabel}</span>
-                                {#if lead.statusLabel}
-                                    <span class={`label label-sm ${lead.statusBadgeClass}`}>{lead.statusLabel}</span>
-                                {/if}
-                            </div>
-                            <span class="txt-xs txt-hint">{formatDateTime(lead.created)}</span>
+    <section class="panel leads-body m-b-base">
+        <div class="leads-inbox-layout">
+            <div class="leads-left-column">
+                <div class="leads-controls">
+                    <div class="leads-toolbar-row">
+                        <div class="leads-filter-cell leads-filter-cell--search">
+                            <label class="txt-sm txt-hint" for="leads-search-filter">Search</label>
+                            <input
+                                id="leads-search-filter"
+                                class="input input-sm"
+                                type="text"
+                                placeholder="Search by name, email, phone, subject, message, or source..."
+                                bind:value={searchTerm}
+                            />
                         </div>
 
-                        <div class="leads-item-identity">{lead.identity}</div>
-
-                        {#if lead.secondaryIdentity}
-                            <div class="txt-sm txt-hint leads-item-secondary">{lead.secondaryIdentity}</div>
-                        {/if}
-
-                        {#if (lead.email && lead.email !== lead.identity) || (lead.phone && lead.phone !== lead.identity)}
-                            <div class="leads-item-contact txt-xs txt-hint">
-                                {#if lead.email && lead.email !== lead.identity}
-                                    <span><i class="ri-mail-line" /> {lead.email}</span>
-                                {/if}
-                                {#if lead.phone && lead.phone !== lead.identity}
-                                    <span><i class="ri-phone-line" /> {lead.phone}</span>
-                                {/if}
-                            </div>
-                        {/if}
-
-                        <p class="txt-sm m-b-0 leads-item-preview">
-                            {lead.preview || "No message preview available yet."}
-                        </p>
-
-                        <div class="leads-item-meta txt-xs txt-hint">
-                            <span class="leads-item-attribution">{resolveLeadAttribution(lead)}</span>
-                            {#if resolveLeadLocationHint(lead)}
-                                <span>{resolveLeadLocationHint(lead)}</span>
-                            {/if}
+                        <div class="leads-filter-cell leads-filter-cell--sort">
+                            <label class="txt-sm txt-hint" for="leads-sort-filter">Sort</label>
+                            <select id="leads-sort-filter" class="input input-sm" bind:value={sortOrder}>
+                                <option value="newest">Newest first</option>
+                                <option value="oldest">Oldest first</option>
+                            </select>
                         </div>
-                    </article>
-                {/each}
-            </div>
-        {/if}
-    </section>
 
-    <OverlayPanel
-        bind:active={isLeadDetailsActive}
-        class="overlay-panel-lg leads-detail-panel"
-        overlayClose={true}
-        escClose={true}
-        on:hide={closeLeadDetails}
-    >
-        <svelte:fragment slot="header">
-            <h4>Lead details</h4>
-        </svelte:fragment>
+                        <div class="leads-filter-cell leads-filter-cell--reset">
+                            <button type="button" class="btn btn-sm btn-outline" on:click={clearFilters}>
+                                <span class="txt">Reset filters</span>
+                            </button>
+                        </div>
+                    </div>
 
-        {#if selectedLead}
-            <div class="lead-detail-layout">
-                <div class="lead-detail-badges">
-                    <span class={`label label-sm ${selectedLead.sourceBadgeClass}`}>
-                        {selectedLead.sourceLabel}
-                    </span>
-                    {#if selectedLead.statusLabel}
-                        <span class={`label label-sm ${selectedLead.statusBadgeClass}`}>
-                            {selectedLead.statusLabel}
-                        </span>
-                    {/if}
+                    <div class="leads-filter-segments">
+                        <div class="leads-segment-group">
+                            <span class="txt-sm txt-hint">Source</span>
+                            <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
+                                {#each sourceFilterOptions as option (option.key)}
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={sourceFilter === option.key}
+                                        on:click={() => (sourceFilter = option.key)}
+                                    >
+                                        <span class="txt">{option.label}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+
+                        <div class="leads-segment-group">
+                            <span class="txt-sm txt-hint">Status</span>
+                            <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
+                                {#each statusFilterOptions as option (option.key)}
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={statusFilter === option.key}
+                                        on:click={() => (statusFilter = option.key)}
+                                    >
+                                        <span class="txt">{option.label}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <section class="lead-detail-section">
-                    <div class="lead-detail-section-head">
-                        <h5 class="m-0">Contact</h5>
-                    </div>
-                    <div class="lead-detail-grid">
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Identity</span>
-                            <span class="txt-sm">{selectedLead.identity}</span>
+                {#if !hasAnyLeadCollections}
+                    <div class="alert alert-warning m-b-0">
+                        <div class="icon">
+                            <i class="ri-information-line" />
                         </div>
-                        {#if selectedLead.name && selectedLead.name !== selectedLead.identity}
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Name</span>
-                                <span class="txt-sm">{selectedLead.name}</span>
-                            </div>
-                        {/if}
-                        {#if selectedLead.email}
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Email</span>
-                                <span class="txt-sm">{selectedLead.email}</span>
-                            </div>
-                        {/if}
-                        {#if selectedLead.phone}
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Phone</span>
-                                <span class="txt-sm">{selectedLead.phone}</span>
-                            </div>
-                        {/if}
-                    </div>
-                </section>
-
-                <section class="lead-detail-section">
-                    <div class="lead-detail-section-head">
-                        <h5 class="m-0">Message</h5>
-                    </div>
-                    <div class="lead-detail-grid">
-                        {#if selectedLead.subject}
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Subject</span>
-                                <span class="txt-sm">{selectedLead.subject}</span>
-                            </div>
-                        {/if}
-                        {#if selectedLead.message}
-                            <div class="lead-detail-row lead-detail-row-block">
-                                <span class="txt-xs txt-hint">Message</span>
-                                <p class="txt-sm m-b-0">{selectedLead.message}</p>
-                            </div>
-                        {/if}
-                        {#if selectedLead.whatsappTargetMessage}
-                            <div class="lead-detail-row lead-detail-row-block">
-                                <span class="txt-xs txt-hint">WhatsApp target message</span>
-                                <p class="txt-sm m-b-0">{selectedLead.whatsappTargetMessage}</p>
-                            </div>
-                        {/if}
-                        {#if !selectedLead.subject && !selectedLead.message && !selectedLead.whatsappTargetMessage}
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Message</span>
-                                <span class="txt-sm txt-hint">No message details are available for this lead yet.</span>
-                            </div>
-                        {/if}
-                    </div>
-                </section>
-
-                <section class="lead-detail-section">
-                    <div class="lead-detail-section-head">
-                        <h5 class="m-0">Source</h5>
-                    </div>
-                    <div class="lead-detail-grid">
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Attribution</span>
-                            <span class="txt-sm">{resolveLeadAttribution(selectedLead)}</span>
+                        <div>
+                            Leads data sources were not found. This page expects contact and WhatsApp interactions.
                         </div>
-                        <div class="lead-detail-row">
-                            <span class="txt-xs txt-hint">Created</span>
-                            <span class="txt-sm">{formatDateTime(selectedLead.created)}</span>
+                    </div>
+                {:else if !hasRequiredCollections}
+                    <div class="alert alert-warning m-b-0">
+                        <div class="icon">
+                            <i class="ri-information-line" />
                         </div>
-                        {#if resolveLeadLocationHint(selectedLead)}
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Context</span>
-                                <span class="txt-sm">{resolveLeadLocationHint(selectedLead)}</span>
-                            </div>
-                        {/if}
-                        {#if selectedLead.whatsappTargetPhone}
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">WhatsApp target phone</span>
-                                <span class="txt-sm">{selectedLead.whatsappTargetPhone}</span>
-                            </div>
-                        {/if}
+                        <div>
+                            One leads source is missing. Contact and WhatsApp interactions may be partially available.
+                        </div>
                     </div>
-                </section>
+                {/if}
 
-                <section class="lead-detail-section">
-                    <div class="lead-detail-section-head">
-                        <h5 class="m-0">Notification setup</h5>
+                {#if leadsError}
+                    <div class="alert alert-danger m-b-0">
+                        <div class="icon">
+                            <i class="ri-error-warning-line" />
+                        </div>
+                        <div>{leadsError}</div>
                     </div>
-                    <p class="txt-sm txt-hint m-b-0">
-                        Based on current Website Settings. Per-lead delivery status is not stored yet.
-                    </p>
+                {/if}
 
-                    {#if selectedLeadNotificationSetup.available}
-                        <div class="lead-detail-grid lead-notification-grid">
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Current setup</span>
-                                <div class="lead-notification-badges">
-                                    <span class={`label label-sm ${selectedLeadNotificationSetup.notificationsEnabled ? "label-success" : "label-danger"}`}>
-                                        Email notifications: {selectedLeadNotificationSetup.notificationsEnabled ? "Enabled" : "Disabled"}
-                                    </span>
-                                    <span class={`label label-sm ${selectedLeadNotificationSetup.hasRecipients ? "label-info" : "label-warning"}`}>
-                                        {selectedLeadNotificationSetup.hasRecipients ? "Recipients configured" : "Missing recipients"}
-                                    </span>
+                {#if $isCollectionsLoading || isLoadingLeads}
+                    <div class="placeholder-section m-b-0">
+                        <span class="loader loader-lg" />
+                        <h1>Loading leads...</h1>
+                    </div>
+                {:else if !normalizedLeads.length}
+                    <div class="empty-state m-b-0">
+                        No leads yet. Contact form submissions and WhatsApp interactions will appear here.
+                    </div>
+                {:else if !filteredLeads.length}
+                    <div class="empty-state m-b-0">
+                        No leads match these filters.
+                    </div>
+                {:else}
+                    <div class="leads-inbox-list" role="list">
+                        {#each filteredLeads as lead (lead.key)}
+                            <!-- svelte-ignore a11y-click-events-have-key-events -->
+                            <!-- svelte-ignore a11y-no-static-element-interactions -->
+                            <article
+                                class="leads-inbox-item"
+                                class:selected={selectedLeadKey === lead.key}
+                                role="button"
+                                tabindex="0"
+                                aria-label={`Open ${lead.sourceLabel} lead details`}
+                                on:click={() => openLeadDetails(lead)}
+                                on:keydown={(event) => handleLeadCardKeyDown(event, lead)}
+                            >
+                                <div class="leads-inbox-item-head">
+                                    <div class="leads-inbox-item-badges">
+                                        <span class={`label label-sm ${lead.sourceBadgeClass}`}>{lead.sourceLabel}</span>
+                                        {#if lead.statusLabel}
+                                            <span class={`label label-sm ${lead.statusBadgeClass}`}>{lead.statusLabel}</span>
+                                        {/if}
+                                    </div>
+                                    <span class="txt-xs txt-hint leads-inbox-item-date">{formatDateTime(lead.created)}</span>
                                 </div>
-                            </div>
 
-                            <div class="lead-detail-row">
-                                <span class="txt-xs txt-hint">Recipients</span>
-                                <span class="txt-sm">
-                                    {selectedLeadNotificationSetup.recipientsTotal} total ({selectedLeadNotificationSetup.toCount} To, {selectedLeadNotificationSetup.ccCount} CC)
+                                <div class="leads-inbox-item-title">{lead.identity}</div>
+
+                                {#if lead.secondaryIdentity}
+                                    <div class="txt-sm txt-hint leads-inbox-item-secondary">{lead.secondaryIdentity}</div>
+                                {/if}
+
+                                {#if lead.email || lead.phone}
+                                    <div class="leads-inbox-item-contact txt-xs txt-hint">
+                                        {#if lead.email}
+                                            <span><i class="ri-mail-line" /> {lead.email}</span>
+                                        {/if}
+                                        {#if lead.phone}
+                                            <span><i class="ri-phone-line" /> {lead.phone}</span>
+                                        {/if}
+                                    </div>
+                                {/if}
+
+                                <p class="txt-sm m-b-0 leads-inbox-item-preview">
+                                    {resolveLeadPreviewText(lead)}
+                                </p>
+
+                                <div class="leads-inbox-item-attribution txt-xs txt-hint">
+                                    <span>{resolveLeadAttribution(lead)}</span>
+                                    {#if resolveLeadLocationHint(lead)}
+                                        <span>{resolveLeadLocationHint(lead)}</span>
+                                    {/if}
+                                </div>
+                            </article>
+                        {/each}
+                    </div>
+                {/if}
+            </div>
+
+            {#if isDesktopMasterDetail}
+                    <aside class="leads-detail-rail" aria-live="polite">
+                        {#if selectedLead}
+                            <div class="lead-detail-layout">
+                                <section class="lead-detail-section lead-rail-block lead-rail-block--summary">
+                                    <div class="lead-detail-section-head">
+                                        <h5 class="m-0">Lead summary</h5>
+                                    </div>
+                                    <div class="lead-detail-head">
+                                        <div class="lead-detail-badges">
+                                            <span class={`label label-sm ${selectedLead.sourceBadgeClass}`}>
+                                                {selectedLead.sourceLabel}
+                                            </span>
+                                            {#if selectedLead.statusLabel}
+                                                <span class={`label label-sm ${selectedLead.statusBadgeClass}`}>
+                                                    {selectedLead.statusLabel}
+                                                </span>
+                                            {/if}
+                                        </div>
+                                        <div class="lead-detail-identity">{selectedLead.identity}</div>
+                                    </div>
+
+                                    <div class="lead-detail-grid">
+                                        <div class="lead-detail-row">
+                                            <span class="txt-xs txt-hint">Created</span>
+                                            <span class="txt-sm">{formatDateTime(selectedLead.created)}</span>
+                                        </div>
+                                        <div class="lead-detail-row">
+                                            <span class="txt-xs txt-hint">Contact</span>
+                                            <span class="txt-sm">
+                                                {#if selectedLead.email || selectedLead.phone}
+                                                    {selectedLead.email || "No email"}{selectedLead.phone ? ` - ${selectedLead.phone}` : ""}
+                                                {:else}
+                                                    No contact details available.
+                                                {/if}
+                                            </span>
+                                        </div>
+                                        {#if selectedLead.subject}
+                                            <div class="lead-detail-row">
+                                                <span class="txt-xs txt-hint">Subject</span>
+                                                <span class="txt-sm">{selectedLead.subject}</span>
+                                            </div>
+                                        {/if}
+                                        <div class="lead-detail-row lead-detail-row-block">
+                                            <span class="txt-xs txt-hint">Message preview</span>
+                                            <p class="txt-sm m-b-0">{resolveLeadPreviewText(selectedLead)}</p>
+                                        </div>
+                                        <div class="lead-detail-row">
+                                            <span class="txt-xs txt-hint">Attribution</span>
+                                            <span class="txt-sm">{resolveLeadAttribution(selectedLead)}</span>
+                                        </div>
+                                        {#if resolveLeadLocationHint(selectedLead)}
+                                            <div class="lead-detail-row">
+                                                <span class="txt-xs txt-hint">Context</span>
+                                                <span class="txt-sm">{resolveLeadLocationHint(selectedLead)}</span>
+                                            </div>
+                                        {/if}
+                                        {#if selectedLead.whatsappTargetPhone}
+                                            <div class="lead-detail-row">
+                                                <span class="txt-xs txt-hint">WhatsApp target phone</span>
+                                                <span class="txt-sm">{selectedLead.whatsappTargetPhone}</span>
+                                            </div>
+                                        {/if}
+                                    </div>
+                                </section>
+
+                                <section class="lead-detail-section lead-rail-block lead-rail-block--actions">
+                                    <div class="lead-detail-section-head">
+                                        <h5 class="m-0">Actions</h5>
+                                    </div>
+
+                                    <div class="lead-detail-actions-block">
+                                        <div class="txt-xs txt-hint txt-uppercase">Status actions</div>
+                                        <div class="lead-detail-actions">
+                                            {#if canToggleSelectedLeadStatus}
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm"
+                                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                                    disabled={isUpdatingLeadStatus}
+                                                    on:click={() => setSelectedLeadStatus(selectedLeadToggleActionTarget)}
+                                                >
+                                                    <span class="txt">{selectedLeadToggleActionLabel}</span>
+                                                </button>
+                                            {/if}
+                                            {#if canArchiveSelectedLead}
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-outline btn-sm"
+                                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                                    disabled={isUpdatingLeadStatus}
+                                                    on:click={archiveSelectedLead}
+                                                >
+                                                    <span class="txt">Archive</span>
+                                                </button>
+                                            {/if}
+                                        </div>
+
+                                        {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                                            <p class="txt-sm txt-hint m-b-0">
+                                                Status actions are not available for WhatsApp interactions yet.
+                                            </p>
+                                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                                            <p class="txt-sm txt-hint m-b-0">
+                                                Status actions are not available for this lead source yet.
+                                            </p>
+                                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
+                                            <p class="txt-sm txt-hint m-b-0">
+                                                Archive is not available for this source yet.
+                                            </p>
+                                        {/if}
+                                    </div>
+
+                                    <div class="lead-detail-actions-block">
+                                        <div class="txt-xs txt-hint txt-uppercase">Utilities</div>
+                                        <div class="lead-detail-actions">
+                                            {#if selectedLead.email}
+                                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
+                                                    <span class="txt">Copy email</span>
+                                                </button>
+                                            {/if}
+                                            {#if selectedLead.phone}
+                                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.phone, "Phone")}>
+                                                    <span class="txt">Copy phone</span>
+                                                </button>
+                                            {/if}
+                                            {#if selectedLead.message || selectedLead.whatsappTargetMessage}
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-outline btn-sm"
+                                                    on:click={() => copyValue(selectedLead.whatsappTargetMessage || selectedLead.message, "Message")}
+                                                >
+                                                    <span class="txt">Copy message</span>
+                                                </button>
+                                            {/if}
+                                            {#if selectedLeadMailto}
+                                                <a href={selectedLeadMailto} class="btn btn-sm">
+                                                    <span class="txt">Open email</span>
+                                                </a>
+                                            {/if}
+                                            {#if selectedLeadWhatsAppLink}
+                                                <a href={selectedLeadWhatsAppLink} target="_blank" rel="noopener noreferrer" class="btn btn-sm">
+                                                    <span class="txt">Open WhatsApp</span>
+                                                </a>
+                                            {/if}
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <section class="lead-detail-section lead-rail-block lead-rail-block--health">
+                                    <div class="lead-detail-section-head">
+                                        <h5 class="m-0">Lead health</h5>
+                                    </div>
+                                    <p class="txt-sm txt-hint m-b-0">
+                                        Review what is missing before follow-up.
+                                    </p>
+                                    <div class="lead-health-summary">
+                                        <span class={`label label-sm ${selectedLeadHealthState.badgeClass}`}>{selectedLeadHealthState.label}</span>
+                                        <span class="summary-pill">
+                                            Warnings: {selectedLeadHealthWarnings.length}
+                                        </span>
+                                        <span class="summary-pill">
+                                            Suggestions: {selectedLeadHealthSuggestions.length}
+                                        </span>
+                                    </div>
+
+                                    {#if selectedLeadHealthWarnings.length}
+                                        <div class="lead-health-list-wrap">
+                                            <div class="txt-xs txt-hint txt-uppercase">Warnings</div>
+                                            <ul class="lead-health-list lead-health-list--warnings">
+                                                {#each selectedLeadHealthWarnings as warning}
+                                                    <li>{warning}</li>
+                                                {/each}
+                                            </ul>
+                                        </div>
+                                    {/if}
+
+                                    {#if selectedLeadHealthSuggestions.length}
+                                        <div class="lead-health-list-wrap">
+                                            <div class="txt-xs txt-hint txt-uppercase">Suggestions</div>
+                                            <ul class="lead-health-list">
+                                                {#each selectedLeadHealthSuggestions as suggestion}
+                                                    <li>{suggestion}</li>
+                                                {/each}
+                                            </ul>
+                                        </div>
+                                    {/if}
+                                </section>
+
+                                <section class="lead-detail-section lead-rail-block lead-rail-block--notification">
+                                    <div class="lead-detail-section-head">
+                                        <h5 class="m-0">Notification setup</h5>
+                                    </div>
+                                    <p class="txt-sm txt-hint m-b-0">
+                                        Based on current Website Settings. Per-lead delivery status is not stored yet.
+                                    </p>
+
+                                    {#if selectedLeadNotificationSetup.available}
+                                        <div class="lead-detail-grid lead-notification-grid">
+                                            <div class="lead-detail-row">
+                                                <span class="txt-xs txt-hint">Current setup</span>
+                                                <div class="lead-notification-badges">
+                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.notificationsEnabled ? "label-success" : "label-danger"}`}>
+                                                        Email notifications: {selectedLeadNotificationSetup.notificationsEnabled ? "Enabled" : "Disabled"}
+                                                    </span>
+                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.hasRecipients ? "label-info" : "label-warning"}`}>
+                                                        {selectedLeadNotificationSetup.hasRecipients ? "Recipients configured" : "Missing recipients"}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="lead-detail-row">
+                                                <span class="txt-xs txt-hint">Recipients</span>
+                                                <span class="txt-sm">
+                                                    {selectedLeadNotificationSetup.recipientsTotal} total ({selectedLeadNotificationSetup.toCount} To, {selectedLeadNotificationSetup.ccCount} CC)
+                                                </span>
+                                            </div>
+
+                                            {#if selectedLeadNotificationSetup.featureAvailabilityLabel}
+                                                <div class="lead-detail-row">
+                                                    <span class="txt-xs txt-hint">Feature availability</span>
+                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.featureAvailable ? "label-success" : "label-warning"}`}>
+                                                        {selectedLeadNotificationSetup.featureAvailabilityLabel}
+                                                    </span>
+                                                </div>
+                                            {/if}
+                                        </div>
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">
+                                            {selectedLeadNotificationSetup.unavailableMessage}
+                                        </p>
+                                    {/if}
+                                </section>
+                            </div>
+                        {:else}
+                            <div class="empty-state m-b-0 leads-detail-empty-state">
+                                Select a lead to view details.
+                            </div>
+                        {/if}
+                    </aside>
+            {/if}
+        </div>
+    </section>
+
+    {#if !isDesktopMasterDetail}
+        <OverlayPanel
+            bind:active={isLeadDetailsActive}
+            class="overlay-panel-lg leads-detail-panel"
+            overlayClose={true}
+            escClose={true}
+            on:hide={closeLeadDetails}
+        >
+            <svelte:fragment slot="header">
+                <h4>Lead details</h4>
+            </svelte:fragment>
+
+            {#if selectedLead}
+                <div class="lead-detail-layout">
+                    <div class="lead-detail-head">
+                        <div class="lead-detail-badges">
+                            <span class={`label label-sm ${selectedLead.sourceBadgeClass}`}>
+                                {selectedLead.sourceLabel}
+                            </span>
+                            {#if selectedLead.statusLabel}
+                                <span class={`label label-sm ${selectedLead.statusBadgeClass}`}>
+                                    {selectedLead.statusLabel}
                                 </span>
-                            </div>
+                            {/if}
+                        </div>
+                        <div class="lead-detail-identity">{selectedLead.identity}</div>
+                    </div>
 
-                            {#if selectedLeadNotificationSetup.featureAvailabilityLabel}
+                    <section class="lead-detail-section">
+                        <div class="lead-detail-section-head">
+                            <h5 class="m-0">Contact</h5>
+                        </div>
+                        <div class="lead-detail-grid">
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Identity</span>
+                                <span class="txt-sm">{selectedLead.identity}</span>
+                            </div>
+                            {#if selectedLead.name && selectedLead.name !== selectedLead.identity}
                                 <div class="lead-detail-row">
-                                    <span class="txt-xs txt-hint">Feature availability</span>
-                                    <span class={`label label-sm ${selectedLeadNotificationSetup.featureAvailable ? "label-success" : "label-warning"}`}>
-                                        {selectedLeadNotificationSetup.featureAvailabilityLabel}
-                                    </span>
+                                    <span class="txt-xs txt-hint">Name</span>
+                                    <span class="txt-sm">{selectedLead.name}</span>
                                 </div>
                             {/if}
-                        </div>
-                    {:else}
-                        <p class="txt-sm txt-hint m-b-0">
-                            {selectedLeadNotificationSetup.unavailableMessage}
-                        </p>
-                    {/if}
-                </section>
-
-                <section class="lead-detail-section">
-                    <div class="lead-detail-section-head">
-                        <h5 class="m-0">Actions</h5>
-                    </div>
-
-                    <div class="lead-detail-actions-block">
-                        <div class="txt-xs txt-hint txt-uppercase">Status actions</div>
-                        <div class="lead-detail-actions">
-                            {#if canToggleSelectedLeadStatus}
-                                <button
-                                    type="button"
-                                    class="btn btn-sm"
-                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
-                                    disabled={isUpdatingLeadStatus}
-                                    on:click={() => setSelectedLeadStatus(selectedLeadToggleActionTarget)}
-                                >
-                                    <span class="txt">{selectedLeadToggleActionLabel}</span>
-                                </button>
-                            {/if}
-                            {#if canArchiveSelectedLead}
-                                <button
-                                    type="button"
-                                    class="btn btn-outline btn-sm"
-                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
-                                    disabled={isUpdatingLeadStatus}
-                                    on:click={archiveSelectedLead}
-                                >
-                                    <span class="txt">Archive</span>
-                                </button>
-                            {/if}
-                        </div>
-
-                        {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                            <p class="txt-sm txt-hint m-b-0">
-                                Status actions are not available for WhatsApp interactions yet.
-                            </p>
-                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                            <p class="txt-sm txt-hint m-b-0">
-                                Status actions are not available for this lead source yet.
-                            </p>
-                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
-                            <p class="txt-sm txt-hint m-b-0">
-                                Archive is not available for this source yet.
-                            </p>
-                        {/if}
-                    </div>
-
-                    <div class="lead-detail-actions-block">
-                        <div class="txt-xs txt-hint txt-uppercase">Utilities</div>
-                        <div class="lead-detail-actions">
                             {#if selectedLead.email}
-                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
-                                    <span class="txt">Copy email</span>
-                                </button>
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">Email</span>
+                                    <span class="txt-sm">{selectedLead.email}</span>
+                                </div>
                             {/if}
                             {#if selectedLead.phone}
-                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.phone, "Phone")}>
-                                    <span class="txt">Copy phone</span>
-                                </button>
-                            {/if}
-                            {#if selectedLead.message || selectedLead.whatsappTargetMessage}
-                                <button
-                                    type="button"
-                                    class="btn btn-outline btn-sm"
-                                    on:click={() => copyValue(selectedLead.whatsappTargetMessage || selectedLead.message, "Message")}
-                                >
-                                    <span class="txt">Copy message</span>
-                                </button>
-                            {/if}
-                            {#if selectedLeadMailto}
-                                <a href={selectedLeadMailto} class="btn btn-sm">
-                                    <span class="txt">Open email</span>
-                                </a>
-                            {/if}
-                            {#if selectedLeadWhatsAppLink}
-                                <a href={selectedLeadWhatsAppLink} target="_blank" rel="noopener noreferrer" class="btn btn-sm">
-                                    <span class="txt">Open WhatsApp</span>
-                                </a>
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">Phone</span>
+                                    <span class="txt-sm">{selectedLead.phone}</span>
+                                </div>
                             {/if}
                         </div>
-                    </div>
-                </section>
-            </div>
-        {:else}
-            <div class="empty-state m-b-0">
-                Lead details are no longer available. Close this drawer and choose another lead.
-            </div>
-        {/if}
+                    </section>
 
-        <svelte:fragment slot="footer">
-            <button type="button" class="btn btn-outline btn-sm" on:click={closeLeadDetails}>
-                <span class="txt">Close</span>
-            </button>
-        </svelte:fragment>
-    </OverlayPanel>
+                    <section class="lead-detail-section">
+                        <div class="lead-detail-section-head">
+                            <h5 class="m-0">Message</h5>
+                        </div>
+                        <div class="lead-detail-grid">
+                            {#if selectedLead.subject}
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">Subject</span>
+                                    <span class="txt-sm">{selectedLead.subject}</span>
+                                </div>
+                            {/if}
+                            {#if selectedLead.message}
+                                <div class="lead-detail-row lead-detail-row-block">
+                                    <span class="txt-xs txt-hint">Message</span>
+                                    <p class="txt-sm m-b-0">{selectedLead.message}</p>
+                                </div>
+                            {/if}
+                            {#if selectedLead.whatsappTargetMessage}
+                                <div class="lead-detail-row lead-detail-row-block">
+                                    <span class="txt-xs txt-hint">WhatsApp target message</span>
+                                    <p class="txt-sm m-b-0">{selectedLead.whatsappTargetMessage}</p>
+                                </div>
+                            {/if}
+                            {#if !selectedLead.subject && !selectedLead.message && !selectedLead.whatsappTargetMessage}
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">Message</span>
+                                    <span class="txt-sm txt-hint">No message details are available for this lead yet.</span>
+                                </div>
+                            {/if}
+                        </div>
+                    </section>
+
+                    <section class="lead-detail-section">
+                        <div class="lead-detail-section-head">
+                            <h5 class="m-0">Source</h5>
+                        </div>
+                        <div class="lead-detail-grid">
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Attribution</span>
+                                <span class="txt-sm">{resolveLeadAttribution(selectedLead)}</span>
+                            </div>
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Created</span>
+                                <span class="txt-sm">{formatDateTime(selectedLead.created)}</span>
+                            </div>
+                            {#if resolveLeadLocationHint(selectedLead)}
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">Context</span>
+                                    <span class="txt-sm">{resolveLeadLocationHint(selectedLead)}</span>
+                                </div>
+                            {/if}
+                            {#if selectedLead.whatsappTargetPhone}
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">WhatsApp target phone</span>
+                                    <span class="txt-sm">{selectedLead.whatsappTargetPhone}</span>
+                                </div>
+                            {/if}
+                        </div>
+                    </section>
+
+                    <section class="lead-detail-section">
+                        <div class="lead-detail-section-head">
+                            <h5 class="m-0">Notification setup</h5>
+                        </div>
+                        <p class="txt-sm txt-hint m-b-0">
+                            Based on current Website Settings. Per-lead delivery status is not stored yet.
+                        </p>
+
+                        {#if selectedLeadNotificationSetup.available}
+                            <div class="lead-detail-grid lead-notification-grid">
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">Current setup</span>
+                                    <div class="lead-notification-badges">
+                                        <span class={`label label-sm ${selectedLeadNotificationSetup.notificationsEnabled ? "label-success" : "label-danger"}`}>
+                                            Email notifications: {selectedLeadNotificationSetup.notificationsEnabled ? "Enabled" : "Disabled"}
+                                        </span>
+                                        <span class={`label label-sm ${selectedLeadNotificationSetup.hasRecipients ? "label-info" : "label-warning"}`}>
+                                            {selectedLeadNotificationSetup.hasRecipients ? "Recipients configured" : "Missing recipients"}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="lead-detail-row">
+                                    <span class="txt-xs txt-hint">Recipients</span>
+                                    <span class="txt-sm">
+                                        {selectedLeadNotificationSetup.recipientsTotal} total ({selectedLeadNotificationSetup.toCount} To, {selectedLeadNotificationSetup.ccCount} CC)
+                                    </span>
+                                </div>
+
+                                {#if selectedLeadNotificationSetup.featureAvailabilityLabel}
+                                    <div class="lead-detail-row">
+                                        <span class="txt-xs txt-hint">Feature availability</span>
+                                        <span class={`label label-sm ${selectedLeadNotificationSetup.featureAvailable ? "label-success" : "label-warning"}`}>
+                                            {selectedLeadNotificationSetup.featureAvailabilityLabel}
+                                        </span>
+                                    </div>
+                                {/if}
+                            </div>
+                        {:else}
+                            <p class="txt-sm txt-hint m-b-0">
+                                {selectedLeadNotificationSetup.unavailableMessage}
+                            </p>
+                        {/if}
+                    </section>
+
+                    <section class="lead-detail-section">
+                        <div class="lead-detail-section-head">
+                            <h5 class="m-0">Actions</h5>
+                        </div>
+
+                        <div class="lead-detail-actions-block">
+                            <div class="txt-xs txt-hint txt-uppercase">Status actions</div>
+                            <div class="lead-detail-actions">
+                                {#if canToggleSelectedLeadStatus}
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                        disabled={isUpdatingLeadStatus}
+                                        on:click={() => setSelectedLeadStatus(selectedLeadToggleActionTarget)}
+                                    >
+                                        <span class="txt">{selectedLeadToggleActionLabel}</span>
+                                    </button>
+                                {/if}
+                                {#if canArchiveSelectedLead}
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline btn-sm"
+                                        class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                        disabled={isUpdatingLeadStatus}
+                                        on:click={archiveSelectedLead}
+                                    >
+                                        <span class="txt">Archive</span>
+                                    </button>
+                                {/if}
+                            </div>
+
+                            {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                                <p class="txt-sm txt-hint m-b-0">
+                                    Status actions are not available for WhatsApp interactions yet.
+                                </p>
+                            {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                                <p class="txt-sm txt-hint m-b-0">
+                                    Status actions are not available for this lead source yet.
+                                </p>
+                            {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
+                                <p class="txt-sm txt-hint m-b-0">
+                                    Archive is not available for this source yet.
+                                </p>
+                            {/if}
+                        </div>
+
+                        <div class="lead-detail-actions-block">
+                            <div class="txt-xs txt-hint txt-uppercase">Utilities</div>
+                            <div class="lead-detail-actions">
+                                {#if selectedLead.email}
+                                    <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
+                                        <span class="txt">Copy email</span>
+                                    </button>
+                                {/if}
+                                {#if selectedLead.phone}
+                                    <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.phone, "Phone")}>
+                                        <span class="txt">Copy phone</span>
+                                    </button>
+                                {/if}
+                                {#if selectedLead.message || selectedLead.whatsappTargetMessage}
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline btn-sm"
+                                        on:click={() => copyValue(selectedLead.whatsappTargetMessage || selectedLead.message, "Message")}
+                                    >
+                                        <span class="txt">Copy message</span>
+                                    </button>
+                                {/if}
+                                {#if selectedLeadMailto}
+                                    <a href={selectedLeadMailto} class="btn btn-sm">
+                                        <span class="txt">Open email</span>
+                                    </a>
+                                {/if}
+                                {#if selectedLeadWhatsAppLink}
+                                    <a href={selectedLeadWhatsAppLink} target="_blank" rel="noopener noreferrer" class="btn btn-sm">
+                                        <span class="txt">Open WhatsApp</span>
+                                    </a>
+                                {/if}
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            {:else}
+                <div class="empty-state m-b-0">
+                    Select a lead to view details.
+                </div>
+            {/if}
+
+            <svelte:fragment slot="footer">
+                <button type="button" class="btn btn-outline btn-sm" on:click={closeLeadDetails}>
+                    <span class="txt">Close</span>
+                </button>
+            </svelte:fragment>
+        </OverlayPanel>
+    {/if}
 </PageWrapper>
 
 <style>
@@ -1518,64 +1919,107 @@
         max-width: 640px;
     }
 
-    .leads-filters {
+    .leads-body {
         padding: calc(var(--baseSpacing) - 10px);
-    }
-
-    .leads-filter-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: flex;
+        flex-direction: column;
         gap: 10px;
     }
 
-    .leads-filter-group {
+    .head-tools {
         display: flex;
-        flex-direction: column;
-        gap: 6px;
+        align-items: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
     }
 
-    .leads-filter-row {
-        display: flex;
-        align-items: center;
+    .head-context {
+        display: inline-flex;
+        align-items: flex-end;
         gap: 8px;
         flex-wrap: wrap;
     }
 
-    .leads-filter-row .input {
-        flex: 1 1 320px;
-        min-width: 220px;
+    .head-context-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 200px;
     }
 
-    .leads-filter-row label {
-        min-width: 58px;
+    .head-context-item .input {
+        min-width: 200px;
     }
 
-    .leads-filter-row--controls .input[type="text"] {
-        flex: 1 1 420px;
-        min-width: 260px;
+    .leads-toolbar-row {
+        display: grid;
+        grid-template-columns: minmax(300px, 1.8fr) minmax(170px, 0.7fr) auto;
+        gap: 10px;
+        align-items: end;
     }
 
-    .leads-filter-row--controls select {
-        min-width: 170px;
-        max-width: 190px;
-        flex: 0 0 auto;
+    .leads-left-column {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
     }
 
-    .leads-sort-label {
-        min-width: 34px;
+    .leads-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
     }
 
-    .leads-list-panel {
-        padding: calc(var(--baseSpacing) - 8px);
+    .leads-filter-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
     }
 
-    .leads-list {
+    .leads-filter-cell .input {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .leads-filter-cell--reset {
+        align-items: flex-end;
+        justify-content: flex-end;
+    }
+
+    .leads-filter-cell--reset .btn {
+        white-space: nowrap;
+    }
+
+    .leads-filter-segments {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
     }
 
-    .leads-item {
+    .leads-segment-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .leads-inbox-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(280px, 24vw, 350px);
+        gap: 12px;
+        align-items: start;
+    }
+
+    .leads-inbox-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .leads-inbox-item {
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
         background: var(--baseColor);
@@ -1584,76 +2028,99 @@
         flex-direction: column;
         gap: 6px;
         cursor: pointer;
-        transition: border-color var(--baseAnimationSpeed), box-shadow var(--baseAnimationSpeed);
+        transition: border-color var(--baseAnimationSpeed), box-shadow var(--baseAnimationSpeed), background-color var(--baseAnimationSpeed);
     }
 
-    .leads-item:hover,
-    .leads-item:focus-visible {
+    .leads-inbox-item:hover,
+    .leads-inbox-item:focus-visible {
         border-color: var(--baseAlt3Color);
         box-shadow: 0 0 0 2px var(--baseAltColor);
         outline: none;
     }
 
-    .leads-item.selected {
-        border-color: var(--baseAlt3Color);
-        box-shadow: 0 0 0 2px var(--baseAltColor);
+    .leads-inbox-item.selected {
+        border-color: color-mix(in srgb, var(--primaryColor) 40%, var(--baseAlt3Color));
+        background: color-mix(in srgb, var(--primaryColor) 6%, var(--baseColor));
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--primaryColor) 20%, transparent);
     }
 
-    .leads-item-head {
+    .leads-inbox-item-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
     }
 
-    .leads-item-badges {
+    .leads-inbox-item-badges {
         display: inline-flex;
         align-items: center;
         gap: 5px;
         flex-wrap: wrap;
     }
 
-    .leads-item-identity {
+    .leads-inbox-item-date {
+        white-space: nowrap;
+    }
+
+    .leads-inbox-item-title {
+        font-size: 14px;
         font-weight: 600;
         color: var(--txtPrimaryColor);
     }
 
-    .leads-item-secondary {
+    .leads-inbox-item-secondary {
         margin-top: -2px;
     }
 
-    .leads-item-contact {
+    .leads-inbox-item-contact {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 10px;
     }
 
-    .leads-item-contact span {
+    .leads-inbox-item-contact span {
         display: inline-flex;
         align-items: center;
         gap: 4px;
     }
 
-    .leads-item-preview {
+    .leads-inbox-item-preview {
         color: var(--txtPrimaryColor);
     }
 
-    .leads-item-meta {
+    .leads-inbox-item-attribution {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
         padding-top: 2px;
     }
 
-    .leads-item-attribution {
+    .leads-inbox-item-attribution span {
+        color: var(--txtHintColor);
+    }
+
+    .leads-inbox-item-attribution span:first-child {
         color: var(--txtPrimaryColor);
         font-weight: 500;
     }
 
-    .leads-item-meta span + span::before {
+    .leads-inbox-item-attribution span + span::before {
         content: "-";
         margin-right: 8px;
         color: var(--txtDisabledColor);
+    }
+
+    .leads-detail-rail {
+        border-left: 0;
+        padding-left: 0;
+        min-width: 0;
+    }
+
+    .leads-detail-empty-state {
+        min-height: 280px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     :global(.leads-detail-panel .panel-content) {
@@ -1666,21 +2133,23 @@
         gap: 12px;
     }
 
-    .lead-detail-section {
+    .lead-rail-block {
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: var(--baseRadius);
+        padding: 10px;
+        background: color-mix(in srgb, var(--baseColor) 90%, var(--baseAlt1Color));
+    }
+
+    .lead-detail-head {
         display: flex;
         flex-direction: column;
         gap: 8px;
     }
 
-    .lead-detail-section + .lead-detail-section {
-        padding-top: 8px;
-        border-top: 1px solid var(--baseAlt2Color);
-    }
-
-    .lead-detail-section-head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
+    .lead-detail-identity {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--txtPrimaryColor);
     }
 
     .lead-detail-badges {
@@ -1688,6 +2157,23 @@
         align-items: center;
         gap: 6px;
         flex-wrap: wrap;
+    }
+
+    .lead-detail-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .lead-detail-section + .lead-detail-section {
+        padding-top: 0;
+        border-top: 0;
+    }
+
+    .lead-detail-section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
     }
 
     .lead-detail-grid {
@@ -1703,11 +2189,17 @@
         padding: 8px 10px;
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
-        background: var(--baseColor);
+        background: color-mix(in srgb, var(--baseColor) 92%, var(--baseAlt1Color));
     }
 
     .lead-detail-row-block p {
         white-space: pre-wrap;
+    }
+
+    .lead-detail-actions-block {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
     }
 
     .lead-detail-actions {
@@ -1718,12 +2210,6 @@
         padding-top: 2px;
     }
 
-    .lead-detail-actions-block {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
     .lead-notification-badges {
         display: inline-flex;
         align-items: center;
@@ -1731,20 +2217,71 @@
         flex-wrap: wrap;
     }
 
-    @media (max-width: 980px) {
-        .leads-list {
+    .lead-health-summary {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+    }
+
+    .lead-health-list-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .lead-health-list {
+        margin: 0;
+        padding-left: 16px;
+        color: var(--txtHintColor);
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .lead-health-list--warnings {
+        color: var(--dangerColor);
+    }
+
+    @media (max-width: 1240px) {
+        .leads-toolbar-row {
+            grid-template-columns: minmax(240px, 1.5fr) minmax(150px, 0.8fr) auto;
+        }
+    }
+
+    @media (min-width: 1480px) {
+        .leads-inbox-list {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 1060px) {
+        .leads-toolbar-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .leads-filter-cell--reset {
+            align-items: flex-start;
+        }
+
+        .leads-filter-segments {
+            grid-template-columns: 1fr;
+        }
+
+        .leads-inbox-layout {
             grid-template-columns: 1fr;
         }
     }
 
-    @media (max-width: 840px) {
-        .leads-filter-grid {
-            grid-template-columns: 1fr;
+    @media (max-width: 760px) {
+        .head-context-item,
+        .head-context-item .input {
+            min-width: 0;
+            width: 100%;
         }
 
-        .leads-filter-row--controls select {
-            max-width: 100%;
-            min-width: 140px;
+        .leads-toolbar-row {
+            grid-template-columns: 1fr;
         }
     }
 </style>
