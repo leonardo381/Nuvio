@@ -1,4 +1,4 @@
-<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
+<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addErrorToast, addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
     $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    const subscriberGroupsFieldAliases = ["groups", "groupIds", "subscriberGroups", "subscriber_groups"];    const campaignRecipientsTypeFieldAliases = ["recipientsType", "recipientType", "recipients_type"];    const campaignRecipientsIdsFieldAliases = ["recipientsIds", "recipientIds", "recipients_ids"];    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
@@ -56,8 +56,10 @@
     let selectedSubscriberIds = [];
 
     let pendingSendCampaign = null;
+    let pendingDeleteCampaign = null;
     let pendingDeleteSubscriber = null;
     let editingSubscriberId = "";
+    let deletingCampaignId = "";
     let editingSubscriberForm = {
         name: "",
         email: "",
@@ -751,17 +753,98 @@
             .trim();
     }
 
+    function resolveCampaignPreviewBaseHref() {
+        if (typeof window === "undefined") {
+            return "/";
+        }
+
+        const fallbackBase = `${window.location.origin || ""}/`;
+        const configuredBackendUrl = `${import.meta.env.PB_BACKEND_URL || ""}`.trim();
+
+        if (!configuredBackendUrl) {
+            return fallbackBase;
+        }
+
+        try {
+            return new URL(configuredBackendUrl, window.location.href).toString();
+        } catch (_) {
+            return fallbackBase;
+        }
+    }
+
+    function normalizeCampaignPreviewMediaUrl(rawUrl, previewBaseHref) {
+        const source = `${rawUrl || ""}`.trim();
+        if (!source) {
+            return source;
+        }
+
+        // Keep explicit non-http resource schemes unchanged.
+        if (/^(data:|blob:|cid:|mailto:|tel:|javascript:)/i.test(source)) {
+            return source;
+        }
+
+        try {
+            const resolved = new URL(source, previewBaseHref);
+            if (typeof window !== "undefined") {
+                const currentUrl = new URL(window.location.href);
+                const isLoopback = (hostname) => hostname === "localhost" || hostname === "127.0.0.1";
+                if (
+                    isLoopback(resolved.hostname)
+                    && isLoopback(currentUrl.hostname)
+                    && resolved.protocol === currentUrl.protocol
+                    && resolved.port === currentUrl.port
+                ) {
+                    resolved.hostname = currentUrl.hostname;
+                }
+            }
+            return resolved.toString();
+        } catch (_) {
+            return source;
+        }
+    }
+
+    function normalizeCampaignPreviewBodyHtml(body, previewBaseHref) {
+        const sanitizedBody = sanitizePreviewBodyHtml(body);
+        if (!sanitizedBody || typeof window === "undefined" || typeof DOMParser === "undefined") {
+            return sanitizedBody;
+        }
+
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(`<div id="campaign-preview-root">${sanitizedBody}</div>`, "text/html");
+            const root = doc.getElementById("campaign-preview-root");
+
+            if (!root) {
+                return sanitizedBody;
+            }
+
+            root.querySelectorAll("img[src], source[src], video[src], audio[src]").forEach((node) => {
+                const rawSrc = node.getAttribute("src");
+                if (!rawSrc) {
+                    return;
+                }
+                node.setAttribute("src", normalizeCampaignPreviewMediaUrl(rawSrc, previewBaseHref));
+            });
+
+            return root.innerHTML.trim();
+        } catch (_) {
+            return sanitizedBody;
+        }
+    }
+
     function buildCampaignPreviewDocument(subject, body) {
         const trimmedSubject = `${subject || ""}`.trim();
         const escapedTitle = escapePreviewText(trimmedSubject || "Campaign preview");
-        const sanitizedBody = sanitizePreviewBodyHtml(body);
-        const bodyHtml = sanitizedBody || '<p class="preview-empty">Body preview will appear here.</p>';
+        const previewBaseHref = resolveCampaignPreviewBaseHref();
+        const normalizedBody = normalizeCampaignPreviewBodyHtml(body, previewBaseHref);
+        const bodyHtml = normalizedBody || '<p class="preview-empty">Body preview will appear here.</p>';
 
         return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <base href="${escapePreviewText(previewBaseHref)}" />
   <title>${escapedTitle}</title>
   <style>
     :root { color-scheme: light; }
@@ -790,6 +873,11 @@
       line-height: 1.3;
     }
     .preview-content p:last-child { margin-bottom: 0; }
+    .preview-content img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
     .preview-empty {
       margin: 0;
       color: #6b7280;
@@ -1047,6 +1135,22 @@
         pendingSendCampaign = null;
     }
 
+    function openDeleteCampaignModal(campaign) {
+        if (!campaign?.id || deletingCampaignId || normalizeStatus(campaign?.status) !== "draft") {
+            return;
+        }
+
+        pendingDeleteCampaign = campaign;
+    }
+
+    function closeDeleteCampaignModal() {
+        if (deletingCampaignId) {
+            return;
+        }
+
+        pendingDeleteCampaign = null;
+    }
+
     function openCampaignPreviewModal() {
         isCampaignPreviewExpanded = true;
     }
@@ -1100,6 +1204,16 @@
         pendingDeleteSubscriber = null;
         await deleteSubscriber(subscriber);
     }
+
+    async function confirmDeleteCampaign() {
+        if (!pendingDeleteCampaign) {
+            return;
+        }
+
+        const campaign = pendingDeleteCampaign;
+        pendingDeleteCampaign = null;
+        await deleteDraftCampaign(campaign);
+    }
     async function loadWebsites() {        if (!websitesCollection?.id) {            websites = [];            selectedWebsiteId = "";            return;        }        isLoadingWebsites = true;        try {            websites = await ApiClient.collection(websitesCollection.id).getFullList({                sort: resolveWebsitesSort(websitesCollection),                requestKey: "nuvio_newsletter_websites",            });            if (!websites.length) {
                 selectedWebsiteId = "";
                 subscribers = [];
@@ -1150,6 +1264,7 @@
         subscriberGroupFormError = "";
         campaignFormError = "";
         pendingSendCampaign = null;
+        pendingDeleteCampaign = null;
         pendingDeleteSubscriber = null;
         subscriberGroupFilter = "all";
         subscriberForm = { ...subscriberForm, name: "", groupIds: [] };
@@ -1475,6 +1590,44 @@
 
         delete isDuplicatingCampaign[campaign.id];
         isDuplicatingCampaign = { ...isDuplicatingCampaign };
+    }
+
+    async function deleteDraftCampaign(campaign) {
+        if (
+            !campaign?.id
+            || !hasNewsletterCollections
+            || deletingCampaignId
+            || normalizeStatus(campaign?.status) !== "draft"
+        ) {
+            return;
+        }
+
+        deletingCampaignId = campaign.id;
+
+        try {
+            await ApiClient.collection(campaignsCollection.id).delete(campaign.id);
+
+            if (editingCampaignId === campaign.id) {
+                resetCampaignComposer();
+                campaignWorkspace = "builder";
+            }
+
+            if (pendingSendCampaign?.id === campaign.id) {
+                pendingSendCampaign = null;
+            }
+
+            await loadCampaigns();
+            addSuccessToast("Draft deleted.");
+        } catch (err) {
+            console.error("Unable to delete draft campaign:", err);
+            addErrorToast("Unable to delete draft right now.");
+        }
+
+        if (pendingDeleteCampaign?.id === campaign.id) {
+            pendingDeleteCampaign = null;
+        }
+
+        deletingCampaignId = "";
     }
 
 
@@ -2600,6 +2753,15 @@
                                                             >
                                                                 <span class="txt">Send</span>
                                                             </button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-danger btn-outline action-btn campaign-row-btn"
+                                                                class:btn-loading={deletingCampaignId === campaign.id}
+                                                                disabled={deletingCampaignId === campaign.id}
+                                                                on:click={() => openDeleteCampaignModal(campaign)}
+                                                            >
+                                                                <span class="txt">Delete</span>
+                                                            </button>
                                                         {:else if normalizeStatus(campaign.status) === "sent"}
                                                             <button
                                                                 type="button"
@@ -2767,6 +2929,44 @@
                         on:click={confirmDeleteSubscriber}
                     >
                         <span class="txt">Delete</span>
+                    </button>
+                </svelte:fragment>
+            </OverlayPanel>
+        {/if}
+        {#if pendingDeleteCampaign}
+            <OverlayPanel
+                popup
+                class="newsletter-delete-confirm hide-content overlay-panel-sm"
+                active={true}
+                overlayClose={!deletingCampaignId}
+                escClose={false}
+                btnClose={false}
+                on:hide={closeDeleteCampaignModal}
+            >
+                <div slot="header" class="newsletter-delete-confirm-head">
+                    <h4 class="m-0">Delete draft?</h4>
+                    <p class="txt-sm txt-hint m-t-5 m-b-0">
+                        This draft will be permanently removed. This action cannot be undone.
+                    </p>
+                </div>
+
+                <svelte:fragment slot="footer">
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-outline"
+                        disabled={!!deletingCampaignId}
+                        on:click={closeDeleteCampaignModal}
+                    >
+                        <span class="txt">Cancel</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-sm btn-danger btn-outline"
+                        class:btn-loading={!!deletingCampaignId}
+                        disabled={!!deletingCampaignId}
+                        on:click={confirmDeleteCampaign}
+                    >
+                        <span class="txt">Delete draft</span>
                     </button>
                 </svelte:fragment>
             </OverlayPanel>
@@ -4360,6 +4560,7 @@
         }
     }
 </style>
+
 
 
 
