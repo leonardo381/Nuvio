@@ -24,6 +24,10 @@
         { key: "new", label: "New" },
         { key: "read", label: "Read" },
     ];
+    const leadsViewOptions = [
+        { key: "inbox", label: "Inbox", icon: "ri-inbox-line" },
+        { key: "archived", label: "Archived", icon: "ri-archive-line" },
+    ];
     const archivedStatusAliases = ["archived", "archive"];
 
     const ALL_WEBSITES_KEY = "all";
@@ -37,6 +41,7 @@
 
     let sourceFilter = "all";
     let statusFilter = "all";
+    let leadsView = "inbox";
     let searchTerm = "";
     let sortOrder = "newest";
     let selectedLeadKey = "";
@@ -75,8 +80,9 @@
     $: websiteOptionMap = new Map(
         websites.map((website) => [website.id, resolveWebsiteLabel(website)]),
     );
-    $: hasMultipleWebsites = websites.length > 1;
-    $: singleWebsiteLabel = websites.length === 1 ? resolveWebsiteLabel(websites[0]) : "";
+    $: if (websites.length === 1 && selectedWebsiteId === ALL_WEBSITES_KEY) {
+        selectedWebsiteId = websites[0].id;
+    }
 
     $: if (selectedWebsiteId !== ALL_WEBSITES_KEY && !websiteOptionMap.has(selectedWebsiteId)) {
         selectedWebsiteId = ALL_WEBSITES_KEY;
@@ -95,6 +101,7 @@
     }
 
     $: normalizedSearchTerm = `${searchTerm || ""}`.trim().toLowerCase();
+    $: normalizedLeadsView = leadsView === "archived" ? "archived" : "inbox";
     $: contactsStatusSupport = resolveStatusSupport(contactsCollection);
     $: whatsappStatusSupport = resolveStatusSupport(whatsappCollection);
 
@@ -137,13 +144,18 @@
     $: selectedLeadStatusSupport = resolveLeadStatusSupport(selectedLead);
     $: canToggleSelectedLeadStatus = !!selectedLead?.recordId && selectedLeadStatusSupport?.supportsToggle;
     $: selectedLeadCurrentStatusNormalized = normalizeLower(selectedLead?.statusValue);
+    $: isSelectedLeadArchived = normalizeLower(selectedLead?.statusKey) === "archived";
     $: selectedLeadToggleToRead = selectedLeadCurrentStatusNormalized === normalizeLower(selectedLeadStatusSupport?.newValue);
     $: selectedLeadToggleActionLabel = selectedLeadToggleToRead ? "Mark as read" : "Mark as new";
     $: selectedLeadToggleActionTarget = selectedLeadToggleToRead
         ? selectedLeadStatusSupport?.readValue
         : selectedLeadStatusSupport?.newValue;
+    $: canMoveSelectedLeadToInbox = !!selectedLead?.recordId
+        && selectedLeadStatusSupport?.supportsToggle
+        && isSelectedLeadArchived;
     $: canArchiveSelectedLead = !!selectedLead?.recordId
         && selectedLeadStatusSupport?.supportsArchive
+        && !isSelectedLeadArchived
         && selectedLeadCurrentStatusNormalized !== normalizeLower(selectedLeadStatusSupport?.archiveValue);
     $: selectedLeadPrimaryMessage = normalizeString(selectedLead?.whatsappTargetMessage || selectedLead?.message);
     $: selectedLeadMissingContact = !!selectedLead && !normalizeString(selectedLead?.email) && !normalizeString(selectedLead?.phone);
@@ -163,10 +175,12 @@
     });
     $: selectedLeadHealthState = resolveLeadHealthState(selectedLeadHealthWarnings, selectedLeadHealthSuggestions);
 
-    $: totalNewLeads = normalizedLeads.filter((lead) => lead.statusKey === "new").length;
-    $: totalThisMonthLeads = normalizedLeads.filter((lead) => isCurrentMonth(lead.created)).length;
-    $: totalContactFormLeads = normalizedLeads.filter((lead) => lead.sourceKey === "contact").length;
-    $: totalWhatsAppLeads = normalizedLeads.filter((lead) => lead.sourceKey === "whatsapp").length;
+    $: nonArchivedLeads = normalizedLeads.filter((lead) => lead.statusKey !== "archived");
+    $: archivedLeadsCount = normalizedLeads.filter((lead) => lead.statusKey === "archived").length;
+    $: totalNewLeads = nonArchivedLeads.filter((lead) => lead.statusKey === "new").length;
+    $: totalThisMonthLeads = nonArchivedLeads.filter((lead) => isCurrentMonth(lead.created)).length;
+    $: totalContactFormLeads = nonArchivedLeads.filter((lead) => lead.sourceKey === "contact").length;
+    $: totalWhatsAppLeads = nonArchivedLeads.filter((lead) => lead.sourceKey === "whatsapp").length;
     // NUVIO CUSTOM END: Unified Leads operations page for purpose-built backoffice workflows.
 
     function normalizeString(value) {
@@ -844,10 +858,14 @@
 
     function filterAndSortLeads(leads) {
         const next = (leads || []).filter((lead) => {
+            const isArchivedLead = lead.statusKey === "archived";
+            const byView = normalizedLeadsView === "archived" ? isArchivedLead : !isArchivedLead;
             const bySource = sourceFilter === "all" || lead.sourceKey === sourceFilter;
-            const byStatus = statusFilter === "all" || lead.statusKey === statusFilter;
+            const byStatus = normalizedLeadsView === "archived"
+                ? true
+                : statusFilter === "all" || lead.statusKey === statusFilter;
 
-            if (!bySource || !byStatus) {
+            if (!byView || !bySource || !byStatus) {
                 return false;
             }
 
@@ -1121,6 +1139,14 @@
         await setSelectedLeadStatus(selectedLeadStatusSupport.archiveValue);
     }
 
+    async function moveSelectedLeadToInbox() {
+        if (!canMoveSelectedLeadToInbox || isUpdatingLeadStatus) {
+            return;
+        }
+
+        await setSelectedLeadStatus(selectedLeadStatusSupport.readValue);
+    }
+
     function openLeadDetails(lead) {
         if (!lead?.key) {
             return;
@@ -1150,6 +1176,13 @@
         statusFilter = "all";
         searchTerm = "";
         sortOrder = "newest";
+    }
+
+    function setLeadsView(nextView) {
+        leadsView = nextView === "archived" ? "archived" : "inbox";
+        if (leadsView === "archived") {
+            statusFilter = "all";
+        }
     }
 
     onMount(() => {
@@ -1190,56 +1223,68 @@
             <div class="summary-title-wrap">
                 <div class="title-row">
                     <h2 class="m-0">Leads</h2>
+                    <RefreshButton class="btn-sm" tooltip={"Refresh"} on:refresh={reload} />
                 </div>
                 <p class="head-description txt-sm txt-hint m-b-0">
                     Review contacts and interactions generated by the website.
                 </p>
             </div>
 
-            <div class="head-tools">
-                <div class="head-context">
-                    {#if hasMultipleWebsites}
-                        <div class="head-context-item">
-                            <label class="txt-xs txt-hint" for="leads-website-filter">Website</label>
-                            <select
-                                id="leads-website-filter"
-                                class="input input-sm"
-                                bind:value={selectedWebsiteId}
-                                disabled={isLoadingWebsites}
-                            >
-                                <option value={ALL_WEBSITES_KEY}>All websites</option>
-                                {#each websites as website (website.id)}
-                                    <option value={website.id}>{resolveWebsiteLabel(website)}</option>
-                                {/each}
-                            </select>
-                        </div>
-                    {:else if singleWebsiteLabel}
-                        <span class="summary-pill">
-                            <i class="ri-global-line" />
-                            {singleWebsiteLabel}
-                        </span>
-                    {/if}
+            <div class="head-selector">
+                <div class="selector-row">
+                    <label class="txt-sm txt-hint selector-label m-b-0" for="leads-website-filter">Website</label>
+                    <select
+                        id="leads-website-filter"
+                        class="input input-sm"
+                        bind:value={selectedWebsiteId}
+                        disabled={isLoadingWebsites || !websites.length}
+                    >
+                        {#if !websites.length}
+                            <option value="">No websites available</option>
+                        {:else}
+                            <option value={ALL_WEBSITES_KEY}>All websites</option>
+                            {#each websites as website (website.id)}
+                                <option value={website.id}>{resolveWebsiteLabel(website)}</option>
+                            {/each}
+                        {/if}
+                    </select>
                 </div>
+            </div>
+        </div>
 
-                <RefreshButton class="btn-sm" tooltip={"Refresh"} on:refresh={reload} />
-                <div class="summary-badges">
-                    <span class="summary-pill">
-                        <i class="ri-mail-line" />
-                        New: {totalNewLeads}
-                    </span>
-                    <span class="summary-pill">
-                        <i class="ri-calendar-event-line" />
-                        Total this month: {totalThisMonthLeads}
-                    </span>
-                    <span class="summary-pill">
-                        <i class="ri-chat-1-line" />
-                        Contact form: {totalContactFormLeads}
-                    </span>
-                    <span class="summary-pill">
-                        <i class="ri-whatsapp-line" />
-                        WhatsApp: {totalWhatsAppLeads}
-                    </span>
-                </div>
+        <div class="head-tools">
+            <div class="tabs-header compact combined left operations-tabs leads-view-toggle">
+                {#each leadsViewOptions as option (option.key)}
+                    <button
+                        type="button"
+                        class="tab-item"
+                        class:active={normalizedLeadsView === option.key}
+                        on:click={() => setLeadsView(option.key)}
+                    >
+                        <i class={`${option.icon} tab-icon`} aria-hidden="true" />
+                        <span class="tab-label">
+                            {option.label}{option.key === "archived" ? ` (${archivedLeadsCount})` : ""}
+                        </span>
+                    </button>
+                {/each}
+            </div>
+            <div class="summary-badges">
+                <span class="summary-pill">
+                    <i class="ri-mail-line" />
+                    New: {totalNewLeads}
+                </span>
+                <span class="summary-pill">
+                    <i class="ri-calendar-event-line" />
+                    Total this month: {totalThisMonthLeads}
+                </span>
+                <span class="summary-pill">
+                    <i class="ri-chat-1-line" />
+                    Contact form: {totalContactFormLeads}
+                </span>
+                <span class="summary-pill">
+                    <i class="ri-whatsapp-line" />
+                    WhatsApp: {totalWhatsAppLeads}
+                </span>
             </div>
         </div>
     </section>
@@ -1275,7 +1320,7 @@
                         </div>
                     </div>
 
-                    <div class="leads-filter-segments">
+                    <div class="leads-filter-segments" class:is-single-column={normalizedLeadsView === "archived"}>
                         <div class="leads-segment-group">
                             <span class="txt-sm txt-hint">Source</span>
                             <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
@@ -1292,21 +1337,23 @@
                             </div>
                         </div>
 
-                        <div class="leads-segment-group">
-                            <span class="txt-sm txt-hint">Status</span>
-                            <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
-                                {#each statusFilterOptions as option (option.key)}
-                                    <button
-                                        type="button"
-                                        class="tab-item"
-                                        class:active={statusFilter === option.key}
-                                        on:click={() => (statusFilter = option.key)}
-                                    >
-                                        <span class="txt">{option.label}</span>
-                                    </button>
-                                {/each}
+                        {#if normalizedLeadsView === "inbox"}
+                            <div class="leads-segment-group">
+                                <span class="txt-sm txt-hint">Status</span>
+                                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
+                                    {#each statusFilterOptions as option (option.key)}
+                                        <button
+                                            type="button"
+                                            class="tab-item"
+                                            class:active={statusFilter === option.key}
+                                            on:click={() => (statusFilter = option.key)}
+                                        >
+                                            <span class="txt">{option.label}</span>
+                                        </button>
+                                    {/each}
+                                </div>
                             </div>
-                        </div>
+                        {/if}
                     </div>
                 </div>
 
@@ -1346,11 +1393,19 @@
                     </div>
                 {:else if !normalizedLeads.length}
                     <div class="empty-state m-b-0">
-                        No leads yet. Contact form submissions and WhatsApp interactions will appear here.
+                        {#if normalizedLeadsView === "archived"}
+                            No archived leads yet.
+                        {:else}
+                            No leads yet. Contact form submissions and WhatsApp interactions will appear here.
+                        {/if}
                     </div>
                 {:else if !filteredLeads.length}
                     <div class="empty-state m-b-0">
-                        No leads match these filters.
+                        {#if normalizedLeadsView === "archived" && !archivedLeadsCount}
+                            No archived leads yet.
+                        {:else}
+                            No leads match these filters.
+                        {/if}
                     </div>
                 {:else}
                     <div class="leads-inbox-list" role="list">
@@ -1485,15 +1540,25 @@
                                         <div class="lead-rail-head-main">
                                             <h5 class="m-0">Actions</h5>
                                             <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
-                                                Update status and use quick tools for follow-up.
+                                                Quick actions for this lead.
                                             </p>
                                         </div>
                                     </div>
 
-                                    <div class="lead-detail-actions-block">
+                                    <div class="lead-detail-actions-block lead-actions-group">
                                         <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Status actions</div>
                                         <div class="lead-detail-actions">
-                                            {#if canToggleSelectedLeadStatus}
+                                            {#if canMoveSelectedLeadToInbox}
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm"
+                                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                                    disabled={isUpdatingLeadStatus}
+                                                    on:click={moveSelectedLeadToInbox}
+                                                >
+                                                    <span class="txt">Move to inbox</span>
+                                                </button>
+                                            {:else if canToggleSelectedLeadStatus}
                                                 <button
                                                     type="button"
                                                     class="btn btn-sm"
@@ -1518,21 +1583,25 @@
                                         </div>
 
                                         {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                                            <p class="txt-sm txt-hint m-b-0">
+                                            <p class="txt-xs txt-hint m-b-0 lead-action-note">
                                                 Status actions are not available for WhatsApp interactions yet.
                                             </p>
                                         {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                                            <p class="txt-sm txt-hint m-b-0">
-                                                Status actions are not available for this lead source yet.
+                                            <p class="txt-xs txt-hint m-b-0 lead-action-note">
+                                                {#if isSelectedLeadArchived}
+                                                    Move to inbox is not available for this lead source yet.
+                                                {:else}
+                                                    Status actions are not available for this lead source yet.
+                                                {/if}
                                             </p>
-                                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
-                                            <p class="txt-sm txt-hint m-b-0">
+                                        {:else if !isSelectedLeadArchived && selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
+                                            <p class="txt-xs txt-hint m-b-0 lead-action-note">
                                                 Archive is not available for this source yet.
                                             </p>
                                         {/if}
                                     </div>
 
-                                    <div class="lead-detail-actions-block">
+                                    <div class="lead-detail-actions-block lead-actions-group">
                                         <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Utilities</div>
                                         <div class="lead-detail-actions">
                                             {#if selectedLead.email}
@@ -1632,20 +1701,20 @@
                                     {#if selectedLeadNotificationSetup.available}
                                         <div class="lead-notification-stack">
                                             <div class="lead-notification-row">
-                                                <span class="txt-xs txt-hint">Current setup</span>
-                                                <div class="lead-notification-badges">
-                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.notificationsEnabled ? "label-success" : "label-danger"}`}>
-                                                        Email notifications: {selectedLeadNotificationSetup.notificationsEnabled ? "Enabled" : "Disabled"}
-                                                    </span>
-                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.hasRecipients ? "label-info" : "label-warning"}`}>
-                                                        {selectedLeadNotificationSetup.hasRecipients ? "Recipients configured" : "Missing recipients"}
-                                                    </span>
-                                                </div>
+                                                <span class="txt-xs txt-hint">Email notifications</span>
+                                                <span class={`label label-sm ${selectedLeadNotificationSetup.notificationsEnabled ? "label-success" : "label-danger"}`}>
+                                                    {selectedLeadNotificationSetup.notificationsEnabled ? "Enabled" : "Disabled"}
+                                                </span>
                                             </div>
 
                                             <div class="lead-notification-row">
                                                 <span class="txt-xs txt-hint">Recipients</span>
-                                                <span class="txt-sm lead-summary-value">
+                                                <div class="lead-notification-badges">
+                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.hasRecipients ? "label-info" : "label-warning"}`}>
+                                                        {selectedLeadNotificationSetup.hasRecipients ? "Recipients configured" : "Missing recipients"}
+                                                    </span>
+                                                </div>
+                                                <span class="txt-sm lead-summary-value lead-notification-meta">
                                                     {selectedLeadNotificationSetup.recipientsTotal} total ({selectedLeadNotificationSetup.toCount} To, {selectedLeadNotificationSetup.ccCount} CC)
                                                 </span>
                                             </div>
@@ -1847,7 +1916,17 @@
                         <div class="lead-detail-actions-block">
                             <div class="txt-xs txt-hint txt-uppercase">Status actions</div>
                             <div class="lead-detail-actions">
-                                {#if canToggleSelectedLeadStatus}
+                                {#if canMoveSelectedLeadToInbox}
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                        disabled={isUpdatingLeadStatus}
+                                        on:click={moveSelectedLeadToInbox}
+                                    >
+                                        <span class="txt">Move to inbox</span>
+                                    </button>
+                                {:else if canToggleSelectedLeadStatus}
                                     <button
                                         type="button"
                                         class="btn btn-sm"
@@ -1877,9 +1956,13 @@
                                 </p>
                             {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
                                 <p class="txt-sm txt-hint m-b-0">
-                                    Status actions are not available for this lead source yet.
+                                    {#if isSelectedLeadArchived}
+                                        Move to inbox is not available for this lead source yet.
+                                    {:else}
+                                        Status actions are not available for this lead source yet.
+                                    {/if}
                                 </p>
-                            {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
+                            {:else if !isSelectedLeadArchived && selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
                                 <p class="txt-sm txt-hint m-b-0">
                                     Archive is not available for this source yet.
                                 </p>
@@ -1939,7 +2022,23 @@
 
 <style>
     .leads-head.operations-head .head-description {
-        max-width: 640px;
+        max-width: 460px;
+    }
+
+    .leads-head.operations-head .head-selector {
+        width: min(100%, 560px);
+    }
+
+    .leads-head.operations-head .head-selector .input {
+        min-width: 220px;
+    }
+
+    .leads-head.operations-head .leads-view-toggle {
+        flex: 0 0 auto;
+    }
+
+    .leads-head.operations-head .summary-badges {
+        justify-content: flex-end;
     }
 
     .leads-body {
@@ -1951,27 +2050,10 @@
 
     .head-tools {
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         gap: 10px;
         flex-wrap: wrap;
-    }
-
-    .head-context {
-        display: inline-flex;
-        align-items: flex-end;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-
-    .head-context-item {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        min-width: 200px;
-    }
-
-    .head-context-item .input {
-        min-width: 200px;
+        justify-content: space-between;
     }
 
     .leads-toolbar-row {
@@ -2019,6 +2101,10 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
+    }
+
+    .leads-filter-segments.is-single-column {
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .leads-segment-group {
@@ -2193,6 +2279,11 @@
         border-top: 0;
     }
 
+    .lead-detail-section.lead-rail-block + .lead-detail-section.lead-rail-block {
+        padding-top: 10px;
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+    }
+
     .lead-detail-section-head {
         display: flex;
         align-items: baseline;
@@ -2285,6 +2376,10 @@
         padding-top: 2px;
     }
 
+    .lead-action-note {
+        line-height: 1.35;
+    }
+
     .lead-notification-badges {
         display: inline-flex;
         align-items: center;
@@ -2309,6 +2404,10 @@
     .lead-notification-row:first-child {
         border-top: 0;
         padding-top: 0;
+    }
+
+    .lead-notification-meta {
+        color: var(--txtHintColor);
     }
 
     .lead-health-head {
@@ -2462,10 +2561,15 @@
     }
 
     @media (max-width: 760px) {
-        .head-context-item,
-        .head-context-item .input {
+        .leads-head.operations-head .head-selector,
+        .leads-head.operations-head .head-selector .input {
             min-width: 0;
             width: 100%;
+        }
+
+        .leads-head.operations-head .head-tools,
+        .leads-head.operations-head .summary-badges {
+            justify-content: flex-start;
         }
 
         .leads-toolbar-row {
