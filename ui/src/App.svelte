@@ -94,42 +94,6 @@
             </a>
 
             <nav class="main-menu">
-                {#if canAccessAdminAreas}
-                    <a
-                        href="/collections"
-                        class="menu-item"
-                        aria-label="Collections"
-                        use:link
-                        use:active={{ path: "/collections/?.*", className: "current-route" }}
-                        use:tooltip={{ text: "Collections", position: "right" }}
-                    >
-                        <i class="ri-database-2-line" />
-                    </a>
-                {/if}
-                <!-- NUVIO CUSTOM START: Dedicated Reviews section entry in app sidebar. -->
-                <a
-                    href="/reviews"
-                    class="menu-item"
-                    aria-label="Reviews"
-                    use:link
-                    use:active={{ path: "/reviews/?.*", className: "current-route" }}
-                    use:tooltip={{ text: "Reviews", position: "right" }}
-                >
-                    <i class="ri-star-smile-line" />
-                </a>
-                <!-- NUVIO CUSTOM END: Dedicated Reviews section entry in app sidebar. -->
-                <!-- NUVIO CUSTOM START: Dedicated Newsletter section entry in app sidebar. -->
-                <a
-                    href="/newsletter"
-                    class="menu-item"
-                    aria-label="Newsletter"
-                    use:link
-                    use:active={{ path: "/newsletter/?.*", className: "current-route" }}
-                    use:tooltip={{ text: "Newsletter", position: "right" }}
-                >
-                    <i class="ri-mail-send-line" />
-                </a>
-                <!-- NUVIO CUSTOM END: Dedicated Newsletter section entry in app sidebar. -->
                 <!-- NUVIO CUSTOM START: Dedicated CMS section entry in app sidebar. -->
                 <a
                     href="/cms"
@@ -142,18 +106,6 @@
                     <i class="ri-layout-grid-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated CMS section entry in app sidebar. -->
-                <!-- NUVIO CUSTOM START: Dedicated Reports section entry in app sidebar. -->
-                <a
-                    href="/reports"
-                    class="menu-item"
-                    aria-label="Reports"
-                    use:link
-                    use:active={{ path: "/reports/?.*", className: "current-route" }}
-                    use:tooltip={{ text: "Reports", position: "right" }}
-                >
-                    <i class="ri-file-chart-line" />
-                </a>
-                <!-- NUVIO CUSTOM END: Dedicated Reports section entry in app sidebar. -->
                 <!-- NUVIO CUSTOM START: Dedicated Leads section entry in app sidebar. -->
                 <a
                     href="/leads"
@@ -163,10 +115,56 @@
                     use:active={{ path: "/leads/?.*", className: "current-route" }}
                     use:tooltip={{ text: "Leads", position: "right" }}
                 >
-                    <i class="ri-contacts-line" />
+                    <i class="ri-mail-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Leads section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated Reviews section entry in app sidebar. -->
+                <a
+                    href="/reviews"
+                    class="menu-item"
+                    aria-label="Reviews"
+                    use:link
+                    use:active={{ path: "/reviews/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Reviews", position: "right" }}
+                >
+                    <i class="ri-star-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Reviews section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated Newsletter section entry in app sidebar. -->
+                <a
+                    href="/newsletter"
+                    class="menu-item"
+                    aria-label="Newsletter"
+                    use:link
+                    use:active={{ path: "/newsletter/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Newsletter", position: "right" }}
+                >
+                    <i class="ri-megaphone-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Newsletter section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated Reports section entry in app sidebar. -->
+                <a
+                    href="/reports"
+                    class="menu-item"
+                    aria-label="Reports"
+                    use:link
+                    use:active={{ path: "/reports/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Reports", position: "right" }}
+                >
+                    <i class="ri-bar-chart-grouped-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Reports section entry in app sidebar. -->
                 {#if canAccessAdminAreas}
+                    <a
+                        href="/collections"
+                        class="menu-item"
+                        aria-label="Collections"
+                        use:link
+                        use:active={{ path: "/collections/?.*", className: "current-route" }}
+                        use:tooltip={{ text: "Collections", position: "right" }}
+                    >
+                        <i class="ri-database-2-line" />
+                    </a>
                     <a
                         href="/logs"
                         class="menu-item"
