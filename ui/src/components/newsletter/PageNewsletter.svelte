@@ -43,7 +43,9 @@
     ];
     let campaignPreviewMode = "desktop";
     let editingCampaignId = "";
+    let viewingSentCampaignId = "";
     let isSavingCampaign = false;
+    let isDuplicatingCampaign = {};
     let audienceRecipientSearch = "";
     let audienceRecipientVisibilityFilter = "all";
     let subscriberSearch = "";
@@ -133,14 +135,18 @@
         selectedWebsiteId,
         subscriberGroupForm.name,
     );
-    $: createCampaignDisabledReason = resolveCreateCampaignDisabledReason(
-        isCreatingCampaign,
-        selectedWebsiteId,
-        campaignForm.subject,
-        campaignForm.body,
-        campaignForm.recipientsType,
-        campaignForm.recipientsIds,
-    );
+    $: createCampaignDisabledReason = (editingCampaignId
+        && viewingSentCampaignId === editingCampaignId
+        && normalizeStatus(editingCampaign?.status) === "sent")
+        ? "Sent campaigns are kept as history. Duplicate to edit and send again."
+        : resolveCreateCampaignDisabledReason(
+            isCreatingCampaign,
+            selectedWebsiteId,
+            campaignForm.subject,
+            campaignForm.body,
+            campaignForm.recipientsType,
+            campaignForm.recipientsIds,
+        );
     $: campaignSubjectValue = `${campaignForm.subject || ""}`.trim();
     $: campaignBodyValue = `${campaignForm.body || ""}`.trim();
     $: activeCampaignPreviewMode = campaignPreviewModes.find((mode) => mode.key === campaignPreviewMode) || campaignPreviewModes[0];
@@ -158,7 +164,13 @@
         return normalizeStatus(campaign?.status) === campaignStatusFilter;
     });
     $: editingCampaign = campaigns.find((campaign) => campaign.id === editingCampaignId) || null;
+    $: isViewingSentCampaign = !!editingCampaign
+        && viewingSentCampaignId === editingCampaign.id
+        && normalizeStatus(editingCampaign?.status) === "sent";
     $: editingCampaignLabel = `${editingCampaign?.subject || ""}`.trim() || "(No subject)";
+    $: if (viewingSentCampaignId && viewingSentCampaignId !== editingCampaignId) {
+        viewingSentCampaignId = "";
+    }
     $: normalizedSubscriberSearch = `${subscriberSearch || ""}`.trim().toLowerCase();    $: filteredSubscribers = sortSubscribers(
         subscribers.filter((subscriber) => {
             const status = normalizeStatus(subscriber?.status);
@@ -228,7 +240,9 @@
         return searchable.includes(normalizedAudienceRecipientSearch);
     });
     $: audienceRecipientsSummary = `${resolveManualAudienceRecipientCountForMode(campaignForm.recipientsType, campaignForm.recipientsIds)} selected / ${activeSubscribers.length} active`;
-    $: audienceSummaryStatus = editingCampaignId ? "Editing existing draft" : "New draft";
+    $: audienceSummaryStatus = isViewingSentCampaign
+        ? "Sent campaign (read-only)"
+        : (editingCampaignId ? "Editing existing draft" : "New draft");
     $: audienceSubjectReady = !!campaignSubjectValue;
     $: audienceBodyReady = !!campaignBodyValue;
     $: audienceRecipientsReady = normalizedCampaignManualRecipientsCount > 0;
@@ -794,7 +808,7 @@
     }
 
     function resolveCampaignsSectionHint() {
-        return "Review drafts and sent campaigns. Open a draft to edit or send.";
+        return "Review drafts and sent campaigns. Sent campaigns are kept as history. Duplicate to edit and send again.";
     }
 
     function resolveSubscribersSectionHint() {
@@ -1300,6 +1314,7 @@
         campaignBuilderShowPreview = false;
         closeCampaignPreviewModal();
         editingCampaignId = "";
+        viewingSentCampaignId = "";
     }
 
     function startEditCampaign(campaign) {
@@ -1313,6 +1328,7 @@
             : getActiveSubscriberIds();
 
         editingCampaignId = campaign.id;
+        viewingSentCampaignId = "";
         campaignForm = {
             subject: `${campaign.subject || ""}`,
             body: `${campaign.body || ""}`,
@@ -1327,8 +1343,40 @@
         campaignFormError = "";
     }
 
+    function startViewCampaign(campaign) {
+        if (!campaign?.id) {
+            return;
+        }
+
+        const previousRecipientsType = getCampaignRecipientsType(campaign);
+        const resolvedRecipientsIds = previousRecipientsType === "all"
+            ? getActiveSubscriberIds()
+            : getCampaignRecipientIds(campaign);
+
+        editingCampaignId = campaign.id;
+        viewingSentCampaignId = campaign.id;
+        campaignForm = {
+            subject: `${campaign.subject || ""}`,
+            body: `${campaign.body || ""}`,
+            recipientsType: "manual",
+            recipientsIds: normalizeManualRecipientIds(resolvedRecipientsIds),
+        };
+        audienceRecipientSearch = "";
+        audienceRecipientVisibilityFilter = "all";
+        campaignBuilderShowEditor = false;
+        campaignBuilderShowPreview = true;
+        campaignWorkspace = "builder";
+        closeCampaignPreviewModal();
+        campaignFormError = "";
+    }
+
     async function saveCampaignDraftFromComposer() {
         if (!hasNewsletterCollections || !selectedWebsiteId || isCreatingCampaign || isSavingCampaign) {
+            return;
+        }
+
+        if (isViewingSentCampaign) {
+            campaignFormError = "Sent campaigns are kept as history. Duplicate to edit and send again.";
             return;
         }
 
@@ -1389,6 +1437,44 @@
             ApiClient.error(err);
         }
         isCreatingCampaign = false;
+    }
+
+    async function duplicateCampaignAsDraft(campaign) {
+        if (!campaign?.id || !hasNewsletterCollections || !selectedWebsiteId || isDuplicatingCampaign[campaign.id]) {
+            return;
+        }
+
+        isDuplicatingCampaign[campaign.id] = true;
+        isDuplicatingCampaign = { ...isDuplicatingCampaign };
+
+        const copiedRecipientsType = normalizeStatus(getCampaignRecipientsType(campaign)) === "all" ? "all" : "manual";
+        const copiedRecipientsIds = normalizeIdList(getCampaignRecipientIds(campaign));
+        const payload = {
+            website: campaign.website || selectedWebsiteId,
+            subject: `${campaign.subject || ""}`.trim(),
+            body: `${campaign.body || ""}`.trim(),
+            status: "draft",
+            recipientsType: copiedRecipientsType,
+            recipientsIds: copiedRecipientsIds,
+            recipientsCount: 0,
+            sentAt: null,
+        };
+        payload[campaignRecipientsTypeFieldName] = copiedRecipientsType;
+        payload[campaignRecipientsIdsFieldName] = copiedRecipientsIds;
+
+        try {
+            const createdCampaign = await ApiClient.collection(campaignsCollection.id).create(payload);
+            await loadCampaigns();
+            const nextDraft = campaigns.find((item) => item.id === createdCampaign?.id) || createdCampaign;
+            startEditCampaign(nextDraft);
+            campaignWorkspace = "builder";
+            addSuccessToast("Draft created from sent campaign.");
+        } catch (err) {
+            ApiClient.error(err);
+        }
+
+        delete isDuplicatingCampaign[campaign.id];
+        isDuplicatingCampaign = { ...isDuplicatingCampaign };
     }
 
 
@@ -1938,10 +2024,31 @@
 
                                 {#if editingCampaignId}
                                     <div class="campaign-edit-banner m-b-sm">
-                                        <span class="txt-sm">Editing: <strong>{editingCampaignLabel}</strong></span>
-                                        <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
-                                            <span class="txt">New draft</span>
-                                        </button>
+                                        <span class="txt-sm">
+                                            {#if isViewingSentCampaign}
+                                                Viewing: <strong>{editingCampaignLabel}</strong> (read-only)
+                                                {#if editingCampaign}
+                                                    <span class="txt-xs txt-hint"> | {resolveCampaignSentMeta(editingCampaign)} | {resolveCampaignDeliveredSummary(editingCampaign)}</span>
+                                                {/if}
+                                            {:else}
+                                                Editing: <strong>{editingCampaignLabel}</strong>
+                                            {/if}
+                                        </span>
+                                        {#if isViewingSentCampaign}
+                                            <button
+                                                type="button"
+                                                class="btn btn-xs btn-outline"
+                                                class:btn-loading={editingCampaign?.id && isDuplicatingCampaign[editingCampaign.id]}
+                                                disabled={!editingCampaign?.id || !!isDuplicatingCampaign[editingCampaign.id]}
+                                                on:click={() => duplicateCampaignAsDraft(editingCampaign)}
+                                            >
+                                                <span class="txt">Duplicate</span>
+                                            </button>
+                                        {:else}
+                                            <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
+                                                <span class="txt">New draft</span>
+                                            </button>
+                                        {/if}
                                     </div>
                                 {/if}
 
@@ -1993,6 +2100,7 @@
                                                 class="input"
                                                 placeholder="Newsletter subject..."
                                                 bind:value={campaignForm.subject}
+                                                disabled={isViewingSentCampaign}
                                                 on:input={clearCampaignFormError}
                                             />
                                             {#if shouldShowCampaignSubjectValidation}
@@ -2004,6 +2112,7 @@
                                                 <TinyMCE
                                                     id="campaign-body-editor"
                                                     conf={campaignBodyEditorConfig}
+                                                    disabled={isViewingSentCampaign}
                                                     bind:value={campaignForm.body}
                                                     on:change={clearCampaignFormError}
                                                     on:input={clearCampaignFormError}
@@ -2118,11 +2227,12 @@
                                                                 type="search"
                                                                 placeholder="Search by name, email, or group..."
                                                                 bind:value={audienceRecipientSearch}
+                                                                disabled={isViewingSentCampaign}
                                                             />
                                                         </label>
                                                         <label class="campaign-audience-toolbar-field campaign-audience-toolbar-field--compact">
                                                             <span class="txt-xs txt-hint">View</span>
-                                                            <select class="form-select" bind:value={audienceRecipientVisibilityFilter}>
+                                                            <select class="form-select" bind:value={audienceRecipientVisibilityFilter} disabled={isViewingSentCampaign}>
                                                                 <option value="all">All</option>
                                                                 <option value="selected">Selected only</option>
                                                                 <option value="unselected">Unselected only</option>
@@ -2132,10 +2242,10 @@
                                                     <div class="campaign-audience-toolbar-row campaign-audience-toolbar-row--actions">
                                                         <div class="campaign-audience-toolbar-actions-row">
                                                             <span class="manual-recipients-count txt-xs">{audienceRecipientsSummary}</span>
-                                                            <button type="button" class="btn btn-xs btn-outline" on:click={selectAllActiveRecipients}>
+                                                            <button type="button" class="btn btn-xs btn-outline" disabled={isViewingSentCampaign} on:click={selectAllActiveRecipients}>
                                                                 <span class="txt">Select all active</span>
                                                             </button>
-                                                            <button type="button" class="btn btn-xs btn-outline" on:click={clearManualRecipients}>
+                                                            <button type="button" class="btn btn-xs btn-outline" disabled={isViewingSentCampaign} on:click={clearManualRecipients}>
                                                                 <span class="txt">Clear selection</span>
                                                             </button>
                                                         </div>
@@ -2153,11 +2263,12 @@
                                                                 {@const groupSelectionMeta = getGroupSelectionMeta(group.id)}
                                                                 <button
                                                                     type="button"
-                                                                    class="manual-group-chip"
-                                                                    class:is-active={groupSelectionMeta.state === "full"}
-                                                                    class:is-partial={groupSelectionMeta.state === "partial"}
-                                                                    on:click={() => toggleGroupRecipients(group.id)}
-                                                                >
+                                                                class="manual-group-chip"
+                                                                class:is-active={groupSelectionMeta.state === "full"}
+                                                                class:is-partial={groupSelectionMeta.state === "partial"}
+                                                                disabled={isViewingSentCampaign}
+                                                                on:click={() => toggleGroupRecipients(group.id)}
+                                                            >
                                                                     <span class="manual-group-chip-name">{group.name}</span>
                                                                     <span class="manual-group-chip-count">
                                                                         {#if groupSelectionMeta.state === "none"}
@@ -2196,6 +2307,7 @@
                                                                     type="checkbox"
                                                                     class="manual-recipient-check"
                                                                     checked={normalizedCampaignManualRecipientIdsSet.has(subscriber.id)}
+                                                                    disabled={isViewingSentCampaign}
                                                                     on:change={() => toggleManualRecipient(subscriber.id)}
                                                                 />
                                                                 <span class="manual-recipient-content">
@@ -2250,68 +2362,119 @@
                                                             {hasSubscriberGroupsFeature ? `${subscriberGroups.length} available` : "Not enabled"}
                                                         </span>
                                                     </div>
+                                                    {#if isViewingSentCampaign && editingCampaign}
+                                                        <div class="campaign-audience-summary-row">
+                                                            <span class="audience-stat-label">Sent at</span>
+                                                            <span class="audience-stat-value">{resolveCampaignSentDate(editingCampaign)}</span>
+                                                        </div>
+                                                        <div class="campaign-audience-summary-row">
+                                                            <span class="audience-stat-label">Delivered</span>
+                                                            <span class="audience-stat-value">{resolveCampaignDeliveredSummary(editingCampaign)}</span>
+                                                        </div>
+                                                        <div class="campaign-audience-summary-row">
+                                                            <span class="audience-stat-label">Audience</span>
+                                                            <span class="audience-stat-value">{resolveCampaignAudienceSummary(editingCampaign)}</span>
+                                                        </div>
+                                                    {/if}
                                                 </div>
                                             </section>
 
                                             <section class="campaign-audience-side-section campaign-audience-actions-panel">
                                                 <h5 class="m-0">Actions</h5>
                                                 <div class="campaign-audience-actions">
-                                                    {#if editingCampaignId}
+                                                    {#if isViewingSentCampaign}
+                                                        <p class="txt-sm txt-hint m-b-0">Sent campaigns are kept as history. Duplicate to edit and send again.</p>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-outline action-btn"
+                                                            class:btn-loading={editingCampaign?.id && isDuplicatingCampaign[editingCampaign.id]}
+                                                            disabled={!editingCampaign?.id || !!isDuplicatingCampaign[editingCampaign.id]}
+                                                            on:click={() => duplicateCampaignAsDraft(editingCampaign)}
+                                                        >
+                                                            <span class="txt">Duplicate</span>
+                                                        </button>
                                                         <button type="button" class="btn btn-sm btn-outline action-btn" on:click={resetCampaignComposer}>
-                                                            <span class="txt">Cancel Edit</span>
+                                                            <span class="txt">Back to drafts</span>
+                                                        </button>
+                                                    {:else}
+                                                        {#if editingCampaignId}
+                                                            <button type="button" class="btn btn-sm btn-outline action-btn" on:click={resetCampaignComposer}>
+                                                                <span class="txt">Cancel Edit</span>
+                                                            </button>
+                                                        {/if}
+                                                        <button
+                                                            type="submit"
+                                                            form="campaign-audience-form"
+                                                            class="btn btn-sm action-btn"
+                                                            class:btn-loading={isCreatingCampaign || isSavingCampaign}
+                                                            disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
+                                                            title={createCampaignDisabledReason || null}
+                                                        >
+                                                            <span class="txt">{editingCampaignId ? "Update draft" : "Create draft"}</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm action-btn"
+                                                            class:btn-loading={editingCampaign?.id && isSendingCampaign[editingCampaign.id]}
+                                                            disabled={!!audienceSendDisabledReason}
+                                                            title={audienceSendDisabledReason || null}
+                                                            on:click={() => openSendCampaignModal(editingCampaign)}
+                                                        >
+                                                            <span class="txt">Send campaign</span>
                                                         </button>
                                                     {/if}
-                                                    <button
-                                                        type="submit"
-                                                        form="campaign-audience-form"
-                                                        class="btn btn-sm action-btn"
-                                                        class:btn-loading={isCreatingCampaign || isSavingCampaign}
-                                                        disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
-                                                        title={createCampaignDisabledReason || null}
-                                                    >
-                                                        <span class="txt">{editingCampaignId ? "Update draft" : "Create draft"}</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-sm action-btn"
-                                                        class:btn-loading={editingCampaign?.id && isSendingCampaign[editingCampaign.id]}
-                                                        disabled={!!audienceSendDisabledReason}
-                                                        title={audienceSendDisabledReason || null}
-                                                        on:click={() => openSendCampaignModal(editingCampaign)}
-                                                    >
-                                                        <span class="txt">Send campaign</span>
-                                                    </button>
                                                 </div>
                                             </section>
 
                                             <section class="campaign-audience-side-section audience-health-panel">
                                                 <div class="campaign-audience-health-head">
-                                                    <h5 class="m-0">Audience health</h5>
-                                                    <span class={`label label-sm ${audienceHealthPillClass}`}>{audienceHealthStatus}</span>
+                                                    <div class="campaign-audience-health-main">
+                                                        <h5 class="m-0">Audience health</h5>
+                                                        <p class="txt-sm txt-hint m-b-0 campaign-audience-health-helper">
+                                                            Review what is missing before sending.
+                                                        </p>
+                                                    </div>
+                                                    <div class="campaign-audience-health-meta">
+                                                        <span class={`label label-sm audience-health-status-pill ${audienceHealthPillClass}`}>
+                                                            {audienceHealthStatus}
+                                                        </span>
+                                                        <span class="summary-pill audience-health-summary-pill" class:warning={audienceWarnings.length > 0}>
+                                                            {audienceWarnings.length} warning{audienceWarnings.length === 1 ? "" : "s"} | {audienceSuggestions.length} suggestion{audienceSuggestions.length === 1 ? "" : "s"}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <div class="txt-xs txt-hint audience-health-counts">
-                                                    {audienceWarnings.length} warning{audienceWarnings.length === 1 ? "" : "s"} | {audienceSuggestions.length} suggestion{audienceSuggestions.length === 1 ? "" : "s"}
-                                                </div>
-                                                <div class="audience-health-block">
-                                                    <h6 class="m-0">Warnings</h6>
-                                                    {#if audienceWarnings.length}
-                                                        <ul class="audience-health-list">
+
+                                                {#if audienceWarnings.length}
+                                                    <div class="audience-health-group">
+                                                        <div class="audience-health-group-title">Warnings</div>
+                                                        <div class="audience-health-check-list">
                                                             {#each audienceWarnings as warning}
-                                                                <li>{warning}</li>
+                                                                <div class="audience-health-check-item warning">
+                                                                    <span class="label label-sm audience-health-check-pill warning">Warning</span>
+                                                                    <span class="audience-health-check-message">{warning}</span>
+                                                                </div>
                                                             {/each}
-                                                        </ul>
-                                                    {:else}
-                                                        <p class="txt-xs txt-hint m-b-0">No blocking warnings.</p>
-                                                    {/if}
-                                                </div>
-                                                <div class="audience-health-block">
-                                                    <h6 class="m-0">Suggestions</h6>
-                                                    <ul class="audience-health-list audience-health-list--suggestions">
-                                                        {#each audienceSuggestions as suggestion}
-                                                            <li>{suggestion}</li>
-                                                        {/each}
-                                                    </ul>
-                                                </div>
+                                                        </div>
+                                                    </div>
+                                                {/if}
+
+                                                {#if audienceSuggestions.length}
+                                                    <div class="audience-health-group">
+                                                        <div class="audience-health-group-title">Suggestions</div>
+                                                        <div class="audience-health-check-list">
+                                                            {#each audienceSuggestions as suggestion}
+                                                                <div class="audience-health-check-item">
+                                                                    <span class="label label-sm audience-health-check-pill">Info</span>
+                                                                    <span class="audience-health-check-message">{suggestion}</span>
+                                                                </div>
+                                                            {/each}
+                                                        </div>
+                                                    </div>
+                                                {/if}
+
+                                                {#if !audienceWarnings.length && !audienceSuggestions.length}
+                                                    <p class="txt-sm txt-hint m-b-0">No audience issues found for this campaign.</p>
+                                                {/if}
                                             </section>
                                         </aside>
                                     </div>
@@ -2427,9 +2590,6 @@
                                                             >
                                                                 <span class="txt">{editingCampaignId === campaign.id ? "Editing" : "Edit"}</span>
                                                             </button>
-                                                        {/if}
-
-                                                        {#if normalizeStatus(campaign.status) !== "sent"}
                                                             <button
                                                                 type="button"
                                                                 class="btn btn-sm action-btn campaign-row-btn"
@@ -2439,6 +2599,23 @@
                                                                 on:click={() => openSendCampaignModal(campaign)}
                                                             >
                                                                 <span class="txt">Send</span>
+                                                            </button>
+                                                        {:else if normalizeStatus(campaign.status) === "sent"}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-outline action-btn campaign-row-btn"
+                                                                on:click={() => startViewCampaign(campaign)}
+                                                            >
+                                                                <span class="txt">{isViewingSentCampaign && editingCampaignId === campaign.id ? "Viewing" : "View"}</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-outline action-btn campaign-row-btn"
+                                                                class:btn-loading={isDuplicatingCampaign[campaign.id]}
+                                                                disabled={!!isDuplicatingCampaign[campaign.id]}
+                                                                on:click={() => duplicateCampaignAsDraft(campaign)}
+                                                            >
+                                                                <span class="txt">Duplicate</span>
                                                             </button>
                                                         {/if}
                                                     </div>
@@ -3504,29 +3681,124 @@
         align-items: center;
         justify-content: space-between;
         gap: 8px;
+        flex-wrap: wrap;
     }
 
-    .audience-health-counts {
-        color: var(--txtHintColor);
-    }
-
-    .audience-health-block {
+    .campaign-audience-health-main {
+        min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 5px;
+        gap: 3px;
     }
 
-    .audience-health-list {
-        margin: 0;
-        padding-left: 16px;
-        display: grid;
-        gap: 4px;
-        color: var(--dangerColor);
-        font-size: 12px;
+    .campaign-audience-health-helper {
+        font-size: 11px;
+        line-height: 1.35;
     }
 
-    .audience-health-list--suggestions {
+    .campaign-audience-health-meta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .audience-health-status-pill {
+        --labelHPadding: 8px;
+        min-height: 20px;
         color: var(--txtHintColor);
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
+        font-weight: 600;
+    }
+
+    .audience-health-status-pill.label-success {
+        color: color-mix(in srgb, var(--successColor) 85%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--successColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--successColor) 12%, var(--baseColor));
+    }
+
+    .audience-health-status-pill.label-warning {
+        color: color-mix(in srgb, var(--warningColor) 86%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
+    .audience-health-status-pill.label-danger {
+        color: color-mix(in srgb, var(--dangerColor) 84%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--dangerColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--dangerColor) 12%, var(--baseColor));
+    }
+
+    .audience-health-summary-pill {
+        --labelHPadding: 9px;
+        min-height: 20px;
+        color: var(--txtHintColor);
+        background: color-mix(in srgb, var(--baseAlt1Color) 22%, var(--baseColor));
+    }
+
+    .audience-health-summary-pill.warning {
+        color: color-mix(in srgb, var(--warningColor) 84%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
+    .audience-health-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .audience-health-group-title {
+        color: var(--txtHintColor);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+
+    .audience-health-check-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .audience-health-check-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        padding: 6px 0;
+        font-size: var(--smFontSize);
+        line-height: var(--smLineHeight);
+        color: var(--txtHintColor);
+    }
+
+    .audience-health-check-item + .audience-health-check-item {
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
+    .audience-health-check-item.warning {
+        color: color-mix(in srgb, var(--warningColor) 80%, var(--txtPrimaryColor));
+    }
+
+    .audience-health-check-message {
+        min-width: 0;
+    }
+
+    .audience-health-check-pill {
+        --labelHPadding: 7px;
+        min-height: 18px;
+        flex: 0 0 auto;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        color: var(--txtHintColor);
+        background: var(--baseColor);
+    }
+
+    .audience-health-check-pill.warning {
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        color: color-mix(in srgb, var(--warningColor) 88%, var(--txtPrimaryColor));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
     }
 
     .campaign-audience-actions-panel .campaign-audience-actions {
