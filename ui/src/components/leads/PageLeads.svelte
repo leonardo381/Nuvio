@@ -982,6 +982,7 @@
                 lead.subject,
                 lead.message,
                 lead.whatsappTargetMessage,
+                lead.notes,
                 lead.preview,
                 lead.page,
                 lead.originSource,
@@ -1681,37 +1682,45 @@
 
                                 <div class="leads-inbox-item-title">{lead.identity}</div>
 
-                                {#if lead.secondaryIdentity}
-                                    <div class="txt-sm txt-hint leads-inbox-item-secondary">{lead.secondaryIdentity}</div>
-                                {/if}
-
                                 {#if lead.email || lead.phone}
                                     <div class="leads-inbox-item-contact txt-xs txt-hint">
+                                        <span class="leads-inbox-inline-label">Contact:</span>
                                         {#if lead.email}
-                                            <span><i class="ri-mail-line" /> {lead.email}</span>
+                                            <span>{lead.email}</span>
+                                        {/if}
+                                        {#if lead.email && lead.phone}
+                                            <span aria-hidden="true" class="leads-inbox-item-contact-separator">&middot;</span>
                                         {/if}
                                         {#if lead.phone}
-                                            <span><i class="ri-phone-line" /> {lead.phone}</span>
+                                            <span>{lead.phone}</span>
                                         {/if}
                                     </div>
                                 {/if}
 
-                                <p class="txt-sm m-b-0 leads-inbox-item-preview">
-                                    {resolveLeadPreviewText(lead)}
-                                </p>
-
-                                <div class="leads-inbox-item-attribution txt-xs txt-hint">
-                                    <span>{resolveLeadAttribution(lead)}</span>
-                                    {#if resolveLeadLocationHint(lead)}
-                                        <span>{resolveLeadLocationHint(lead)}</span>
-                                    {/if}
+                                <div class="leads-inbox-item-message-row txt-sm">
+                                    <span class="leads-inbox-item-message-label leads-inbox-inline-label txt-xs txt-hint">Message:</span>
+                                    <span class="leads-inbox-item-preview">{resolveLeadPreviewText(lead)}</span>
                                 </div>
 
-                                {#if lead.lastContactedAt}
-                                    <div class="leads-inbox-item-last-contact txt-xs txt-hint">
-                                        Last contact: {resolveLastContactedLabel(lead.lastContactedAt)}
+                                {#if lead.notes}
+                                    <div class="leads-inbox-item-note txt-xs">
+                                        <span class="leads-inbox-item-note-label">Note:</span>
+                                        <span class="leads-inbox-item-note-text">{truncate(lead.notes, 120)}</span>
                                     </div>
                                 {/if}
+
+                                <div class="leads-inbox-item-footer txt-xs txt-hint">
+                                    <div class="leads-inbox-item-attribution">
+                                        <span class="leads-inbox-inline-label">Origin:</span>
+                                        <span class="leads-inbox-item-attribution-main">{resolveLeadAttribution(lead)}</span>
+                                        {#if resolveLeadLocationHint(lead)}
+                                            <span class="leads-inbox-item-attribution-context">{resolveLeadLocationHint(lead)}</span>
+                                        {/if}
+                                    </div>
+                                    <div class="leads-inbox-item-last-contact">
+                                        Last contact: {lead.lastContactedAt ? resolveLastContactedLabel(lead.lastContactedAt) : "Not contacted yet"}
+                                    </div>
+                                </div>
                             </article>
                         {/each}
                     </div>
@@ -1863,12 +1872,12 @@
                                         <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Notes</div>
                                         {#if canSaveSelectedLeadNote || canMarkSelectedLeadContacted}
                                             <div class="lead-followup-stack">
-                                                <label class="txt-xs txt-hint m-b-0" for="lead-followup-notes">Notes</label>
                                                 <textarea
                                                     id="lead-followup-notes"
                                                     class="input lead-followup-notes"
                                                     rows="4"
                                                     placeholder="Add notes about next steps, context, or follow-up outcomes..."
+                                                    aria-label="Notes"
                                                     bind:value={leadNotesDraft}
                                                     disabled={isSavingLeadFollowUp || !canSaveSelectedLeadNote}
                                                 />
@@ -1994,52 +2003,6 @@
                                     {/if}
                                 </section>
 
-                                <section class="lead-detail-section lead-rail-block lead-rail-block--notification">
-                                    <div class="lead-detail-section-head lead-rail-head">
-                                        <div class="lead-rail-head-main">
-                                            <h5 class="m-0">Notification setup</h5>
-                                            <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
-                                                Based on current Website Settings. Per-lead delivery status is not stored yet.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {#if selectedLeadNotificationSetup.available}
-                                        <div class="lead-notification-stack">
-                                            <div class="lead-notification-row">
-                                                <span class="txt-xs txt-hint">Email notifications</span>
-                                                <span class={`label label-sm ${selectedLeadNotificationSetup.notificationsEnabled ? "label-success" : "label-danger"}`}>
-                                                    {selectedLeadNotificationSetup.notificationsEnabled ? "Enabled" : "Disabled"}
-                                                </span>
-                                            </div>
-
-                                            <div class="lead-notification-row">
-                                                <span class="txt-xs txt-hint">Recipients</span>
-                                                <div class="lead-notification-badges">
-                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.hasRecipients ? "label-info" : "label-warning"}`}>
-                                                        {selectedLeadNotificationSetup.hasRecipients ? "Recipients configured" : "Missing recipients"}
-                                                    </span>
-                                                </div>
-                                                <span class="txt-sm lead-summary-value lead-notification-meta">
-                                                    {selectedLeadNotificationSetup.recipientsTotal} total ({selectedLeadNotificationSetup.toCount} To, {selectedLeadNotificationSetup.ccCount} CC)
-                                                </span>
-                                            </div>
-
-                                            {#if selectedLeadNotificationSetup.featureAvailabilityLabel}
-                                                <div class="lead-notification-row">
-                                                    <span class="txt-xs txt-hint">Feature availability</span>
-                                                    <span class={`label label-sm ${selectedLeadNotificationSetup.featureAvailable ? "label-success" : "label-warning"}`}>
-                                                        {selectedLeadNotificationSetup.featureAvailabilityLabel}
-                                                    </span>
-                                                </div>
-                                            {/if}
-                                        </div>
-                                    {:else}
-                                        <p class="txt-sm txt-hint m-b-0">
-                                            {selectedLeadNotificationSetup.unavailableMessage}
-                                        </p>
-                                    {/if}
-                                </section>
                             </div>
                         {:else}
                             <div class="empty-state m-b-0 leads-detail-empty-state">
@@ -2488,10 +2451,10 @@
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
         background: var(--baseColor);
-        padding: 10px 12px;
+        padding: 9px 11px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 5px;
         cursor: pointer;
         transition: border-color var(--baseAnimationSpeed), box-shadow var(--baseAnimationSpeed), background-color var(--baseAnimationSpeed);
     }
@@ -2513,7 +2476,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: 6px;
     }
 
     .leads-inbox-item-badges {
@@ -2540,43 +2503,109 @@
     .leads-inbox-item-contact {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
     }
 
     .leads-inbox-item-contact span {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
+        min-width: 0;
+    }
+
+    .leads-inbox-inline-label {
+        flex: 0 0 auto;
+        color: var(--txtHintColor);
+        font-weight: 600;
+        letter-spacing: 0.01em;
     }
 
     .leads-inbox-item-preview {
         color: var(--txtPrimaryColor);
+        min-width: 0;
+        flex: 1 1 auto;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+    }
+
+    .leads-inbox-item-message-row {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .leads-inbox-item-message-label {
+        white-space: nowrap;
+    }
+
+    .leads-inbox-item-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        margin-top: 0;
+    }
+
+    .leads-inbox-item-note-label {
+        flex: 0 0 auto;
+        color: var(--txtHintColor);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }
+
+    .leads-inbox-item-note-text {
+        min-width: 0;
+        color: color-mix(in srgb, var(--txtHintColor) 92%, var(--txtPrimaryColor));
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+    }
+
+    .leads-inbox-item-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 1px;
     }
 
     .leads-inbox-item-attribution {
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
-        padding-top: 2px;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1 1 auto;
     }
 
-    .leads-inbox-item-attribution span {
-        color: var(--txtHintColor);
-    }
-
-    .leads-inbox-item-attribution span:first-child {
+    .leads-inbox-item-attribution-main {
         color: var(--txtPrimaryColor);
         font-weight: 500;
+        min-width: 0;
     }
 
-    .leads-inbox-item-attribution span + span::before {
+    .leads-inbox-item-attribution-context {
+        min-width: 0;
+    }
+
+    .leads-inbox-item-attribution-context::before {
         content: "-";
-        margin-right: 8px;
+        margin-right: 6px;
         color: var(--txtDisabledColor);
     }
 
     .leads-inbox-item-last-contact {
-        margin-top: 2px;
+        margin-top: 0;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .leads-inbox-item-contact-separator {
+        color: var(--txtDisabledColor);
+        flex: 0 0 auto;
     }
 
     .leads-detail-rail {
@@ -2946,3 +2975,4 @@
         }
     }
 </style>
+
