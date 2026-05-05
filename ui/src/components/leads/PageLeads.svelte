@@ -128,7 +128,15 @@
         websiteLabelById: websiteOptionMap,
     });
 
-    $: filteredLeads = filterAndSortLeads(normalizedLeads);
+    $: websiteScopedLeads = filterLeadsBySelectedWebsite(normalizedLeads, selectedWebsiteId);
+    $: inboxLeadsCount = websiteScopedLeads.filter((lead) => !isArchivedLead(lead)).length;
+    $: archivedLeadsCount = websiteScopedLeads.filter((lead) => isArchivedLead(lead)).length;
+    $: leadsByView = filterLeadsByView(websiteScopedLeads, normalizedLeadsView);
+    $: leadsByType = filterLeadsByType(leadsByView, sourceFilter);
+    $: leadsByStatus = filterLeadsByStatus(leadsByType, normalizedLeadsView, statusFilter);
+    $: leadsByPeriod = filterLeadsByPeriod(leadsByStatus, periodFilter);
+    $: leadsBySearch = filterLeadsBySearch(leadsByPeriod, normalizedSearchTerm);
+    $: filteredLeads = sortLeads(leadsBySearch, sortOrder);
     $: if (filteredLeads.length) {
         const isSelectedLeadVisible = selectedLeadKey
             ? filteredLeads.some((lead) => lead.key === selectedLeadKey)
@@ -140,7 +148,7 @@
         selectedLeadKey = "";
         isLeadDetailsActive = false;
     }
-    $: selectedLead = normalizedLeads.find((lead) => lead.key === selectedLeadKey) || null;
+    $: selectedLead = websiteScopedLeads.find((lead) => lead.key === selectedLeadKey) || null;
     $: if (isDesktopMasterDetail && isLeadDetailsActive) {
         isLeadDetailsActive = false;
     }
@@ -214,8 +222,7 @@
         leadFollowUpError = "";
     }
 
-    $: nonArchivedLeads = normalizedLeads.filter((lead) => lead.statusKey !== "archived");
-    $: archivedLeadsCount = normalizedLeads.filter((lead) => lead.statusKey === "archived").length;
+    $: nonArchivedLeads = websiteScopedLeads.filter((lead) => !isArchivedLead(lead));
     $: totalNewLeads = nonArchivedLeads.filter((lead) => lead.statusKey === "new").length;
     $: totalThisMonthLeads = nonArchivedLeads.filter((lead) => isCurrentMonth(lead.created)).length;
     $: totalContactFormLeads = nonArchivedLeads.filter((lead) => lead.sourceKey === "contact").length;
@@ -956,46 +963,99 @@
         return normalized;
     }
 
-    function filterAndSortLeads(leads) {
-        const next = (leads || []).filter((lead) => {
-            const isArchivedLead = lead.statusKey === "archived";
-            const byView = normalizedLeadsView === "archived" ? isArchivedLead : !isArchivedLead;
-            const bySource = sourceFilter === "all" || lead.sourceKey === sourceFilter;
-            const byStatus = normalizedLeadsView === "archived"
-                ? true
-                : statusFilter === "all" || lead.statusKey === statusFilter;
-            const periodStartTimestamp = getPeriodStartTimestamp(periodFilter);
-            const byPeriod = !periodStartTimestamp || (lead.createdTs || 0) >= periodStartTimestamp;
+    function isArchivedLead(lead) {
+        return archivedStatusAliases.includes(normalizeLower(lead?.statusKey));
+    }
 
-            if (!byView || !bySource || !byStatus || !byPeriod) {
-                return false;
-            }
+    function filterLeadsBySelectedWebsite(leads, websiteIdFilter) {
+        const next = Array.isArray(leads) ? leads : [];
+        if (websiteIdFilter === ALL_WEBSITES_KEY) {
+            return [...next];
+        }
 
-            if (!normalizedSearchTerm) {
-                return true;
-            }
+        const websiteId = normalizeString(websiteIdFilter);
+        return next.filter((lead) => normalizeString(lead?.websiteId) === websiteId);
+    }
 
-            const searchable = [
-                lead.identity,
-                lead.secondaryIdentity,
-                lead.websiteName,
-                lead.subject,
-                lead.message,
-                lead.whatsappTargetMessage,
-                lead.notes,
-                lead.preview,
-                lead.page,
-                lead.originSource,
-            ]
-                .map((value) => normalizeLower(value))
-                .filter(Boolean)
-                .join(" ");
+    function filterLeadsByView(leads, viewKey) {
+        const next = Array.isArray(leads) ? leads : [];
+        return viewKey === "archived"
+            ? next.filter((lead) => isArchivedLead(lead))
+            : next.filter((lead) => !isArchivedLead(lead));
+    }
 
-            return searchable.includes(normalizedSearchTerm);
-        });
+    function filterLeadsByType(leads, sourceFilterValue) {
+        const next = Array.isArray(leads) ? leads : [];
+        const normalizedSourceFilter = normalizeLower(sourceFilterValue);
+        if (!normalizedSourceFilter || normalizedSourceFilter === "all") {
+            return [...next];
+        }
 
+        return next.filter((lead) => normalizeLower(lead?.sourceKey) === normalizedSourceFilter);
+    }
+
+    function filterLeadsByStatus(leads, viewKey, statusFilterValue) {
+        const next = Array.isArray(leads) ? leads : [];
+        if (viewKey === "archived") {
+            return [...next];
+        }
+
+        const normalizedStatusFilter = normalizeLower(statusFilterValue);
+        if (!normalizedStatusFilter || normalizedStatusFilter === "all") {
+            return [...next];
+        }
+
+        return next.filter((lead) => normalizeLower(lead?.statusKey) === normalizedStatusFilter);
+    }
+
+    function filterLeadsByPeriod(leads, periodFilterValue) {
+        const next = Array.isArray(leads) ? leads : [];
+        const periodStartTimestamp = getPeriodStartTimestamp(periodFilterValue);
+        if (!periodStartTimestamp) {
+            return [...next];
+        }
+
+        return next.filter((lead) => (lead?.createdTs || 0) >= periodStartTimestamp);
+    }
+
+    function resolveLeadSearchText(lead) {
+        return [
+            lead?.identity,
+            lead?.name,
+            lead?.email,
+            lead?.phone,
+            lead?.secondaryIdentity,
+            lead?.websiteName,
+            lead?.subject,
+            lead?.message,
+            lead?.whatsappTargetMessage,
+            lead?.notes,
+            lead?.preview,
+            lead?.page,
+            lead?.originSource,
+            lead?.sourceLabel,
+            lead?.statusLabel,
+            resolveLeadAttribution(lead),
+            resolveLeadLocationHint(lead),
+        ]
+            .map((value) => normalizeLower(value))
+            .filter(Boolean)
+            .join(" ");
+    }
+
+    function filterLeadsBySearch(leads, normalizedSearchValue) {
+        const next = Array.isArray(leads) ? leads : [];
+        if (!normalizedSearchValue) {
+            return [...next];
+        }
+
+        return next.filter((lead) => resolveLeadSearchText(lead).includes(normalizedSearchValue));
+    }
+
+    function sortLeads(leads, sortDirection) {
+        const next = [...(Array.isArray(leads) ? leads : [])];
         next.sort((a, b) => {
-            if (sortOrder === "oldest") {
+            if (sortDirection === "oldest") {
                 return (a.createdTs || 0) - (b.createdTs || 0);
             }
 
@@ -1516,7 +1576,7 @@
                     >
                         <i class={`${option.icon} tab-icon`} aria-hidden="true" />
                         <span class="tab-label">
-                            {option.label}{option.key === "archived" ? ` (${archivedLeadsCount})` : ""}
+                            {option.label} ({option.key === "archived" ? archivedLeadsCount : inboxLeadsCount})
                         </span>
                     </button>
                 {/each}
@@ -1553,7 +1613,7 @@
                                 id="leads-search-filter"
                                 class="input input-sm"
                                 type="text"
-                                placeholder="Search by name, email, phone, subject, message, or source..."
+                                placeholder="Search by name, email, phone, subject, message, notes, or source..."
                                 bind:value={searchTerm}
                             />
                         </div>
@@ -1640,7 +1700,7 @@
                         <span class="loader loader-lg" />
                         <h1>Loading leads...</h1>
                     </div>
-                {:else if !normalizedLeads.length}
+                {:else if !websiteScopedLeads.length}
                     <div class="empty-state m-b-0">
                         {#if normalizedLeadsView === "archived"}
                             No archived leads yet.
