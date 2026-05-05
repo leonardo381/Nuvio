@@ -38,7 +38,6 @@
     let isCampaignPreviewExpanded = false;
     let editingCampaignId = "";
     let isSavingCampaign = false;
-    let audienceMode = "manual";
     let audienceRecipientSearch = "";
     let audienceRecipientVisibilityFilter = "all";
     let subscriberSearch = "";
@@ -216,49 +215,58 @@
         const searchable = `${resolveSubscriberDisplayName(subscriber)} ${subscriber?.email || ""} ${groupsLabel}`.toLowerCase();
         return searchable.includes(normalizedAudienceRecipientSearch);
     });
-    $: resolvedAudienceMode = normalizeAudienceMode(
-        audienceMode === "group" ? audienceMode : campaignForm.recipientsType,
-    );
-    $: audienceModeLabel = resolveAudienceModeLabel(resolvedAudienceMode);
     $: audienceRecipientsSummary = `${resolveManualAudienceRecipientCountForMode(campaignForm.recipientsType, campaignForm.recipientsIds)} selected / ${activeSubscribers.length} active`;
     $: audienceSummaryStatus = editingCampaignId ? "Editing existing draft" : "New draft";
     $: audienceSubjectReady = !!campaignSubjectValue;
     $: audienceBodyReady = !!campaignBodyValue;
-    $: audienceRecipientsReady = resolvedAudienceMode === "all"
-        ? activeSubscribers.length > 0
-        : normalizedCampaignManualRecipientsCount > 0;
+    $: audienceRecipientsReady = normalizedCampaignManualRecipientsCount > 0;
     $: audienceHasUnsavedChanges = !!editingCampaign && campaignHasUnsavedComposerChanges(editingCampaign);
-    $: audienceWarnings = [];
+    $: audienceSendDisabledReason = !editingCampaign
+        ? "Save the draft before sending this campaign."
+        : getSendCampaignDisabledReason(editingCampaign);
+    $: audienceBlockingWarnings = [];
     $: if (!audienceSubjectReady) {
-        audienceWarnings.push("Add a subject before sending.");
+        audienceBlockingWarnings.push("Add a subject before sending.");
     }
     $: if (!audienceBodyReady) {
-        audienceWarnings.push("Add email content before sending.");
+        audienceBlockingWarnings.push("Add email content before sending.");
     }
     $: if (!audienceRecipientsReady) {
-        audienceWarnings.push("Select at least one active recipient before sending.");
+        audienceBlockingWarnings.push("Select at least one active recipient before sending.");
     }
     $: if (!editingCampaignId) {
-        audienceWarnings.push("Save the draft before sending this campaign.");
+        audienceBlockingWarnings.push("Save the draft before sending this campaign.");
     }
+    $: if (editingCampaign && normalizeStatus(editingCampaign.status) === "sent") {
+        audienceBlockingWarnings.push("Campaign already sent.");
+    }
+    $: audienceAttentionWarnings = [];
     $: if (audienceHasUnsavedChanges) {
-        audienceWarnings.push("Update the draft before sending this audience.");
+        audienceAttentionWarnings.push("Update the draft before sending these selected recipients.");
     }
+    $: if (
+        !!editingCampaign
+        && !!audienceSendDisabledReason
+        && audienceSendDisabledReason !== "Update the draft before sending these selected recipients."
+        && !audienceBlockingWarnings.includes(audienceSendDisabledReason)
+    ) {
+        audienceAttentionWarnings.push(audienceSendDisabledReason);
+    }
+    $: audienceWarnings = [...audienceBlockingWarnings, ...audienceAttentionWarnings];
     $: audienceSuggestions = [];
     $: if (hasSubscriberGroupsFeature) {
         audienceSuggestions.push("Use groups to select recipients faster.");
     }
     $: audienceSuggestions.push("Review your audience before sending.");
-    $: audienceHasMissingBasics = !audienceSubjectReady || !audienceBodyReady || !audienceRecipientsReady;
+    $: audienceHasMissingBasics = audienceBlockingWarnings.length > 0;
+    $: audienceNeedsAttention = !audienceHasMissingBasics && audienceAttentionWarnings.length > 0;
+    $: audienceCanSendNow = !!editingCampaign && !audienceSendDisabledReason;
     $: audienceHealthStatus = resolveAudienceHealthStatus({
         hasMissingBasics: audienceHasMissingBasics,
-        hasUnsavedChanges: audienceHasUnsavedChanges,
-        hasSavedDraft: !!editingCampaignId,
+        needsAttention: audienceNeedsAttention,
+        canSend: audienceCanSendNow,
     });
     $: audienceHealthPillClass = resolveAudienceHealthPillClass(audienceHealthStatus);
-    $: audienceSendDisabledReason = !editingCampaign
-        ? "Save the draft before sending this campaign."
-        : getSendCampaignDisabledReason(editingCampaign);
     $: subscribersTotalPages = Math.max(1, Math.ceil(filteredSubscribers.length / subscribersPageSize));    $: if (subscribersPage > subscribersTotalPages) {        subscribersPage = subscribersTotalPages;    };    $: subscribersPageStart = (subscribersPage - 1) * subscribersPageSize;    $: pagedSubscribers = filteredSubscribers.slice(subscribersPageStart, subscribersPageStart + subscribersPageSize);    $: visibleSubscriberIds = pagedSubscribers.map((subscriber) => subscriber.id);    $: areAllVisibleSubscribersSelected = visibleSubscriberIds.length > 0        && visibleSubscriberIds.every((id) => selectedSubscriberIds.includes(id));    $: selectedSubscribersCount = selectedSubscriberIds.length;    $: pendingSendRecipientsCount = resolveCampaignRecipientsCount(pendingSendCampaign);    $: {
         const nextFilterKey = `${selectedWebsiteId}|${subscriberSearch}|${subscriberStatusFilter}|${subscriberGroupFilter}|${subscriberSort}|${subscribers.length}`;
         if (nextFilterKey !== lastSubscribersFilterKey) {
@@ -361,44 +369,9 @@
         return activeSubscribers.map((subscriber) => subscriber.id);
     }
 
-    function normalizeAudienceMode(mode) {
-        const normalized = normalizeStatus(mode);
-        if (normalized === "all") {
-            return "all";
-        }
-        if (normalized === "group") {
-            return "group";
-        }
-        return "manual";
-    }
-
-    function resolveAudienceModeLabel(mode) {
-        if (mode === "all") {
-            return "All active";
-        }
-        if (mode === "group") {
-            return "Select by group";
-        }
-        return "Manual selection";
-    }
-
     function setCampaignRecipientsType(nextType) {
-        const normalized = normalizeStatus(nextType) === "all" ? "all" : "manual";
-        campaignForm = { ...campaignForm, recipientsType: normalized };
-    }
-
-    function setAudienceMode(mode) {
-        const normalizedMode = normalizeAudienceMode(mode);
-        audienceMode = normalizedMode;
-        clearCampaignFormError();
-
-        if (normalizedMode === "all") {
-            setCampaignRecipientsType("all");
-            setManualRecipientIds(getActiveSubscriberIds(), { clearError: false });
-            return;
-        }
-
-        setCampaignRecipientsType("manual");
+        void nextType;
+        campaignForm = { ...campaignForm, recipientsType: "manual" };
     }
 
     function normalizeManualRecipientIds(ids) {
@@ -424,7 +397,7 @@
             clearCampaignFormError();
         }
         const normalizedIds = normalizeManualRecipientIds(ids);
-        campaignForm = { ...campaignForm, recipientsIds: normalizedIds };
+        campaignForm = { ...campaignForm, recipientsType: "manual", recipientsIds: normalizedIds };
         return normalizedIds;
     }
 
@@ -448,9 +421,6 @@
             return;
         }
 
-        if (audienceMode !== "group") {
-            audienceMode = "group";
-        }
         if (normalizeStatus(campaignForm.recipientsType) !== "manual") {
             setCampaignRecipientsType("manual");
         }
@@ -466,15 +436,15 @@
     }
 
     function selectAllActiveRecipients() {
+        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {
+            setCampaignRecipientsType("manual");
+        }
         setManualRecipientIds(getActiveSubscriberIds());
     }
 
     function clearManualRecipients() {
         if (normalizeStatus(campaignForm.recipientsType) === "all") {
             setCampaignRecipientsType("manual");
-        }
-        if (audienceMode === "all") {
-            audienceMode = "manual";
         }
         setManualRecipientIds([]);
     }
@@ -484,9 +454,7 @@
     }
 
     function resolveManualAudienceRecipientCountForMode(recipientsType, recipientsIds) {
-        if (normalizeStatus(recipientsType) === "all") {
-            return activeSubscribers.length;
-        }
+        void recipientsType;
         return normalizeManualAudienceRecipientIds(recipientsIds).length;
     }
 
@@ -570,16 +538,10 @@
         if (`${campaignForm.body || ""}`.trim() !== `${campaign?.body || ""}`.trim()) {
             return true;
         }
-        const composerRecipientsType = normalizeStatus(campaignForm.recipientsType) === "all" ? "all" : "manual";
-        const persistedRecipientsType = getCampaignRecipientsType(campaign) === "all" ? "all" : "manual";
-        if (composerRecipientsType !== persistedRecipientsType) {
-            return true;
-        }
-        if (composerRecipientsType === "all") {
-            return false;
-        }
         const composerRecipients = normalizeManualAudienceRecipientIds(campaignForm.recipientsIds);
-        const persistedRecipients = normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign));
+        const persistedRecipients = getCampaignRecipientsType(campaign) === "all"
+            ? normalizeManualAudienceRecipientIds(getActiveSubscriberIds())
+            : normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign));
         if (composerRecipients.length !== persistedRecipients.length) {
             return true;
         }
@@ -597,7 +559,7 @@
             return "Campaign already sent.";
         }
         if (campaignHasUnsavedComposerChanges(campaign)) {
-            return "Update the draft before sending this audience.";
+            return "Update the draft before sending these selected recipients.";
         }
         if (resolveCampaignRecipientsCount(campaign) < 1) {
             return "Select at least one active recipient before sending.";
@@ -627,8 +589,8 @@
     }
 
     function resolveCampaignAudienceLabel(campaign) {
-        const recipientsType = getCampaignRecipientsType(campaign);
-        return recipientsType === "manual" ? "Manual" : "All active";
+        void campaign;
+        return "Selected recipients";
     }
 
     function resolveCampaignTimelineLabel(campaign) {
@@ -648,7 +610,7 @@
     }
 
     function resolveCampaignAudienceSummary(campaign) {
-        return `${resolveCampaignAudienceLabel(campaign)} audience`;
+        return resolveCampaignAudienceLabel(campaign);
     }
 
     function resolveCampaignSendPreviewLabel(campaign) {
@@ -717,11 +679,11 @@
         return "Finalize recipients, then save or send from your drafts list.";
     }
 
-    function resolveAudienceHealthStatus({ hasMissingBasics = false, hasUnsavedChanges = false, hasSavedDraft = false } = {}) {
+    function resolveAudienceHealthStatus({ hasMissingBasics = false, needsAttention = false, canSend = false } = {}) {
         if (hasMissingBasics) {
             return "Missing basics";
         }
-        if (hasUnsavedChanges || !hasSavedDraft) {
+        if (needsAttention || !canSend) {
             return "Needs attention";
         }
         return "Ready to send";
@@ -977,7 +939,7 @@
         nextCreateGroupIds.add(groupId);
         subscriberForm = { ...subscriberForm, groupIds: [...nextCreateGroupIds] };
     }
-    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        if (audienceMode === "all") {            audienceMode = "manual";        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
+    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
     }
 
@@ -1241,7 +1203,6 @@
             recipientsType: "manual",
             recipientsIds: [],
         };
-        audienceMode = "manual";
         audienceRecipientSearch = "";
         audienceRecipientVisibilityFilter = "all";
         campaignFormError = "";
@@ -1265,10 +1226,9 @@
         campaignForm = {
             subject: `${campaign.subject || ""}`,
             body: `${campaign.body || ""}`,
-            recipientsType: previousRecipientsType === "all" ? "all" : "manual",
+            recipientsType: "manual",
             recipientsIds: normalizeManualRecipientIds(resolvedRecipientsIds),
         };
-        audienceMode = previousRecipientsType === "all" ? "all" : "manual";
         audienceRecipientSearch = "";
         audienceRecipientVisibilityFilter = "all";
         campaignBuilderShowEditor = true;
@@ -1297,10 +1257,8 @@
         }
 
         campaignFormError = "";
-        const normalizedRecipientsType = normalizeStatus(campaignForm.recipientsType) === "all" ? "all" : "manual";
-        const normalizedRecipientsIds = normalizedRecipientsType === "all"
-            ? getActiveSubscriberIds()
-            : normalizeManualRecipientIds(campaignForm.recipientsIds);
+        const normalizedRecipientsType = "manual";
+        const normalizedRecipientsIds = normalizeManualRecipientIds(campaignForm.recipientsIds);
         const payload = {
             website: selectedWebsiteId,
             subject: `${campaignForm.subject || ""}`.trim(),
@@ -2027,56 +1985,38 @@
                                     </div>
 
                                     <div class="campaign-audience-workspace">
-                                        <form id="campaign-audience-form" class="campaign-audience-form panel" on:submit|preventDefault={saveCampaignDraftFromComposer}>
-                                            <div class="campaign-audience-mode-panel">
-                                                <h5 class="m-0">Audience mode</h5>
-                                                <div class="campaign-audience-mode-options" role="toolbar" aria-label="Audience mode">
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-xs btn-outline audience-mode-btn"
-                                                        class:is-active={resolvedAudienceMode === "all"}
-                                                        on:click={() => setAudienceMode("all")}
-                                                    >
-                                                        <span class="txt">All active</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-xs btn-outline audience-mode-btn"
-                                                        class:is-active={resolvedAudienceMode === "manual"}
-                                                        on:click={() => setAudienceMode("manual")}
-                                                    >
-                                                        <span class="txt">Manual selection</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-xs btn-outline audience-mode-btn"
-                                                        class:is-active={resolvedAudienceMode === "group"}
-                                                        on:click={() => setAudienceMode("group")}
-                                                    >
-                                                        <span class="txt">Select by group</span>
-                                                    </button>
+                                        <form id="campaign-audience-form" class="campaign-audience-form" on:submit|preventDefault={saveCampaignDraftFromComposer}>
+                                            <section class="campaign-audience-main-section manual-recipients">
+                                                <div class="manual-recipients-head section-head-inline">
+                                                    <h5 class="m-0">Recipients</h5>
+                                                    <span class="txt-sm txt-hint m-b-0 manual-section-helper">
+                                                        Choose recipients manually. Group chips are shortcuts for manual selection.
+                                                    </span>
                                                 </div>
-                                            </div>
 
-                                            <div class="manual-recipients m-t-sm">
-                                                <div class="manual-recipients-head">
-                                                    <div class="manual-recipients-title-row">
-                                                        <h5 class="m-0">Recipients</h5>
-                                                        <span class="txt-sm txt-hint manual-recipients-help">
-                                                            {#if resolvedAudienceMode === "all"}
-                                                                All active subscribers are included.
-                                                            {:else if resolvedAudienceMode === "group"}
-                                                                Select groups to build your manual audience.
-                                                            {:else}
-                                                                Choose recipients manually. Group chips are shortcuts for manual selection.
-                                                            {/if}
-                                                        </span>
+                                                <div class="campaign-audience-toolbar">
+                                                    <div class="campaign-audience-toolbar-row campaign-audience-toolbar-row--filters">
+                                                        <label class="campaign-audience-toolbar-field campaign-audience-toolbar-field--search">
+                                                            <span class="txt-xs txt-hint">Search subscribers</span>
+                                                            <input
+                                                                class="form-input"
+                                                                type="search"
+                                                                placeholder="Search by name, email, or group..."
+                                                                bind:value={audienceRecipientSearch}
+                                                            />
+                                                        </label>
+                                                        <label class="campaign-audience-toolbar-field campaign-audience-toolbar-field--compact">
+                                                            <span class="txt-xs txt-hint">View</span>
+                                                            <select class="form-select" bind:value={audienceRecipientVisibilityFilter}>
+                                                                <option value="all">All</option>
+                                                                <option value="selected">Selected only</option>
+                                                                <option value="unselected">Unselected only</option>
+                                                            </select>
+                                                        </label>
                                                     </div>
-                                                    <div class="manual-recipients-tools">
-                                                        <span class="manual-recipients-count txt-xs">
-                                                            {audienceRecipientsSummary}
-                                                        </span>
-                                                        <div class="manual-group-action-buttons">
+                                                    <div class="campaign-audience-toolbar-row campaign-audience-toolbar-row--actions">
+                                                        <div class="campaign-audience-toolbar-actions-row">
+                                                            <span class="manual-recipients-count txt-xs">{audienceRecipientsSummary}</span>
                                                             <button type="button" class="btn btn-xs btn-outline" on:click={selectAllActiveRecipients}>
                                                                 <span class="txt">Select all active</span>
                                                             </button>
@@ -2087,30 +2027,10 @@
                                                     </div>
                                                 </div>
 
-                                                <div class="campaign-audience-toolbar m-b-sm">
-                                                    <label class="campaign-audience-toolbar-field">
-                                                        <span class="txt-xs txt-hint">Search subscribers</span>
-                                                        <input
-                                                            class="form-input"
-                                                            type="search"
-                                                            placeholder="Search by name, email, or group..."
-                                                            bind:value={audienceRecipientSearch}
-                                                        />
-                                                    </label>
-                                                    <label class="campaign-audience-toolbar-field campaign-audience-toolbar-field--compact">
-                                                        <span class="txt-xs txt-hint">Show</span>
-                                                        <select class="form-select" bind:value={audienceRecipientVisibilityFilter}>
-                                                            <option value="all">All</option>
-                                                            <option value="selected">Selected only</option>
-                                                            <option value="unselected">Unselected only</option>
-                                                        </select>
-                                                    </label>
-                                                </div>
-
-                                                <div class="manual-group-tools m-b-sm">
-                                                    <div class="section-head-inline m-b-xs">
+                                                <div class="manual-group-tools">
+                                                    <div class="section-head-inline manual-group-head">
                                                         <h6 class="m-0">Groups</h6>
-                                                        <span class="txt-xs txt-hint">Choose groups to add their active subscribers to this campaign.</span>
+                                                        <span class="txt-sm txt-hint m-b-0 manual-section-helper">Choose groups to add their active subscribers to this campaign.</span>
                                                     </div>
                                                     {#if hasSubscriberGroupsFeature && subscriberGroups.length}
                                                         <div class="manual-group-chip-list">
@@ -2148,12 +2068,18 @@
                                                 {:else}
                                                     <div class="manual-recipients-grid">
                                                         {#each filteredAudienceRecipients as subscriber (subscriber.id)}
+                                                            {@const subscriberGroupNames = hasSubscriberGroupsFeature
+                                                                ? getSubscriberGroupIds(subscriber)
+                                                                    .map((groupId) => subscriberGroupsById.get(groupId)?.name)
+                                                                    .filter(Boolean)
+                                                                : []}
                                                             <label
                                                                 class="manual-recipient-item"
                                                                 class:is-selected={normalizedCampaignManualRecipientIdsSet.has(subscriber.id)}
                                                             >
                                                                 <input
                                                                     type="checkbox"
+                                                                    class="manual-recipient-check"
                                                                     checked={normalizedCampaignManualRecipientIdsSet.has(subscriber.id)}
                                                                     on:change={() => toggleManualRecipient(subscriber.id)}
                                                                 />
@@ -2165,14 +2091,13 @@
                                                                         <span class="manual-recipient-title">{subscriber.email}</span>
                                                                     {/if}
                                                                     {#if hasSubscriberGroupsFeature}
-                                                                        <span class="manual-recipient-groups txt-xs txt-hint">
-                                                                            {#if getSubscriberGroupIds(subscriber).length}
-                                                                                {getSubscriberGroupIds(subscriber)
-                                                                                    .map((groupId) => subscriberGroupsById.get(groupId)?.name)
-                                                                                    .filter(Boolean)
-                                                                                    .join(", ")}
+                                                                        <span class="manual-recipient-groups">
+                                                                            {#if subscriberGroupNames.length}
+                                                                                {#each subscriberGroupNames as groupName}
+                                                                                    <span class="label label-sm manual-recipient-group-pill">{groupName}</span>
+                                                                                {/each}
                                                                             {:else}
-                                                                                No groups
+                                                                                <span class="txt-xs txt-hint">No groups</span>
                                                                             {/if}
                                                                         </span>
                                                                     {/if}
@@ -2181,14 +2106,14 @@
                                                         {/each}
                                                     </div>
                                                 {/if}
-                                            </div>
+                                            </section>
 
                                             {#if campaignFormError}
                                                 <div class="txt-sm txt-danger">{campaignFormError}</div>
                                             {/if}
                                         </form>
 
-                                        <aside class="campaign-audience-side panel">
+                                        <aside class="campaign-audience-side">
                                             <section class="campaign-audience-side-section">
                                                 <h5 class="m-0">Campaign summary</h5>
                                                 <div class="campaign-audience-summary-list">
@@ -2201,15 +2126,11 @@
                                                         <span class="audience-stat-value">{audienceSummaryStatus}</span>
                                                     </div>
                                                     <div class="campaign-audience-summary-row">
-                                                        <span class="audience-stat-label">Audience mode</span>
-                                                        <span class="audience-stat-value">{audienceModeLabel}</span>
-                                                    </div>
-                                                    <div class="campaign-audience-summary-row">
                                                         <span class="audience-stat-label">Recipients</span>
                                                         <span class="audience-stat-value">{audienceRecipientsSummary}</span>
                                                     </div>
                                                     <div class="campaign-audience-summary-row">
-                                                        <span class="audience-stat-label">Groups</span>
+                                                        <span class="audience-stat-label">Groups available</span>
                                                         <span class="audience-stat-value">
                                                             {hasSubscriberGroupsFeature ? `${subscriberGroups.length} available` : "Not enabled"}
                                                         </span>
@@ -2223,7 +2144,7 @@
                                                     <span class={`label label-sm ${audienceHealthPillClass}`}>{audienceHealthStatus}</span>
                                                 </div>
                                                 <div class="txt-xs txt-hint audience-health-counts">
-                                                    {audienceWarnings.length} warning{audienceWarnings.length === 1 ? "" : "s"} · {audienceSuggestions.length} suggestion{audienceSuggestions.length === 1 ? "" : "s"}
+                                                    {audienceWarnings.length} warning{audienceWarnings.length === 1 ? "" : "s"} | {audienceSuggestions.length} suggestion{audienceSuggestions.length === 1 ? "" : "s"}
                                                 </div>
                                                 <div class="audience-health-block">
                                                     <h6 class="m-0">Warnings</h6>
@@ -2250,9 +2171,6 @@
                                             <section class="campaign-audience-side-section campaign-audience-actions-panel">
                                                 <h5 class="m-0">Actions</h5>
                                                 <div class="campaign-audience-actions">
-                                                    <button type="button" class="btn btn-sm btn-outline action-btn" on:click={() => (campaignWorkspace = "builder")}>
-                                                        <span class="txt">Back to Builder</span>
-                                                    </button>
                                                     {#if editingCampaignId}
                                                         <button type="button" class="btn btn-sm btn-outline action-btn" on:click={resetCampaignComposer}>
                                                             <span class="txt">Cancel Edit</span>
@@ -2804,38 +2722,29 @@
         min-width: 150px;
         width: 100%;
     }
-    .manual-recipients {
-        border-top: 1px solid var(--baseAlt2Color);
-        padding-top: 10px;
-    }
-
-    .manual-recipients-head {
+    .campaign-audience-main-section {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 8px;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
     }
 
-    .manual-recipients-title-row {
-        display: inline-flex;
-        align-items: center;
+    .manual-recipients {
+        border: 0;
+        padding-top: 0;
+        gap: 12px;
+    }
+
+    .manual-recipients-head,
+    .manual-group-head {
+        align-items: baseline;
         gap: 8px;
         flex-wrap: wrap;
     }
 
-    .manual-recipients-tools {
-        display: inline-flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-left: auto;
-    }
-
-    .manual-recipients-help {
-        white-space: nowrap;
+    .manual-section-helper {
+        white-space: normal;
+        line-height: 1.35;
     }
 
     .manual-recipients-count {
@@ -2860,25 +2769,41 @@
         gap: 8px;
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
-        padding: 7px 9px;
-        background: var(--baseAlt1Color);
+        padding: 6px 9px;
+        background: var(--baseColor);
         cursor: pointer;
         min-width: 0;
+        position: relative;
         transition: border-color 140ms ease, background-color 140ms ease;
     }
 
+    .manual-recipient-item::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 3px;
+        border-radius: var(--baseRadius) 0 0 var(--baseRadius);
+        background: color-mix(in srgb, var(--primaryColor) 55%, transparent);
+        opacity: 0;
+        transition: opacity 140ms ease;
+    }
+
     .manual-recipient-item:hover {
-        border-color: color-mix(in srgb, var(--primaryColor) 28%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--baseAlt1Color) 78%, var(--baseAlt2Color));
+        border-color: color-mix(in srgb, var(--primaryColor) 26%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseColor) 92%, var(--baseAlt1Color));
     }
 
     .manual-recipient-item.is-selected {
         border-color: color-mix(in srgb, var(--primaryColor) 44%, var(--baseAlt2Color));
         background: color-mix(in srgb, var(--primaryColor) 9%, var(--baseColor));
-        box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primaryColor) 50%, transparent);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 18%, transparent);
     }
 
-    .manual-recipient-item input {
+    .manual-recipient-item.is-selected::before {
+        opacity: 1;
+    }
+
+    .manual-recipient-check {
         margin-top: 2px;
         flex: 0 0 auto;
         accent-color: var(--primaryColor);
@@ -2887,7 +2812,7 @@
     .manual-recipient-content {
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 3px;
         min-width: 0;
     }
 
@@ -2902,16 +2827,30 @@
 
     .manual-recipient-subtitle {
         font-size: 12px;
-        color: var(--txtHintColor);
+        color: color-mix(in srgb, var(--txtHintColor) 88%, var(--txtPrimaryColor));
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
     .manual-recipient-groups {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .manual-recipient-group-pill {
+        font-size: 11px;
+        line-height: 1.3;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 90%, var(--baseColor));
+        color: var(--txtHintColor);
+    }
+
+    .manual-recipient-item.is-selected .manual-recipient-group-pill {
+        border-color: color-mix(in srgb, var(--primaryColor) 30%, var(--baseAlt2Color));
+        color: color-mix(in srgb, var(--txtPrimaryColor) 85%, var(--txtHintColor));
     }
 
     .manual-recipient-item input:checked + .manual-recipient-content .manual-recipient-title {
@@ -3250,7 +3189,7 @@
     .campaign-audience-workspace {
         display: grid;
         grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
-        gap: 14px;
+        gap: 12px;
         align-items: start;
     }
 
@@ -3261,28 +3200,27 @@
         gap: 10px;
     }
 
-    .campaign-audience-mode-panel {
+    .campaign-audience-toolbar {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-    }
-
-    .campaign-audience-mode-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    .audience-mode-btn.is-active {
-        border-color: color-mix(in srgb, var(--primaryColor) 40%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--primaryColor) 10%, var(--baseColor));
-        color: var(--txtPrimaryColor);
-    }
-
-    .campaign-audience-toolbar {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(180px, 220px);
         gap: 10px;
+    }
+
+    .campaign-audience-toolbar-row {
+        display: flex;
+        align-items: end;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .campaign-audience-toolbar-row--filters {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+        align-items: end;
+    }
+
+    .campaign-audience-toolbar-row--actions {
+        justify-content: flex-end;
     }
 
     .campaign-audience-toolbar-field {
@@ -3294,6 +3232,13 @@
 
     .campaign-audience-toolbar-field--compact {
         max-width: 220px;
+    }
+
+    .campaign-audience-toolbar-actions-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
     }
 
     .campaign-audience-side {
@@ -3389,9 +3334,11 @@
         display: flex;
         flex-direction: column;
         gap: 6px;
+        margin: 0;
+        padding-top: 2px;
     }
 
-        .manual-group-action-buttons {
+    .manual-group-action-buttons {
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -3667,11 +3614,23 @@
         }
 
         .campaign-audience-toolbar {
+            gap: 10px;
+        }
+
+        .campaign-audience-toolbar-row--filters {
             grid-template-columns: 1fr;
         }
 
         .campaign-audience-toolbar-field--compact {
             max-width: none;
+        }
+
+        .campaign-audience-toolbar-row--actions {
+            justify-content: flex-start;
+        }
+
+        .campaign-audience-toolbar-actions-row {
+            width: 100%;
         }
 
         .subscriber-filter-grid {
@@ -3757,30 +3716,13 @@
             align-items: stretch;
         }
 
-        .campaign-audience-mode-options .btn {
-            flex: 1 1 calc(50% - 6px);
-            min-width: 0;
-        }
-
-        .manual-recipients-head {
-            align-items: flex-start;
-        }
-
-        .manual-recipients-tools {
+        .campaign-audience-toolbar-actions-row {
+            gap: 6px;
             width: 100%;
             justify-content: flex-start;
-            margin-left: 0;
         }
 
-        .manual-recipients-help {
-            white-space: normal;
-        }
-
-        .manual-group-action-buttons {
-            width: 100%;
-        }
-
-        .manual-group-action-buttons .btn {
+        .campaign-audience-toolbar-actions-row .btn {
             flex: 1 1 auto;
         }
 
