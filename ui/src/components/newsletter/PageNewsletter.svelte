@@ -36,6 +36,12 @@
     let campaignBuilderShowPreview = false;
     let campaignStatusFilter = "all";
     let isCampaignPreviewExpanded = false;
+    const campaignPreviewModes = [
+        { key: "desktop", label: "Desktop", icon: "ri-computer-line", width: 720 },
+        { key: "tablet", label: "Tablet", icon: "ri-tablet-line", width: 600 },
+        { key: "mobile", label: "Mobile", icon: "ri-smartphone-line", width: 390 },
+    ];
+    let campaignPreviewMode = "desktop";
     let editingCampaignId = "";
     let isSavingCampaign = false;
     let audienceRecipientSearch = "";
@@ -136,7 +142,13 @@
         campaignForm.recipientsIds,
     );
     $: campaignSubjectValue = `${campaignForm.subject || ""}`.trim();
-    $: campaignBodyValue = `${campaignForm.body || ""}`.trim();    $: campaignBodyEditorConfig = {        ...CommonHelper.defaultEditorOptions(),        convert_urls: false,        relative_urls: false,        min_height: 320,        height: 320,    };
+    $: campaignBodyValue = `${campaignForm.body || ""}`.trim();
+    $: activeCampaignPreviewMode = campaignPreviewModes.find((mode) => mode.key === campaignPreviewMode) || campaignPreviewModes[0];
+    $: campaignPreviewFrameWidth = activeCampaignPreviewMode?.width || 720;
+    $: campaignPreviewFrameStyle = `--campaign-preview-frame-width: ${campaignPreviewFrameWidth}px;`;
+    $: campaignPreviewHasBody = !!campaignBodyValue;
+    $: campaignPreviewDocumentHtml = buildCampaignPreviewDocument(campaignSubjectValue, campaignForm.body);
+    $: campaignBodyEditorConfig = {        ...CommonHelper.defaultEditorOptions(),        convert_urls: false,        relative_urls: false,        min_height: 320,        height: 320,    };
     $: shouldShowCampaignSubjectValidation = !campaignSubjectValue && (!!campaignBodyValue || !!campaignFormError);
     $: shouldShowCampaignBodyValidation = !campaignBodyValue && (!!campaignSubjectValue || !!campaignFormError);
     $: filteredCampaigns = campaigns.filter((campaign) => {
@@ -701,6 +713,84 @@
 
     function resolveBuilderStepHint() {
         return "Write your subject and content, then review the preview.";
+    }
+
+    function setCampaignPreviewMode(modeKey) {
+        if (!campaignPreviewModes.some((mode) => mode.key === modeKey)) {
+            return;
+        }
+        campaignPreviewMode = modeKey;
+    }
+
+    function escapePreviewText(value) {
+        return `${value || ""}`
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function sanitizePreviewBodyHtml(value) {
+        return `${value || ""}`
+            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+            .trim();
+    }
+
+    function buildCampaignPreviewDocument(subject, body) {
+        const trimmedSubject = `${subject || ""}`.trim();
+        const escapedTitle = escapePreviewText(trimmedSubject || "Campaign preview");
+        const sanitizedBody = sanitizePreviewBodyHtml(body);
+        const bodyHtml = sanitizedBody || '<p class="preview-empty">Body preview will appear here.</p>';
+
+        return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapedTitle}</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #f3f4f6;
+      color: #111827;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+    }
+    .preview-doc {
+      max-width: 100%;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 10px 24px rgba(17, 24, 39, 0.08);
+    }
+    .preview-subject {
+      margin: 0 0 16px;
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .preview-content p:last-child { margin-bottom: 0; }
+    .preview-empty {
+      margin: 0;
+      color: #6b7280;
+      font-size: 14px;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <main class="preview-doc">
+    ${trimmedSubject ? `<h1 class="preview-subject">${escapePreviewText(trimmedSubject)}</h1>` : ""}
+    <section class="preview-content">${bodyHtml}</section>
+  </main>
+</body>
+</html>`;
     }
 
     function resolveCampaignsSectionHint() {
@@ -1954,18 +2044,43 @@
                                         <div class="campaign-builder-preview-side">
                                             <div class="campaign-preview-header m-b-xs">
                                                 <h5 class="m-0">Preview</h5>
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-xs btn-outline campaign-preview-expand-btn"
-                                                    on:click={openCampaignPreviewModal}
-                                                >
-                                                    <span class="txt">Expand</span>
-                                                </button>
+                                                <div class="campaign-preview-header-actions">
+                                                    <div class="tabs-header compact combined left operations-tabs campaign-preview-device-tabs">
+                                                        {#each campaignPreviewModes as mode (mode.key)}
+                                                            <button
+                                                                type="button"
+                                                                class="tab-item"
+                                                                class:active={campaignPreviewMode === mode.key}
+                                                                aria-pressed={campaignPreviewMode === mode.key}
+                                                                on:click={() => setCampaignPreviewMode(mode.key)}
+                                                            >
+                                                                <i class={`${mode.icon} tab-icon`} aria-hidden="true" />
+                                                                <span class="tab-label">{mode.label}</span>
+                                                            </button>
+                                                        {/each}
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-xs btn-outline campaign-preview-expand-btn"
+                                                        on:click={openCampaignPreviewModal}
+                                                    >
+                                                        <span class="txt">Expand</span>
+                                                    </button>
+                                                </div>
                                             </div>
 
                                             <div class="campaign-preview-box campaign-preview-html">
-                                                {#if campaignBodyValue}
-                                                    {@html campaignForm.body}
+                                                {#if campaignPreviewHasBody}
+                                                    <div class="campaign-preview-canvas">
+                                                        <div class="campaign-preview-frame-shell" style={campaignPreviewFrameStyle}>
+                                                            <iframe
+                                                                class="campaign-preview-iframe"
+                                                                title="Campaign preview"
+                                                                sandbox="allow-same-origin"
+                                                                srcdoc={campaignPreviewDocumentHtml}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 {:else}
                                                     <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
                                                 {/if}
@@ -2350,16 +2465,55 @@
                 on:hide={closeCampaignPreviewModal}
             >
                 <div slot="header" class="campaign-preview-modal-header">
-                    <h4 class="m-0">Campaign Preview</h4>
-                    <button type="button" class="btn btn-xs btn-outline" on:click={closeCampaignPreviewModal}>
-                        <span class="txt">Close</span>
-                    </button>
+                    <div class="campaign-preview-modal-title">
+                        <h4 class="m-0">Campaign Preview</h4>
+                        <p class="txt-sm txt-hint m-b-0">Previewing current unsaved editor content.</p>
+                    </div>
+                    <div class="campaign-preview-modal-actions">
+                        <div class="tabs-header compact combined left operations-tabs campaign-preview-device-tabs campaign-preview-device-tabs--modal">
+                            {#each campaignPreviewModes as mode (mode.key)}
+                                <button
+                                    type="button"
+                                    class="tab-item"
+                                    class:active={campaignPreviewMode === mode.key}
+                                    aria-pressed={campaignPreviewMode === mode.key}
+                                    on:click={() => setCampaignPreviewMode(mode.key)}
+                                >
+                                    <i class={`${mode.icon} tab-icon`} aria-hidden="true" />
+                                    <span class="tab-label">{mode.label}</span>
+                                </button>
+                            {/each}
+                        </div>
+                        <button
+                            type="button"
+                            class="btn btn-xs btn-outline campaign-preview-modal-close-btn"
+                            on:click={closeCampaignPreviewModal}
+                        >
+                            <span class="txt">Close</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="campaign-preview-box campaign-preview-html campaign-preview-modal-box">
-                    {#if campaignBodyValue}
-                        {@html campaignForm.body}
+                    <div class="campaign-preview-modal-meta txt-xs txt-hint">
+                        <span>{activeCampaignPreviewMode.label} preview</span>
+                        <span aria-hidden="true" class="meta-sep">|</span>
+                        <span>{campaignPreviewFrameWidth}px frame</span>
+                    </div>
+                    {#if campaignPreviewHasBody}
+                        <div class="campaign-preview-canvas campaign-preview-canvas--modal">
+                            <div class="campaign-preview-frame-shell campaign-preview-frame-shell--modal" style={campaignPreviewFrameStyle}>
+                                <iframe
+                                    class="campaign-preview-iframe campaign-preview-iframe--modal"
+                                    title="Expanded campaign preview"
+                                    sandbox="allow-same-origin"
+                                    srcdoc={campaignPreviewDocumentHtml}
+                                />
+                            </div>
+                        </div>
                     {:else}
-                        <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
+                        <div class="campaign-preview-empty-state">
+                            <p class="txt-sm txt-hint m-0">Body preview will appear here.</p>
+                        </div>
                     {/if}
                 </div>
             </OverlayPanel>
@@ -2683,17 +2837,46 @@
         background: var(--baseAlt1Color);
         padding: 12px;
         min-height: 250px;
-        max-height: 380px;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
+        max-height: 400px;
+        overflow: hidden;
         font-family: inherit;
         font-size: var(--baseFontSize);
         flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
     }
 
     .campaign-preview-html :global(p:last-child) {
         margin-bottom: 0;
+    }
+
+    .campaign-preview-canvas {
+        width: 100%;
+        min-height: 220px;
+        padding: 4px;
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
+        overflow: auto;
+    }
+
+    .campaign-preview-frame-shell {
+        width: min(var(--campaign-preview-frame-width, 720px), 100%);
+        background: var(--baseColor);
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+        border-radius: 10px;
+        box-shadow: 0 10px 24px color-mix(in srgb, var(--txtPrimaryColor) 12%, transparent);
+        overflow: hidden;
+        flex: 0 0 auto;
+    }
+
+    .campaign-preview-iframe {
+        width: 100%;
+        height: 360px;
+        border: 0;
+        display: block;
+        background: var(--baseColor);
     }
 
     .loading-state,
@@ -3158,10 +3341,31 @@
         align-items: center;
         justify-content: space-between;
         gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .campaign-preview-header-actions {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-left: auto;
+    }
+
+    .campaign-preview-device-tabs .tab-item {
+        min-height: 30px;
+        min-width: 92px;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    .campaign-preview-device-tabs .tab-label {
+        font-size: var(--smFontSize);
     }
 
     .campaign-preview-expand-btn {
-        margin-left: auto;
+        margin-left: 0;
     }
 
     .campaign-edit-banner {
@@ -3518,22 +3722,108 @@
     }
 
     :global(.overlay-panel.newsletter-campaign-preview) {
-        width: min(100%, 980px);
-        max-height: 90vh;
+        width: min(100%, 1180px);
+        max-height: 94vh;
+    }
+
+    :global(.overlay-panel.newsletter-campaign-preview .panel-header .campaign-preview-device-tabs--modal) {
+        margin-bottom: 0;
     }
 
 
     .campaign-preview-modal-header {
+        width: 100%;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
+        flex-wrap: nowrap;
+    }
+
+    .campaign-preview-modal-title {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        flex: 1 1 auto;
+        white-space: nowrap;
+    }
+
+    .campaign-preview-modal-title h4,
+    .campaign-preview-modal-title p {
+        margin: 0;
+        line-height: 1.2;
+    }
+
+    .campaign-preview-modal-title p {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .campaign-preview-modal-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: nowrap;
+        margin-left: auto;
+        flex: 0 0 auto;
+        min-height: 34px;
+    }
+
+    .campaign-preview-device-tabs--modal {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+    }
+
+    .campaign-preview-device-tabs--modal .tab-item {
+        min-height: 34px;
+        justify-content: center;
+    }
+
+    .campaign-preview-modal-close-btn {
+        min-height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .campaign-preview-modal-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         flex-wrap: wrap;
     }
 
     .campaign-preview-modal-box {
-        min-height: min(66vh, 620px);
-        max-height: min(68vh, 640px);
+        min-height: min(72vh, 760px);
+        max-height: min(74vh, 780px);
+    }
+
+    .campaign-preview-canvas--modal {
+        min-height: min(66vh, 680px);
+        padding: 6px;
+    }
+
+    .campaign-preview-frame-shell--modal {
+        width: min(var(--campaign-preview-frame-width, 720px), 100%);
+    }
+
+    .campaign-preview-iframe--modal {
+        height: min(64vh, 660px);
+    }
+
+    .campaign-preview-empty-state {
+        min-height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: calc(var(--baseRadius) - 2px);
+        background: color-mix(in srgb, var(--baseColor) 88%, var(--baseAlt1Color));
+        padding: 16px;
     }
 
     @media (max-width: 980px) {
@@ -3612,6 +3902,44 @@
 
         .campaign-preview-header {
             flex-wrap: wrap;
+        }
+
+        .campaign-preview-header-actions {
+            width: 100%;
+            justify-content: flex-start;
+            margin-left: 0;
+        }
+
+        .campaign-preview-device-tabs {
+            flex: 1 1 auto;
+        }
+
+        .campaign-preview-modal-actions {
+            width: 100%;
+            justify-content: flex-start;
+            margin-left: 0;
+            flex-wrap: wrap;
+        }
+
+        .campaign-preview-modal-header {
+            flex-wrap: wrap;
+        }
+
+        .campaign-preview-modal-title {
+            white-space: normal;
+            flex-wrap: wrap;
+        }
+
+        .campaign-preview-canvas {
+            padding: 8px;
+        }
+
+        .campaign-preview-iframe {
+            height: 320px;
+        }
+
+        .campaign-preview-iframe--modal {
+            height: min(58vh, 560px);
         }
 
         .campaign-preview-expand-btn {
