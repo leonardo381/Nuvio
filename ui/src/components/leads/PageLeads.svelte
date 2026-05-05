@@ -14,21 +14,29 @@
     $pageTitle = "Leads";
 
     const sourceFilterOptions = [
-        { key: "all", label: "All" },
+        { key: "all", label: "All lead types" },
         { key: "contact", label: "Contact form" },
         { key: "whatsapp", label: "WhatsApp" },
         { key: "booking", label: "Booking" },
     ];
     const statusFilterOptions = [
-        { key: "all", label: "All" },
+        { key: "all", label: "All statuses" },
         { key: "new", label: "New" },
         { key: "read", label: "Read" },
+    ];
+    const periodFilterOptions = [
+        { key: "all", label: "All time" },
+        { key: "today", label: "Today" },
+        { key: "thisWeek", label: "This week" },
+        { key: "thisMonth", label: "This month" },
     ];
     const leadsViewOptions = [
         { key: "inbox", label: "Inbox", icon: "ri-inbox-line" },
         { key: "archived", label: "Archived", icon: "ri-archive-line" },
     ];
     const archivedStatusAliases = ["archived", "archive"];
+    const leadNotesFieldAliases = ["notes", "note", "internalNotes", "internal_notes"];
+    const leadLastContactedFieldAliases = ["lastContactedAt", "last_contacted_at", "lastContacted", "last_contacted"];
 
     const ALL_WEBSITES_KEY = "all";
     const whatsappCollectionAliases = ["whatsapp", "whatsapp_interactions", "whatsapp_clicks"];
@@ -41,6 +49,7 @@
 
     let sourceFilter = "all";
     let statusFilter = "all";
+    let periodFilter = "all";
     let leadsView = "inbox";
     let searchTerm = "";
     let sortOrder = "newest";
@@ -49,6 +58,10 @@
     let isDesktopMasterDetail = false;
     let isUpdatingLeadStatus = false;
     let updatingLeadStatusKey = "";
+    let isSavingLeadFollowUp = false;
+    let leadFollowUpError = "";
+    let leadNotesDraft = "";
+    let leadNotesDraftKey = "";
 
     let isLoadingWebsites = false;
     let isLoadingLeads = false;
@@ -104,6 +117,10 @@
     $: normalizedLeadsView = leadsView === "archived" ? "archived" : "inbox";
     $: contactsStatusSupport = resolveStatusSupport(contactsCollection);
     $: whatsappStatusSupport = resolveStatusSupport(whatsappCollection);
+    $: contactsNotesFieldName = resolveCollectionFieldNameByAliases(contactsCollection, leadNotesFieldAliases);
+    $: whatsappNotesFieldName = resolveCollectionFieldNameByAliases(whatsappCollection, leadNotesFieldAliases);
+    $: contactsLastContactedFieldName = resolveCollectionFieldNameByAliases(contactsCollection, leadLastContactedFieldAliases);
+    $: whatsappLastContactedFieldName = resolveCollectionFieldNameByAliases(whatsappCollection, leadLastContactedFieldAliases);
 
     $: normalizedLeads = normalizeLeadRecords({
         contacts: contactsRecords,
@@ -174,6 +191,28 @@
         selectedLeadNeedsFollowUp,
     });
     $: selectedLeadHealthState = resolveLeadHealthState(selectedLeadHealthWarnings, selectedLeadHealthSuggestions);
+    $: selectedLeadFollowUpSupport = resolveLeadFollowUpSupport(selectedLead);
+    $: selectedLeadLastContactedLabel = resolveLastContactedLabel(selectedLead?.lastContactedAt);
+    $: selectedLeadLastContactedDisplay = selectedLeadLastContactedLabel || "Not contacted yet";
+    $: selectedLeadNotesValue = `${selectedLead?.notes || ""}`;
+    $: leadNotesDirty = !!selectedLead && `${leadNotesDraft || ""}` !== selectedLeadNotesValue;
+    $: canSaveSelectedLeadNote = !!selectedLead?.recordId
+        && !!selectedLeadFollowUpSupport?.collectionId
+        && !!selectedLeadFollowUpSupport?.notesFieldName;
+    $: canMarkSelectedLeadContacted = !!selectedLead?.recordId
+        && !!selectedLeadFollowUpSupport?.collectionId
+        && !!selectedLeadFollowUpSupport?.lastContactedFieldName;
+    $: if (selectedLead?.key) {
+        if (leadNotesDraftKey !== selectedLead.key) {
+            leadNotesDraftKey = selectedLead.key;
+            leadNotesDraft = `${selectedLead?.notes || ""}`;
+            leadFollowUpError = "";
+        }
+    } else if (leadNotesDraftKey || leadNotesDraft || leadFollowUpError) {
+        leadNotesDraftKey = "";
+        leadNotesDraft = "";
+        leadFollowUpError = "";
+    }
 
     $: nonArchivedLeads = normalizedLeads.filter((lead) => lead.statusKey !== "archived");
     $: archivedLeadsCount = normalizedLeads.filter((lead) => lead.statusKey === "archived").length;
@@ -276,6 +315,11 @@
         return null;
     }
 
+    function resolveCollectionFieldNameByAliases(collection, aliases = []) {
+        const field = resolveCollectionField(collection, aliases);
+        return normalizeString(field?.name);
+    }
+
     function resolveFieldSelectValues(field) {
         if (Array.isArray(field?.values)) {
             return field.values.map((value) => normalizeString(value)).filter(Boolean);
@@ -351,6 +395,29 @@
         return Number.isNaN(parsed) ? 0 : parsed;
     }
 
+    function getPeriodStartTimestamp(periodKey) {
+        const now = new Date();
+        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+        if (periodKey === "today") {
+            return dayStart.getTime();
+        }
+
+        if (periodKey === "thisWeek") {
+            const weekStart = new Date(dayStart);
+            const dayIndex = weekStart.getDay();
+            const mondayOffset = (dayIndex + 6) % 7;
+            weekStart.setDate(weekStart.getDate() - mondayOffset);
+            return weekStart.getTime();
+        }
+
+        if (periodKey === "thisMonth") {
+            return new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
+        }
+
+        return 0;
+    }
+
     function isCurrentMonth(value) {
         const timestamp = toTimestamp(value);
         if (!timestamp) {
@@ -361,6 +428,29 @@
         const now = new Date();
 
         return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    }
+
+    function resolveLastContactedLabel(value) {
+        const timestamp = toTimestamp(value);
+        if (!timestamp) {
+            return "";
+        }
+
+        const nowTs = Date.now();
+        const diffMs = Math.max(0, nowTs - timestamp);
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) {
+            return "today";
+        }
+        if (diffDays === 1) {
+            return "yesterday";
+        }
+        if (diffDays < 7) {
+            return `${diffDays} days ago`;
+        }
+
+        return formatDateTime(value);
     }
 
     function formatDateTime(value) {
@@ -757,6 +847,8 @@
             const statusKey = resolveStatusKey(statusValue, contactsStatusSupport);
             const subject = normalizeString(record?.subject);
             const message = normalizeString(record?.message);
+            const notes = resolveValueByCandidates(record, [contactsNotesFieldName, ...leadNotesFieldAliases]);
+            const lastContactedAt = resolveValueByCandidates(record, [contactsLastContactedFieldName, ...leadLastContactedFieldAliases]);
             const lead = {
                 key: `contacts:${record?.id || CommonHelper.randomString(8)}`,
                 sourceKey,
@@ -779,6 +871,9 @@
                 message,
                 whatsappTargetPhone: "",
                 whatsappTargetMessage: "",
+                notes,
+                lastContactedAt,
+                lastContactedTs: toTimestamp(lastContactedAt),
                 preview: resolveLeadPreview(subject, message),
                 created: normalizeString(record?.created),
                 createdTs: toTimestamp(record?.created),
@@ -798,6 +893,8 @@
             const statusKey = resolveStatusKey(statusValue, whatsappStatusSupport);
             const subject = resolveValueByCandidates(record, ["subject", "title"]);
             const message = resolveValueByCandidates(record, ["message", "body", "text", "note"]);
+            const notes = resolveValueByCandidates(record, [whatsappNotesFieldName, ...leadNotesFieldAliases]);
+            const lastContactedAt = resolveValueByCandidates(record, [whatsappLastContactedFieldName, ...leadLastContactedFieldAliases]);
             const whatsappTargetPhone = resolveValueByCandidates(record, [
                 "targetPhone",
                 "target_phone",
@@ -840,6 +937,9 @@
                 message,
                 whatsappTargetPhone,
                 whatsappTargetMessage,
+                notes,
+                lastContactedAt,
+                lastContactedTs: toTimestamp(lastContactedAt),
                 preview: resolveLeadPreview(subject, message || whatsappTargetMessage),
                 created: normalizeString(record?.created),
                 createdTs: toTimestamp(record?.created),
@@ -864,8 +964,10 @@
             const byStatus = normalizedLeadsView === "archived"
                 ? true
                 : statusFilter === "all" || lead.statusKey === statusFilter;
+            const periodStartTimestamp = getPeriodStartTimestamp(periodFilter);
+            const byPeriod = !periodStartTimestamp || (lead.createdTs || 0) >= periodStartTimestamp;
 
-            if (!byView || !bySource || !byStatus) {
+            if (!byView || !bySource || !byStatus || !byPeriod) {
                 return false;
             }
 
@@ -908,6 +1010,30 @@
         }
 
         return `website="${selectedWebsiteId}"`;
+    }
+
+    function resolveLeadFollowUpSupport(lead) {
+        if (!lead?.sourceKey) {
+            return {
+                collectionId: "",
+                notesFieldName: "",
+                lastContactedFieldName: "",
+            };
+        }
+
+        if (lead.sourceKey === "whatsapp") {
+            return {
+                collectionId: normalizeString(whatsappCollection?.id),
+                notesFieldName: whatsappNotesFieldName,
+                lastContactedFieldName: whatsappLastContactedFieldName,
+            };
+        }
+
+        return {
+            collectionId: normalizeString(contactsCollection?.id),
+            notesFieldName: contactsNotesFieldName,
+            lastContactedFieldName: contactsLastContactedFieldName,
+        };
     }
 
     async function loadRecordsByCollection(collection, requestKeyPrefix) {
@@ -1060,8 +1186,8 @@
         return contactsStatusSupport;
     }
 
-    function patchLeadStatus(sourceKey, recordId, statusFieldName, nextStatusValue) {
-        if (!recordId || !statusFieldName) {
+    function patchLeadRecord(sourceKey, recordId, patchData = {}) {
+        if (!recordId || typeof patchData !== "object" || !Object.keys(patchData).length) {
             return;
         }
 
@@ -1070,7 +1196,7 @@
                 record?.id === recordId
                     ? {
                         ...record,
-                        [statusFieldName]: nextStatusValue,
+                        ...patchData,
                     }
                     : record,
             );
@@ -1112,7 +1238,7 @@
                 [statusSupport.fieldName]: nextStatusValue,
             });
 
-            patchLeadStatus(sourceKey, recordId, statusSupport.fieldName, nextStatusValue);
+            patchLeadRecord(sourceKey, recordId, { [statusSupport.fieldName]: nextStatusValue });
 
             const nextLabel = normalizedTargetStatus === normalizeLower(statusSupport.readValue)
                 ? "read"
@@ -1147,6 +1273,58 @@
         await setSelectedLeadStatus(selectedLeadStatusSupport.readValue);
     }
 
+    async function saveSelectedLeadNote() {
+        if (!selectedLead?.recordId || !canSaveSelectedLeadNote || isSavingLeadFollowUp) {
+            return;
+        }
+
+        leadFollowUpError = "";
+        isSavingLeadFollowUp = true;
+        const patchData = {
+            [selectedLeadFollowUpSupport.notesFieldName]: leadNotesDraft,
+        };
+
+        try {
+            await ApiClient.collection(selectedLeadFollowUpSupport.collectionId).update(selectedLead.recordId, patchData);
+            patchLeadRecord(selectedLead.sourceKey, selectedLead.recordId, patchData);
+            addSuccessToast("Lead note saved.");
+        } catch (err) {
+            ApiClient.error(err, false);
+            leadFollowUpError = "Unable to save follow-up note right now.";
+            addErrorToast("Unable to save follow-up note right now.");
+        } finally {
+            isSavingLeadFollowUp = false;
+        }
+    }
+
+    async function markSelectedLeadContactedNow() {
+        if (!selectedLead?.recordId || !canMarkSelectedLeadContacted || isSavingLeadFollowUp) {
+            return;
+        }
+
+        leadFollowUpError = "";
+        isSavingLeadFollowUp = true;
+        const patchData = {
+            [selectedLeadFollowUpSupport.lastContactedFieldName]: new Date().toISOString(),
+        };
+
+        if (leadNotesDirty && selectedLeadFollowUpSupport.notesFieldName) {
+            patchData[selectedLeadFollowUpSupport.notesFieldName] = leadNotesDraft;
+        }
+
+        try {
+            await ApiClient.collection(selectedLeadFollowUpSupport.collectionId).update(selectedLead.recordId, patchData);
+            patchLeadRecord(selectedLead.sourceKey, selectedLead.recordId, patchData);
+            addSuccessToast("Lead marked as contacted.");
+        } catch (err) {
+            ApiClient.error(err, false);
+            leadFollowUpError = "Unable to update follow-up details right now.";
+            addErrorToast("Unable to update follow-up details right now.");
+        } finally {
+            isSavingLeadFollowUp = false;
+        }
+    }
+
     function openLeadDetails(lead) {
         if (!lead?.key) {
             return;
@@ -1174,6 +1352,7 @@
     function clearFilters() {
         sourceFilter = "all";
         statusFilter = "all";
+        periodFilter = "all";
         searchTerm = "";
         sortOrder = "newest";
     }
@@ -1183,6 +1362,79 @@
         if (leadsView === "archived") {
             statusFilter = "all";
         }
+    }
+
+    function escapeCsvValue(value) {
+        const raw = `${value ?? ""}`;
+        if (!raw) {
+            return "";
+        }
+        const escaped = raw.replace(/"/g, "\"\"");
+        if (/[",\n\r]/.test(escaped)) {
+            return `"${escaped}"`;
+        }
+        return escaped;
+    }
+
+    function normalizeFilenamePart(value) {
+        return normalizeLower(value)
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            || "all-websites";
+    }
+
+    function exportFilteredLeadsCsv() {
+        const rows = [
+            [
+                "Created",
+                "Last contacted",
+                "Status",
+                "Type",
+                "Name",
+                "Email",
+                "Phone",
+                "Subject",
+                "Message",
+                "Website",
+                "Page/source",
+                "Notes",
+            ],
+        ];
+
+        for (const lead of filteredLeads) {
+            rows.push([
+                formatDateTime(lead.created),
+                lead.lastContactedAt ? formatDateTime(lead.lastContactedAt) : "",
+                lead.statusLabel || "",
+                lead.sourceLabel || "",
+                lead.name || "",
+                lead.email || "",
+                lead.phone || "",
+                lead.subject || "",
+                lead.message || lead.whatsappTargetMessage || "",
+                lead.websiteName || "",
+                resolveLeadLocationHint(lead) || resolveLeadAttribution(lead),
+                lead.notes || "",
+            ]);
+        }
+
+        const csvContent = rows.map((row) => row.map((cell) => escapeCsvValue(cell)).join(",")).join("\r\n");
+        const selectedWebsite = websites.find((website) => website.id === selectedWebsiteId);
+        const websiteLabel = selectedWebsiteId === ALL_WEBSITES_KEY
+            ? "all-websites"
+            : resolveWebsiteLabel(selectedWebsite || {});
+        const datePart = new Date().toISOString().slice(0, 10);
+        const fileName = `leads-${normalizeFilenamePart(websiteLabel)}-${datePart}.csv`;
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = fileName;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
     }
 
     onMount(() => {
@@ -1305,6 +1557,35 @@
                             />
                         </div>
 
+                        <div class="leads-filter-cell leads-filter-cell--select">
+                            <label class="txt-sm txt-hint" for="leads-type-filter">Type</label>
+                            <select id="leads-type-filter" class="input input-sm" bind:value={sourceFilter}>
+                                {#each sourceFilterOptions as option (option.key)}
+                                    <option value={option.key}>{option.label}</option>
+                                {/each}
+                            </select>
+                        </div>
+
+                        {#if normalizedLeadsView === "inbox"}
+                            <div class="leads-filter-cell leads-filter-cell--select">
+                                <label class="txt-sm txt-hint" for="leads-status-filter">Status</label>
+                                <select id="leads-status-filter" class="input input-sm" bind:value={statusFilter}>
+                                    {#each statusFilterOptions as option (option.key)}
+                                        <option value={option.key}>{option.label}</option>
+                                    {/each}
+                                </select>
+                            </div>
+                        {/if}
+
+                        <div class="leads-filter-cell leads-filter-cell--select">
+                            <label class="txt-sm txt-hint" for="leads-period-filter">Period</label>
+                            <select id="leads-period-filter" class="input input-sm" bind:value={periodFilter}>
+                                {#each periodFilterOptions as option (option.key)}
+                                    <option value={option.key}>{option.label}</option>
+                                {/each}
+                            </select>
+                        </div>
+
                         <div class="leads-filter-cell leads-filter-cell--sort">
                             <label class="txt-sm txt-hint" for="leads-sort-filter">Sort</label>
                             <select id="leads-sort-filter" class="input input-sm" bind:value={sortOrder}>
@@ -1313,47 +1594,14 @@
                             </select>
                         </div>
 
-                        <div class="leads-filter-cell leads-filter-cell--reset">
+                        <div class="leads-filter-cell leads-filter-cell--actions">
                             <button type="button" class="btn btn-sm btn-outline" on:click={clearFilters}>
                                 <span class="txt">Reset filters</span>
                             </button>
+                            <button type="button" class="btn btn-sm btn-outline" on:click={exportFilteredLeadsCsv}>
+                                <span class="txt">Export CSV</span>
+                            </button>
                         </div>
-                    </div>
-
-                    <div class="leads-filter-segments" class:is-single-column={normalizedLeadsView === "archived"}>
-                        <div class="leads-segment-group">
-                            <span class="txt-sm txt-hint">Source</span>
-                            <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
-                                {#each sourceFilterOptions as option (option.key)}
-                                    <button
-                                        type="button"
-                                        class="tab-item"
-                                        class:active={sourceFilter === option.key}
-                                        on:click={() => (sourceFilter = option.key)}
-                                    >
-                                        <span class="txt">{option.label}</span>
-                                    </button>
-                                {/each}
-                            </div>
-                        </div>
-
-                        {#if normalizedLeadsView === "inbox"}
-                            <div class="leads-segment-group">
-                                <span class="txt-sm txt-hint">Status</span>
-                                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
-                                    {#each statusFilterOptions as option (option.key)}
-                                        <button
-                                            type="button"
-                                            class="tab-item"
-                                            class:active={statusFilter === option.key}
-                                            on:click={() => (statusFilter = option.key)}
-                                        >
-                                            <span class="txt">{option.label}</span>
-                                        </button>
-                                    {/each}
-                                </div>
-                            </div>
-                        {/if}
                     </div>
                 </div>
 
@@ -1458,6 +1706,12 @@
                                         <span>{resolveLeadLocationHint(lead)}</span>
                                     {/if}
                                 </div>
+
+                                {#if lead.lastContactedAt}
+                                    <div class="leads-inbox-item-last-contact txt-xs txt-hint">
+                                        Last contact: {resolveLastContactedLabel(lead.lastContactedAt)}
+                                    </div>
+                                {/if}
                             </article>
                         {/each}
                     </div>
@@ -1495,6 +1749,10 @@
                                         <div class="lead-summary-item">
                                             <span class="txt-xs txt-hint lead-summary-key">Created</span>
                                             <span class="txt-sm lead-summary-value">{formatDateTime(selectedLead.created)}</span>
+                                        </div>
+                                        <div class="lead-summary-item">
+                                            <span class="txt-xs txt-hint lead-summary-key">Last contacted</span>
+                                            <span class="txt-sm lead-summary-value">{selectedLeadLastContactedDisplay}</span>
                                         </div>
                                         <div class="lead-summary-item">
                                             <span class="txt-xs txt-hint lead-summary-key">Contact</span>
@@ -1535,12 +1793,12 @@
                                     </div>
                                 </section>
 
-                                <section class="lead-detail-section lead-rail-block lead-rail-block--actions">
+                                <section class="lead-detail-section lead-rail-block lead-rail-block--followup">
                                     <div class="lead-detail-section-head lead-rail-head">
                                         <div class="lead-rail-head-main">
-                                            <h5 class="m-0">Actions</h5>
+                                            <h5 class="m-0">Follow-up</h5>
                                             <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
-                                                Quick actions for this lead.
+                                                Update status, keep notes, and follow up quickly.
                                             </p>
                                         </div>
                                     </div>
@@ -1599,6 +1857,54 @@
                                                 Archive is not available for this source yet.
                                             </p>
                                         {/if}
+                                    </div>
+
+                                    <div class="lead-detail-actions-block lead-actions-group">
+                                        <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Notes</div>
+                                        {#if canSaveSelectedLeadNote || canMarkSelectedLeadContacted}
+                                            <div class="lead-followup-stack">
+                                                <label class="txt-xs txt-hint m-b-0" for="lead-followup-notes">Notes</label>
+                                                <textarea
+                                                    id="lead-followup-notes"
+                                                    class="input lead-followup-notes"
+                                                    rows="4"
+                                                    placeholder="Add notes about next steps, context, or follow-up outcomes..."
+                                                    bind:value={leadNotesDraft}
+                                                    disabled={isSavingLeadFollowUp || !canSaveSelectedLeadNote}
+                                                />
+
+                                                {#if leadFollowUpError}
+                                                    <p class="txt-xs txt-danger m-b-0">{leadFollowUpError}</p>
+                                                {/if}
+
+                                                <div class="lead-detail-actions">
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-sm"
+                                                        class:btn-loading={isSavingLeadFollowUp}
+                                                        disabled={!canSaveSelectedLeadNote || isSavingLeadFollowUp || !leadNotesDirty}
+                                                        on:click={saveSelectedLeadNote}
+                                                    >
+                                                        <span class="txt">Save note</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-outline btn-sm"
+                                                        class:btn-loading={isSavingLeadFollowUp}
+                                                        disabled={!canMarkSelectedLeadContacted || isSavingLeadFollowUp}
+                                                        on:click={markSelectedLeadContactedNow}
+                                                    >
+                                                        <span class="txt">Mark contacted now</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        {:else}
+                                            <p class="txt-sm txt-hint m-b-0">
+                                                Follow-up fields are not available for this lead source yet.
+                                            </p>
+                                        {/if}
+
+                                        <p class="txt-xs txt-hint m-b-0">Last contacted: {selectedLeadLastContactedDisplay}</p>
                                     </div>
 
                                     <div class="lead-detail-actions-block lead-actions-group">
@@ -1848,6 +2154,10 @@
                                 <span class="txt-xs txt-hint">Created</span>
                                 <span class="txt-sm">{formatDateTime(selectedLead.created)}</span>
                             </div>
+                            <div class="lead-detail-row">
+                                <span class="txt-xs txt-hint">Last contacted</span>
+                                <span class="txt-sm">{selectedLeadLastContactedDisplay}</span>
+                            </div>
                             {#if resolveLeadLocationHint(selectedLead)}
                                 <div class="lead-detail-row">
                                     <span class="txt-xs txt-hint">Context</span>
@@ -1861,6 +2171,55 @@
                                 </div>
                             {/if}
                         </div>
+                    </section>
+
+                    <section class="lead-detail-section">
+                        <div class="lead-detail-section-head">
+                            <h5 class="m-0">Follow-up</h5>
+                        </div>
+                        <p class="txt-sm txt-hint m-b-0">Keep internal notes about this lead.</p>
+
+                        {#if canSaveSelectedLeadNote || canMarkSelectedLeadContacted}
+                            <div class="lead-followup-stack">
+                                <label class="txt-xs txt-hint m-b-0" for="lead-followup-notes-mobile">Notes</label>
+                                <textarea
+                                    id="lead-followup-notes-mobile"
+                                    class="input lead-followup-notes"
+                                    rows="4"
+                                    placeholder="Add notes about next steps, context, or follow-up outcomes..."
+                                    bind:value={leadNotesDraft}
+                                    disabled={isSavingLeadFollowUp || !canSaveSelectedLeadNote}
+                                />
+                                {#if leadFollowUpError}
+                                    <p class="txt-xs txt-danger m-b-0">{leadFollowUpError}</p>
+                                {/if}
+                                <div class="lead-detail-actions">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        class:btn-loading={isSavingLeadFollowUp}
+                                        disabled={!canSaveSelectedLeadNote || isSavingLeadFollowUp || !leadNotesDirty}
+                                        on:click={saveSelectedLeadNote}
+                                    >
+                                        <span class="txt">Save note</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline btn-sm"
+                                        class:btn-loading={isSavingLeadFollowUp}
+                                        disabled={!canMarkSelectedLeadContacted || isSavingLeadFollowUp}
+                                        on:click={markSelectedLeadContactedNow}
+                                    >
+                                        <span class="txt">Mark contacted now</span>
+                                    </button>
+                                </div>
+                                <p class="txt-xs txt-hint m-b-0">Last contacted: {selectedLeadLastContactedDisplay}</p>
+                            </div>
+                        {:else}
+                            <p class="txt-sm txt-hint m-b-0">
+                                Follow-up fields are not available for this lead source yet.
+                            </p>
+                        {/if}
                     </section>
 
                     <section class="lead-detail-section">
@@ -2058,7 +2417,7 @@
 
     .leads-toolbar-row {
         display: grid;
-        grid-template-columns: minmax(300px, 1.8fr) minmax(170px, 0.7fr) auto;
+        grid-template-columns: minmax(180px, 2.3fr) repeat(4, minmax(78px, 0.9fr)) auto;
         gap: 10px;
         align-items: end;
     }
@@ -2088,30 +2447,27 @@
         min-width: 0;
     }
 
-    .leads-filter-cell--reset {
+    .leads-filter-cell--search {
+        min-width: 0;
+    }
+
+    .leads-filter-cell--select,
+    .leads-filter-cell--sort {
+        min-width: 78px;
+    }
+
+    .leads-filter-cell--actions {
+        display: inline-flex;
+        flex-direction: row;
         align-items: flex-end;
         justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: nowrap;
+        align-self: end;
     }
 
-    .leads-filter-cell--reset .btn {
+    .leads-filter-cell--actions .btn {
         white-space: nowrap;
-    }
-
-    .leads-filter-segments {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-    }
-
-    .leads-filter-segments.is-single-column {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .leads-segment-group {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        min-width: 0;
     }
 
     .leads-inbox-layout {
@@ -2217,6 +2573,10 @@
         content: "-";
         margin-right: 8px;
         color: var(--txtDisabledColor);
+    }
+
+    .leads-inbox-item-last-contact {
+        margin-top: 2px;
     }
 
     .leads-detail-rail {
@@ -2410,6 +2770,17 @@
         color: var(--txtHintColor);
     }
 
+    .lead-followup-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .lead-followup-notes {
+        min-height: 90px;
+        resize: vertical;
+    }
+
     .lead-health-head {
         display: flex;
         align-items: center;
@@ -2530,12 +2901,6 @@
         background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
     }
 
-    @media (max-width: 1240px) {
-        .leads-toolbar-row {
-            grid-template-columns: minmax(240px, 1.5fr) minmax(150px, 0.8fr) auto;
-        }
-    }
-
     @media (min-width: 1480px) {
         .leads-inbox-list {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2544,15 +2909,18 @@
 
     @media (max-width: 1060px) {
         .leads-toolbar-row {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .leads-filter-cell--reset {
-            align-items: flex-start;
-        }
-
-        .leads-filter-segments {
             grid-template-columns: 1fr;
+        }
+
+        .leads-filter-cell--search,
+        .leads-filter-cell--select,
+        .leads-filter-cell--sort {
+            min-width: 0;
+        }
+
+        .leads-filter-cell--actions {
+            grid-column: auto;
+            width: 100%;
         }
 
         .leads-inbox-layout {
@@ -2572,8 +2940,9 @@
             justify-content: flex-start;
         }
 
-        .leads-toolbar-row {
-            grid-template-columns: 1fr;
+        .leads-filter-cell--actions {
+            width: 100%;
+            justify-content: flex-start;
         }
     }
 </style>
