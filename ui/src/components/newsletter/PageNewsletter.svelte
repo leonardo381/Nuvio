@@ -2138,36 +2138,6 @@
                                                 </div>
                                             </section>
 
-                                            <section class="campaign-audience-side-section audience-health-panel">
-                                                <div class="campaign-audience-health-head">
-                                                    <h5 class="m-0">Audience health</h5>
-                                                    <span class={`label label-sm ${audienceHealthPillClass}`}>{audienceHealthStatus}</span>
-                                                </div>
-                                                <div class="txt-xs txt-hint audience-health-counts">
-                                                    {audienceWarnings.length} warning{audienceWarnings.length === 1 ? "" : "s"} | {audienceSuggestions.length} suggestion{audienceSuggestions.length === 1 ? "" : "s"}
-                                                </div>
-                                                <div class="audience-health-block">
-                                                    <h6 class="m-0">Warnings</h6>
-                                                    {#if audienceWarnings.length}
-                                                        <ul class="audience-health-list">
-                                                            {#each audienceWarnings as warning}
-                                                                <li>{warning}</li>
-                                                            {/each}
-                                                        </ul>
-                                                    {:else}
-                                                        <p class="txt-xs txt-hint m-b-0">No blocking warnings.</p>
-                                                    {/if}
-                                                </div>
-                                                <div class="audience-health-block">
-                                                    <h6 class="m-0">Suggestions</h6>
-                                                    <ul class="audience-health-list audience-health-list--suggestions">
-                                                        {#each audienceSuggestions as suggestion}
-                                                            <li>{suggestion}</li>
-                                                        {/each}
-                                                    </ul>
-                                                </div>
-                                            </section>
-
                                             <section class="campaign-audience-side-section campaign-audience-actions-panel">
                                                 <h5 class="m-0">Actions</h5>
                                                 <div class="campaign-audience-actions">
@@ -2198,6 +2168,36 @@
                                                     </button>
                                                 </div>
                                             </section>
+
+                                            <section class="campaign-audience-side-section audience-health-panel">
+                                                <div class="campaign-audience-health-head">
+                                                    <h5 class="m-0">Audience health</h5>
+                                                    <span class={`label label-sm ${audienceHealthPillClass}`}>{audienceHealthStatus}</span>
+                                                </div>
+                                                <div class="txt-xs txt-hint audience-health-counts">
+                                                    {audienceWarnings.length} warning{audienceWarnings.length === 1 ? "" : "s"} | {audienceSuggestions.length} suggestion{audienceSuggestions.length === 1 ? "" : "s"}
+                                                </div>
+                                                <div class="audience-health-block">
+                                                    <h6 class="m-0">Warnings</h6>
+                                                    {#if audienceWarnings.length}
+                                                        <ul class="audience-health-list">
+                                                            {#each audienceWarnings as warning}
+                                                                <li>{warning}</li>
+                                                            {/each}
+                                                        </ul>
+                                                    {:else}
+                                                        <p class="txt-xs txt-hint m-b-0">No blocking warnings.</p>
+                                                    {/if}
+                                                </div>
+                                                <div class="audience-health-block">
+                                                    <h6 class="m-0">Suggestions</h6>
+                                                    <ul class="audience-health-list audience-health-list--suggestions">
+                                                        {#each audienceSuggestions as suggestion}
+                                                            <li>{suggestion}</li>
+                                                        {/each}
+                                                    </ul>
+                                                </div>
+                                            </section>
                                         </aside>
                                     </div>
                                 {/if}
@@ -2211,11 +2211,6 @@
                                     </div>
                                     <div class="campaign-list-header-actions">
                                         <span class="txt-sm txt-hint">{resolveCampaignListStats()}</span>
-                                        {#if editingCampaignId}
-                                            <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
-                                                <span class="txt">Clear Edit</span>
-                                            </button>
-                                        {/if}
                                     </div>
                                 </div>
 
@@ -3189,15 +3184,15 @@
     .campaign-audience-workspace {
         display: grid;
         grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
-        gap: 12px;
+        gap: 10px;
         align-items: start;
     }
 
     .campaign-audience-form {
-        padding: 12px;
+        padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
     }
 
     .campaign-audience-toolbar {
@@ -3242,10 +3237,10 @@
     }
 
     .campaign-audience-side {
-        padding: 12px;
+        padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
     }
 
     .campaign-audience-side-section {
