@@ -1414,8 +1414,13 @@
                         {#if selectedLead}
                             <div class="lead-detail-layout">
                                 <section class="lead-detail-section lead-rail-block lead-rail-block--summary">
-                                    <div class="lead-detail-section-head">
-                                        <h5 class="m-0">Lead summary</h5>
+                                    <div class="lead-detail-section-head lead-rail-head">
+                                        <div class="lead-rail-head-main">
+                                            <h5 class="m-0">Lead summary</h5>
+                                            <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
+                                                Snapshot of this lead and where it came from.
+                                            </p>
+                                        </div>
                                     </div>
                                     <div class="lead-detail-head">
                                         <div class="lead-detail-badges">
@@ -1431,14 +1436,14 @@
                                         <div class="lead-detail-identity">{selectedLead.identity}</div>
                                     </div>
 
-                                    <div class="lead-detail-grid">
-                                        <div class="lead-detail-row">
-                                            <span class="txt-xs txt-hint">Created</span>
-                                            <span class="txt-sm">{formatDateTime(selectedLead.created)}</span>
+                                    <div class="lead-summary-stack">
+                                        <div class="lead-summary-item">
+                                            <span class="txt-xs txt-hint lead-summary-key">Created</span>
+                                            <span class="txt-sm lead-summary-value">{formatDateTime(selectedLead.created)}</span>
                                         </div>
-                                        <div class="lead-detail-row">
-                                            <span class="txt-xs txt-hint">Contact</span>
-                                            <span class="txt-sm">
+                                        <div class="lead-summary-item">
+                                            <span class="txt-xs txt-hint lead-summary-key">Contact</span>
+                                            <span class="txt-sm lead-summary-value">
                                                 {#if selectedLead.email || selectedLead.phone}
                                                     {selectedLead.email || "No email"}{selectedLead.phone ? ` - ${selectedLead.phone}` : ""}
                                                 {:else}
@@ -1447,41 +1452,46 @@
                                             </span>
                                         </div>
                                         {#if selectedLead.subject}
-                                            <div class="lead-detail-row">
-                                                <span class="txt-xs txt-hint">Subject</span>
-                                                <span class="txt-sm">{selectedLead.subject}</span>
+                                            <div class="lead-summary-item">
+                                                <span class="txt-xs txt-hint lead-summary-key">Subject</span>
+                                                <span class="txt-sm lead-summary-value">{selectedLead.subject}</span>
                                             </div>
                                         {/if}
-                                        <div class="lead-detail-row lead-detail-row-block">
-                                            <span class="txt-xs txt-hint">Message preview</span>
-                                            <p class="txt-sm m-b-0">{resolveLeadPreviewText(selectedLead)}</p>
+                                        <div class="lead-summary-item lead-summary-item--message">
+                                            <span class="txt-xs txt-hint lead-summary-key">Message preview</span>
+                                            <p class="txt-sm m-b-0 lead-summary-value">{resolveLeadPreviewText(selectedLead)}</p>
                                         </div>
-                                        <div class="lead-detail-row">
-                                            <span class="txt-xs txt-hint">Attribution</span>
-                                            <span class="txt-sm">{resolveLeadAttribution(selectedLead)}</span>
+                                        <div class="lead-summary-item">
+                                            <span class="txt-xs txt-hint lead-summary-key">Attribution</span>
+                                            <span class="txt-sm lead-summary-value">{resolveLeadAttribution(selectedLead)}</span>
                                         </div>
                                         {#if resolveLeadLocationHint(selectedLead)}
-                                            <div class="lead-detail-row">
-                                                <span class="txt-xs txt-hint">Context</span>
-                                                <span class="txt-sm">{resolveLeadLocationHint(selectedLead)}</span>
+                                            <div class="lead-summary-item">
+                                                <span class="txt-xs txt-hint lead-summary-key">Context</span>
+                                                <span class="txt-sm lead-summary-value">{resolveLeadLocationHint(selectedLead)}</span>
                                             </div>
                                         {/if}
                                         {#if selectedLead.whatsappTargetPhone}
-                                            <div class="lead-detail-row">
-                                                <span class="txt-xs txt-hint">WhatsApp target phone</span>
-                                                <span class="txt-sm">{selectedLead.whatsappTargetPhone}</span>
+                                            <div class="lead-summary-item">
+                                                <span class="txt-xs txt-hint lead-summary-key">WhatsApp target phone</span>
+                                                <span class="txt-sm lead-summary-value">{selectedLead.whatsappTargetPhone}</span>
                                             </div>
                                         {/if}
                                     </div>
                                 </section>
 
                                 <section class="lead-detail-section lead-rail-block lead-rail-block--actions">
-                                    <div class="lead-detail-section-head">
-                                        <h5 class="m-0">Actions</h5>
+                                    <div class="lead-detail-section-head lead-rail-head">
+                                        <div class="lead-rail-head-main">
+                                            <h5 class="m-0">Actions</h5>
+                                            <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
+                                                Update status and use quick tools for follow-up.
+                                            </p>
+                                        </div>
                                     </div>
 
                                     <div class="lead-detail-actions-block">
-                                        <div class="txt-xs txt-hint txt-uppercase">Status actions</div>
+                                        <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Status actions</div>
                                         <div class="lead-detail-actions">
                                             {#if canToggleSelectedLeadStatus}
                                                 <button
@@ -1523,7 +1533,7 @@
                                     </div>
 
                                     <div class="lead-detail-actions-block">
-                                        <div class="txt-xs txt-hint txt-uppercase">Utilities</div>
+                                        <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Utilities</div>
                                         <div class="lead-detail-actions">
                                             {#if selectedLead.email}
                                                 <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
@@ -1559,56 +1569,69 @@
                                 </section>
 
                                 <section class="lead-detail-section lead-rail-block lead-rail-block--health">
-                                    <div class="lead-detail-section-head">
-                                        <h5 class="m-0">Lead health</h5>
-                                    </div>
-                                    <p class="txt-sm txt-hint m-b-0">
-                                        Review what is missing before follow-up.
-                                    </p>
-                                    <div class="lead-health-summary">
-                                        <span class={`label label-sm ${selectedLeadHealthState.badgeClass}`}>{selectedLeadHealthState.label}</span>
-                                        <span class="summary-pill">
-                                            Warnings: {selectedLeadHealthWarnings.length}
-                                        </span>
-                                        <span class="summary-pill">
-                                            Suggestions: {selectedLeadHealthSuggestions.length}
-                                        </span>
+                                    <div class="lead-health-head">
+                                        <div class="lead-health-main">
+                                            <h5 class="m-0">Lead health</h5>
+                                            <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
+                                                Review what is missing before follow-up.
+                                            </p>
+                                        </div>
+                                        <div class="lead-health-meta">
+                                            <span class={`label label-sm lead-health-status-pill ${selectedLeadHealthState.badgeClass}`}>
+                                                {selectedLeadHealthState.label}
+                                            </span>
+                                            <span class="summary-pill lead-health-summary-pill" class:warning={selectedLeadHealthWarnings.length > 0}>
+                                                {selectedLeadHealthWarnings.length} warnings | {selectedLeadHealthSuggestions.length} suggestions
+                                            </span>
+                                        </div>
                                     </div>
 
                                     {#if selectedLeadHealthWarnings.length}
-                                        <div class="lead-health-list-wrap">
-                                            <div class="txt-xs txt-hint txt-uppercase">Warnings</div>
-                                            <ul class="lead-health-list lead-health-list--warnings">
+                                        <div class="lead-health-group">
+                                            <div class="lead-health-group-title">Warnings</div>
+                                            <div class="lead-health-check-list">
                                                 {#each selectedLeadHealthWarnings as warning}
-                                                    <li>{warning}</li>
+                                                    <div class="lead-health-check-item warning">
+                                                        <span class="label label-sm lead-health-check-pill warning">Warning</span>
+                                                        <span class="lead-health-check-message">{warning}</span>
+                                                    </div>
                                                 {/each}
-                                            </ul>
+                                            </div>
                                         </div>
                                     {/if}
 
                                     {#if selectedLeadHealthSuggestions.length}
-                                        <div class="lead-health-list-wrap">
-                                            <div class="txt-xs txt-hint txt-uppercase">Suggestions</div>
-                                            <ul class="lead-health-list">
+                                        <div class="lead-health-group">
+                                            <div class="lead-health-group-title">Suggestions</div>
+                                            <div class="lead-health-check-list">
                                                 {#each selectedLeadHealthSuggestions as suggestion}
-                                                    <li>{suggestion}</li>
+                                                    <div class="lead-health-check-item">
+                                                        <span class="label label-sm lead-health-check-pill">Info</span>
+                                                        <span class="lead-health-check-message">{suggestion}</span>
+                                                    </div>
                                                 {/each}
-                                            </ul>
+                                            </div>
                                         </div>
+                                    {/if}
+
+                                    {#if !selectedLeadHealthWarnings.length && !selectedLeadHealthSuggestions.length}
+                                        <p class="txt-sm txt-hint m-b-0">No follow-up issues detected for this lead.</p>
                                     {/if}
                                 </section>
 
                                 <section class="lead-detail-section lead-rail-block lead-rail-block--notification">
-                                    <div class="lead-detail-section-head">
-                                        <h5 class="m-0">Notification setup</h5>
+                                    <div class="lead-detail-section-head lead-rail-head">
+                                        <div class="lead-rail-head-main">
+                                            <h5 class="m-0">Notification setup</h5>
+                                            <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
+                                                Based on current Website Settings. Per-lead delivery status is not stored yet.
+                                            </p>
+                                        </div>
                                     </div>
-                                    <p class="txt-sm txt-hint m-b-0">
-                                        Based on current Website Settings. Per-lead delivery status is not stored yet.
-                                    </p>
 
                                     {#if selectedLeadNotificationSetup.available}
-                                        <div class="lead-detail-grid lead-notification-grid">
-                                            <div class="lead-detail-row">
+                                        <div class="lead-notification-stack">
+                                            <div class="lead-notification-row">
                                                 <span class="txt-xs txt-hint">Current setup</span>
                                                 <div class="lead-notification-badges">
                                                     <span class={`label label-sm ${selectedLeadNotificationSetup.notificationsEnabled ? "label-success" : "label-danger"}`}>
@@ -1620,15 +1643,15 @@
                                                 </div>
                                             </div>
 
-                                            <div class="lead-detail-row">
+                                            <div class="lead-notification-row">
                                                 <span class="txt-xs txt-hint">Recipients</span>
-                                                <span class="txt-sm">
+                                                <span class="txt-sm lead-summary-value">
                                                     {selectedLeadNotificationSetup.recipientsTotal} total ({selectedLeadNotificationSetup.toCount} To, {selectedLeadNotificationSetup.ccCount} CC)
                                                 </span>
                                             </div>
 
                                             {#if selectedLeadNotificationSetup.featureAvailabilityLabel}
-                                                <div class="lead-detail-row">
+                                                <div class="lead-notification-row">
                                                     <span class="txt-xs txt-hint">Feature availability</span>
                                                     <span class={`label label-sm ${selectedLeadNotificationSetup.featureAvailable ? "label-success" : "label-warning"}`}>
                                                         {selectedLeadNotificationSetup.featureAvailabilityLabel}
@@ -2134,10 +2157,10 @@
     }
 
     .lead-rail-block {
-        border: 1px solid var(--baseAlt2Color);
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
         border-radius: var(--baseRadius);
         padding: 10px;
-        background: color-mix(in srgb, var(--baseColor) 90%, var(--baseAlt1Color));
+        background: var(--baseColor);
     }
 
     .lead-detail-head {
@@ -2176,6 +2199,49 @@
         justify-content: space-between;
     }
 
+    .lead-rail-head {
+        align-items: flex-start;
+    }
+
+    .lead-rail-head-main {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .lead-rail-helper {
+        font-size: 11px;
+        line-height: 1.35;
+    }
+
+    .lead-summary-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .lead-summary-item {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding-top: 7px;
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
+    .lead-summary-item:first-child {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    .lead-summary-item--message p {
+        white-space: pre-wrap;
+    }
+
+    .lead-summary-value {
+        color: var(--txtPrimaryColor);
+    }
+
     .lead-detail-grid {
         display: flex;
         flex-direction: column;
@@ -2202,6 +2268,15 @@
         gap: 6px;
     }
 
+    .lead-detail-actions-block + .lead-detail-actions-block {
+        padding-top: 8px;
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
+    .lead-actions-title {
+        letter-spacing: 0.02em;
+    }
+
     .lead-detail-actions {
         display: flex;
         align-items: center;
@@ -2217,30 +2292,143 @@
         flex-wrap: wrap;
     }
 
-    .lead-health-summary {
-        display: inline-flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
+    .lead-notification-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
     }
 
-    .lead-health-list-wrap {
+    .lead-notification-row {
         display: flex;
         flex-direction: column;
         gap: 4px;
+        padding-top: 7px;
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
     }
 
-    .lead-health-list {
-        margin: 0;
-        padding-left: 16px;
-        color: var(--txtHintColor);
+    .lead-notification-row:first-child {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    .lead-health-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .lead-health-main {
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: 3px;
     }
 
-    .lead-health-list--warnings {
-        color: var(--dangerColor);
+    .lead-health-meta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .lead-health-status-pill {
+        --labelHPadding: 8px;
+        min-height: 20px;
+        color: var(--txtHintColor);
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
+        font-weight: 600;
+    }
+
+    .lead-health-status-pill.label-success {
+        color: color-mix(in srgb, var(--successColor) 85%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--successColor) 40%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--successColor) 12%, var(--baseColor));
+    }
+
+    .lead-health-status-pill.label-warning {
+        color: color-mix(in srgb, var(--warningColor) 86%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
+    .lead-health-status-pill.label-info {
+        color: color-mix(in srgb, var(--primaryColor) 82%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--primaryColor) 30%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--primaryColor) 10%, var(--baseColor));
+    }
+
+    .lead-health-summary-pill {
+        --labelHPadding: 9px;
+        min-height: 20px;
+        color: var(--txtHintColor);
+        background: color-mix(in srgb, var(--baseAlt1Color) 22%, var(--baseColor));
+    }
+
+    .lead-health-summary-pill.warning {
+        color: color-mix(in srgb, var(--warningColor) 84%, var(--txtPrimaryColor));
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    }
+
+    .lead-health-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .lead-health-group-title {
+        color: var(--txtHintColor);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+    }
+
+    .lead-health-check-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .lead-health-check-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        padding: 6px 0;
+        font-size: var(--smFontSize);
+        line-height: var(--smLineHeight);
+        color: var(--txtHintColor);
+    }
+
+    .lead-health-check-item + .lead-health-check-item {
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
+    .lead-health-check-item.warning {
+        color: color-mix(in srgb, var(--warningColor) 80%, var(--txtPrimaryColor));
+    }
+
+    .lead-health-check-message {
+        min-width: 0;
+    }
+
+    .lead-health-check-pill {
+        --labelHPadding: 7px;
+        min-height: 18px;
+        flex: 0 0 auto;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        color: var(--txtHintColor);
+        background: var(--baseColor);
+    }
+
+    .lead-health-check-pill.warning {
+        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
+        color: color-mix(in srgb, var(--warningColor) 88%, var(--txtPrimaryColor));
+        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
     }
 
     @media (max-width: 1240px) {
