@@ -2066,7 +2066,7 @@
                                                 {:else if !filteredAudienceRecipients.length}
                                                     <div class="empty-state">No recipients match the current audience filters.</div>
                                                 {:else}
-                                                    <div class="manual-recipients-grid">
+                                                    <div class="manual-recipients-tiles">
                                                         {#each filteredAudienceRecipients as subscriber (subscriber.id)}
                                                             {@const subscriberGroupNames = hasSubscriberGroupsFeature
                                                                 ? getSubscriberGroupIds(subscriber)
@@ -2074,7 +2074,7 @@
                                                                     .filter(Boolean)
                                                                 : []}
                                                             <label
-                                                                class="manual-recipient-item"
+                                                                class="manual-recipient-tile"
                                                                 class:is-selected={normalizedCampaignManualRecipientIdsSet.has(subscriber.id)}
                                                             >
                                                                 <input
@@ -2097,7 +2097,7 @@
                                                                                     <span class="label label-sm manual-recipient-group-pill">{groupName}</span>
                                                                                 {/each}
                                                                             {:else}
-                                                                                <span class="txt-xs txt-hint">No groups</span>
+                                                                                <span class="txt-xs txt-hint manual-recipient-no-groups">No groups</span>
                                                                             {/if}
                                                                         </span>
                                                                     {/if}
@@ -2752,68 +2752,74 @@
         color: var(--txtHintColor);
     }
 
-    .manual-recipients-grid {
+    .manual-recipients-tiles {
         display: grid;
-        gap: 6px;
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
     }
 
-    .manual-recipient-item {
-        display: flex;
+    .manual-recipient-tile {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
         align-items: flex-start;
-        gap: 8px;
+        gap: 7px;
         border: 1px solid var(--baseAlt2Color);
         border-radius: var(--baseRadius);
-        padding: 6px 9px;
-        background: var(--baseColor);
+        padding: 8px 10px;
+        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
         cursor: pointer;
         min-width: 0;
         position: relative;
-        transition: border-color 140ms ease, background-color 140ms ease;
+        transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
     }
 
-    .manual-recipient-item::before {
+    .manual-recipient-tile::before {
         content: "";
         position: absolute;
-        inset: 0 auto 0 0;
+        left: 0;
+        top: 0;
+        bottom: 0;
         width: 3px;
         border-radius: var(--baseRadius) 0 0 var(--baseRadius);
-        background: color-mix(in srgb, var(--primaryColor) 55%, transparent);
+        background: color-mix(in srgb, var(--primaryColor) 44%, transparent);
         opacity: 0;
         transition: opacity 140ms ease;
     }
 
-    .manual-recipient-item:hover {
-        border-color: color-mix(in srgb, var(--primaryColor) 26%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--baseColor) 92%, var(--baseAlt1Color));
+    .manual-recipient-tile:hover {
+        border-color: color-mix(in srgb, var(--primaryColor) 42%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseColor) 90%, var(--baseAlt1Color));
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 10%, transparent);
     }
 
-    .manual-recipient-item.is-selected {
-        border-color: color-mix(in srgb, var(--primaryColor) 44%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--primaryColor) 9%, var(--baseColor));
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 18%, transparent);
+    .manual-recipient-tile.is-selected {
+        border-color: color-mix(in srgb, var(--primaryColor) 58%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--primaryColor) 13%, var(--baseColor));
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 20%, transparent);
     }
 
-    .manual-recipient-item.is-selected::before {
+    .manual-recipient-tile.is-selected::before {
         opacity: 1;
     }
 
     .manual-recipient-check {
-        margin-top: 2px;
+        margin-top: 1px;
         flex: 0 0 auto;
+        width: 15px;
+        height: 15px;
         accent-color: var(--primaryColor);
     }
 
     .manual-recipient-content {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 2px;
         min-width: 0;
     }
 
     .manual-recipient-title {
         font-size: 13px;
-        font-weight: 500;
+        font-weight: 600;
         color: var(--txtPrimaryColor);
         white-space: nowrap;
         overflow: hidden;
@@ -2822,7 +2828,7 @@
 
     .manual-recipient-subtitle {
         font-size: 12px;
-        color: color-mix(in srgb, var(--txtHintColor) 88%, var(--txtPrimaryColor));
+        color: color-mix(in srgb, var(--txtHintColor) 92%, var(--txtPrimaryColor));
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -2831,28 +2837,35 @@
     .manual-recipient-groups {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: 5px;
         flex-wrap: wrap;
+        margin-top: 2px;
     }
 
     .manual-recipient-group-pill {
         font-size: 11px;
-        line-height: 1.3;
+        line-height: 1.25;
         border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-        background: color-mix(in srgb, var(--baseAlt1Color) 90%, var(--baseColor));
+        background: color-mix(in srgb, var(--baseAlt1Color) 86%, var(--baseColor));
         color: var(--txtHintColor);
     }
 
-    .manual-recipient-item.is-selected .manual-recipient-group-pill {
+    .manual-recipient-tile.is-selected .manual-recipient-group-pill {
         border-color: color-mix(in srgb, var(--primaryColor) 30%, var(--baseAlt2Color));
         color: color-mix(in srgb, var(--txtPrimaryColor) 85%, var(--txtHintColor));
+        background: color-mix(in srgb, var(--primaryColor) 8%, var(--baseColor));
     }
 
-    .manual-recipient-item input:checked + .manual-recipient-content .manual-recipient-title {
+    .manual-recipient-no-groups {
+        display: inline-block;
+        padding-top: 1px;
+    }
+
+    .manual-recipient-tile input:checked + .manual-recipient-content .manual-recipient-title {
         font-weight: 600;
     }
 
-    .manual-recipient-item.is-selected .manual-recipient-title {
+    .manual-recipient-tile.is-selected .manual-recipient-title {
         font-weight: 600;
     }
 
@@ -3183,7 +3196,7 @@
 
     .campaign-audience-workspace {
         display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+        grid-template-columns: minmax(0, 1fr) clamp(320px, 28vw, 360px);
         gap: 10px;
         align-items: start;
     }
@@ -3361,6 +3374,7 @@
 
     .manual-group-chip:hover {
         border-color: color-mix(in srgb, var(--primaryColor) 28%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1Color) 88%, var(--baseColor));
         color: var(--txtPrimaryColor);
     }
 
@@ -3371,8 +3385,8 @@
     }
 
     .manual-group-chip.is-partial {
-        border-color: color-mix(in srgb, var(--warningColor) 40%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--warningColor) 10%, var(--baseColor));
+        border-color: color-mix(in srgb, var(--primaryColor) 32%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--primaryColor) 6%, var(--baseColor));
         color: var(--txtPrimaryColor);
     }
 
@@ -3405,7 +3419,7 @@
     }
 
     .manual-group-chip.is-partial .manual-group-chip-count {
-        border-color: color-mix(in srgb, var(--warningColor) 40%, var(--baseAlt2Color));
+        border-color: color-mix(in srgb, var(--primaryColor) 32%, var(--baseAlt2Color));
         color: var(--txtPrimaryColor);
     }
 
@@ -3605,6 +3619,10 @@
         }
 
         .campaign-audience-workspace {
+            grid-template-columns: 1fr;
+        }
+
+        .manual-recipients-tiles {
             grid-template-columns: 1fr;
         }
 
