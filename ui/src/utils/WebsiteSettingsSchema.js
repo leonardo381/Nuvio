@@ -4,6 +4,7 @@ const ROLE_CLIENT = "client";
 const defaultEditableBy = [ROLE_ADMIN];
 const websiteFeatureFlagKeys = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
 const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
+const hiddenWebsiteSettingsFeatureKeys = new Set(["reviews"]);
 
 export const websiteSettingsSchema = {
     fields: [
@@ -440,6 +441,40 @@ function filterFieldsByRole(fields, role) {
     return filtered;
 }
 
+function filterHiddenWebsiteSettingsFields(fields = []) {
+    const filtered = [];
+
+    for (const field of fields || []) {
+        if (!field) {
+            continue;
+        }
+
+        if (hiddenWebsiteSettingsFeatureKeys.has(field.key)) {
+            continue;
+        }
+
+        if (field.key === "featureFlags" && field.type === "object") {
+            const nextFeatureFlagFields = (field.fields || []).filter(
+                (childField) => !hiddenWebsiteSettingsFeatureKeys.has(childField?.key),
+            );
+
+            if (!nextFeatureFlagFields.length) {
+                continue;
+            }
+
+            filtered.push({
+                ...field,
+                fields: nextFeatureFlagFields,
+            });
+            continue;
+        }
+
+        filtered.push(field);
+    }
+
+    return filtered;
+}
+
 function shouldShowFeatureForClient(featureKey, featureFlags) {
     if (!websiteFeatureSectionKeys.has(featureKey)) {
         return true;
@@ -694,7 +729,9 @@ function normalizeWhatsappSettings(whatsappSettings) {
 
 export function getWebsiteSettingsSchemaForRole(role = ROLE_ADMIN, rawSettings = null) {
     const normalizedRole = normalizeRole(role);
-    const roleFilteredFields = filterFieldsByRole(websiteSettingsSchema.fields, normalizedRole);
+    const roleFilteredFields = filterHiddenWebsiteSettingsFields(
+        filterFieldsByRole(websiteSettingsSchema.fields, normalizedRole),
+    );
 
     if (normalizedRole !== ROLE_CLIENT) {
         return {

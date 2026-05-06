@@ -118,18 +118,6 @@
                     <i class="ri-mail-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Leads section entry in app sidebar. -->
-                <!-- NUVIO CUSTOM START: Dedicated Reviews section entry in app sidebar. -->
-                <a
-                    href="/reviews"
-                    class="menu-item"
-                    aria-label="Reviews"
-                    use:link
-                    use:active={{ path: "/reviews/?.*", className: "current-route" }}
-                    use:tooltip={{ text: "Reviews", position: "right" }}
-                >
-                    <i class="ri-star-line" />
-                </a>
-                <!-- NUVIO CUSTOM END: Dedicated Reviews section entry in app sidebar. -->
                 <!-- NUVIO CUSTOM START: Dedicated Newsletter section entry in app sidebar. -->
                 <a
                     href="/newsletter"

@@ -30,14 +30,13 @@
     const websiteIdentitySeoTabLocalBusinessKey = "local-business";
     const websiteIdentitySeoTabAdvancedKey = "advanced";
     const clientSettingsRole = "client";
-    const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
+    const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "newsletter", "booking", "reports", "i18n"]);
     const websiteSettingsAreaIdentitySeoKey = "identity-seo";
     const websiteSettingsAreaFeaturesKey = "features";
-    const websiteSettingsFeatureOrder = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
+    const websiteSettingsFeatureOrder = ["whatsapp", "contactForm", "newsletter", "booking", "reports", "i18n"];
     const websiteSettingsFeatureLabelByKey = {
         whatsapp: "WhatsApp",
         contactForm: "Contact form",
-        reviews: "Reviews",
         newsletter: "Newsletter",
         booking: "Booking",
         reports: "Reports",
@@ -50,7 +49,6 @@
     const websiteSettingsFeatureIconByKey = {
         whatsapp: "ri-whatsapp-line",
         contactForm: "ri-mail-line",
-        reviews: "ri-star-line",
         newsletter: "ri-megaphone-line",
         booking: "ri-calendar-line",
         reports: "ri-bar-chart-2-line",
@@ -1631,7 +1629,7 @@
         if (hasGooglePlaceIdField && expectsGooglePlaceId && !googlePlaceId) {
             checks.push({
                 level: "info",
-                message: "Google Place ID is missing. Add it if you plan to use Google reviews or local integrations.",
+                message: "Google Place ID is missing. Add it if you plan to use local integrations.",
             });
         } else if (hasGooglePlaceIdField && expectsGooglePlaceId && googlePlaceId) {
             checks.push({

@@ -5,7 +5,7 @@ import PageLeads from "@/components/leads/PageLeads.svelte";
 import PageNewsletter from "@/components/newsletter/PageNewsletter.svelte";
 import PageRecords from "@/components/records/PageRecords.svelte";
 import PageReports from "@/components/reports/PageReports.svelte";
-import PageReviews from "@/components/reviews/PageReviews.svelte";
+import PageReviewsDisabled from "@/components/reviews/PageReviewsDisabled.svelte";
 import PageApplication from "@/components/settings/PageApplication.svelte";
 import PageBackups from "@/components/settings/PageBackups.svelte";
 import PageCrons from "@/components/settings/PageCrons.svelte";
@@ -60,7 +60,7 @@ const routes = {
     }),
 
     "/reviews": wrap({
-        component: PageReviews,
+        component: PageReviewsDisabled,
         conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),

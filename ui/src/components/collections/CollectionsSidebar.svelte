@@ -41,11 +41,6 @@
             label: "Markting",
             collectionNames: new Set(["markting", "marketing", "campaigns", "newsletter", "newsletters"]),
         },
-        {
-            key: "reviews",
-            label: "Reviews",
-            collectionNames: new Set(["reviews", "review", "testimonials", "ratings"]),
-        },
     ];
     // NUVIO CUSTOM END: Admin collection sidebar grouped aggregators.
 
@@ -58,7 +53,6 @@
         site: true,
         leads: true,
         markting: true,
-        reviews: true,
     };
     // NUVIO CUSTOM END: Expand/collapse state per custom sidebar group.
     let oldCollectionId;
