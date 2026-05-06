@@ -30,7 +30,13 @@
   }
 </script>
 
-<FieldShell {field} {id} error={error || localError} required={!!field?.required} hint="Must be valid JSON">
+<FieldShell
+  {field}
+  {id}
+  error={error || localError}
+  required={!!field?.required}
+  hint={field?.hint || "Must be valid JSON"}
+>
   <textarea
     id={id}
     name={field?.key}

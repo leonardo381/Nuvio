@@ -57,7 +57,7 @@
   });
 </script>
 
-<FieldShell {field} {id} {error} required={!!field?.required}>
+<FieldShell {field} {id} {error} required={!!field?.required} hint={field?.hint || ""}>
   {#if mounted}
     <TinyMCE id={id} conf={editorConfig} bind:value={editorValue} {disabled} />
   {:else}

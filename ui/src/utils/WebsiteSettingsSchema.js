@@ -339,6 +339,55 @@ export const websiteSettingsSchema = {
             ],
         },
         {
+            key: "reports",
+            label: "Reports",
+            type: "object",
+            editableBy: [ROLE_ADMIN],
+            fields: [
+                {
+                    key: "analytics",
+                    label: "Traffic analytics",
+                    type: "object",
+                    editableBy: [ROLE_ADMIN],
+                    fields: [
+                        {
+                            key: "provider",
+                            label: "Analytics provider",
+                            type: "select",
+                            default: "plausible",
+                            editableBy: [ROLE_ADMIN],
+                            options: [
+                                { label: "Plausible", value: "plausible" },
+                            ],
+                        },
+                        {
+                            key: "enabled",
+                            label: "Enable traffic analytics",
+                            type: "bool",
+                            default: false,
+                            editableBy: [ROLE_ADMIN],
+                        },
+                        {
+                            key: "siteId",
+                            label: "Plausible site ID / domain",
+                            type: "text",
+                            default: "",
+                            editableBy: [ROLE_ADMIN],
+                            hint: "Usually the website domain configured in Plausible.",
+                        },
+                        {
+                            key: "scriptEnabled",
+                            label: "Inject Plausible tracking script",
+                            type: "bool",
+                            default: false,
+                            editableBy: [ROLE_ADMIN],
+                            hint: "Used later by the public website runtime. No script is injected in this phase.",
+                        },
+                    ],
+                },
+            ],
+        },
+        {
             key: "i18n",
             label: "Internationalization",
             type: "object",

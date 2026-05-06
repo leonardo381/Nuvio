@@ -123,6 +123,10 @@ func main() {
 			registerNuvioBookingRoutes(e)
 			// NUVIO CUSTOM END: Register Booking MVP Phase 3 public routes.
 
+			// NUVIO CUSTOM START: Register Reports traffic analytics routes.
+			registerNuvioReportsRoutes(e)
+			// NUVIO CUSTOM END: Register Reports traffic analytics routes.
+
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
 				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
 			}

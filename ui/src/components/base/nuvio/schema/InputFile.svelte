@@ -151,7 +151,7 @@
   }
 </script>
 
-<FieldShell {field} {id} error={error || localError} required={!!field?.required}>
+<FieldShell {field} {id} error={error || localError} required={!!field?.required} hint={field?.hint || ""}>
   {#if value}
     <div class="file-current">
       <div class="file-current-main">

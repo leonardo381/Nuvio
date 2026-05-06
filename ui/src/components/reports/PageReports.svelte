@@ -43,11 +43,16 @@
 
     let isLoadingWebsites = false;
     let isLoadingData = false;
+    let isLoadingTraffic = false;
     let reportsLoadError = "";
 
     let lastWebsitesCollectionId = "";
     let lastDataKey = "";
+    let lastTrafficKey = "";
     let dataLoadToken = 0;
+    let trafficLoadToken = 0;
+
+    let trafficResponse = null;
 
     loadCollections();
 
@@ -64,6 +69,25 @@
     $: reportsFeatureAvailable = resolveReportsFeatureAvailable(selectedWebsite);
 
     $: selectedPeriodLabel = periodOptions.find((option) => option.key === selectedPeriod)?.label || "This month";
+    $: selectedTrafficPeriod = mapPeriodToTrafficPeriod(selectedPeriod);
+    $: trafficState = normalizeLower(trafficResponse?.state) || "";
+    $: trafficPeriod = trafficResponse?.period || null;
+    $: trafficSummary = trafficState === "ok" && trafficResponse?.summary && typeof trafficResponse.summary === "object"
+        ? trafficResponse.summary
+        : null;
+    $: trafficTopPages = trafficState === "ok" && Array.isArray(trafficResponse?.topPages)
+        ? trafficResponse.topPages
+        : [];
+    $: trafficSources = trafficState === "ok" && Array.isArray(trafficResponse?.sources)
+        ? trafficResponse.sources
+        : [];
+    $: trafficDevices = trafficState === "ok" && Array.isArray(trafficResponse?.devices)
+        ? trafficResponse.devices
+        : [];
+    $: trafficDisplayState = trafficState || "analytics_not_configured";
+    $: topTrafficPage = trafficTopPages[0] || null;
+    $: topTrafficSource = trafficSources[0] || null;
+    $: topTrafficDevice = trafficDevices[0] || null;
 
     $: dataKey = [
         selectedWebsiteId,
@@ -75,14 +99,20 @@
         campaignsCollection?.id || "",
         pagesCollection?.id || "",
     ].join(":");
+    $: trafficKey = [
+        selectedWebsiteId,
+        selectedTrafficPeriod,
+    ].join(":");
 
     $: if (!websitesCollection?.id) {
         websites = [];
         selectedWebsiteId = "";
         clearDataRecords();
+        clearTrafficRecords();
         reportsLoadError = "";
         lastWebsitesCollectionId = "";
         lastDataKey = "";
+        lastTrafficKey = "";
     } else if (websitesCollection.id !== lastWebsitesCollectionId) {
         lastWebsitesCollectionId = websitesCollection.id;
         loadWebsites();
@@ -91,6 +121,14 @@
     $: if (selectedWebsiteId && dataKey !== lastDataKey) {
         lastDataKey = dataKey;
         loadDashboardData();
+    }
+
+    $: if (!selectedWebsiteId || !reportsFeatureAvailable) {
+        clearTrafficRecords();
+        lastTrafficKey = "";
+    } else if (trafficKey !== lastTrafficKey) {
+        lastTrafficKey = trafficKey;
+        loadTrafficData();
     }
 
     $: websiteLabelById = new Map(
@@ -226,6 +264,8 @@
         bookingSummary,
         newsletterSummary,
         seoSummary,
+        trafficState,
+        isLoadingTraffic,
     });
 
     $: reportSuggestions = buildReportSuggestions({
@@ -233,6 +273,8 @@
         bookingSummary,
         newsletterSummary,
         seoSummary,
+        trafficState,
+        isLoadingTraffic,
     });
 
     $: reportHealthState = resolveReportHealthState(reportWarnings.length);
@@ -273,21 +315,33 @@
             hint: `${seoSummary.missingTitle} missing title - ${seoSummary.missingDescription} missing description`,
             icon: "ri-search-eye-line",
         },
+        ...(trafficState === "ok" && trafficSummary
+            ? [{
+                key: "trafficVisitors",
+                label: "Visitors",
+                value: formatMetricNumber(trafficSummary.visitors),
+                hint: `${formatMetricNumber(trafficSummary.pageviews)} pageviews`,
+                icon: "ri-line-chart-line",
+            }]
+            : []),
     ];
 
-    $: trafficPlaceholderMessage = "Traffic analytics are not configured yet.";
     $: historyPlaceholderMessage = "Monthly report history will appear here once automatic snapshots are enabled.";
 
-    export function reload() {
+    export async function reload() {
         if (!websitesCollection?.id) {
-            return Promise.resolve();
+            return;
         }
 
         if (!selectedWebsiteId) {
-            return loadWebsites();
+            await loadWebsites();
+            return;
         }
 
-        return loadDashboardData();
+        await Promise.all([
+            loadDashboardData(),
+            loadTrafficData(),
+        ]);
     }
 
     function normalizeString(value) {
@@ -296,6 +350,83 @@
 
     function normalizeLower(value) {
         return normalizeString(value).toLowerCase();
+    }
+
+    function mapPeriodToTrafficPeriod(periodKey) {
+        if (periodKey === "lastMonth") {
+            return "lastMonth";
+        }
+        if (periodKey === "last30Days") {
+            return "last30Days";
+        }
+        if (periodKey === "allTime") {
+            return "allTime";
+        }
+        return "thisMonth";
+    }
+
+    function resolveTrafficStateMessage(stateKey) {
+        if (stateKey === "feature_unavailable") {
+            return "Traffic analytics are not available for this website.";
+        }
+
+        if (stateKey === "analytics_disabled") {
+            return "Traffic analytics are disabled.";
+        }
+
+        if (stateKey === "analytics_not_configured") {
+            return "Plausible analytics are not configured yet.";
+        }
+
+        if (stateKey === "provider_unconfigured") {
+            return "Plausible is not configured on the server yet.";
+        }
+
+        if (stateKey === "provider_error") {
+            return "Unable to load traffic analytics right now.";
+        }
+
+        return "Unable to load traffic analytics right now.";
+    }
+
+    function formatMetricNumber(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return "—";
+        }
+        return Math.round(numeric).toLocaleString();
+    }
+
+    function formatBounceRate(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return "—";
+        }
+
+        const percent = numeric <= 1 ? numeric * 100 : numeric;
+        return `${percent.toFixed(1)}%`;
+    }
+
+    function formatDurationSeconds(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) {
+            return "—";
+        }
+
+        const total = Math.max(0, Math.round(numeric));
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const seconds = total % 60;
+
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        }
+
+        if (minutes > 0) {
+            return `${minutes}m ${seconds}s`;
+        }
+
+        return `${seconds}s`;
     }
 
     function stripHtml(value) {
@@ -390,6 +521,11 @@
         pagesRecords = [];
     }
 
+    function clearTrafficRecords() {
+        trafficResponse = null;
+        isLoadingTraffic = false;
+    }
+
     async function loadWebsites() {
         if (!websitesCollection?.id) {
             websites = [];
@@ -408,6 +544,7 @@
             if (!websites.length) {
                 selectedWebsiteId = "";
                 clearDataRecords();
+                clearTrafficRecords();
                 return;
             }
 
@@ -418,6 +555,7 @@
             websites = [];
             selectedWebsiteId = "";
             clearDataRecords();
+            clearTrafficRecords();
             reportsLoadError = "Unable to load reports right now.";
             ApiClient.error(err);
         }
@@ -493,6 +631,58 @@
         } finally {
             if (currentToken === dataLoadToken) {
                 isLoadingData = false;
+            }
+        }
+    }
+
+    async function loadTrafficData() {
+        if (!selectedWebsiteId || !reportsFeatureAvailable) {
+            clearTrafficRecords();
+            return;
+        }
+
+        const currentToken = ++trafficLoadToken;
+        isLoadingTraffic = true;
+
+        try {
+            const response = await ApiClient.send("/api/nuvio/reports/traffic", {
+                method: "GET",
+                query: {
+                    websiteId: selectedWebsiteId,
+                    period: selectedTrafficPeriod,
+                },
+                requestKey: `nuvio_reports_traffic_${selectedWebsiteId}_${selectedTrafficPeriod}`,
+            });
+
+            if (currentToken !== trafficLoadToken) {
+                return;
+            }
+
+            trafficResponse = response && typeof response === "object"
+                ? response
+                : {
+                    state: "provider_error",
+                    period: {
+                        key: selectedTrafficPeriod,
+                        label: selectedPeriodLabel,
+                    },
+                };
+        } catch (err) {
+            if (currentToken !== trafficLoadToken) {
+                return;
+            }
+
+            trafficResponse = {
+                state: "provider_error",
+                period: {
+                    key: selectedTrafficPeriod,
+                    label: selectedPeriodLabel,
+                },
+            };
+            ApiClient.error(err, false);
+        } finally {
+            if (currentToken === trafficLoadToken) {
+                isLoadingTraffic = false;
             }
         }
     }
@@ -922,7 +1112,9 @@
     function buildReportWarnings(payload = {}) {
         const warnings = [];
 
-        warnings.push("Traffic analytics are not configured yet.");
+        if (!payload?.isLoadingTraffic && payload?.trafficState !== "ok") {
+            warnings.push("Traffic analytics are not configured yet.");
+        }
 
         if (Number(payload?.leadsSummary?.total || 0) < 1) {
             warnings.push("No leads were received in this period.");
@@ -942,6 +1134,10 @@
 
     function buildReportSuggestions(payload = {}) {
         const suggestions = [];
+
+        if (!payload?.isLoadingTraffic && payload?.trafficState !== "ok") {
+            suggestions.push("Configure Plausible analytics in Website Settings > Reports.");
+        }
 
         if (Number(payload?.leadsSummary?.total || 0) < 1) {
             suggestions.push("Use Lead Capture settings to make contact options clear.");
@@ -1206,6 +1402,62 @@
                                 </div>
                             </article>
                         </div>
+
+                        {#if trafficState === "ok"}
+                            <div class="reports-grid-two m-t-sm">
+                                <article class="panel">
+                                    <div class="section-head m-b-sm">
+                                        <h5 class="m-0">Traffic summary</h5>
+                                        <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
+                                    </div>
+                                    <div class="reports-mini-stack">
+                                        <div class="reports-mini-row"><span>Visitors</span><strong>{formatMetricNumber(trafficSummary?.visitors)}</strong></div>
+                                        <div class="reports-mini-row"><span>Pageviews</span><strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong></div>
+                                        <div class="reports-mini-row"><span>Bounce rate</span><strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong></div>
+                                        <div class="reports-mini-row"><span>Visit duration</span><strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong></div>
+                                    </div>
+                                </article>
+
+                                <article class="panel">
+                                    <div class="section-head m-b-sm">
+                                        <h5 class="m-0">Traffic highlights</h5>
+                                        <p class="txt-sm txt-hint m-b-0">Top page, source, and device trends.</p>
+                                    </div>
+                                    <div class="reports-mini-stack">
+                                        <div class="reports-mini-row reports-mini-row--wrap">
+                                            <span>Top page</span>
+                                            <span class="txt-sm txt-hint">
+                                                {#if topTrafficPage}
+                                                    {topTrafficPage.page || "/"} - {formatMetricNumber(topTrafficPage.visitors)} visitors
+                                                {:else}
+                                                    No page data available.
+                                                {/if}
+                                            </span>
+                                        </div>
+                                        <div class="reports-mini-row reports-mini-row--wrap">
+                                            <span>Top source</span>
+                                            <span class="txt-sm txt-hint">
+                                                {#if topTrafficSource}
+                                                    {topTrafficSource.source || "Direct"} - {formatMetricNumber(topTrafficSource.visitors)} visitors
+                                                {:else}
+                                                    No source data available.
+                                                {/if}
+                                            </span>
+                                        </div>
+                                        <div class="reports-mini-row reports-mini-row--wrap">
+                                            <span>Top device</span>
+                                            <span class="txt-sm txt-hint">
+                                                {#if topTrafficDevice}
+                                                    {topTrafficDevice.device || "Unknown"} - {formatMetricNumber(topTrafficDevice.visitors)} visitors
+                                                {:else}
+                                                    No device data available.
+                                                {/if}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </article>
+                            </div>
+                        {/if}
                     </div>
 
                     <aside class="reports-overview-rail">
@@ -1479,13 +1731,95 @@
                     {/if}
                 </section>
             {:else if activeTab === "traffic"}
-                <section class="panel reports-placeholder-panel">
-                    <div class="section-head m-b-sm">
-                        <h5 class="m-0">Traffic</h5>
-                        <p class="txt-sm txt-hint m-b-0">Plausible integration will be added in a later phase.</p>
+                {#if isLoadingTraffic}
+                    <section class="panel reports-placeholder-panel">
+                        <div class="placeholder-section m-b-0">
+                            <span class="loader loader-lg" />
+                            <h1>Loading traffic analytics...</h1>
+                        </div>
+                    </section>
+                {:else if trafficState === "ok"}
+                    <div class="reports-tab-grid">
+                        <article class="panel">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Traffic summary</h5>
+                                <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
+                            </div>
+                            <div class="reports-mini-stack">
+                                <div class="reports-mini-row"><span>Visitors</span><strong>{formatMetricNumber(trafficSummary?.visitors)}</strong></div>
+                                <div class="reports-mini-row"><span>Pageviews</span><strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong></div>
+                                <div class="reports-mini-row"><span>Bounce rate</span><strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong></div>
+                                <div class="reports-mini-row"><span>Visit duration</span><strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong></div>
+                            </div>
+                        </article>
+
+                        <article class="panel">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Top pages</h5>
+                                <p class="txt-sm txt-hint m-b-0">Most viewed pages in the selected period.</p>
+                            </div>
+
+                            {#if trafficTopPages.length}
+                                <div class="reports-mini-stack">
+                                    {#each trafficTopPages.slice(0, 8) as pageRow}
+                                        <div class="reports-mini-row reports-mini-row--wrap">
+                                            <span>{pageRow.page || "/"}</span>
+                                            <span class="txt-sm txt-hint">
+                                                {formatMetricNumber(pageRow.visitors)} visitors - {formatMetricNumber(pageRow.pageviews)} pageviews
+                                            </span>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="empty-state m-b-0">No top pages data available for this period.</div>
+                            {/if}
+                        </article>
                     </div>
-                    <div class="empty-state m-b-0">{trafficPlaceholderMessage}</div>
-                </section>
+
+                    <div class="reports-grid-two m-t-sm">
+                        <article class="panel">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Traffic sources</h5>
+                                <p class="txt-sm txt-hint m-b-0">Main traffic sources by visitors.</p>
+                            </div>
+
+                            {#if trafficSources.length}
+                                <div class="reports-mini-stack">
+                                    {#each trafficSources.slice(0, 8) as sourceRow}
+                                        <div class="reports-mini-row"><span>{sourceRow.source || "Direct"}</span><strong>{formatMetricNumber(sourceRow.visitors)}</strong></div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="empty-state m-b-0">No traffic source data available for this period.</div>
+                            {/if}
+                        </article>
+
+                        <article class="panel">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Devices</h5>
+                                <p class="txt-sm txt-hint m-b-0">Visitors by device type.</p>
+                            </div>
+
+                            {#if trafficDevices.length}
+                                <div class="reports-mini-stack">
+                                    {#each trafficDevices.slice(0, 8) as deviceRow}
+                                        <div class="reports-mini-row"><span>{deviceRow.device || "Unknown"}</span><strong>{formatMetricNumber(deviceRow.visitors)}</strong></div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="empty-state m-b-0">No device data available for this period.</div>
+                            {/if}
+                        </article>
+                    </div>
+                {:else}
+                    <section class="panel reports-placeholder-panel">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Traffic</h5>
+                            <p class="txt-sm txt-hint m-b-0">Plausible analytics status for this website.</p>
+                        </div>
+                        <div class="empty-state m-b-0">{resolveTrafficStateMessage(trafficDisplayState)}</div>
+                    </section>
+                {/if}
             {:else if activeTab === "history"}
                 <section class="panel reports-placeholder-panel">
                     <div class="section-head m-b-sm">

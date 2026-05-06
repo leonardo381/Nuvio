@@ -17,7 +17,7 @@
   }
 </script>
 
-<FieldShell {field} {id} {error} required={!!field?.required}>
+<FieldShell {field} {id} {error} required={!!field?.required} hint={field?.hint || ""}>
   <input
     id={id}
     name={field?.key}

@@ -8,6 +8,8 @@
 !nuvio_newsletter.go
 !nuvio_email.go
 !nuvio_leads_notifications.go
+!nuvio_booking.go
+!nuvio_reports.go
 
 # ignore Go cache anywhere
 .gocache/

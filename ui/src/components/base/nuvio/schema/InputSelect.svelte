@@ -33,7 +33,7 @@
   }
 </script>
 
-<FieldShell {field} {id} {error} required={!!field?.required}>
+<FieldShell {field} {id} {error} required={!!field?.required} hint={field?.hint || ""}>
   <div class="schema-select-wrap">
     <select
       id={id}

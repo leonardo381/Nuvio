@@ -22,7 +22,7 @@
   {id}
   {error}
   required={!!field?.required}
-  hint="Enter record ID(s), separated by commas"
+  hint={field?.hint || "Enter record ID(s), separated by commas"}
 >
   <input
     id={id}

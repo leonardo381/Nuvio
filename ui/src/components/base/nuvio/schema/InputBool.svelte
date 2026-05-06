@@ -17,7 +17,7 @@
   }
 </script>
 
-<FieldShell {field} {id} {error} required={!!field?.required}>
+<FieldShell {field} {id} {error} required={!!field?.required} hint={field?.hint || ""}>
 <!--
   <label class="switch">
     <input id={id} name={field?.key} type="checkbox" checked={!!value} {disabled} on:change={onToggle} />
