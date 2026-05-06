@@ -119,6 +119,10 @@ func main() {
 			registerNuvioLeadsRoutes(e)
 			// NUVIO CUSTOM END: Register Contact Form + WhatsApp leads routes.
 
+			// NUVIO CUSTOM START: Register Booking MVP Phase 3 public routes.
+			registerNuvioBookingRoutes(e)
+			// NUVIO CUSTOM END: Register Booking MVP Phase 3 public routes.
+
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
 				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
 			}

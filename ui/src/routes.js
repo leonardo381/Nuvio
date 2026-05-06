@@ -1,6 +1,7 @@
 import PageIndex from "@/components/PageIndex.svelte";
 import PageLogs from "@/components/logs/PageLogs.svelte";
 import PageCms from "@/components/cms/PageCms.svelte";
+import PageBooking from "@/components/booking/PageBooking.svelte";
 import PageLeads from "@/components/leads/PageLeads.svelte";
 import PageNewsletter from "@/components/newsletter/PageNewsletter.svelte";
 import PageRecords from "@/components/records/PageRecords.svelte";
@@ -73,6 +74,12 @@ const routes = {
 
     "/cms": wrap({
         component: PageCms,
+        conditions: [(_) => isSuperuserAuth()],
+        userData: { showAppSidebar: true },
+    }),
+
+    "/booking": wrap({
+        component: PageBooking,
         conditions: [(_) => isSuperuserAuth()],
         userData: { showAppSidebar: true },
     }),

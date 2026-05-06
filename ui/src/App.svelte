@@ -118,6 +118,18 @@
                     <i class="ri-mail-line" />
                 </a>
                 <!-- NUVIO CUSTOM END: Dedicated Leads section entry in app sidebar. -->
+                <!-- NUVIO CUSTOM START: Dedicated Booking section entry in app sidebar. -->
+                <a
+                    href="/booking"
+                    class="menu-item"
+                    aria-label="Booking"
+                    use:link
+                    use:active={{ path: "/booking/?.*", className: "current-route" }}
+                    use:tooltip={{ text: "Booking", position: "right" }}
+                >
+                    <i class="ri-calendar-line" />
+                </a>
+                <!-- NUVIO CUSTOM END: Dedicated Booking section entry in app sidebar. -->
                 <!-- NUVIO CUSTOM START: Dedicated Newsletter section entry in app sidebar. -->
                 <a
                     href="/newsletter"
