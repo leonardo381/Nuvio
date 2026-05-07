@@ -124,6 +124,7 @@
     let rescheduleForm = createDefaultRescheduleForm();
 
     let selectedServiceId = "";
+    let isCreatingService = false;
     let isSavingService = false;
     let serviceSearch = "";
     let serviceStatusFilter = "all";
@@ -131,6 +132,8 @@
         id: "",
         name: "",
         durationMinutes: "30",
+        description: "",
+        displayOrder: "0",
         active: true,
     };
     let serviceFormError = "";
@@ -252,8 +255,11 @@
         bookingRulesConfiguredCount,
     });
     $: availabilityHealthState = resolveBookingReadinessState(availabilityHealthWarnings.length);
+    $: normalizedServices = sortServicesForBackoffice(
+        servicesRecords.map((service) => normalizeServiceRecord(service)),
+    );
     $: normalizedServiceSearch = normalizeLower(serviceSearch);
-    $: filteredServices = servicesRecords.filter((service) => {
+    $: filteredServices = normalizedServices.filter((service) => {
         const isActive = !!service?.active;
 
         if (serviceStatusFilter === "active" && !isActive) {
@@ -268,6 +274,8 @@
             const duration = `${service?.durationMinutes || ""}`.trim();
             const searchable = [
                 normalizeString(service?.name),
+                normalizeString(service?.description),
+                `${service?.displayOrder ?? 0}`,
                 duration,
                 duration ? `${duration} minutes` : "",
             ]
@@ -505,10 +513,10 @@
         appointmentInternalNotesDraft = "";
     }
 
-    $: selectedService = servicesRecords.find((service) => service.id === selectedServiceId) || null;
+    $: selectedService = normalizedServices.find((service) => service.id === selectedServiceId) || null;
 
-    $: if (servicesRecords.length && !selectedServiceId && !serviceForm.id) {
-        selectedServiceId = servicesRecords[0].id;
+    $: if (normalizedServices.length && !selectedServiceId && !serviceForm.id && !isCreatingService) {
+        selectedServiceId = normalizedServices[0].id;
     }
 
     $: if (selectedService) {
@@ -517,12 +525,130 @@
         }
     }
 
+    $: serviceFormDurationValue = Number.parseInt(`${serviceForm.durationMinutes || ""}`.trim(), 10);
+    $: serviceFormDurationValid = Number.isFinite(serviceFormDurationValue)
+        && serviceFormDurationValue >= 5
+        && serviceFormDurationValue <= 480;
+    $: serviceFormDisplayOrderParse = parseServiceDisplayOrderDraft(serviceForm.displayOrder);
+    $: serviceHealthWarnings = buildServiceHealthWarnings({
+        name: serviceForm.name,
+        durationValid: serviceFormDurationValid,
+        displayOrderValid: serviceFormDisplayOrderParse.valid,
+    });
+    $: serviceHealthSuggestions = buildServiceHealthSuggestions({
+        active: !!serviceForm.active,
+        description: serviceForm.description,
+        displayOrder: serviceFormDisplayOrderParse.valid ? serviceFormDisplayOrderParse.value : 0,
+        servicesCount: normalizedServices.length,
+    });
+    $: serviceHealthState = resolveBookingReadinessState(serviceHealthWarnings.length);
+
     function normalizeString(value) {
         return `${value || ""}`.trim();
     }
 
     function normalizeLower(value) {
         return normalizeString(value).toLowerCase();
+    }
+
+    function normalizeServiceRecord(record) {
+        return {
+            ...record,
+            id: normalizeString(record?.id),
+            name: normalizeString(record?.name),
+            description: normalizeString(record?.description),
+            durationMinutes: readNonNegativeInteger(record?.durationMinutes, 0),
+            displayOrder: readNonNegativeInteger(record?.displayOrder, 0),
+            active: !!record?.active,
+            created: normalizeString(record?.created),
+        };
+    }
+
+    function sortServicesForBackoffice(list = []) {
+        return [...list].sort((a, b) => {
+            const firstOrder = readNonNegativeInteger(a?.displayOrder, 0);
+            const secondOrder = readNonNegativeInteger(b?.displayOrder, 0);
+            if (firstOrder !== secondOrder) {
+                return firstOrder - secondOrder;
+            }
+
+            const firstName = normalizeLower(a?.name);
+            const secondName = normalizeLower(b?.name);
+            if (firstName !== secondName) {
+                return firstName.localeCompare(secondName);
+            }
+
+            const firstCreated = normalizeString(a?.created);
+            const secondCreated = normalizeString(b?.created);
+            if (firstCreated && secondCreated && firstCreated !== secondCreated) {
+                return firstCreated.localeCompare(secondCreated);
+            }
+
+            return normalizeString(a?.id).localeCompare(normalizeString(b?.id));
+        });
+    }
+
+    function parseServiceDisplayOrderDraft(rawValue) {
+        const normalized = normalizeString(rawValue);
+        if (!normalized) {
+            return { valid: true, value: 0 };
+        }
+
+        if (!/^-?\d+$/.test(normalized)) {
+            return { valid: false, value: 0, error: "Display order must be a whole number." };
+        }
+
+        const parsed = Number.parseInt(normalized, 10);
+        if (!Number.isFinite(parsed)) {
+            return { valid: false, value: 0, error: "Display order must be a whole number." };
+        }
+
+        return { valid: true, value: Math.max(0, parsed) };
+    }
+
+    function buildServiceHealthWarnings({
+        name = "",
+        durationValid = true,
+        displayOrderValid = true,
+    } = {}) {
+        const warnings = [];
+
+        if (!normalizeString(name)) {
+            warnings.push("Service name is required.");
+        }
+
+        if (!durationValid) {
+            warnings.push("Duration must be an integer between 5 and 480 minutes.");
+        }
+
+        if (!displayOrderValid) {
+            warnings.push("Display order must be a whole number.");
+        }
+
+        return warnings;
+    }
+
+    function buildServiceHealthSuggestions({
+        active = true,
+        description = "",
+        displayOrder = 0,
+        servicesCount = 0,
+    } = {}) {
+        const suggestions = [];
+
+        if (!active) {
+            suggestions.push("Inactive services are hidden from new booking requests.");
+        }
+
+        if (!normalizeString(description)) {
+            suggestions.push("Add a short description to help visitors choose this service.");
+        }
+
+        if (servicesCount > 1 && readNonNegativeInteger(displayOrder, 0) === 0) {
+            suggestions.push("Set display order to control how services appear to visitors.");
+        }
+
+        return suggestions;
     }
 
     function isPlainObject(value) {
@@ -796,6 +922,14 @@
             endTime: normalized.endTime || "17:00",
             note: normalized.note,
             active: normalized.active,
+        };
+    }
+
+    function createDefaultBookingRulesDraft() {
+        return {
+            minNoticeHours: "0",
+            bookingWindowDays: "0",
+            bufferMinutes: "0",
         };
     }
 
@@ -2253,6 +2387,8 @@
             id: "",
             name: "",
             durationMinutes: "30",
+            description: "",
+            displayOrder: "0",
             active: true,
         };
         serviceFormError = "";
@@ -2263,17 +2399,21 @@
             id: normalizeString(service?.id),
             name: normalizeString(service?.name),
             durationMinutes: `${service?.durationMinutes || "30"}`,
+            description: normalizeString(service?.description),
+            displayOrder: `${readNonNegativeInteger(service?.displayOrder, 0)}`,
             active: !!service?.active,
         };
         serviceFormError = "";
     }
 
     function createNewService() {
+        isCreatingService = true;
         selectedServiceId = "";
         resetServiceForm();
     }
 
     function selectService(service) {
+        isCreatingService = false;
         selectedServiceId = normalizeString(service?.id);
     }
 
@@ -2308,6 +2448,8 @@
 
         const normalizedName = normalizeString(serviceForm.name);
         const duration = Number.parseInt(`${serviceForm.durationMinutes || ""}`.trim(), 10);
+        const normalizedDescription = normalizeString(serviceForm.description);
+        const parsedDisplayOrder = parseServiceDisplayOrderDraft(serviceForm.displayOrder);
 
         if (!normalizedName) {
             serviceFormError = "Service name is required.";
@@ -2319,12 +2461,19 @@
             return;
         }
 
+        if (!parsedDisplayOrder.valid) {
+            serviceFormError = parsedDisplayOrder.error || "Display order must be a whole number.";
+            return;
+        }
+
         serviceFormError = "";
         isSavingService = true;
 
         const payload = {
             name: normalizedName,
             durationMinutes: duration,
+            description: normalizedDescription,
+            displayOrder: parsedDisplayOrder.value,
             active: !!serviceForm.active,
         };
 
@@ -2343,6 +2492,7 @@
                     ...payload,
                 });
                 servicesRecords = [created, ...servicesRecords];
+                isCreatingService = false;
                 selectedServiceId = created.id;
                 setServiceFormFromRecord(created);
                 addSuccessToast("Service created.");
@@ -3267,7 +3417,7 @@
                                 id="booking-services-search"
                                 class="input input-sm"
                                 type="text"
-                                placeholder="Search by service name or duration..."
+                                placeholder="Search by name, description, duration, or order..."
                                 bind:value={serviceSearch}
                             />
                         </div>
@@ -3308,7 +3458,14 @@
                                                 {service.active ? "Active" : "Inactive"}
                                             </span>
                                         </div>
-                                        <div class="booking-service-meta txt-sm txt-hint">{service.durationMinutes || 0} minutes</div>
+                                        <div class="booking-service-meta txt-sm txt-hint">
+                                            {service.durationMinutes || 0} minutes
+                                            <span class="booking-service-meta-separator">·</span>
+                                            <span>Order {service.displayOrder ?? 0}</span>
+                                        </div>
+                                        {#if service.description}
+                                            <p class="booking-service-description txt-xs txt-hint m-b-0">{service.description}</p>
+                                        {/if}
                                     </div>
                                     <div class="booking-service-actions">
                                         <button
@@ -3328,7 +3485,7 @@
                 <aside class="booking-rail">
                     <section class="booking-rail-block">
                         <h5 class="m-0">Service details</h5>
-                        <p class="txt-sm txt-hint m-b-0">Create or update service name, duration, and active status.</p>
+                        <p class="txt-sm txt-hint m-b-0">Create or update service name, duration, description, order, and active status.</p>
                         <div class="booking-actions-row">
                             <span class="summary-pill">{serviceForm.id ? "Editing selected service" : "Creating a new service"}</span>
                         </div>
@@ -3358,6 +3515,33 @@
                                     bind:value={serviceForm.durationMinutes}
                                     disabled={isSavingService}
                                 />
+                            </div>
+
+                            <div class="form-field">
+                                <label class="txt-sm txt-hint" for="booking-service-display-order">Display order</label>
+                                <input
+                                    id="booking-service-display-order"
+                                    class="input input-sm"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    bind:value={serviceForm.displayOrder}
+                                    disabled={isSavingService}
+                                />
+                                <p class="txt-xs txt-hint m-b-0">Lower numbers appear first.</p>
+                            </div>
+
+                            <div class="form-field">
+                                <label class="txt-sm txt-hint" for="booking-service-description">Description</label>
+                                <textarea
+                                    id="booking-service-description"
+                                    class="input booking-service-description-input"
+                                    rows="4"
+                                    placeholder="Short visitor-facing service description..."
+                                    bind:value={serviceForm.description}
+                                    disabled={isSavingService}
+                                />
+                                <p class="txt-xs txt-hint m-b-0">Short description shown to visitors when choosing a service.</p>
                             </div>
 
                             <label class="booking-checkbox-row" for="booking-service-active">
@@ -3395,6 +3579,70 @@
                                     </button>
                                 {/if}
                             </div>
+                        </div>
+                    </section>
+
+                    <section class="booking-rail-block">
+                        <h5 class="m-0">Public preview</h5>
+                        <p class="txt-sm txt-hint m-b-0">Approximate visitor-facing service presentation.</p>
+                        <div class="booking-service-preview-card">
+                            <div class="booking-service-title-row">
+                                <div class="booking-service-title">{normalizeString(serviceForm.name) || "Service name"}</div>
+                                <span class={`label label-sm ${serviceForm.active ? "label-success" : "label-warning"}`}>
+                                    {serviceForm.active ? "Active" : "Inactive"}
+                                </span>
+                            </div>
+                            <div class="booking-service-meta txt-sm txt-hint">
+                                {serviceFormDurationValid ? serviceFormDurationValue : 0} minutes
+                                <span class="booking-service-meta-separator">·</span>
+                                <span>Order {serviceFormDisplayOrderParse.valid ? serviceFormDisplayOrderParse.value : 0}</span>
+                            </div>
+                            {#if normalizeString(serviceForm.description)}
+                                <p class="booking-service-description txt-xs txt-hint m-b-0">{normalizeString(serviceForm.description)}</p>
+                            {:else}
+                                <p class="txt-xs txt-hint m-b-0">No service description yet.</p>
+                            {/if}
+                        </div>
+                    </section>
+
+                    <section class="booking-rail-block booking-health-panel">
+                        <div class="booking-health-head">
+                            <div class="booking-health-main">
+                                <h5 class="m-0">Service health</h5>
+                                <p class="txt-sm txt-hint m-b-0">Check whether this service is ready for visitors.</p>
+                            </div>
+                            <div class="booking-health-meta">
+                                <span class={`label label-sm ${serviceHealthState.badgeClass}`}>{serviceHealthState.label}</span>
+                                <span class="summary-pill">{serviceHealthWarnings.length} warnings - {serviceHealthSuggestions.length} suggestions</span>
+                            </div>
+                        </div>
+
+                        <div class="booking-health-group m-t-8">
+                            <div class="booking-health-group-title">Warnings</div>
+                            {#if serviceHealthWarnings.length}
+                                {#each serviceHealthWarnings as warning}
+                                    <div class="booking-health-item warning">
+                                        <span class="label label-sm booking-health-pill warning">Warning</span>
+                                        <span>{warning}</span>
+                                    </div>
+                                {/each}
+                            {:else}
+                                <p class="txt-sm txt-hint m-b-0">This service has no blocking issues.</p>
+                            {/if}
+                        </div>
+
+                        <div class="booking-health-group m-t-8">
+                            <div class="booking-health-group-title">Suggestions</div>
+                            {#if serviceHealthSuggestions.length}
+                                {#each serviceHealthSuggestions as suggestion}
+                                    <div class="booking-health-item">
+                                        <span class="label label-sm booking-health-pill">Info</span>
+                                        <span>{suggestion}</span>
+                                    </div>
+                                {/each}
+                            {:else}
+                                <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
+                            {/if}
                         </div>
                     </section>
                 </aside>
@@ -4704,6 +4952,11 @@
         font-weight: 600;
     }
 
+    .booking-service-main {
+        min-width: 0;
+        flex: 1;
+    }
+
     .booking-service-title-row {
         display: flex;
         align-items: center;
@@ -4715,10 +4968,38 @@
         margin-top: 4px;
     }
 
+    .booking-service-meta-separator {
+        margin: 0 4px;
+    }
+
+    .booking-service-description {
+        margin-top: 6px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+
     .booking-service-actions {
         display: flex;
         gap: 8px;
         align-items: center;
+    }
+
+    .booking-service-description-input {
+        resize: vertical;
+        min-height: 88px;
+    }
+
+    .booking-service-preview-card {
+        border: 1px solid var(--baseAlt1);
+        border-radius: var(--baseRadius);
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        background: color-mix(in srgb, var(--baseAlt1) 10%, transparent);
     }
 
     .booking-form-stack {

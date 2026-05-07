@@ -68,6 +68,8 @@ type nuvioBookingPublicService struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
 	DurationMinutes int    `json:"durationMinutes"`
+	Description     string `json:"description"`
+	DisplayOrder    int    `json:"displayOrder"`
 }
 
 type nuvioBookingCreateAppointmentPayload struct {
@@ -1588,25 +1590,59 @@ func listNuvioActiveBookingServices(app core.App, websiteID string) ([]nuvioBook
 		return nil, err
 	}
 
-	services := make([]nuvioBookingPublicService, 0, len(records))
+	type sortableBookingService struct {
+		dto        nuvioBookingPublicService
+		createdKey string
+	}
+
+	services := make([]sortableBookingService, 0, len(records))
 	for _, record := range records {
 		duration, err := parseNuvioBookingServiceDuration(record)
 		if err != nil {
 			continue
 		}
 
-		services = append(services, nuvioBookingPublicService{
-			ID:              strings.TrimSpace(record.Id),
-			Name:            strings.TrimSpace(record.GetString("name")),
-			DurationMinutes: duration,
+		services = append(services, sortableBookingService{
+			dto: nuvioBookingPublicService{
+				ID:              strings.TrimSpace(record.Id),
+				Name:            strings.TrimSpace(record.GetString("name")),
+				DurationMinutes: duration,
+				Description:     strings.TrimSpace(record.GetString("description")),
+				DisplayOrder:    parseNuvioNonNegativeInt(record.Get("displayOrder"), 0),
+			},
+			createdKey: strings.TrimSpace(record.GetString("created")),
 		})
 	}
 
 	sort.SliceStable(services, func(i, j int) bool {
-		return strings.ToLower(strings.TrimSpace(services[i].Name)) < strings.ToLower(strings.TrimSpace(services[j].Name))
+		first := services[i]
+		second := services[j]
+
+		if first.dto.DisplayOrder != second.dto.DisplayOrder {
+			return first.dto.DisplayOrder < second.dto.DisplayOrder
+		}
+
+		firstName := strings.ToLower(strings.TrimSpace(first.dto.Name))
+		secondName := strings.ToLower(strings.TrimSpace(second.dto.Name))
+		if firstName != secondName {
+			return firstName < secondName
+		}
+
+		firstCreated := strings.TrimSpace(first.createdKey)
+		secondCreated := strings.TrimSpace(second.createdKey)
+		if firstCreated != "" && secondCreated != "" && firstCreated != secondCreated {
+			return firstCreated < secondCreated
+		}
+
+		return strings.TrimSpace(first.dto.ID) < strings.TrimSpace(second.dto.ID)
 	})
 
-	return services, nil
+	result := make([]nuvioBookingPublicService, 0, len(services))
+	for _, service := range services {
+		result = append(result, service.dto)
+	}
+
+	return result, nil
 }
 
 func isNuvioBookingServiceActive(serviceRecord *core.Record) bool {
