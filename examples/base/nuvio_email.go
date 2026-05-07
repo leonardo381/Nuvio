@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,14 +20,21 @@ var nuvioEmailHTTPClient = &http.Client{
 }
 
 type resendSendEmailRequest struct {
-	From    string   `json:"from"`
-	To      []string `json:"to,omitempty"`
-	Cc      []string `json:"cc,omitempty"`
-	Bcc     []string `json:"bcc,omitempty"`
-	ReplyTo []string `json:"reply_to,omitempty"`
-	Subject string   `json:"subject"`
-	Html    string   `json:"html,omitempty"`
-	Text    string   `json:"text,omitempty"`
+	From        string                      `json:"from"`
+	To          []string                    `json:"to,omitempty"`
+	Cc          []string                    `json:"cc,omitempty"`
+	Bcc         []string                    `json:"bcc,omitempty"`
+	ReplyTo     []string                    `json:"reply_to,omitempty"`
+	Subject     string                      `json:"subject"`
+	Html        string                      `json:"html,omitempty"`
+	Text        string                      `json:"text,omitempty"`
+	Attachments []resendSendEmailAttachment `json:"attachments,omitempty"`
+}
+
+type resendSendEmailAttachment struct {
+	Filename    string `json:"filename"`
+	Content     string `json:"content"`
+	ContentType string `json:"content_type,omitempty"`
 }
 
 type resendSendEmailResponse struct {
@@ -46,6 +54,15 @@ type nuvioTransactionalEmailMessage struct {
 	Subject string
 	HTML    string
 	Text    string
+	// Attachments expects raw, unencoded bytes. The helper will base64-encode
+	// content according to Resend's attachments payload shape.
+	Attachments []nuvioTransactionalEmailAttachment
+}
+
+type nuvioTransactionalEmailAttachment struct {
+	Filename    string
+	Content     []byte
+	ContentType string
 }
 
 func loadNuvioResendConfig() (nuvioResendConfig, error) {
@@ -115,6 +132,16 @@ func sendNuvioTransactionalEmailViaResend(
 		requestPayload.Text = textBody
 	}
 
+	if len(message.Attachments) > 0 {
+		attachments, err := buildNuvioResendAttachments(message.Attachments)
+		if err != nil {
+			return err
+		}
+		if len(attachments) > 0 {
+			requestPayload.Attachments = attachments
+		}
+	}
+
 	rawPayload, err := json.Marshal(requestPayload)
 	if err != nil {
 		return fmt.Errorf("Failed to encode Resend payload: %w", err)
@@ -171,4 +198,29 @@ func sendNuvioTransactionalEmailViaResend(
 	}
 
 	return nil
+}
+
+func buildNuvioResendAttachments(
+	attachments []nuvioTransactionalEmailAttachment,
+) ([]resendSendEmailAttachment, error) {
+	result := make([]resendSendEmailAttachment, 0, len(attachments))
+
+	for i, attachment := range attachments {
+		filename := strings.TrimSpace(attachment.Filename)
+		if filename == "" {
+			return nil, fmt.Errorf("Attachment %d is missing filename", i+1)
+		}
+
+		if len(attachment.Content) == 0 {
+			return nil, fmt.Errorf("Attachment %q is missing content", filename)
+		}
+
+		result = append(result, resendSendEmailAttachment{
+			Filename:    filename,
+			Content:     base64.StdEncoding.EncodeToString(attachment.Content),
+			ContentType: strings.TrimSpace(attachment.ContentType),
+		})
+	}
+
+	return result, nil
 }

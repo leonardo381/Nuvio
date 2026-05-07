@@ -99,6 +99,8 @@
     let selectedAppointmentId = "";
     let isUpdatingAppointmentStatus = false;
     let updatingAppointmentId = "";
+    let sendConfirmationEmailOnConfirm = false;
+    let sendConfirmationEmailTargetAppointmentId = "";
     let appointmentInternalNotesDraft = "";
     let appointmentInternalNotesDraftId = "";
     let isSavingAppointmentInternalNotes = false;
@@ -483,6 +485,15 @@
         && (selectedAppointmentStatusKey === "pending" || selectedAppointmentStatusKey === "confirmed");
     $: canRescheduleSelectedAppointment = !!selectedAppointment
         && (selectedAppointmentStatusKey === "pending" || selectedAppointmentStatusKey === "confirmed");
+    $: if (selectedAppointment?.id) {
+        if (sendConfirmationEmailTargetAppointmentId !== selectedAppointment.id) {
+            sendConfirmationEmailTargetAppointmentId = selectedAppointment.id;
+            sendConfirmationEmailOnConfirm = false;
+        }
+    } else if (sendConfirmationEmailTargetAppointmentId || sendConfirmationEmailOnConfirm) {
+        sendConfirmationEmailTargetAppointmentId = "";
+        sendConfirmationEmailOnConfirm = false;
+    }
 
     $: if (selectedAppointment?.id) {
         if (appointmentInternalNotesDraftId !== selectedAppointment.id) {
@@ -508,10 +519,6 @@
 
     function normalizeString(value) {
         return `${value || ""}`.trim();
-    }
-
-    function getNowIsoTimestamp() {
-        return new Date().toISOString();
     }
 
     function normalizeLower(value) {
@@ -2165,32 +2172,48 @@
         });
     }
 
-    async function setSelectedAppointmentStatus(nextStatus) {
+    async function setSelectedAppointmentStatus(nextStatus, options = {}) {
         if (!selectedAppointment?.id || !nextStatus || isUpdatingAppointmentStatus || !appointmentsCollection?.id) {
             return;
         }
 
+        const statusValue = normalizeStatus(nextStatus);
+        const sendEmail = statusValue === "confirmed" ? !!options?.sendEmail : false;
+
         isUpdatingAppointmentStatus = true;
         updatingAppointmentId = selectedAppointment.id;
 
-        const payload = {
-            [appointmentStatusFieldName]: nextStatus,
-        };
-
-        if (nextStatus === "confirmed" && appointmentConfirmedAtFieldName) {
-            payload[appointmentConfirmedAtFieldName] = getNowIsoTimestamp();
-        }
-
-        if (nextStatus === "cancelled" && appointmentCancelledAtFieldName) {
-            payload[appointmentCancelledAtFieldName] = getNowIsoTimestamp();
-        }
-
         try {
-            await ApiClient.collection(appointmentsCollection.id).update(selectedAppointment.id, payload);
+            const response = await ApiClient.send(`/api/nuvio/booking/admin/appointments/${encodeURIComponent(selectedAppointment.id)}/status`, {
+                method: "POST",
+                body: {
+                    status: statusValue,
+                    sendEmail,
+                },
+                requestKey: `nuvio_booking_status_${selectedWebsiteId}_${selectedAppointment.id}`,
+            });
 
-            patchAppointmentRecord(selectedAppointment.id, payload);
+            const resolvedStatus = normalizeStatus(response?.status || statusValue);
+            const patchPayload = {
+                [appointmentStatusFieldName]: resolvedStatus,
+            };
 
-            addSuccessToast(`Appointment marked as ${nextStatus}.`);
+            const confirmedAtValue = normalizeString(response?.confirmedAt);
+            if (confirmedAtValue) {
+                patchPayload[appointmentConfirmedAtFieldName || "confirmedAt"] = confirmedAtValue;
+            }
+
+            const cancelledAtValue = normalizeString(response?.cancelledAt);
+            if (cancelledAtValue) {
+                patchPayload[appointmentCancelledAtFieldName || "cancelledAt"] = cancelledAtValue;
+            }
+
+            patchAppointmentRecord(selectedAppointment.id, patchPayload);
+
+            addSuccessToast(`Appointment marked as ${resolvedStatus}.`);
+            if (normalizeString(response?.warning)) {
+                addErrorToast(normalizeString(response.warning));
+            }
         } catch (err) {
             ApiClient.error(err, false);
             addErrorToast("Unable to update appointment status right now.");
@@ -3115,12 +3138,23 @@
                                 {/if}
 
                                 {#if canSetSelectedAppointmentConfirmed}
+                                    <label class="booking-checkbox-row booking-actions-email-option">
+                                        <input
+                                            type="checkbox"
+                                            checked={sendConfirmationEmailOnConfirm}
+                                            disabled={isUpdatingAppointmentStatus}
+                                            on:change={(event) => {
+                                                sendConfirmationEmailOnConfirm = !!event.currentTarget.checked;
+                                            }}
+                                        />
+                                        <span class="txt-xs txt-hint">Send confirmation email</span>
+                                    </label>
                                     <button
                                         type="button"
                                         class="btn btn-sm"
                                         class:btn-loading={isUpdatingAppointmentStatus && updatingAppointmentId === selectedAppointment.id}
                                         disabled={isUpdatingAppointmentStatus}
-                                        on:click={() => setSelectedAppointmentStatus("confirmed")}
+                                        on:click={() => setSelectedAppointmentStatus("confirmed", { sendEmail: sendConfirmationEmailOnConfirm })}
                                     >
                                         <span class="txt">Confirm appointment</span>
                                     </button>

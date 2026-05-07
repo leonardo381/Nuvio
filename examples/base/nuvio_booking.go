@@ -103,6 +103,11 @@ type nuvioBookingAdminRescheduleAppointmentPayload struct {
 	SendEmail *bool  `json:"sendEmail"`
 }
 
+type nuvioBookingAdminUpdateAppointmentStatusPayload struct {
+	Status    string `json:"status"`
+	SendEmail *bool  `json:"sendEmail"`
+}
+
 // NUVIO CUSTOM START: Booking MVP Phase 3 public booking endpoints.
 func registerNuvioBookingRoutes(e *core.ServeEvent) {
 	bookingGroup := e.Router.Group("/api/nuvio/booking")
@@ -696,29 +701,95 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		}
 
 		if sendConfirmationEmail {
-			visitorOnlyConfig := config
-			visitorOnlyConfig.EmailNotifications = nuvioEmailNotificationsConfig{
-				Enabled: false,
-				To:      []string{},
-				Cc:      []string{},
+			var emailErr error
+
+			if status == "confirmed" {
+				attachments := []nuvioTransactionalEmailAttachment{}
+				durationMinutes, durationErr := parseNuvioBookingServiceDuration(serviceRecord)
+				if durationErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking calendar duration parse failed",
+						"websiteId",
+						websiteID,
+						"appointmentId",
+						appointmentID,
+						"serviceId",
+						serviceID,
+						"error",
+						durationErr.Error(),
+					)
+				} else {
+					attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+						WebsiteName:     resolveWebsiteDisplayName(website),
+						ServiceName:     serviceName,
+						CustomerName:    name,
+						CustomerEmail:   email,
+						CustomerPhone:   phone,
+						Date:            dateValue,
+						Time:            timeValue,
+						DurationMinutes: durationMinutes,
+						Notes:           notes,
+						Location:        resolveNuvioBookingCalendarLocation(website),
+						AppointmentID:   appointmentID,
+					})
+					if calendarErr != nil {
+						e.App.Logger().Error(
+							"NUVIO booking calendar attachment build failed",
+							"websiteId",
+							websiteID,
+							"appointmentId",
+							appointmentID,
+							"error",
+							calendarErr.Error(),
+						)
+					} else if attachment != nil {
+						attachments = append(attachments, *attachment)
+					}
+				}
+
+				emailErr = sendNuvioBookingConfirmedVisitorEmail(
+					e.Request.Context(),
+					website,
+					serviceName,
+					nuvioBookingCreateAppointmentPayload{
+						WebsiteID: websiteID,
+						ServiceID: serviceID,
+						Date:      dateValue,
+						Time:      timeValue,
+						Name:      name,
+						Email:     email,
+						Phone:     phone,
+						Notes:     notes,
+					},
+					attachments,
+				)
+			} else {
+				visitorOnlyConfig := config
+				visitorOnlyConfig.EmailNotifications = nuvioEmailNotificationsConfig{
+					Enabled: false,
+					To:      []string{},
+					Cc:      []string{},
+				}
+
+				emailErr = sendNuvioBookingEmails(
+					e.Request.Context(),
+					website,
+					visitorOnlyConfig,
+					serviceName,
+					nuvioBookingCreateAppointmentPayload{
+						WebsiteID: websiteID,
+						ServiceID: serviceID,
+						Date:      dateValue,
+						Time:      timeValue,
+						Name:      name,
+						Email:     email,
+						Phone:     phone,
+						Notes:     notes,
+					},
+				)
 			}
 
-			if emailErr := sendNuvioBookingEmails(
-				e.Request.Context(),
-				website,
-				visitorOnlyConfig,
-				serviceName,
-				nuvioBookingCreateAppointmentPayload{
-					WebsiteID: websiteID,
-					ServiceID: serviceID,
-					Date:      dateValue,
-					Time:      timeValue,
-					Name:      name,
-					Email:     email,
-					Phone:     phone,
-					Notes:     notes,
-				},
-			); emailErr != nil {
+			if emailErr != nil {
 				e.App.Logger().Error(
 					"NUVIO booking admin confirmation email failed",
 					"websiteId",
@@ -865,6 +936,8 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		oldDateValue := strings.TrimSpace(appointmentRecord.GetString("date"))
 		oldTimeValue := strings.TrimSpace(appointmentRecord.GetString("time"))
 		visitorName := strings.TrimSpace(appointmentRecord.GetString("name"))
+		visitorPhone := strings.TrimSpace(appointmentRecord.GetString("phone"))
+		visitorNotes := strings.TrimSpace(appointmentRecord.GetString("notes"))
 		visitorEmail, hasVisitorEmail := normalizeNuvioEmail(appointmentRecord.GetString("email"))
 
 		rescheduledAt := ""
@@ -1010,6 +1083,49 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			if !hasVisitorEmail {
 				responsePayload["warning"] = "Appointment rescheduled, but customer email is missing."
 			} else {
+				attachments := []nuvioTransactionalEmailAttachment{}
+				durationMinutes, durationErr := parseNuvioBookingServiceDuration(serviceRecord)
+				if durationErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking calendar duration parse failed",
+						"websiteId",
+						websiteID,
+						"appointmentId",
+						appointmentID,
+						"serviceId",
+						serviceID,
+						"error",
+						durationErr.Error(),
+					)
+				} else {
+					attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+						WebsiteName:     resolveWebsiteDisplayName(website),
+						ServiceName:     newServiceName,
+						CustomerName:    visitorName,
+						CustomerEmail:   visitorEmail,
+						CustomerPhone:   visitorPhone,
+						Date:            dateValue,
+						Time:            timeValue,
+						DurationMinutes: durationMinutes,
+						Notes:           visitorNotes,
+						Location:        resolveNuvioBookingCalendarLocation(website),
+						AppointmentID:   appointmentID,
+					})
+					if calendarErr != nil {
+						e.App.Logger().Error(
+							"NUVIO booking calendar attachment build failed",
+							"websiteId",
+							websiteID,
+							"appointmentId",
+							appointmentID,
+							"error",
+							calendarErr.Error(),
+						)
+					} else if attachment != nil {
+						attachments = append(attachments, *attachment)
+					}
+				}
+
 				if emailErr := sendNuvioBookingRescheduleVisitorEmail(
 					e.Request.Context(),
 					website,
@@ -1021,6 +1137,7 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 					newServiceName,
 					dateValue,
 					timeValue,
+					attachments,
 				); emailErr != nil {
 					e.App.Logger().Error(
 						"NUVIO booking reschedule email failed",
@@ -1032,6 +1149,247 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 						emailErr.Error(),
 					)
 					responsePayload["warning"] = "Appointment rescheduled, but confirmation email could not be sent."
+				} else {
+					responsePayload["emailSent"] = true
+				}
+			}
+		}
+
+		return e.JSON(http.StatusOK, responsePayload)
+	})
+
+	bookingAdminGroup.POST("/appointments/{id}/status", func(e *core.RequestEvent) error {
+		appointmentID := strings.TrimSpace(e.Request.PathValue("id"))
+		if appointmentID == "" {
+			appointmentID = strings.TrimSpace(e.Request.URL.Query().Get("id"))
+		}
+		if appointmentID == "" {
+			return e.BadRequestError("Missing appointment id.", nil)
+		}
+
+		payload := nuvioBookingAdminUpdateAppointmentStatusPayload{}
+		if err := e.BindBody(&payload); err != nil {
+			return e.BadRequestError("Invalid appointment status payload.", nil)
+		}
+
+		nextStatus := strings.ToLower(strings.TrimSpace(payload.Status))
+		if nextStatus != "pending" && nextStatus != "confirmed" && nextStatus != "cancelled" {
+			return e.BadRequestError("Status must be pending, confirmed, or cancelled.", nil)
+		}
+
+		sendEmail := false
+		if payload.SendEmail != nil {
+			sendEmail = *payload.SendEmail
+		}
+
+		appointmentRecord, err := e.App.FindRecordById(nuvioAppointmentsCollectionID, appointmentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Appointment not found.", nil)
+			}
+
+			e.App.Logger().Error(
+				"NUVIO booking appointment lookup failed",
+				"appointmentId",
+				appointmentID,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Unable to load appointment right now.", nil)
+		}
+
+		websiteID := strings.TrimSpace(appointmentRecord.GetString("website"))
+		if websiteID == "" {
+			return e.BadRequestError("Appointment website is missing.", nil)
+		}
+
+		serviceID := strings.TrimSpace(appointmentRecord.GetString("service"))
+		dateValue := strings.TrimSpace(appointmentRecord.GetString("date"))
+		timeValue := strings.TrimSpace(appointmentRecord.GetString("time"))
+		visitorName := strings.TrimSpace(appointmentRecord.GetString("name"))
+		visitorPhone := strings.TrimSpace(appointmentRecord.GetString("phone"))
+		visitorNotes := strings.TrimSpace(appointmentRecord.GetString("notes"))
+		visitorEmail, hasVisitorEmail := normalizeNuvioEmail(appointmentRecord.GetString("email"))
+
+		confirmedAt := ""
+		cancelledAt := ""
+
+		transactionErr := e.App.RunInTransaction(func(txApp core.App) error {
+			txAppointmentRecord, err := txApp.FindRecordById(nuvioAppointmentsCollectionID, appointmentID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errNuvioBookingAppointmentNotFound
+				}
+				return err
+			}
+
+			txAppointmentRecord.Set("status", nextStatus)
+
+			nowIso := time.Now().UTC().Format(time.RFC3339)
+			appointmentsCollection, collectionErr := txApp.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
+			if collectionErr == nil {
+				if nextStatus == "confirmed" {
+					confirmedAt = nowIso
+					if appointmentsCollection.Fields.GetByName("confirmedAt") != nil {
+						txAppointmentRecord.Set("confirmedAt", confirmedAt)
+					} else if appointmentsCollection.Fields.GetByName("confirmed_at") != nil {
+						txAppointmentRecord.Set("confirmed_at", confirmedAt)
+					}
+				} else if nextStatus == "cancelled" {
+					cancelledAt = nowIso
+					if appointmentsCollection.Fields.GetByName("cancelledAt") != nil {
+						txAppointmentRecord.Set("cancelledAt", cancelledAt)
+					} else if appointmentsCollection.Fields.GetByName("cancelled_at") != nil {
+						txAppointmentRecord.Set("cancelled_at", cancelledAt)
+					}
+				}
+			}
+
+			if err := txApp.Save(txAppointmentRecord); err != nil {
+				return err
+			}
+
+			return nil
+		})
+
+		if transactionErr != nil {
+			if errors.Is(transactionErr, errNuvioBookingAppointmentNotFound) {
+				return e.NotFoundError("Appointment not found.", nil)
+			}
+
+			e.App.Logger().Error(
+				"NUVIO booking appointment status update failed",
+				"appointmentId",
+				appointmentID,
+				"status",
+				nextStatus,
+				"error",
+				transactionErr.Error(),
+			)
+			return e.InternalServerError("Unable to update appointment status right now.", nil)
+		}
+
+		responsePayload := map[string]any{
+			"ok":            true,
+			"appointmentId": appointmentID,
+			"status":        nextStatus,
+			"emailSent":     false,
+		}
+		if confirmedAt != "" {
+			responsePayload["confirmedAt"] = confirmedAt
+		}
+		if cancelledAt != "" {
+			responsePayload["cancelledAt"] = cancelledAt
+		}
+
+		if nextStatus == "confirmed" && sendEmail {
+			if !hasVisitorEmail {
+				responsePayload["warning"] = "Appointment confirmed, but customer email is missing."
+			} else {
+				website, websiteErr := e.App.FindRecordById(nuvioWebsitesCollectionID, websiteID)
+				if websiteErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking website lookup failed during status email",
+						"appointmentId",
+						appointmentID,
+						"websiteId",
+						websiteID,
+						"error",
+						websiteErr.Error(),
+					)
+				}
+
+				serviceName := "Booking service"
+				attachments := []nuvioTransactionalEmailAttachment{}
+				if serviceID != "" {
+					serviceRecord, serviceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+					if serviceErr != nil {
+						e.App.Logger().Error(
+							"NUVIO booking service lookup failed during status email",
+							"appointmentId",
+							appointmentID,
+							"websiteId",
+							websiteID,
+							"serviceId",
+							serviceID,
+							"error",
+							serviceErr.Error(),
+						)
+					} else {
+						if normalizedName := strings.TrimSpace(serviceRecord.GetString("name")); normalizedName != "" {
+							serviceName = normalizedName
+						}
+
+						durationMinutes, durationErr := parseNuvioBookingServiceDuration(serviceRecord)
+						if durationErr != nil {
+							e.App.Logger().Error(
+								"NUVIO booking calendar duration parse failed",
+								"websiteId",
+								websiteID,
+								"appointmentId",
+								appointmentID,
+								"serviceId",
+								serviceID,
+								"error",
+								durationErr.Error(),
+							)
+						} else {
+							attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+								WebsiteName:     resolveWebsiteDisplayName(website),
+								ServiceName:     serviceName,
+								CustomerName:    visitorName,
+								CustomerEmail:   visitorEmail,
+								CustomerPhone:   visitorPhone,
+								Date:            dateValue,
+								Time:            timeValue,
+								DurationMinutes: durationMinutes,
+								Notes:           visitorNotes,
+								Location:        resolveNuvioBookingCalendarLocation(website),
+								AppointmentID:   appointmentID,
+							})
+							if calendarErr != nil {
+								e.App.Logger().Error(
+									"NUVIO booking calendar attachment build failed",
+									"websiteId",
+									websiteID,
+									"appointmentId",
+									appointmentID,
+									"error",
+									calendarErr.Error(),
+								)
+							} else if attachment != nil {
+								attachments = append(attachments, *attachment)
+							}
+						}
+					}
+				}
+
+				if emailErr := sendNuvioBookingConfirmedVisitorEmail(
+					e.Request.Context(),
+					website,
+					serviceName,
+					nuvioBookingCreateAppointmentPayload{
+						WebsiteID: websiteID,
+						ServiceID: serviceID,
+						Date:      dateValue,
+						Time:      timeValue,
+						Name:      visitorName,
+						Email:     visitorEmail,
+						Phone:     visitorPhone,
+						Notes:     visitorNotes,
+					},
+					attachments,
+				); emailErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking confirmation email failed during status update",
+						"appointmentId",
+						appointmentID,
+						"websiteId",
+						websiteID,
+						"error",
+						emailErr.Error(),
+					)
+					responsePayload["warning"] = "Appointment confirmed, but confirmation email could not be sent."
 				} else {
 					responsePayload["emailSent"] = true
 				}
@@ -1859,6 +2217,87 @@ func buildNuvioBookingContactMessage(
 	return strings.Join(lines, "\n")
 }
 
+func maybeBuildNuvioBookingICSAttachment(
+	payload nuvioBookingCalendarInvitePayload,
+) (*nuvioTransactionalEmailAttachment, error) {
+	content, err := buildNuvioBookingICSContent(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	filename := buildNuvioBookingICSFilename(payload.Date, payload.Time)
+	return &nuvioTransactionalEmailAttachment{
+		Filename:    filename,
+		Content:     content,
+		ContentType: "text/calendar; charset=utf-8; method=REQUEST",
+	}, nil
+}
+
+func resolveNuvioBookingCalendarLocation(website *core.Record) string {
+	if website == nil {
+		return ""
+	}
+
+	candidates := []string{
+		website.GetString("businessAddress"),
+		website.GetString("address"),
+		website.GetString("local_business_address"),
+		website.GetString("localBusinessAddress"),
+	}
+
+	for _, candidate := range candidates {
+		if normalized := strings.TrimSpace(candidate); normalized != "" {
+			return normalized
+		}
+	}
+
+	return ""
+}
+
+func sendNuvioBookingConfirmedVisitorEmail(
+	ctx context.Context,
+	website *core.Record,
+	serviceName string,
+	payload nuvioBookingCreateAppointmentPayload,
+	attachments []nuvioTransactionalEmailAttachment,
+) error {
+	resendConfig, err := loadNuvioResendConfig()
+	if err != nil {
+		return err
+	}
+
+	visitorEmail, ok := normalizeNuvioEmail(payload.Email)
+	if !ok {
+		return fmt.Errorf("invalid visitor email")
+	}
+
+	websiteName := resolveWebsiteDisplayName(website)
+	if websiteName == "" {
+		websiteName = "Website"
+	}
+
+	lines := []string{
+		fmt.Sprintf("Hi %s,", strings.TrimSpace(payload.Name)),
+		"",
+		"Your appointment is confirmed.",
+		fmt.Sprintf("Service: %s", strings.TrimSpace(serviceName)),
+		fmt.Sprintf("Date: %s", strings.TrimSpace(payload.Date)),
+		fmt.Sprintf("Time: %s", strings.TrimSpace(payload.Time)),
+		fmt.Sprintf("Website: %s", websiteName),
+	}
+
+	if notes := strings.TrimSpace(payload.Notes); notes != "" {
+		lines = append(lines, "", "Notes received:", notes)
+	}
+
+	return sendNuvioTransactionalEmailViaResend(ctx, resendConfig, nuvioTransactionalEmailMessage{
+		To:          []string{visitorEmail},
+		Subject:     "Appointment confirmed",
+		Text:        strings.Join(lines, "\n"),
+		Attachments: attachments,
+	})
+}
+
 func sendNuvioBookingEmails(
 	ctx context.Context,
 	website *core.Record,
@@ -1955,6 +2394,7 @@ func sendNuvioBookingRescheduleVisitorEmail(
 	newServiceName string,
 	newDate string,
 	newTime string,
+	attachments []nuvioTransactionalEmailAttachment,
 ) error {
 	resendConfig, err := loadNuvioResendConfig()
 	if err != nil {
@@ -1992,9 +2432,10 @@ func sendNuvioBookingRescheduleVisitorEmail(
 	}
 
 	return sendNuvioTransactionalEmailViaResend(ctx, resendConfig, nuvioTransactionalEmailMessage{
-		To:      []string{normalizedEmail},
-		Subject: "Appointment rescheduled",
-		Text:    strings.Join(lines, "\n"),
+		To:          []string{normalizedEmail},
+		Subject:     "Appointment rescheduled",
+		Text:        strings.Join(lines, "\n"),
+		Attachments: attachments,
 	})
 }
 
