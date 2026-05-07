@@ -394,6 +394,48 @@ export const websiteSettingsSchema = {
                         },
                     ],
                 },
+                {
+                    key: "rules",
+                    label: "Scheduling rules",
+                    type: "object",
+                    editableBy: [ROLE_ADMIN],
+                    hint: "Future-ready rules for upcoming booking slot controls.",
+                    fields: [
+                        {
+                            key: "minNoticeHours",
+                            label: "Minimum notice (hours)",
+                            type: "text",
+                            default: "0",
+                            editableBy: [ROLE_ADMIN],
+                            options: {
+                                pattern: "^[0-9]+$",
+                            },
+                            hint: "0 means no minimum notice. Applied in a later booking phase.",
+                        },
+                        {
+                            key: "bookingWindowDays",
+                            label: "Booking window (days)",
+                            type: "text",
+                            default: "0",
+                            editableBy: [ROLE_ADMIN],
+                            options: {
+                                pattern: "^[0-9]+$",
+                            },
+                            hint: "0 means no forward booking window limit. Applied in a later booking phase.",
+                        },
+                        {
+                            key: "bufferMinutes",
+                            label: "Buffer between appointments (minutes)",
+                            type: "text",
+                            default: "0",
+                            editableBy: [ROLE_ADMIN],
+                            options: {
+                                pattern: "^[0-9]+$",
+                            },
+                            hint: "0 means no slot buffer. Applied in a later booking phase.",
+                        },
+                    ],
+                },
             ],
         },
         {
@@ -803,6 +845,41 @@ function normalizeEmailNotifications(settingsSection, { legacyDestination = "" }
     };
 }
 
+function normalizeNonNegativeInteger(value, fallback = 0) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return Math.max(0, Math.trunc(value));
+    }
+
+    if (typeof value === "string") {
+        const normalized = value.trim();
+        if (!normalized) {
+            return fallback;
+        }
+
+        if (!/^-?\d+$/.test(normalized)) {
+            return fallback;
+        }
+
+        const parsed = Number.parseInt(normalized, 10);
+        if (Number.isFinite(parsed)) {
+            return Math.max(0, parsed);
+        }
+    }
+
+    return fallback;
+}
+
+function normalizeBookingRules(rulesSettings) {
+    const source = isPlainObject(rulesSettings) ? rulesSettings : {};
+
+    return {
+        ...source,
+        minNoticeHours: normalizeNonNegativeInteger(source.minNoticeHours, 0),
+        bookingWindowDays: normalizeNonNegativeInteger(source.bookingWindowDays, 0),
+        bufferMinutes: normalizeNonNegativeInteger(source.bufferMinutes, 0),
+    };
+}
+
 function normalizeContactFormSettings(contactFormSettings) {
     const source = isPlainObject(contactFormSettings) ? contactFormSettings : {};
 
@@ -843,6 +920,7 @@ function normalizeBookingSettings(bookingSettings) {
         emailNotifications: normalizeEmailNotifications(source.emailNotifications, {
             legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
         }),
+        rules: normalizeBookingRules(source.rules),
     };
 }
 

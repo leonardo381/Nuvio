@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -20,19 +21,47 @@ import (
 const (
 	nuvioBookingServicesCollectionID     = "pbc_1661203700"
 	nuvioBookingAvailabilityCollectionID = "pbc_1661203800"
+	nuvioBookingExceptionsCollectionID   = "pbc_1778803400"
 	nuvioAppointmentsCollectionID        = "pbc_1661203900"
 )
 
 var (
-	nuvioBookingDatePattern        = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-	nuvioBookingTimePattern        = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
-	errNuvioBookingSlotUnavailable = errors.New("nuvio booking slot unavailable")
+	nuvioBookingDatePattern             = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	nuvioBookingTimePattern             = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
+	nuvioBookingIntegerValuePattern     = regexp.MustCompile(`^-?\d+$`)
+	errNuvioBookingSlotUnavailable      = errors.New("nuvio booking slot unavailable")
+	errNuvioBookingDateOutsideWindow    = errors.New("nuvio booking date outside window")
+	errNuvioBookingTimeTooSoon          = errors.New("nuvio booking time too soon")
+	errNuvioBookingAppointmentNotFound  = errors.New("nuvio booking appointment not found")
+	errNuvioBookingServiceNotFound      = errors.New("nuvio booking service not found")
+	errNuvioBookingAppointmentCancelled = errors.New("nuvio booking appointment cancelled")
 )
 
 type nuvioWebsiteBookingConfig struct {
 	FeatureAvailable   bool
 	Enabled            bool
 	EmailNotifications nuvioEmailNotificationsConfig
+	Rules              nuvioBookingRulesConfig
+}
+
+type nuvioBookingRulesConfig struct {
+	MinNoticeHours    int
+	BookingWindowDays int
+	BufferMinutes     int
+}
+
+type nuvioBookingDailyRange struct {
+	StartMinutes int
+	EndMinutes   int
+}
+
+type nuvioBookingInterval struct {
+	StartMinutes int
+	EndMinutes   int
+}
+
+type nuvioBookingSlotComputationOptions struct {
+	ExcludeAppointmentID string
 }
 
 type nuvioBookingPublicService struct {
@@ -65,6 +94,13 @@ type nuvioBookingAdminCreateAppointmentPayload struct {
 	Status                string `json:"status"`
 	CreateContact         *bool  `json:"createContact"`
 	SendConfirmationEmail *bool  `json:"sendConfirmationEmail"`
+}
+
+type nuvioBookingAdminRescheduleAppointmentPayload struct {
+	ServiceID string `json:"serviceId"`
+	Date      string `json:"date"`
+	Time      string `json:"time"`
+	SendEmail *bool  `json:"sendEmail"`
 }
 
 // NUVIO CUSTOM START: Booking MVP Phase 3 public booking endpoints.
@@ -168,7 +204,7 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("Service is not available.", nil)
 		}
 
-		slots, err := computeNuvioAvailableSlots(e.App, websiteID, serviceRecord, dateValue)
+		slots, err := computeNuvioAvailableSlots(e.App, websiteID, serviceRecord, dateValue, config.Rules)
 		if err != nil {
 			e.App.Logger().Error(
 				"NUVIO booking slots generation failed",
@@ -290,11 +326,14 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 				return sql.ErrNoRows
 			}
 
-			slots, err := computeNuvioAvailableSlots(txApp, websiteID, txServiceRecord, dateValue)
+			slots, err := computeNuvioAvailableSlots(txApp, websiteID, txServiceRecord, dateValue, config.Rules)
 			if err != nil {
 				return err
 			}
 			if !containsNuvioBookingSlot(slots, timeValue) {
+				if timingErr := validateNuvioBookingSlotTiming(dateValue, timeValue, config.Rules); timingErr != nil {
+					return timingErr
+				}
 				return errNuvioBookingSlotUnavailable
 			}
 
@@ -342,6 +381,20 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		})
 
 		if transactionErr != nil {
+			if errors.Is(transactionErr, errNuvioBookingDateOutsideWindow) {
+				return e.JSON(http.StatusBadRequest, map[string]any{
+					"ok":    false,
+					"error": "This date is outside the booking window.",
+				})
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingTimeTooSoon) {
+				return e.JSON(http.StatusBadRequest, map[string]any{
+					"ok":    false,
+					"error": "This time is too soon to book.",
+				})
+			}
+
 			if errors.Is(transactionErr, errNuvioBookingSlotUnavailable) {
 				return e.JSON(http.StatusConflict, map[string]any{
 					"ok":    false,
@@ -516,11 +569,14 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 				return sql.ErrNoRows
 			}
 
-			slots, err := computeNuvioAvailableSlots(txApp, websiteID, txServiceRecord, dateValue)
+			slots, err := computeNuvioAvailableSlots(txApp, websiteID, txServiceRecord, dateValue, config.Rules)
 			if err != nil {
 				return err
 			}
 			if !containsNuvioBookingSlot(slots, timeValue) {
+				if timingErr := validateNuvioBookingSlotTiming(dateValue, timeValue, config.Rules); timingErr != nil {
+					return timingErr
+				}
 				return errNuvioBookingSlotUnavailable
 			}
 
@@ -540,6 +596,15 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			appointmentRecord.Set("notes", notes)
 			appointmentRecord.Set("status", status)
 
+			if status == "confirmed" {
+				confirmedAt := time.Now().UTC().Format(time.RFC3339)
+				if appointmentsCollection.Fields.GetByName("confirmedAt") != nil {
+					appointmentRecord.Set("confirmedAt", confirmedAt)
+				} else if appointmentsCollection.Fields.GetByName("confirmed_at") != nil {
+					appointmentRecord.Set("confirmed_at", confirmedAt)
+				}
+			}
+
 			if appointmentsCollection.Fields.GetByName("internalNotes") != nil {
 				appointmentRecord.Set("internalNotes", internalNotes)
 			} else if appointmentsCollection.Fields.GetByName("internal_notes") != nil {
@@ -555,6 +620,20 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		})
 
 		if transactionErr != nil {
+			if errors.Is(transactionErr, errNuvioBookingDateOutsideWindow) {
+				return e.JSON(http.StatusBadRequest, map[string]any{
+					"ok":    false,
+					"error": "This date is outside the booking window.",
+				})
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingTimeTooSoon) {
+				return e.JSON(http.StatusBadRequest, map[string]any{
+					"ok":    false,
+					"error": "This time is too soon to book.",
+				})
+			}
+
 			if errors.Is(transactionErr, errNuvioBookingSlotUnavailable) {
 				return e.JSON(http.StatusConflict, map[string]any{
 					"ok":    false,
@@ -661,6 +740,306 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 
 		return e.JSON(http.StatusOK, responsePayload)
 	})
+
+	bookingAdminGroup.POST("/appointments/{id}/reschedule", func(e *core.RequestEvent) error {
+		appointmentID := strings.TrimSpace(e.Request.PathValue("id"))
+		if appointmentID == "" {
+			appointmentID = strings.TrimSpace(e.Request.URL.Query().Get("id"))
+		}
+		if appointmentID == "" {
+			return e.BadRequestError("Missing appointment id.", nil)
+		}
+
+		payload := nuvioBookingAdminRescheduleAppointmentPayload{}
+		if err := e.BindBody(&payload); err != nil {
+			return e.BadRequestError("Invalid reschedule payload.", nil)
+		}
+
+		serviceID := strings.TrimSpace(payload.ServiceID)
+		if serviceID == "" {
+			return e.BadRequestError("Missing serviceId.", nil)
+		}
+
+		dateValue := strings.TrimSpace(payload.Date)
+		if !nuvioBookingDatePattern.MatchString(dateValue) {
+			return e.BadRequestError("Date must use YYYY-MM-DD format.", nil)
+		}
+
+		timeValue := strings.TrimSpace(payload.Time)
+		if !nuvioBookingTimePattern.MatchString(timeValue) {
+			return e.BadRequestError("Time must use HH:mm format.", nil)
+		}
+
+		sendEmail := false
+		if payload.SendEmail != nil {
+			sendEmail = *payload.SendEmail
+		}
+
+		appointmentRecord, err := e.App.FindRecordById(nuvioAppointmentsCollectionID, appointmentID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Appointment not found.", nil)
+			}
+
+			e.App.Logger().Error(
+				"NUVIO booking appointment lookup failed",
+				"appointmentId",
+				appointmentID,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Unable to load appointment right now.", nil)
+		}
+
+		currentStatus := strings.ToLower(strings.TrimSpace(appointmentRecord.GetString("status")))
+		if currentStatus == "" {
+			currentStatus = "pending"
+		}
+		if currentStatus != "pending" && currentStatus != "confirmed" && currentStatus != "cancelled" {
+			currentStatus = "pending"
+		}
+		if currentStatus == "cancelled" {
+			return e.BadRequestError("Cancelled appointments cannot be rescheduled.", nil)
+		}
+
+		websiteID := strings.TrimSpace(appointmentRecord.GetString("website"))
+		if websiteID == "" {
+			return e.BadRequestError("Appointment website is missing.", nil)
+		}
+
+		website, config, err := loadNuvioWebsiteBookingConfig(e.App, websiteID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Website not found.", nil)
+			}
+			return e.BadRequestError("Failed to load Booking settings.", nil)
+		}
+
+		serviceRecord, err := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Service not found.", nil)
+			}
+
+			e.App.Logger().Error(
+				"NUVIO booking reschedule service lookup failed",
+				"appointmentId",
+				appointmentID,
+				"websiteId",
+				websiteID,
+				"serviceId",
+				serviceID,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Unable to load booking service right now.", nil)
+		}
+
+		if strings.TrimSpace(serviceRecord.GetString("website")) != websiteID {
+			return e.NotFoundError("Service not found.", nil)
+		}
+
+		if !isNuvioBookingServiceActive(serviceRecord) {
+			return e.BadRequestError("Service is not available.", nil)
+		}
+
+		newServiceName := strings.TrimSpace(serviceRecord.GetString("name"))
+		if newServiceName == "" {
+			newServiceName = "Booking service"
+		}
+
+		oldServiceID := strings.TrimSpace(appointmentRecord.GetString("service"))
+		oldServiceName := newServiceName
+		if oldServiceID != "" && oldServiceID != serviceID {
+			oldServiceRecord, oldServiceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, oldServiceID)
+			if oldServiceErr == nil {
+				if oldName := strings.TrimSpace(oldServiceRecord.GetString("name")); oldName != "" {
+					oldServiceName = oldName
+				}
+			}
+		}
+		if oldServiceName == "" {
+			oldServiceName = "Booking service"
+		}
+
+		oldDateValue := strings.TrimSpace(appointmentRecord.GetString("date"))
+		oldTimeValue := strings.TrimSpace(appointmentRecord.GetString("time"))
+		visitorName := strings.TrimSpace(appointmentRecord.GetString("name"))
+		visitorEmail, hasVisitorEmail := normalizeNuvioEmail(appointmentRecord.GetString("email"))
+
+		rescheduledAt := ""
+		transactionErr := e.App.RunInTransaction(func(txApp core.App) error {
+			txAppointmentRecord, err := txApp.FindRecordById(nuvioAppointmentsCollectionID, appointmentID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errNuvioBookingAppointmentNotFound
+				}
+				return err
+			}
+
+			txStatus := strings.ToLower(strings.TrimSpace(txAppointmentRecord.GetString("status")))
+			if txStatus == "" {
+				txStatus = "pending"
+			}
+			if txStatus != "pending" && txStatus != "confirmed" && txStatus != "cancelled" {
+				txStatus = "pending"
+			}
+			if txStatus == "cancelled" {
+				return errNuvioBookingAppointmentCancelled
+			}
+
+			txWebsiteID := strings.TrimSpace(txAppointmentRecord.GetString("website"))
+			if txWebsiteID == "" {
+				return errNuvioBookingAppointmentNotFound
+			}
+
+			txServiceRecord, err := txApp.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return errNuvioBookingServiceNotFound
+				}
+				return err
+			}
+
+			if strings.TrimSpace(txServiceRecord.GetString("website")) != txWebsiteID || !isNuvioBookingServiceActive(txServiceRecord) {
+				return errNuvioBookingServiceNotFound
+			}
+
+			slots, err := computeNuvioAvailableSlotsWithOptions(
+				txApp,
+				txWebsiteID,
+				txServiceRecord,
+				dateValue,
+				config.Rules,
+				nuvioBookingSlotComputationOptions{
+					ExcludeAppointmentID: appointmentID,
+				},
+			)
+			if err != nil {
+				return err
+			}
+			if !containsNuvioBookingSlot(slots, timeValue) {
+				if timingErr := validateNuvioBookingSlotTiming(dateValue, timeValue, config.Rules); timingErr != nil {
+					return timingErr
+				}
+				return errNuvioBookingSlotUnavailable
+			}
+
+			txAppointmentRecord.Set("service", serviceID)
+			txAppointmentRecord.Set("date", dateValue)
+			txAppointmentRecord.Set("time", timeValue)
+
+			rescheduledAt = time.Now().UTC().Format(time.RFC3339)
+			appointmentsCollection, collectionErr := txApp.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
+			if collectionErr == nil {
+				if appointmentsCollection.Fields.GetByName("rescheduledAt") != nil {
+					txAppointmentRecord.Set("rescheduledAt", rescheduledAt)
+				} else if appointmentsCollection.Fields.GetByName("rescheduled_at") != nil {
+					txAppointmentRecord.Set("rescheduled_at", rescheduledAt)
+				}
+			}
+
+			if err := txApp.Save(txAppointmentRecord); err != nil {
+				return err
+			}
+
+			return nil
+		})
+
+		if transactionErr != nil {
+			if errors.Is(transactionErr, errNuvioBookingDateOutsideWindow) {
+				return e.JSON(http.StatusBadRequest, map[string]any{
+					"ok":    false,
+					"error": "This date is outside the booking window.",
+				})
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingTimeTooSoon) {
+				return e.JSON(http.StatusBadRequest, map[string]any{
+					"ok":    false,
+					"error": "This time is too soon to book.",
+				})
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingSlotUnavailable) {
+				return e.JSON(http.StatusConflict, map[string]any{
+					"ok":    false,
+					"error": "This time is no longer available. Please choose another time.",
+				})
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingAppointmentCancelled) {
+				return e.BadRequestError("Cancelled appointments cannot be rescheduled.", nil)
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingAppointmentNotFound) {
+				return e.NotFoundError("Appointment not found.", nil)
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingServiceNotFound) {
+				return e.NotFoundError("Service not found.", nil)
+			}
+
+			e.App.Logger().Error(
+				"NUVIO booking appointment reschedule failed",
+				"appointmentId",
+				appointmentID,
+				"websiteId",
+				websiteID,
+				"serviceId",
+				serviceID,
+				"date",
+				dateValue,
+				"time",
+				timeValue,
+				"error",
+				transactionErr.Error(),
+			)
+			return e.InternalServerError("Unable to reschedule appointment right now.", nil)
+		}
+
+		responsePayload := map[string]any{
+			"ok":            true,
+			"appointmentId": appointmentID,
+			"status":        currentStatus,
+			"rescheduledAt": rescheduledAt,
+			"emailSent":     false,
+		}
+
+		if sendEmail {
+			if !hasVisitorEmail {
+				responsePayload["warning"] = "Appointment rescheduled, but customer email is missing."
+			} else {
+				if emailErr := sendNuvioBookingRescheduleVisitorEmail(
+					e.Request.Context(),
+					website,
+					visitorName,
+					visitorEmail,
+					oldServiceName,
+					oldDateValue,
+					oldTimeValue,
+					newServiceName,
+					dateValue,
+					timeValue,
+				); emailErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking reschedule email failed",
+						"appointmentId",
+						appointmentID,
+						"websiteId",
+						websiteID,
+						"error",
+						emailErr.Error(),
+					)
+					responsePayload["warning"] = "Appointment rescheduled, but confirmation email could not be sent."
+				} else {
+					responsePayload["emailSent"] = true
+				}
+			}
+		}
+
+		return e.JSON(http.StatusOK, responsePayload)
+	})
 }
 
 func loadNuvioWebsiteBookingConfig(
@@ -681,6 +1060,11 @@ func loadNuvioWebsiteBookingConfig(
 			To:      []string{},
 			Cc:      []string{},
 		},
+		Rules: nuvioBookingRulesConfig{
+			MinNoticeHours:    0,
+			BookingWindowDays: 0,
+			BufferMinutes:     0,
+		},
 	}
 
 	if featureFlags, ok := toStringAnyMap(settings["featureFlags"]); ok {
@@ -699,6 +1083,7 @@ func loadNuvioWebsiteBookingConfig(
 			bookingSettings["emailNotifications"],
 			legacyDestination,
 		)
+		config.Rules = parseNuvioBookingRulesConfig(bookingSettings["rules"])
 	}
 
 	// Fallback to Contact Form notification recipients when Booking-specific recipients are not configured yet.
@@ -723,6 +1108,106 @@ func loadNuvioWebsiteBookingConfig(
 	}
 
 	return website, config, nil
+}
+
+func parseNuvioBookingRulesConfig(raw any) nuvioBookingRulesConfig {
+	rules := nuvioBookingRulesConfig{
+		MinNoticeHours:    0,
+		BookingWindowDays: 0,
+		BufferMinutes:     0,
+	}
+
+	settings, ok := toStringAnyMap(raw)
+	if !ok {
+		return rules
+	}
+
+	rules.MinNoticeHours = parseNuvioNonNegativeInt(settings["minNoticeHours"], 0)
+	rules.BookingWindowDays = parseNuvioNonNegativeInt(settings["bookingWindowDays"], 0)
+	rules.BufferMinutes = parseNuvioNonNegativeInt(settings["bufferMinutes"], 0)
+	return rules
+}
+
+func parseNuvioNonNegativeInt(raw any, fallback int) int {
+	if fallback < 0 {
+		fallback = 0
+	}
+
+	switch typed := raw.(type) {
+	case int:
+		if typed < 0 {
+			return 0
+		}
+		return typed
+	case int64:
+		if typed < 0 {
+			return 0
+		}
+		return int(typed)
+	case int32:
+		if typed < 0 {
+			return 0
+		}
+		return int(typed)
+	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) {
+			return fallback
+		}
+		if typed != math.Trunc(typed) {
+			return fallback
+		}
+		parsed := int(typed)
+		if parsed < 0 {
+			return 0
+		}
+		return parsed
+	case float32:
+		if math.IsNaN(float64(typed)) || math.IsInf(float64(typed), 0) {
+			return fallback
+		}
+		if float64(typed) != math.Trunc(float64(typed)) {
+			return fallback
+		}
+		parsed := int(typed)
+		if parsed < 0 {
+			return 0
+		}
+		return parsed
+	case string:
+		normalized := strings.TrimSpace(typed)
+		if normalized == "" {
+			return fallback
+		}
+
+		if !nuvioBookingIntegerValuePattern.MatchString(normalized) {
+			return fallback
+		}
+
+		parsed, err := strconv.Atoi(normalized)
+		if err != nil {
+			return fallback
+		}
+
+		if parsed < 0 {
+			return 0
+		}
+		return parsed
+	default:
+		normalized := strings.TrimSpace(parseStringValue(raw))
+		if normalized == "" || !nuvioBookingIntegerValuePattern.MatchString(normalized) {
+			return fallback
+		}
+
+		parsed, err := strconv.Atoi(normalized)
+		if err != nil {
+			return fallback
+		}
+
+		if parsed < 0 {
+			return 0
+		}
+		return parsed
+	}
 }
 
 func listNuvioActiveBookingServices(app core.App, websiteID string) ([]nuvioBookingPublicService, error) {
@@ -802,8 +1287,28 @@ func computeNuvioAvailableSlots(
 	websiteID string,
 	serviceRecord *core.Record,
 	dateValue string,
+	rules nuvioBookingRulesConfig,
 ) ([]string, error) {
-	if !nuvioBookingDatePattern.MatchString(strings.TrimSpace(dateValue)) {
+	return computeNuvioAvailableSlotsWithOptions(
+		app,
+		websiteID,
+		serviceRecord,
+		dateValue,
+		rules,
+		nuvioBookingSlotComputationOptions{},
+	)
+}
+
+func computeNuvioAvailableSlotsWithOptions(
+	app core.App,
+	websiteID string,
+	serviceRecord *core.Record,
+	dateValue string,
+	rules nuvioBookingRulesConfig,
+	options nuvioBookingSlotComputationOptions,
+) ([]string, error) {
+	normalizedDate := strings.TrimSpace(dateValue)
+	if !nuvioBookingDatePattern.MatchString(normalizedDate) {
 		return nil, fmt.Errorf("invalid date format")
 	}
 
@@ -812,53 +1317,83 @@ func computeNuvioAvailableSlots(
 		return nil, fmt.Errorf("missing service id")
 	}
 
-	dayOfWeek, err := dateToNuvioBookingDayOfWeek(dateValue)
-	if err != nil {
-		return nil, err
-	}
-
-	availabilityRecord, err := findNuvioBookingAvailabilityRecord(app, websiteID, dayOfWeek)
-	if err != nil {
-		return nil, err
-	}
-	if availabilityRecord == nil {
-		return []string{}, nil
-	}
-
-	startMinutes, err := parseNuvioBookingHHMM(strings.TrimSpace(availabilityRecord.GetString("startTime")))
-	if err != nil {
-		return nil, err
-	}
-
-	endMinutes, err := parseNuvioBookingHHMM(strings.TrimSpace(availabilityRecord.GetString("endTime")))
-	if err != nil {
-		return nil, err
-	}
-
-	if endMinutes <= startMinutes {
-		return nil, fmt.Errorf("invalid availability range")
-	}
-
 	durationMinutes, err := parseNuvioBookingServiceDuration(serviceRecord)
 	if err != nil {
 		return nil, err
 	}
 
-	candidateSlots := generateNuvioBookingSlots(startMinutes, endMinutes, durationMinutes)
-	if len(candidateSlots) == 0 {
-		return []string{}, nil
-	}
-
-	blockedSlots, err := loadNuvioBlockedAppointmentSlots(app, websiteID, serviceID, dateValue)
+	location := getNuvioBookingLocation()
+	bookingDate, err := parseNuvioBookingDateInLocation(normalizedDate, location)
 	if err != nil {
 		return nil, err
 	}
 
+	now := time.Now().In(location)
+	if isNuvioBookingDateOutsideWindow(bookingDate, now, rules.BookingWindowDays) {
+		return []string{}, nil
+	}
+
+	dailyRange, err := resolveNuvioBookingDailyRange(app, websiteID, normalizedDate)
+	if err != nil {
+		return nil, err
+	}
+	if dailyRange == nil {
+		return []string{}, nil
+	}
+
+	candidateSlots := generateNuvioBookingSlots(dailyRange.StartMinutes, dailyRange.EndMinutes, durationMinutes)
+	if len(candidateSlots) == 0 {
+		return []string{}, nil
+	}
+
+	blockedIntervals, err := loadNuvioBlockedAppointmentIntervals(
+		app,
+		websiteID,
+		serviceID,
+		normalizedDate,
+		durationMinutes,
+		rules.BufferMinutes,
+		options.ExcludeAppointmentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	minAllowed := now
+	if rules.MinNoticeHours > 0 {
+		minAllowed = now.Add(time.Duration(rules.MinNoticeHours) * time.Hour)
+	}
+
 	filtered := make([]string, 0, len(candidateSlots))
 	for _, slot := range candidateSlots {
-		if _, isBlocked := blockedSlots[slot]; isBlocked {
+		slotMinutes, err := parseNuvioBookingHHMM(slot)
+		if err != nil {
 			continue
 		}
+
+		slotStart := time.Date(
+			bookingDate.Year(),
+			bookingDate.Month(),
+			bookingDate.Day(),
+			slotMinutes/60,
+			slotMinutes%60,
+			0,
+			0,
+			location,
+		)
+
+		if slotStart.Before(now) {
+			continue
+		}
+
+		if rules.MinNoticeHours > 0 && slotStart.Before(minAllowed) {
+			continue
+		}
+
+		if shouldNuvioBookingSlotBeBlocked(slotMinutes, durationMinutes, blockedIntervals) {
+			continue
+		}
+
 		filtered = append(filtered, slot)
 	}
 
@@ -893,12 +1428,128 @@ func findNuvioBookingAvailabilityRecord(
 	return record, nil
 }
 
-func loadNuvioBlockedAppointmentSlots(
+func resolveNuvioBookingDailyRange(
+	app core.App,
+	websiteID string,
+	dateValue string,
+) (*nuvioBookingDailyRange, error) {
+	exceptionRecord, err := findNuvioActiveBookingExceptionRecord(app, websiteID, dateValue)
+	if err != nil {
+		return nil, err
+	}
+
+	if exceptionRecord != nil {
+		exceptionType := strings.ToLower(strings.TrimSpace(exceptionRecord.GetString("type")))
+		if exceptionType == "closed" {
+			return nil, nil
+		}
+
+		if exceptionType == "customhours" {
+			startRaw := strings.TrimSpace(exceptionRecord.GetString("startTime"))
+			endRaw := strings.TrimSpace(exceptionRecord.GetString("endTime"))
+
+			startMinutes, startErr := parseNuvioBookingHHMM(startRaw)
+			endMinutes, endErr := parseNuvioBookingHHMM(endRaw)
+			if startErr != nil || endErr != nil || endMinutes <= startMinutes {
+				app.Logger().Error(
+					"NUVIO booking customHours exception is invalid",
+					"websiteId",
+					websiteID,
+					"date",
+					dateValue,
+				)
+				return nil, nil
+			}
+
+			return &nuvioBookingDailyRange{
+				StartMinutes: startMinutes,
+				EndMinutes:   endMinutes,
+			}, nil
+		}
+
+		return nil, nil
+	}
+
+	dayOfWeek, err := dateToNuvioBookingDayOfWeek(dateValue)
+	if err != nil {
+		return nil, err
+	}
+
+	availabilityRecord, err := findNuvioBookingAvailabilityRecord(app, websiteID, dayOfWeek)
+	if err != nil {
+		return nil, err
+	}
+	if availabilityRecord == nil {
+		return nil, nil
+	}
+
+	startMinutes, startErr := parseNuvioBookingHHMM(strings.TrimSpace(availabilityRecord.GetString("startTime")))
+	endMinutes, endErr := parseNuvioBookingHHMM(strings.TrimSpace(availabilityRecord.GetString("endTime")))
+	if startErr != nil || endErr != nil || endMinutes <= startMinutes {
+		app.Logger().Error(
+			"NUVIO booking weekly availability row is invalid",
+			"websiteId",
+			websiteID,
+			"dayOfWeek",
+			dayOfWeek,
+		)
+		return nil, nil
+	}
+
+	return &nuvioBookingDailyRange{
+		StartMinutes: startMinutes,
+		EndMinutes:   endMinutes,
+	}, nil
+}
+
+func findNuvioActiveBookingExceptionRecord(
+	app core.App,
+	websiteID string,
+	dateValue string,
+) (*core.Record, error) {
+	exceptionsCollection, err := app.FindCachedCollectionByNameOrId(nuvioBookingExceptionsCollectionID)
+	if err != nil {
+		return nil, err
+	}
+
+	records, err := app.FindRecordsByFilter(
+		exceptionsCollection,
+		"website={:website} && date={:date} && active=true",
+		"-updated,-created",
+		10,
+		0,
+		dbx.Params{
+			"website": websiteID,
+			"date":    dateValue,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(records) == 0 {
+		return nil, nil
+	}
+
+	return records[0], nil
+}
+
+func loadNuvioBlockedAppointmentIntervals(
 	app core.App,
 	websiteID string,
 	serviceID string,
 	dateValue string,
-) (map[string]struct{}, error) {
+	serviceDurationMinutes int,
+	bufferMinutes int,
+	excludeAppointmentID string,
+) ([]nuvioBookingInterval, error) {
+	if serviceDurationMinutes <= 0 {
+		return []nuvioBookingInterval{}, nil
+	}
+	if bufferMinutes < 0 {
+		bufferMinutes = 0
+	}
+
 	appointmentsCollection, err := app.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
 	if err != nil {
 		return nil, err
@@ -920,8 +1571,12 @@ func loadNuvioBlockedAppointmentSlots(
 		return nil, err
 	}
 
-	blocked := map[string]struct{}{}
+	blocked := make([]nuvioBookingInterval, 0, len(records))
 	for _, record := range records {
+		if strings.TrimSpace(record.Id) != "" && strings.TrimSpace(record.Id) == strings.TrimSpace(excludeAppointmentID) {
+			continue
+		}
+
 		status := strings.ToLower(strings.TrimSpace(record.GetString("status")))
 		if status != "pending" && status != "confirmed" {
 			continue
@@ -932,19 +1587,146 @@ func loadNuvioBlockedAppointmentSlots(
 			continue
 		}
 
-		blocked[timeValue] = struct{}{}
+		appointmentStart, err := parseNuvioBookingHHMM(timeValue)
+		if err != nil {
+			continue
+		}
+
+		blockedStart := appointmentStart - bufferMinutes
+		if blockedStart < 0 {
+			blockedStart = 0
+		}
+
+		blockedEnd := appointmentStart + serviceDurationMinutes + bufferMinutes
+		if blockedEnd > 24*60 {
+			blockedEnd = 24 * 60
+		}
+		if blockedEnd <= blockedStart {
+			continue
+		}
+
+		blocked = append(blocked, nuvioBookingInterval{
+			StartMinutes: blockedStart,
+			EndMinutes:   blockedEnd,
+		})
 	}
+
+	sort.SliceStable(blocked, func(i, j int) bool {
+		return blocked[i].StartMinutes < blocked[j].StartMinutes
+	})
 
 	return blocked, nil
 }
 
-func dateToNuvioBookingDayOfWeek(dateValue string) (string, error) {
+func shouldNuvioBookingSlotBeBlocked(
+	slotStartMinutes int,
+	durationMinutes int,
+	blockedIntervals []nuvioBookingInterval,
+) bool {
+	slotEndMinutes := slotStartMinutes + durationMinutes
+	for _, blockedInterval := range blockedIntervals {
+		if nuvioBookingIntervalsOverlap(slotStartMinutes, slotEndMinutes, blockedInterval.StartMinutes, blockedInterval.EndMinutes) {
+			return true
+		}
+	}
+	return false
+}
+
+func nuvioBookingIntervalsOverlap(
+	startA int,
+	endA int,
+	startB int,
+	endB int,
+) bool {
+	return startA < endB && startB < endA
+}
+
+func getNuvioBookingLocation() *time.Location {
 	location := time.UTC
 	if lisbon, err := time.LoadLocation("Europe/Lisbon"); err == nil && lisbon != nil {
 		location = lisbon
 	}
+	return location
+}
+
+func parseNuvioBookingDateInLocation(dateValue string, location *time.Location) (time.Time, error) {
+	if location == nil {
+		location = getNuvioBookingLocation()
+	}
 
 	date, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(dateValue), location)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date value")
+	}
+
+	return date, nil
+}
+
+func isNuvioBookingDateOutsideWindow(
+	bookingDate time.Time,
+	now time.Time,
+	bookingWindowDays int,
+) bool {
+	if bookingWindowDays <= 0 {
+		return false
+	}
+
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	requestedDate := time.Date(bookingDate.Year(), bookingDate.Month(), bookingDate.Day(), 0, 0, 0, 0, now.Location())
+	lastAllowedDate := today.AddDate(0, 0, bookingWindowDays)
+
+	return requestedDate.After(lastAllowedDate)
+}
+
+func validateNuvioBookingSlotTiming(
+	dateValue string,
+	timeValue string,
+	rules nuvioBookingRulesConfig,
+) error {
+	location := getNuvioBookingLocation()
+	bookingDate, err := parseNuvioBookingDateInLocation(dateValue, location)
+	if err != nil {
+		return fmt.Errorf("invalid date value")
+	}
+
+	now := time.Now().In(location)
+	if isNuvioBookingDateOutsideWindow(bookingDate, now, rules.BookingWindowDays) {
+		return errNuvioBookingDateOutsideWindow
+	}
+
+	slotMinutes, err := parseNuvioBookingHHMM(timeValue)
+	if err != nil {
+		return fmt.Errorf("invalid time value")
+	}
+
+	slotStart := time.Date(
+		bookingDate.Year(),
+		bookingDate.Month(),
+		bookingDate.Day(),
+		slotMinutes/60,
+		slotMinutes%60,
+		0,
+		0,
+		location,
+	)
+
+	if slotStart.Before(now) {
+		return errNuvioBookingTimeTooSoon
+	}
+
+	if rules.MinNoticeHours > 0 {
+		minAllowed := now.Add(time.Duration(rules.MinNoticeHours) * time.Hour)
+		if slotStart.Before(minAllowed) {
+			return errNuvioBookingTimeTooSoon
+		}
+	}
+
+	return nil
+}
+
+func dateToNuvioBookingDayOfWeek(dateValue string) (string, error) {
+	location := getNuvioBookingLocation()
+	date, err := parseNuvioBookingDateInLocation(dateValue, location)
 	if err != nil {
 		return "", fmt.Errorf("invalid date value")
 	}
@@ -1160,6 +1942,60 @@ func sendNuvioBookingEmails(
 	}
 
 	return nil
+}
+
+func sendNuvioBookingRescheduleVisitorEmail(
+	ctx context.Context,
+	website *core.Record,
+	visitorName string,
+	visitorEmail string,
+	oldServiceName string,
+	oldDate string,
+	oldTime string,
+	newServiceName string,
+	newDate string,
+	newTime string,
+) error {
+	resendConfig, err := loadNuvioResendConfig()
+	if err != nil {
+		return err
+	}
+
+	normalizedEmail, ok := normalizeNuvioEmail(visitorEmail)
+	if !ok {
+		return fmt.Errorf("invalid visitor email")
+	}
+
+	websiteName := resolveWebsiteDisplayName(website)
+	if websiteName == "" {
+		websiteName = "Website"
+	}
+
+	name := strings.TrimSpace(visitorName)
+	if name == "" {
+		name = "there"
+	}
+
+	lines := []string{
+		fmt.Sprintf("Hi %s,", name),
+		"",
+		"Your appointment was rescheduled.",
+		"",
+		fmt.Sprintf("Previous service: %s", strings.TrimSpace(oldServiceName)),
+		fmt.Sprintf("Previous date: %s", strings.TrimSpace(oldDate)),
+		fmt.Sprintf("Previous time: %s", strings.TrimSpace(oldTime)),
+		"",
+		fmt.Sprintf("New service: %s", strings.TrimSpace(newServiceName)),
+		fmt.Sprintf("New date: %s", strings.TrimSpace(newDate)),
+		fmt.Sprintf("New time: %s", strings.TrimSpace(newTime)),
+		fmt.Sprintf("Website: %s", websiteName),
+	}
+
+	return sendNuvioTransactionalEmailViaResend(ctx, resendConfig, nuvioTransactionalEmailMessage{
+		To:      []string{normalizedEmail},
+		Subject: "Appointment rescheduled",
+		Text:    strings.Join(lines, "\n"),
+	})
 }
 
 // NUVIO CUSTOM END: Booking MVP Phase 3 public booking endpoints.

@@ -47,21 +47,41 @@
         { key: "sat", label: "Saturday" },
         { key: "sun", label: "Sunday" },
     ];
+    const availabilityTabs = [
+        { key: "weekly", label: "Weekly schedule" },
+        { key: "exceptions", label: "Exceptions" },
+        { key: "rules", label: "Rules" },
+    ];
+    const exceptionTypeFilterOptions = [
+        { key: "all", label: "All" },
+        { key: "closed", label: "Closed" },
+        { key: "customHours", label: "Custom hours" },
+    ];
+    const exceptionActiveFilterOptions = [
+        { key: "all", label: "All" },
+        { key: "active", label: "Active" },
+        { key: "inactive", label: "Inactive" },
+    ];
 
     const appointmentStatusFieldAliases = ["status"];
     const appointmentCustomerNotesFieldAliases = ["notes", "note"];
     const appointmentInternalNotesFieldAliases = ["internalNotes", "internal_notes"];
+    const appointmentConfirmedAtFieldAliases = ["confirmedAt", "confirmed_at"];
+    const appointmentCancelledAtFieldAliases = ["cancelledAt", "cancelled_at"];
+    const appointmentRescheduledAtFieldAliases = ["rescheduledAt", "rescheduled_at"];
     const bookingDatePattern = /^\d{4}-\d{2}-\d{2}$/;
     const bookingTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
     const bookingEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     let activeTab = "appointments";
+    let activeAvailabilityTab = "weekly";
 
     let websites = [];
     let selectedWebsiteId = "";
 
     let servicesRecords = [];
     let availabilityRecords = [];
+    let exceptionsRecords = [];
     let appointmentRecords = [];
 
     let isLoadingWebsites = false;
@@ -90,6 +110,16 @@
     let manualAppointmentAvailableSlots = [];
     let lastManualSlotsQueryKey = "";
     let manualAppointmentForm = createDefaultManualAppointmentForm();
+    let isReschedulePanelOpen = false;
+    let isSavingRescheduleAppointment = false;
+    let isLoadingRescheduleSlots = false;
+    let rescheduleFormError = "";
+    let rescheduleSlotsError = "";
+    let rescheduleAvailableSlots = [];
+    let lastRescheduleSlotsQueryKey = "";
+    let rescheduleSourceAppointment = null;
+    let rescheduleSourceWebsiteId = "";
+    let rescheduleForm = createDefaultRescheduleForm();
 
     let selectedServiceId = "";
     let isSavingService = false;
@@ -112,13 +142,28 @@
     let slotPreviewError = "";
     let isLoadingSlotPreview = false;
     let lastSlotPreviewQueryKey = "";
+    let selectedExceptionId = "";
+    let isCreatingException = false;
+    let exceptionSearch = "";
+    let exceptionTypeFilter = "all";
+    let exceptionActiveFilter = "all";
+    let exceptionForm = createDefaultExceptionForm();
+    let exceptionFormError = "";
+    let isSavingException = false;
+
+    let bookingRulesDraft = createDefaultBookingRulesDraft();
+    let bookingRulesDraftWebsiteId = "";
+    let bookingRulesFormError = "";
+    let isSavingBookingRules = false;
 
     loadCollections();
 
     $: websitesCollection = resolveCollectionByAliases(["websites"]);
     $: bookingServicesCollection = resolveCollectionByAliases(["bookingservices"]);
     $: bookingAvailabilityCollection = resolveCollectionByAliases(["bookingavailability"]);
+    $: bookingExceptionsCollection = resolveCollectionByAliases(["bookingexceptions"]);
     $: appointmentsCollection = resolveCollectionByAliases(["appointments"]);
+    $: websiteSettingsFieldName = resolveCollectionFieldNameByAliases(websitesCollection, ["settings"]) || "settings";
 
     $: hasBookingCollections = !!bookingServicesCollection?.id
         && !!bookingAvailabilityCollection?.id
@@ -127,6 +172,9 @@
     $: appointmentStatusFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentStatusFieldAliases) || "status";
     $: appointmentCustomerNotesFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentCustomerNotesFieldAliases) || "notes";
     $: appointmentInternalNotesFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentInternalNotesFieldAliases) || "internalNotes";
+    $: appointmentConfirmedAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentConfirmedAtFieldAliases) || "";
+    $: appointmentCancelledAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentCancelledAtFieldAliases) || "";
+    $: appointmentRescheduledAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentRescheduledAtFieldAliases) || "";
 
     $: if (!websitesCollection?.id) {
         websites = [];
@@ -145,6 +193,7 @@
         selectedWebsiteId,
         bookingServicesCollection?.id || "",
         bookingAvailabilityCollection?.id || "",
+        bookingExceptionsCollection?.id || "",
         appointmentsCollection?.id || "",
     ].join(":");
 
@@ -158,7 +207,7 @@
     );
 
     $: selectedWebsite = websites.find((website) => website.id === selectedWebsiteId) || null;
-    $: selectedWebsiteBookingSettings = resolveWebsiteBookingSettings(selectedWebsite?.settings);
+    $: selectedWebsiteBookingSettings = resolveWebsiteBookingSettings(selectedWebsite?.[websiteSettingsFieldName]);
 
     $: normalizedAppointments = appointmentRecords.map((record) => normalizeAppointment(record));
 
@@ -167,6 +216,13 @@
     $: thisWeekAppointmentsCount = normalizedAppointments.filter((appointment) => isInCurrentWeek(appointment.date)).length;
     $: activeServicesCount = servicesRecords.filter((service) => !!service?.active).length;
     $: activeAvailabilityDaysCount = availabilityRows.filter((row) => !!row?.active).length;
+    $: normalizedExceptions = normalizeExceptionsRecords(exceptionsRecords);
+    $: activeExceptionsCount = normalizedExceptions.filter((exception) => !!exception.active).length;
+    $: bookingRulesConfiguredCount = [
+        Number(selectedWebsiteBookingSettings?.rules?.minNoticeHours || 0),
+        Number(selectedWebsiteBookingSettings?.rules?.bookingWindowDays || 0),
+        Number(selectedWebsiteBookingSettings?.rules?.bufferMinutes || 0),
+    ].filter((value) => Number.isFinite(value) && value > 0).length;
     $: bookingReadinessWarnings = buildBookingReadinessWarnings({
         activeServicesCount,
         activeAvailabilityDaysCount,
@@ -183,11 +239,15 @@
         bookingWarnings: bookingReadinessWarnings,
         availabilityValidationIssuesCount,
         dirtyAvailabilityRowsCount,
+        activeExceptionsCount,
+        bookingRulesConfiguredCount,
     });
     $: availabilityHealthSuggestions = buildAvailabilityHealthSuggestions({
         bookingSuggestions: bookingReadinessSuggestions,
         dirtyAvailabilityRowsCount,
         availabilityValidationIssuesCount,
+        activeExceptionsCount,
+        bookingRulesConfiguredCount,
     });
     $: availabilityHealthState = resolveBookingReadinessState(availabilityHealthWarnings.length);
     $: normalizedServiceSearch = normalizeLower(serviceSearch);
@@ -238,6 +298,9 @@
     $: manualAppointmentSlotsQueryKey = isManualAppointmentPanelOpen
         ? `${selectedWebsiteId}:${manualAppointmentForm.serviceId}:${manualAppointmentForm.date}`
         : "";
+    $: rescheduleSlotsQueryKey = isReschedulePanelOpen
+        ? `${selectedWebsiteId}:${rescheduleForm.appointmentId}:${rescheduleForm.serviceId}:${rescheduleForm.date}`
+        : "";
     $: slotPreviewQueryKey = activeTab === "availability"
         ? `${selectedWebsiteId}:${slotPreviewServiceId}:${slotPreviewDate}`
         : "";
@@ -255,6 +318,26 @@
     $: if (manualAppointmentSlotsQueryKey !== lastManualSlotsQueryKey) {
         lastManualSlotsQueryKey = manualAppointmentSlotsQueryKey;
         loadManualAppointmentSlots();
+    }
+    $: if (
+        isReschedulePanelOpen
+        && manualAppointmentServiceOptions.length
+        && !manualAppointmentServiceOptions.some((service) => service.id === rescheduleForm.serviceId)
+    ) {
+        rescheduleForm = {
+            ...rescheduleForm,
+            serviceId: manualAppointmentServiceOptions[0].id,
+            time: "",
+        };
+        rescheduleSlotsError = "";
+        rescheduleFormError = "";
+    }
+    $: if (rescheduleSlotsQueryKey !== lastRescheduleSlotsQueryKey) {
+        lastRescheduleSlotsQueryKey = rescheduleSlotsQueryKey;
+        loadRescheduleAppointmentSlots();
+    }
+    $: if (isReschedulePanelOpen && rescheduleSourceWebsiteId && selectedWebsiteId !== rescheduleSourceWebsiteId) {
+        closeReschedulePanel();
     }
     $: if (activeTab === "availability" && !slotPreviewDate) {
         slotPreviewDate = getDefaultSlotPreviewDate();
@@ -274,6 +357,63 @@
     $: if (slotPreviewQueryKey !== lastSlotPreviewQueryKey) {
         lastSlotPreviewQueryKey = slotPreviewQueryKey;
         loadSlotPreview();
+    }
+    $: if (selectedWebsiteId !== bookingRulesDraftWebsiteId) {
+        bookingRulesDraftWebsiteId = selectedWebsiteId;
+        bookingRulesDraft = createBookingRulesDraftFromSettings(selectedWebsiteBookingSettings?.rules);
+        bookingRulesFormError = "";
+    }
+    $: bookingRulesDirty = (() => {
+        const source = selectedWebsiteBookingSettings?.rules || {};
+        const current = createBookingRulesDraftFromSettings(source);
+        return current.minNoticeHours !== normalizeString(bookingRulesDraft.minNoticeHours)
+            || current.bookingWindowDays !== normalizeString(bookingRulesDraft.bookingWindowDays)
+            || current.bufferMinutes !== normalizeString(bookingRulesDraft.bufferMinutes);
+    })();
+    $: if (!isCreatingException && normalizedExceptions.length) {
+        const hasSelectedException = selectedExceptionId
+            && normalizedExceptions.some((exception) => exception.id === selectedExceptionId);
+
+        if (!hasSelectedException) {
+            selectedExceptionId = normalizedExceptions[0].id;
+        }
+    } else if (!normalizedExceptions.length && selectedExceptionId) {
+        selectedExceptionId = "";
+    }
+    $: selectedException = normalizedExceptions.find((exception) => exception.id === selectedExceptionId) || null;
+    $: filteredExceptions = sortExceptions(
+        normalizedExceptions.filter((exception) => {
+            if (exceptionTypeFilter !== "all" && exception.type !== exceptionTypeFilter) {
+                return false;
+            }
+
+            if (exceptionActiveFilter === "active" && !exception.active) {
+                return false;
+            }
+
+            if (exceptionActiveFilter === "inactive" && exception.active) {
+                return false;
+            }
+
+            const normalizedQuery = normalizeLower(exceptionSearch);
+            if (normalizedQuery) {
+                const searchable = [exception.date, exception.note, exception.typeLabel]
+                    .filter(Boolean)
+                    .join(" ")
+                    .toLowerCase();
+                if (!searchable.includes(normalizedQuery)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }),
+    );
+    $: if (selectedException?.id) {
+        if (exceptionForm.id !== selectedException.id) {
+            exceptionForm = createExceptionFormFromRecord(selectedException);
+            exceptionFormError = "";
+        }
     }
 
     $: normalizedAppointmentSearch = normalizeLower(appointmentSearch);
@@ -328,12 +468,20 @@
 
     $: selectedAppointment = filteredAppointments.find((appointment) => appointment.id === selectedAppointmentId) || null;
     $: selectedAppointmentStatusKey = selectedAppointment?.statusKey || "";
+    $: selectedAppointmentDurationMinutes = resolveAppointmentDurationMinutes(selectedAppointment);
+    $: selectedAppointmentGoogleCalendar = buildGoogleCalendarEventForAppointment(
+        selectedAppointment,
+        selectedWebsite,
+        selectedAppointmentDurationMinutes,
+    );
 
     $: canSetSelectedAppointmentPending = !!selectedAppointment
         && selectedAppointmentStatusKey !== "pending";
     $: canSetSelectedAppointmentConfirmed = !!selectedAppointment
         && selectedAppointmentStatusKey === "pending";
     $: canSetSelectedAppointmentCancelled = !!selectedAppointment
+        && (selectedAppointmentStatusKey === "pending" || selectedAppointmentStatusKey === "confirmed");
+    $: canRescheduleSelectedAppointment = !!selectedAppointment
         && (selectedAppointmentStatusKey === "pending" || selectedAppointmentStatusKey === "confirmed");
 
     $: if (selectedAppointment?.id) {
@@ -360,6 +508,10 @@
 
     function normalizeString(value) {
         return `${value || ""}`.trim();
+    }
+
+    function getNowIsoTimestamp() {
+        return new Date().toISOString();
     }
 
     function normalizeLower(value) {
@@ -409,6 +561,32 @@
             if (normalized === "false") {
                 return false;
             }
+        }
+
+        return fallback;
+    }
+
+    function readNonNegativeInteger(value, fallback = 0) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+            return Math.max(0, Math.trunc(value));
+        }
+
+        if (typeof value === "string") {
+            const normalized = value.trim();
+            if (!normalized) {
+                return fallback;
+            }
+
+            if (!/^-?\d+$/.test(normalized)) {
+                return fallback;
+            }
+
+            const parsed = Number.parseInt(normalized, 10);
+            if (!Number.isFinite(parsed)) {
+                return fallback;
+            }
+
+            return Math.max(0, parsed);
         }
 
         return fallback;
@@ -476,6 +654,15 @@
         };
     }
 
+    function parseBookingRules(rawRules) {
+        const source = readObject(rawRules);
+        return {
+            minNoticeHours: readNonNegativeInteger(source.minNoticeHours, 0),
+            bookingWindowDays: readNonNegativeInteger(source.bookingWindowDays, 0),
+            bufferMinutes: readNonNegativeInteger(source.bufferMinutes, 0),
+        };
+    }
+
     function resolveWebsiteBookingSettings(rawSettings) {
         const settings = parseSettingsObject(rawSettings);
         const featureFlags = readObject(settings.featureFlags);
@@ -484,6 +671,7 @@
 
         const bookingFeatureAvailable = readBoolean(featureFlags.booking, true);
         const bookingEnabled = readBoolean(booking.enabled, true);
+        const rules = parseBookingRules(booking.rules);
 
         const bookingNotifications = parseEmailNotifications(
             booking.emailNotifications,
@@ -516,12 +704,119 @@
         return {
             featureAvailable: bookingFeatureAvailable,
             enabled: bookingEnabled,
+            rules,
             bookingNotifications,
             contactNotifications,
             effectiveNotifications,
             usingContactFormFallback,
             businessNotificationsReady,
         };
+    }
+
+    function createDefaultExceptionForm() {
+        return {
+            id: "",
+            date: "",
+            type: "closed",
+            startTime: "09:00",
+            endTime: "17:00",
+            note: "",
+            active: true,
+        };
+    }
+
+    function normalizeExceptionType(value) {
+        const normalized = normalizeLower(value);
+        if (normalized === "customhours") {
+            return "customHours";
+        }
+        return "closed";
+    }
+
+    function normalizeExceptionRecord(record) {
+        const type = normalizeExceptionType(record?.type);
+        const startTime = normalizeString(record?.startTime);
+        const endTime = normalizeString(record?.endTime);
+        const note = normalizeString(record?.note);
+        const active = !!record?.active;
+
+        return {
+            ...record,
+            id: normalizeString(record?.id),
+            date: normalizeString(record?.date),
+            type,
+            typeLabel: type === "customHours" ? "Custom hours" : "Closed",
+            startTime,
+            endTime,
+            note,
+            active,
+            timeRangeLabel: type === "customHours" && startTime && endTime
+                ? `${startTime} - ${endTime}`
+                : "Closed all day",
+        };
+    }
+
+    function normalizeExceptionsRecords(records = []) {
+        if (!Array.isArray(records)) {
+            return [];
+        }
+
+        return records
+            .map((record) => normalizeExceptionRecord(record))
+            .filter((record) => !!record.id);
+    }
+
+    function sortExceptions(list = []) {
+        return [...list].sort((a, b) => {
+            const firstDate = normalizeString(a?.date);
+            const secondDate = normalizeString(b?.date);
+
+            if (firstDate !== secondDate) {
+                return secondDate.localeCompare(firstDate);
+            }
+
+            return toTimestamp(b?.updated || b?.created) - toTimestamp(a?.updated || a?.created);
+        });
+    }
+
+    function createExceptionFormFromRecord(record) {
+        const normalized = normalizeExceptionRecord(record || {});
+        return {
+            id: normalized.id,
+            date: normalized.date,
+            type: normalized.type,
+            startTime: normalized.startTime || "09:00",
+            endTime: normalized.endTime || "17:00",
+            note: normalized.note,
+            active: normalized.active,
+        };
+    }
+
+    function createBookingRulesDraftFromSettings(rules = {}) {
+        const source = isPlainObject(rules) ? rules : {};
+        return {
+            minNoticeHours: `${readNonNegativeInteger(source.minNoticeHours, 0)}`,
+            bookingWindowDays: `${readNonNegativeInteger(source.bookingWindowDays, 0)}`,
+            bufferMinutes: `${readNonNegativeInteger(source.bufferMinutes, 0)}`,
+        };
+    }
+
+    function parseRulesDraftField(value, label) {
+        const normalized = normalizeString(value);
+        if (!normalized) {
+            return 0;
+        }
+
+        if (!/^-?\d+$/.test(normalized)) {
+            throw new Error(`${label} must be a whole number.`);
+        }
+
+        const parsed = Number.parseInt(normalized, 10);
+        if (!Number.isFinite(parsed)) {
+            throw new Error(`${label} must be a whole number.`);
+        }
+
+        return Math.max(0, parsed);
     }
 
     function getDefaultSlotPreviewDate() {
@@ -563,6 +858,16 @@
         };
     }
 
+    function createDefaultRescheduleForm() {
+        return {
+            appointmentId: "",
+            serviceId: "",
+            date: "",
+            time: "",
+            sendEmail: false,
+        };
+    }
+
     function resetManualAppointmentForm() {
         manualAppointmentForm = createDefaultManualAppointmentForm();
         manualAppointmentFormError = "";
@@ -594,6 +899,56 @@
         resetManualAppointmentForm();
     }
 
+    function resetRescheduleForm() {
+        rescheduleForm = createDefaultRescheduleForm();
+        rescheduleFormError = "";
+        rescheduleSlotsError = "";
+        rescheduleAvailableSlots = [];
+        lastRescheduleSlotsQueryKey = "";
+    }
+
+    function openReschedulePanel() {
+        if (!selectedAppointment?.id) {
+            return;
+        }
+
+        if (!canRescheduleSelectedAppointment) {
+            addErrorToast("Only pending or confirmed appointments can be rescheduled.");
+            return;
+        }
+
+        const defaultServiceId = normalizeString(selectedAppointment.serviceId);
+        const fallbackServiceId = manualAppointmentServiceOptions[0]?.id || "";
+        const hasDefaultService = !!defaultServiceId
+            && manualAppointmentServiceOptions.some((service) => service.id === defaultServiceId);
+        const initialServiceId = hasDefaultService ? defaultServiceId : fallbackServiceId;
+        rescheduleSourceAppointment = {
+            id: selectedAppointment.id,
+            serviceLabel: selectedAppointment.serviceLabel,
+            date: selectedAppointment.date,
+            time: selectedAppointment.time,
+        };
+        rescheduleSourceWebsiteId = selectedWebsiteId;
+        resetRescheduleForm();
+        rescheduleForm = {
+            appointmentId: selectedAppointment.id,
+            serviceId: initialServiceId,
+            date: normalizeString(selectedAppointment.date),
+            time: "",
+            sendEmail: false,
+        };
+        isReschedulePanelOpen = true;
+    }
+
+    function closeReschedulePanel() {
+        isReschedulePanelOpen = false;
+        isSavingRescheduleAppointment = false;
+        isLoadingRescheduleSlots = false;
+        rescheduleSourceAppointment = null;
+        rescheduleSourceWebsiteId = "";
+        resetRescheduleForm();
+    }
+
     function setManualAppointmentService(serviceId) {
         manualAppointmentForm = {
             ...manualAppointmentForm,
@@ -602,6 +957,16 @@
         };
         manualAppointmentFormError = "";
         manualAppointmentSlotsError = "";
+    }
+
+    function setRescheduleService(serviceId) {
+        rescheduleForm = {
+            ...rescheduleForm,
+            serviceId: normalizeString(serviceId),
+            time: "",
+        };
+        rescheduleFormError = "";
+        rescheduleSlotsError = "";
     }
 
     function setManualAppointmentDate(dateValue) {
@@ -614,12 +979,30 @@
         manualAppointmentSlotsError = "";
     }
 
+    function setRescheduleDate(dateValue) {
+        rescheduleForm = {
+            ...rescheduleForm,
+            date: normalizeString(dateValue),
+            time: "",
+        };
+        rescheduleFormError = "";
+        rescheduleSlotsError = "";
+    }
+
     function selectManualAppointmentSlot(slot) {
         manualAppointmentForm = {
             ...manualAppointmentForm,
             time: normalizeString(slot),
         };
         manualAppointmentFormError = "";
+    }
+
+    function selectRescheduleSlot(slot) {
+        rescheduleForm = {
+            ...rescheduleForm,
+            time: normalizeString(slot),
+        };
+        rescheduleFormError = "";
     }
 
     function normalizeRelationId(value) {
@@ -723,8 +1106,13 @@
         if (!selectedWebsiteId || !hasBookingCollections) {
             servicesRecords = [];
             availabilityRecords = [];
+            exceptionsRecords = [];
             appointmentRecords = [];
             availabilityRows = createDefaultAvailabilityRows();
+            selectedExceptionId = "";
+            isCreatingException = false;
+            exceptionForm = createDefaultExceptionForm();
+            exceptionFormError = "";
             return;
         }
 
@@ -733,7 +1121,7 @@
 
         try {
             const filter = `website="${selectedWebsiteId}"`;
-            const [services, availability, appointments] = await Promise.all([
+            const [services, availability, exceptions, appointments] = await Promise.all([
                 ApiClient.collection(bookingServicesCollection.id).getFullList({
                     filter,
                     sort: "+name",
@@ -744,6 +1132,13 @@
                     sort: "-created",
                     requestKey: `nuvio_booking_availability_${selectedWebsiteId}`,
                 }),
+                bookingExceptionsCollection?.id
+                    ? ApiClient.collection(bookingExceptionsCollection.id).getFullList({
+                        filter,
+                        sort: "-date,-updated,-created",
+                        requestKey: `nuvio_booking_exceptions_${selectedWebsiteId}`,
+                    })
+                    : Promise.resolve([]),
                 ApiClient.collection(appointmentsCollection.id).getFullList({
                     filter,
                     sort: "-created",
@@ -754,8 +1149,13 @@
 
             servicesRecords = services;
             availabilityRecords = availability;
+            exceptionsRecords = Array.isArray(exceptions) ? exceptions : [];
             appointmentRecords = appointments;
             availabilityRows = createAvailabilityRowsFromRecords(availabilityRecords);
+            selectedExceptionId = "";
+            exceptionForm = createDefaultExceptionForm();
+            exceptionFormError = "";
+            isCreatingException = false;
             isSavingAvailability = {};
 
             const hasSelectedService = !!selectedServiceId
@@ -774,8 +1174,10 @@
             addErrorToast("Unable to load booking data right now.");
             servicesRecords = [];
             availabilityRecords = [];
+            exceptionsRecords = [];
             appointmentRecords = [];
             availabilityRows = createDefaultAvailabilityRows();
+            isCreatingException = false;
         }
 
         isLoadingBookingData = false;
@@ -904,6 +1306,77 @@
         }
     }
 
+    async function loadRescheduleAppointmentSlots() {
+        if (!isReschedulePanelOpen) {
+            rescheduleAvailableSlots = [];
+            rescheduleSlotsError = "";
+            return;
+        }
+
+        const appointmentId = normalizeString(rescheduleForm.appointmentId);
+        const serviceId = normalizeString(rescheduleForm.serviceId);
+        const dateValue = normalizeString(rescheduleForm.date);
+        const hasValidService = manualAppointmentServiceOptions.some((service) => service.id === serviceId);
+        const requestScopeKey = `${selectedWebsiteId}:${appointmentId}:${serviceId}:${dateValue}`;
+
+        if (!selectedWebsiteId || !appointmentId || !serviceId || !hasValidService || !bookingDatePattern.test(dateValue)) {
+            rescheduleAvailableSlots = [];
+            rescheduleSlotsError = "";
+            isLoadingRescheduleSlots = false;
+            return;
+        }
+
+        isLoadingRescheduleSlots = true;
+        rescheduleSlotsError = "";
+
+        try {
+            const query = new URLSearchParams({
+                websiteId: selectedWebsiteId,
+                serviceId,
+                date: dateValue,
+            });
+
+            const response = await ApiClient.send(`/api/nuvio/booking/slots?${query.toString()}`, {
+                method: "GET",
+                requestKey: `nuvio_booking_reschedule_slots_${selectedWebsiteId}_${appointmentId}_${serviceId}_${dateValue}`,
+            });
+
+            const slots = Array.isArray(response?.slots)
+                ? response.slots.map((slot) => normalizeString(slot)).filter((slot) => bookingTimePattern.test(slot))
+                : [];
+
+            if (!isReschedulePanelOpen || rescheduleSlotsQueryKey !== requestScopeKey) {
+                return;
+            }
+
+            rescheduleAvailableSlots = slots;
+
+            if (!slots.includes(normalizeString(rescheduleForm.time))) {
+                rescheduleForm = {
+                    ...rescheduleForm,
+                    time: "",
+                };
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+
+            if (!isReschedulePanelOpen || rescheduleSlotsQueryKey !== requestScopeKey) {
+                return;
+            }
+
+            rescheduleAvailableSlots = [];
+            rescheduleSlotsError = "Unable to load available times right now.";
+            rescheduleForm = {
+                ...rescheduleForm,
+                time: "",
+            };
+        } finally {
+            if (isReschedulePanelOpen && rescheduleSlotsQueryKey === requestScopeKey) {
+                isLoadingRescheduleSlots = false;
+            }
+        }
+    }
+
     function validateManualAppointmentForm() {
         const serviceId = normalizeString(manualAppointmentForm.serviceId);
         const dateValue = normalizeString(manualAppointmentForm.date);
@@ -946,6 +1419,44 @@
 
         if (!["pending", "confirmed"].includes(statusValue)) {
             return "Status must be pending or confirmed.";
+        }
+
+        return "";
+    }
+
+    function validateRescheduleForm() {
+        const appointmentId = normalizeString(rescheduleForm.appointmentId);
+        const serviceId = normalizeString(rescheduleForm.serviceId);
+        const dateValue = normalizeString(rescheduleForm.date);
+        const timeValue = normalizeString(rescheduleForm.time);
+        const hasValidService = manualAppointmentServiceOptions.some((service) => service.id === serviceId);
+
+        if (!selectedWebsiteId) {
+            return "Select a website before rescheduling.";
+        }
+
+        if (!appointmentId) {
+            return "Select an appointment to reschedule.";
+        }
+
+        if (!serviceId || !hasValidService) {
+            return "Service is required.";
+        }
+
+        if (!bookingDatePattern.test(dateValue)) {
+            return "Date is required.";
+        }
+
+        if (!timeValue || !bookingTimePattern.test(timeValue)) {
+            return "Select an available time.";
+        }
+
+        if (
+            Array.isArray(rescheduleAvailableSlots)
+            && rescheduleAvailableSlots.length
+            && !rescheduleAvailableSlots.includes(timeValue)
+        ) {
+            return "Select an available time.";
         }
 
         return "";
@@ -1014,6 +1525,61 @@
             }
         } finally {
             isCreatingManualAppointment = false;
+        }
+    }
+
+    async function saveRescheduledAppointment() {
+        if (isSavingRescheduleAppointment || isLoadingRescheduleSlots) {
+            return;
+        }
+
+        const validationError = validateRescheduleForm();
+        if (validationError) {
+            rescheduleFormError = validationError;
+            return;
+        }
+
+        const appointmentId = normalizeString(rescheduleForm.appointmentId);
+
+        isSavingRescheduleAppointment = true;
+        rescheduleFormError = "";
+
+        const payload = {
+            serviceId: normalizeString(rescheduleForm.serviceId),
+            date: normalizeString(rescheduleForm.date),
+            time: normalizeString(rescheduleForm.time),
+            sendEmail: !!rescheduleForm.sendEmail,
+        };
+
+        try {
+            const response = await ApiClient.send(`/api/nuvio/booking/admin/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
+                method: "POST",
+                body: payload,
+                requestKey: `nuvio_booking_reschedule_${selectedWebsiteId}_${appointmentId}`,
+            });
+
+            await loadBookingData();
+            selectedAppointmentId = appointmentId;
+            closeReschedulePanel();
+            addSuccessToast("Appointment rescheduled.");
+
+            if (normalizeString(response?.warning)) {
+                addErrorToast(normalizeString(response.warning));
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+
+            const statusCode = (err?.status << 0) || 0;
+            const conflictMessage = "This time is no longer available. Please choose another time.";
+            if (statusCode === 409) {
+                rescheduleFormError = conflictMessage;
+                addErrorToast(conflictMessage);
+                await loadRescheduleAppointmentSlots();
+            } else {
+                addErrorToast("Unable to reschedule appointment right now.");
+            }
+        } finally {
+            isSavingRescheduleAppointment = false;
         }
     }
 
@@ -1105,6 +1671,189 @@
         const dateLabel = formatDate(dateValue);
         const timeLabel = normalizeString(timeValue) || "--:--";
         return `${dateLabel} at ${timeLabel}`;
+    }
+
+    function resolveAppointmentDurationMinutes(appointment) {
+        if (!appointment) {
+            return 0;
+        }
+
+        const serviceId = normalizeString(appointment.serviceId);
+        const serviceRecord = servicesRecords.find((service) => normalizeString(service?.id) === serviceId);
+        const candidates = [
+            serviceRecord?.durationMinutes,
+            appointment?.expand?.service?.durationMinutes,
+            Array.isArray(appointment?.expand?.service) ? appointment.expand.service[0]?.durationMinutes : "",
+        ];
+
+        for (const candidate of candidates) {
+            const parsed = Number.parseInt(`${candidate || ""}`.trim(), 10);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+
+        return 0;
+    }
+
+    function parseGoogleCalendarDateTime(dateValue, timeValue) {
+        const dateMatch = normalizeString(dateValue).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        const timeMatch = normalizeString(timeValue).match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+        if (!dateMatch || !timeMatch) {
+            return null;
+        }
+
+        const year = Number.parseInt(dateMatch[1], 10);
+        const month = Number.parseInt(dateMatch[2], 10);
+        const day = Number.parseInt(dateMatch[3], 10);
+        const hour = Number.parseInt(timeMatch[1], 10);
+        const minute = Number.parseInt(timeMatch[2], 10);
+        if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(hour) || !Number.isFinite(minute)) {
+            return null;
+        }
+
+        return new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+    }
+
+    function formatGoogleCalendarDateTimeValue(value) {
+        if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+            return "";
+        }
+
+        const year = `${value.getUTCFullYear()}`;
+        const month = `${value.getUTCMonth() + 1}`.padStart(2, "0");
+        const day = `${value.getUTCDate()}`.padStart(2, "0");
+        const hours = `${value.getUTCHours()}`.padStart(2, "0");
+        const minutes = `${value.getUTCMinutes()}`.padStart(2, "0");
+        const seconds = `${value.getUTCSeconds()}`.padStart(2, "0");
+        return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+    }
+
+    function resolveGoogleCalendarLocation(website) {
+        const source = isPlainObject(website) ? website : {};
+
+        const directCandidates = [
+            source.businessAddress,
+            source.address,
+            source.addressLine1,
+            source.localBusinessAddress,
+            source.local_business_address,
+            source.localBusinessStreetAddress,
+        ]
+            .map((value) => normalizeString(value))
+            .filter(Boolean);
+
+        if (directCandidates.length) {
+            return directCandidates[0];
+        }
+
+        const localParts = [
+            source.localBusinessStreet,
+            source.local_business_street,
+            source.localBusinessCity,
+            source.local_business_city,
+            source.localBusinessRegion,
+            source.local_business_region,
+            source.localBusinessPostalCode,
+            source.local_business_postal_code,
+            source.localBusinessCountry,
+            source.local_business_country,
+        ]
+            .map((value) => normalizeString(value))
+            .filter(Boolean);
+
+        return localParts.join(", ");
+    }
+
+    function buildGoogleCalendarEventForAppointment(appointment, website, durationMinutes) {
+        const base = {
+            available: false,
+            href: "",
+            helper: "",
+        };
+
+        if (!appointment) {
+            return base;
+        }
+
+        const duration = Number.parseInt(`${durationMinutes || 0}`, 10);
+        if (!Number.isFinite(duration) || duration <= 0) {
+            return {
+                ...base,
+                helper: "Service duration is required to add this appointment to Google Calendar.",
+            };
+        }
+
+        const startDate = parseGoogleCalendarDateTime(appointment.date, appointment.time);
+        if (!startDate) {
+            return {
+                ...base,
+                helper: "Date and time are required to add this appointment to Google Calendar.",
+            };
+        }
+
+        const endDate = new Date(startDate.getTime() + duration * 60 * 1000);
+        const startValue = formatGoogleCalendarDateTimeValue(startDate);
+        const endValue = formatGoogleCalendarDateTimeValue(endDate);
+        if (!startValue || !endValue) {
+            return base;
+        }
+
+        const customerName = normalizeString(appointment.name);
+        const serviceLabel = normalizeString(appointment.serviceLabel);
+        const hasServiceLabel = serviceLabel && normalizeLower(serviceLabel) !== "service not found";
+
+        let title = "Appointment";
+        if (hasServiceLabel && customerName) {
+            title = `${serviceLabel} - ${customerName}`;
+        } else if (customerName) {
+            title = `Appointment - ${customerName}`;
+        }
+
+        const detailsLines = [];
+        if (customerName) {
+            detailsLines.push(`Customer: ${customerName}`);
+        }
+        if (normalizeString(appointment.email)) {
+            detailsLines.push(`Email: ${normalizeString(appointment.email)}`);
+        }
+        if (normalizeString(appointment.phone)) {
+            detailsLines.push(`Phone: ${normalizeString(appointment.phone)}`);
+        }
+        if (normalizeString(appointment.customerNotes)) {
+            detailsLines.push("", "Customer notes:", normalizeString(appointment.customerNotes));
+        }
+        detailsLines.push("", "Source: Nuvio Booking");
+
+        const params = new URLSearchParams();
+        params.set("action", "TEMPLATE");
+        params.set("text", title);
+        params.set("dates", `${startValue}/${endValue}`);
+        params.set("details", detailsLines.join("\n"));
+        params.set("ctz", "Europe/Lisbon");
+
+        const location = resolveGoogleCalendarLocation(website);
+        if (location) {
+            params.set("location", location);
+        }
+
+        return {
+            available: true,
+            href: `https://calendar.google.com/calendar/render?${params.toString()}`,
+            helper: "Opens Google Calendar with this appointment pre-filled.",
+        };
+    }
+
+    function openGoogleCalendarForSelectedAppointment() {
+        const targetUrl = normalizeString(selectedAppointmentGoogleCalendar?.href);
+        if (!targetUrl || !selectedAppointmentGoogleCalendar?.available) {
+            return;
+        }
+
+        const openedWindow = window.open(targetUrl, "_blank", "noopener,noreferrer");
+        if (openedWindow) {
+            openedWindow.opener = null;
+        }
     }
 
     function getStatusMeta(statusKey) {
@@ -1215,6 +1964,8 @@
         bookingWarnings = [],
         availabilityValidationIssuesCount = 0,
         dirtyAvailabilityRowsCount = 0,
+        activeExceptionsCount = 0,
+        bookingRulesConfiguredCount = 0,
     } = {}) {
         const warnings = Array.isArray(bookingWarnings) ? [...bookingWarnings] : [];
 
@@ -1228,6 +1979,14 @@
             warnings.push("There are unsaved availability changes.");
         }
 
+        if (activeExceptionsCount <= 0) {
+            warnings.push("No active exceptions are configured for special dates.");
+        }
+
+        if (bookingRulesConfiguredCount <= 0) {
+            warnings.push("Booking rules are all set to default values.");
+        }
+
         return [...new Set(warnings)];
     }
 
@@ -1235,6 +1994,8 @@
         bookingSuggestions = [],
         dirtyAvailabilityRowsCount = 0,
         availabilityValidationIssuesCount = 0,
+        activeExceptionsCount = 0,
+        bookingRulesConfiguredCount = 0,
     } = {}) {
         const suggestions = Array.isArray(bookingSuggestions) ? [...bookingSuggestions] : [];
 
@@ -1244,6 +2005,14 @@
 
         if (availabilityValidationIssuesCount > 0) {
             suggestions.unshift("Fix active day time ranges where end time is not after start time.");
+        }
+
+        if (activeExceptionsCount <= 0) {
+            suggestions.push("Add exceptions for holidays, closed dates, or custom special-day hours.");
+        }
+
+        if (bookingRulesConfiguredCount <= 0) {
+            suggestions.push("Review booking rules to set minimum notice, booking window, and slot buffer.");
         }
 
         if (!dirtyAvailabilityRowsCount && !availabilityValidationIssuesCount) {
@@ -1279,6 +2048,15 @@
             time: normalizeString(record?.time),
             customerNotes: normalizeString(record?.[appointmentCustomerNotesFieldName]),
             internalNotes: normalizeString(record?.[appointmentInternalNotesFieldName]),
+            confirmedAt: appointmentConfirmedAtFieldName
+                ? normalizeString(record?.[appointmentConfirmedAtFieldName])
+                : normalizeString(record?.confirmedAt || record?.confirmed_at),
+            cancelledAt: appointmentCancelledAtFieldName
+                ? normalizeString(record?.[appointmentCancelledAtFieldName])
+                : normalizeString(record?.cancelledAt || record?.cancelled_at),
+            rescheduledAt: appointmentRescheduledAtFieldName
+                ? normalizeString(record?.[appointmentRescheduledAtFieldName])
+                : normalizeString(record?.rescheduledAt || record?.rescheduled_at),
             statusKey,
             statusLabel: statusMeta.label,
             statusClassName: statusMeta.className,
@@ -1395,14 +2173,22 @@
         isUpdatingAppointmentStatus = true;
         updatingAppointmentId = selectedAppointment.id;
 
-        try {
-            await ApiClient.collection(appointmentsCollection.id).update(selectedAppointment.id, {
-                [appointmentStatusFieldName]: nextStatus,
-            });
+        const payload = {
+            [appointmentStatusFieldName]: nextStatus,
+        };
 
-            patchAppointmentRecord(selectedAppointment.id, {
-                [appointmentStatusFieldName]: nextStatus,
-            });
+        if (nextStatus === "confirmed" && appointmentConfirmedAtFieldName) {
+            payload[appointmentConfirmedAtFieldName] = getNowIsoTimestamp();
+        }
+
+        if (nextStatus === "cancelled" && appointmentCancelledAtFieldName) {
+            payload[appointmentCancelledAtFieldName] = getNowIsoTimestamp();
+        }
+
+        try {
+            await ApiClient.collection(appointmentsCollection.id).update(selectedAppointment.id, payload);
+
+            patchAppointmentRecord(selectedAppointment.id, payload);
 
             addSuccessToast(`Appointment marked as ${nextStatus}.`);
         } catch (err) {
@@ -1711,6 +2497,10 @@
                     addSuccessToast(`${row.label} availability saved.`);
                 }
             }
+
+            if (!options?.skipSlotPreviewRefresh) {
+                await loadSlotPreview();
+            }
             return true;
         } catch (err) {
             ApiClient.error(err, false);
@@ -1805,7 +2595,7 @@
 
         try {
             const saveResults = await Promise.all(
-                rowsToSave.map((row) => saveAvailabilityRow(row, { silent: true })),
+                rowsToSave.map((row) => saveAvailabilityRow(row, { silent: true, skipSlotPreviewRefresh: true })),
             );
 
             const savedCount = saveResults.filter(Boolean).length;
@@ -1818,8 +2608,188 @@
             if (failedCount > 0 || invalidRowsCount > 0) {
                 addErrorToast("Some availability changes could not be saved.");
             }
+
+            if (savedCount > 0) {
+                await loadSlotPreview();
+            }
         } finally {
             isSavingAllAvailability = false;
+        }
+    }
+
+    function createNewException() {
+        selectedExceptionId = "";
+        isCreatingException = true;
+        exceptionForm = createDefaultExceptionForm();
+        exceptionFormError = "";
+    }
+
+    function selectException(exception) {
+        isCreatingException = false;
+        selectedExceptionId = normalizeString(exception?.id);
+    }
+
+    function setExceptionType(nextType) {
+        const normalizedType = normalizeExceptionType(nextType);
+        exceptionForm = {
+            ...exceptionForm,
+            type: normalizedType,
+            ...(normalizedType === "closed"
+                ? {}
+                : {
+                    startTime: normalizeString(exceptionForm.startTime) || "09:00",
+                    endTime: normalizeString(exceptionForm.endTime) || "17:00",
+                }),
+        };
+        exceptionFormError = "";
+    }
+
+    function validateExceptionForm(form = exceptionForm) {
+        const dateValue = normalizeString(form?.date);
+        const typeValue = normalizeExceptionType(form?.type);
+        const startTimeValue = normalizeString(form?.startTime);
+        const endTimeValue = normalizeString(form?.endTime);
+
+        if (!bookingDatePattern.test(dateValue)) {
+            return "Date must use YYYY-MM-DD format.";
+        }
+
+        if (!["closed", "customHours"].includes(typeValue)) {
+            return "Type must be Closed or Custom hours.";
+        }
+
+        if (typeValue === "customHours") {
+            if (!bookingTimePattern.test(startTimeValue) || !bookingTimePattern.test(endTimeValue)) {
+                return "Start and end time must use HH:mm format.";
+            }
+
+            const startMinutes = parseTimeToMinutes(startTimeValue);
+            const endMinutes = parseTimeToMinutes(endTimeValue);
+            if (startMinutes < 0 || endMinutes < 0 || endMinutes <= startMinutes) {
+                return "End time must be after start time.";
+            }
+        }
+
+        return "";
+    }
+
+    async function saveException() {
+        if (!selectedWebsiteId || !bookingExceptionsCollection?.id || isSavingException) {
+            return;
+        }
+
+        const validationError = validateExceptionForm(exceptionForm);
+        if (validationError) {
+            exceptionFormError = validationError;
+            return;
+        }
+
+        exceptionFormError = "";
+        isSavingException = true;
+
+        const typeValue = normalizeExceptionType(exceptionForm.type);
+        const payload = {
+            website: selectedWebsiteId,
+            date: normalizeString(exceptionForm.date),
+            type: typeValue,
+            startTime: typeValue === "customHours" ? normalizeString(exceptionForm.startTime) : "",
+            endTime: typeValue === "customHours" ? normalizeString(exceptionForm.endTime) : "",
+            note: normalizeString(exceptionForm.note),
+            active: !!exceptionForm.active,
+        };
+
+        try {
+            if (normalizeString(exceptionForm.id)) {
+                const updated = await ApiClient.collection(bookingExceptionsCollection.id).update(exceptionForm.id, payload);
+                exceptionsRecords = exceptionsRecords.map((record) =>
+                    normalizeString(record?.id) === normalizeString(updated?.id)
+                        ? { ...record, ...updated }
+                        : record,
+                );
+                isCreatingException = false;
+                selectedExceptionId = normalizeString(updated?.id);
+                addSuccessToast("Exception updated.");
+            } else {
+                const created = await ApiClient.collection(bookingExceptionsCollection.id).create(payload);
+                exceptionsRecords = [created, ...exceptionsRecords];
+                isCreatingException = false;
+                selectedExceptionId = normalizeString(created?.id);
+                addSuccessToast("Exception created.");
+            }
+
+            await loadSlotPreview();
+        } catch (err) {
+            ApiClient.error(err, false);
+            exceptionFormError = "Unable to save exception right now.";
+            addErrorToast("Unable to save exception right now.");
+        } finally {
+            isSavingException = false;
+        }
+    }
+
+    async function saveBookingRules() {
+        if (!selectedWebsiteId || !websitesCollection?.id || !selectedWebsite) {
+            return;
+        }
+
+        bookingRulesFormError = "";
+
+        let minNoticeHours = 0;
+        let bookingWindowDays = 0;
+        let bufferMinutes = 0;
+
+        try {
+            minNoticeHours = parseRulesDraftField(bookingRulesDraft.minNoticeHours, "Minimum notice");
+            bookingWindowDays = parseRulesDraftField(bookingRulesDraft.bookingWindowDays, "Booking window");
+            bufferMinutes = parseRulesDraftField(bookingRulesDraft.bufferMinutes, "Buffer between appointments");
+        } catch (err) {
+            bookingRulesFormError = normalizeString(err?.message) || "Rules values are invalid.";
+            return;
+        }
+
+        isSavingBookingRules = true;
+
+        try {
+            const currentSettings = parseSettingsObject(selectedWebsite?.[websiteSettingsFieldName]);
+            const bookingSettings = readObject(currentSettings.booking);
+            const currentRules = readObject(bookingSettings.rules);
+
+            const nextSettings = {
+                ...currentSettings,
+                booking: {
+                    ...bookingSettings,
+                    rules: {
+                        ...currentRules,
+                        minNoticeHours,
+                        bookingWindowDays,
+                        bufferMinutes,
+                    },
+                },
+            };
+
+            const updatedWebsite = await ApiClient.collection(websitesCollection.id).update(selectedWebsiteId, {
+                [websiteSettingsFieldName]: nextSettings,
+            });
+
+            websites = websites.map((website) =>
+                normalizeString(website?.id) === normalizeString(updatedWebsite?.id)
+                    ? { ...website, ...updatedWebsite }
+                    : website,
+            );
+
+            bookingRulesDraft = createBookingRulesDraftFromSettings({
+                minNoticeHours,
+                bookingWindowDays,
+                bufferMinutes,
+            });
+            addSuccessToast("Booking rules saved.");
+            await loadSlotPreview();
+        } catch (err) {
+            ApiClient.error(err, false);
+            bookingRulesFormError = "Unable to save booking rules right now.";
+            addErrorToast("Unable to save booking rules right now.");
+        } finally {
+            isSavingBookingRules = false;
         }
     }
 
@@ -2101,6 +3071,24 @@
                                     <span class="txt-xs txt-hint">Created</span>
                                     <span class="txt-sm">{formatDateTime(selectedAppointment.created)}</span>
                                 </div>
+                                {#if selectedAppointment.confirmedAt}
+                                    <div class="booking-summary-row">
+                                        <span class="txt-xs txt-hint">Confirmed at</span>
+                                        <span class="txt-sm">{formatDateTime(selectedAppointment.confirmedAt)}</span>
+                                    </div>
+                                {/if}
+                                {#if selectedAppointment.cancelledAt}
+                                    <div class="booking-summary-row">
+                                        <span class="txt-xs txt-hint">Cancelled at</span>
+                                        <span class="txt-sm">{formatDateTime(selectedAppointment.cancelledAt)}</span>
+                                    </div>
+                                {/if}
+                                {#if selectedAppointment.rescheduledAt}
+                                    <div class="booking-summary-row">
+                                        <span class="txt-xs txt-hint">Rescheduled at</span>
+                                        <span class="txt-sm">{formatDateTime(selectedAppointment.rescheduledAt)}</span>
+                                    </div>
+                                {/if}
                                 <div class="booking-summary-row">
                                     <span class="txt-xs txt-hint">Customer email</span>
                                     <span class="txt-sm">{selectedAppointment.email || "No email provided"}</span>
@@ -2115,6 +3103,17 @@
                         <section class="booking-rail-block">
                             <h5 class="m-0">Actions</h5>
                             <div class="booking-actions-row">
+                                {#if canRescheduleSelectedAppointment}
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline btn-sm"
+                                        disabled={isUpdatingAppointmentStatus || isSavingRescheduleAppointment}
+                                        on:click={openReschedulePanel}
+                                    >
+                                        <span class="txt">Reschedule</span>
+                                    </button>
+                                {/if}
+
                                 {#if canSetSelectedAppointmentConfirmed}
                                     <button
                                         type="button"
@@ -2151,6 +3150,20 @@
                                     </button>
                                 {/if}
                             </div>
+
+                            <div class="booking-actions-row booking-actions-row--utility">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline btn-sm"
+                                    disabled={!selectedAppointmentGoogleCalendar.available}
+                                    on:click={openGoogleCalendarForSelectedAppointment}
+                                >
+                                    <span class="txt">Add to Google Calendar</span>
+                                </button>
+                            </div>
+                            <p class="txt-xs txt-hint m-b-0">
+                                {selectedAppointmentGoogleCalendar.helper || "Opens Google Calendar with this appointment pre-filled."}
+                            </p>
                         </section>
 
                         <section class="booking-rail-block">
@@ -2353,212 +3366,688 @@
                 </aside>
             </div>
         {:else}
-            <div class="booking-split-layout booking-split-layout--availability">
-                <div class="booking-main-column booking-availability-main">
-                    <div class="booking-section-head-row">
-                        <div class="booking-section-head-copy">
-                            <h4 class="m-0">Weekly availability</h4>
-                            <p class="txt-sm txt-hint m-b-0">Set active days and time windows for appointment requests.</p>
-                        </div>
-                        <div class="booking-section-head-actions">
-                            <span class="summary-pill">{activeAvailabilityDaysCount} active days</span>
-                            <span class="summary-pill" class:warning={dirtyAvailabilityRowsCount > 0}>
-                                {dirtyAvailabilityRowsCount} unsaved
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="booking-availability-helper txt-xs txt-hint">
-                        Changes are local until you save. Inactive days do not require start/end times.
-                    </div>
-
-                    <div class="booking-availability-list">
-                        {#each availabilityRows as row (row.dayOfWeek)}
-                            <article class="booking-availability-row" class:is-inactive={!row.active}>
-                                <div class="booking-availability-day">
-                                    <div class="booking-availability-day-meta">
-                                        <span class="txt-sm booking-availability-day-label">{row.label}</span>
-                                        {#if row.dirty}
-                                            <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
-                                        {/if}
-                                    </div>
-                                    <label class="booking-checkbox-row">
-                                        <input
-                                            type="checkbox"
-                                            checked={row.active}
-                                            on:change={(event) => updateAvailabilityRow(row.dayOfWeek, { active: !!event.currentTarget.checked, error: "" })}
-                                        />
-                                        <span class="txt-xs txt-hint">Active</span>
-                                    </label>
-                                </div>
-
-                                <div class="booking-availability-time-range">
-                                    <div class="form-field form-field--compact m-b-0">
-                                        <label class="txt-xs txt-hint" for={`booking-start-${row.dayOfWeek}`}>Start</label>
-                                        <input
-                                            id={`booking-start-${row.dayOfWeek}`}
-                                            class="input input-sm"
-                                            type="time"
-                                            value={row.startTime}
-                                            disabled={!row.active || isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
-                                            on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { startTime: event.currentTarget.value, error: "" })}
-                                        />
-                                    </div>
-                                    <div class="form-field form-field--compact m-b-0">
-                                        <label class="txt-xs txt-hint" for={`booking-end-${row.dayOfWeek}`}>End</label>
-                                        <input
-                                            id={`booking-end-${row.dayOfWeek}`}
-                                            class="input input-sm"
-                                            type="time"
-                                            value={row.endTime}
-                                            disabled={!row.active || isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
-                                            on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { endTime: event.currentTarget.value, error: "" })}
-                                        />
-                                    </div>
-                                </div>
-
-                                {#if row.error}
-                                    <p class="txt-xs txt-danger m-b-0 booking-availability-error">{row.error}</p>
-                                {/if}
-                            </article>
-                        {/each}
-                    </div>
-                </div>
-
-                <aside class="booking-rail">
-                    <section class="booking-rail-block">
-                        <h5 class="m-0">Schedule actions</h5>
-                        <p class="txt-sm txt-hint m-b-0">Save schedule updates and apply common weekly presets.</p>
+            <div class="booking-availability-layout">
+                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested booking-availability-tabs">
+                    {#each availabilityTabs as tab (tab.key)}
                         <button
                             type="button"
-                            class="btn btn-sm"
-                            class:btn-loading={isSavingAllAvailability}
-                            disabled={isSavingAllAvailability || hasSavingAvailabilityRows || dirtyAvailabilityRowsCount === 0}
-                            on:click={saveAllChangedAvailabilityRows}
+                            class="tab-item"
+                            class:active={activeAvailabilityTab === tab.key}
+                            on:click={() => (activeAvailabilityTab = tab.key)}
                         >
-                            <span class="txt">Save changes</span>
+                            <span class="tab-label">{tab.label}</span>
                         </button>
-                        <div class="booking-availability-actions-list">
-                            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={setWeekdaysBusinessHours}>
-                                <span class="txt">Set weekdays 09:00-17:00</span>
-                            </button>
-                            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={applyMondayToWeekdays}>
-                                <span class="txt">Apply Monday to weekdays</span>
-                            </button>
-                            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={clearWeekendAvailability}>
-                                <span class="txt">Clear weekend</span>
-                            </button>
-                        </div>
-                    </section>
+                    {/each}
+                </div>
 
-                    <section class="booking-rail-block booking-health-panel">
-                        <div class="booking-health-head">
-                            <div class="booking-health-main">
-                                <h5 class="m-0">Availability health</h5>
-                                <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
+                {#if activeAvailabilityTab === "weekly"}
+                    <div class="booking-split-layout booking-split-layout--availability">
+                        <div class="booking-main-column booking-availability-main">
+                            <div class="booking-section-head-row">
+                                <div class="booking-section-head-copy">
+                                    <h4 class="m-0">Weekly availability</h4>
+                                    <p class="txt-sm txt-hint m-b-0">Set active days and time windows for appointment requests.</p>
+                                </div>
+                                <div class="booking-section-head-actions">
+                                    <span class="summary-pill">{activeAvailabilityDaysCount} active days</span>
+                                    <span class="summary-pill" class:warning={dirtyAvailabilityRowsCount > 0}>
+                                        {dirtyAvailabilityRowsCount} unsaved
+                                    </span>
+                                </div>
                             </div>
-                            <div class="booking-health-meta">
-                                <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
-                                <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
-                            </div>
-                        </div>
 
-                        <div class="booking-health-group m-t-8">
-                            <div class="booking-health-group-title">Warnings</div>
-                            {#if availabilityHealthWarnings.length}
-                                {#each availabilityHealthWarnings as warning}
-                                    <div class="booking-health-item warning">
-                                        <span class="label label-sm booking-health-pill warning">Warning</span>
-                                        <span>{warning}</span>
-                                    </div>
+                            <div class="booking-availability-helper txt-xs txt-hint">
+                                Changes are local until you save. Inactive days do not require start/end times.
+                            </div>
+
+                            <div class="booking-availability-list">
+                                <div class="booking-availability-grid-head txt-xs txt-hint" aria-hidden="true">
+                                    <span>Day</span>
+                                    <span>Status</span>
+                                    <span>Start</span>
+                                    <span>End</span>
+                                    <span>State</span>
+                                </div>
+
+                                {#each availabilityRows as row (row.dayOfWeek)}
+                                    <article class="booking-availability-row" class:is-inactive={!row.active}>
+                                        <div class="booking-availability-cell booking-availability-cell--day">
+                                            <span class="txt-sm booking-availability-day-label">{row.label}</span>
+                                        </div>
+
+                                        <div class="booking-availability-cell booking-availability-cell--status">
+                                            <label class="booking-checkbox-row booking-checkbox-row--compact">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={row.active}
+                                                    disabled={isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
+                                                    on:change={(event) => updateAvailabilityRow(row.dayOfWeek, { active: !!event.currentTarget.checked, error: "" })}
+                                                />
+                                                <span class="txt-xs" class:txt-hint={!row.active}>{row.active ? "Active" : "Inactive"}</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="booking-availability-cell booking-availability-cell--time">
+                                            <span class="txt-xs txt-hint booking-time-caption">Start</span>
+                                            {#if row.active}
+                                                <input
+                                                    id={`booking-start-${row.dayOfWeek}`}
+                                                    class="input input-sm booking-time-input"
+                                                    type="time"
+                                                    value={row.startTime}
+                                                    disabled={isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
+                                                    on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { startTime: event.currentTarget.value, error: "" })}
+                                                />
+                                            {:else}
+                                                <span class="txt-xs txt-hint booking-time-placeholder">&mdash;</span>
+                                            {/if}
+                                        </div>
+
+                                        <div class="booking-availability-cell booking-availability-cell--time">
+                                            <span class="txt-xs txt-hint booking-time-caption">End</span>
+                                            {#if row.active}
+                                                <input
+                                                    id={`booking-end-${row.dayOfWeek}`}
+                                                    class="input input-sm booking-time-input"
+                                                    type="time"
+                                                    value={row.endTime}
+                                                    disabled={isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
+                                                    on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { endTime: event.currentTarget.value, error: "" })}
+                                                />
+                                            {:else}
+                                                <span class="txt-xs txt-hint booking-time-placeholder">&mdash;</span>
+                                            {/if}
+                                        </div>
+
+                                        <div class="booking-availability-cell booking-availability-cell--state">
+                                            {#if row.error}
+                                                <span class="label label-sm label-danger booking-state-pill">Invalid</span>
+                                            {:else if row.dirty}
+                                                <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
+                                            {:else}
+                                                <span class="txt-xs txt-hint booking-state-saved">Saved</span>
+                                            {/if}
+                                        </div>
+
+                                        {#if row.error}
+                                            <p class="txt-xs txt-danger m-b-0 booking-availability-error">{row.error}</p>
+                                        {/if}
+                                    </article>
                                 {/each}
-                            {:else}
-                                <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
-                            {/if}
-                        </div>
-
-                        <div class="booking-health-group m-t-8">
-                            <div class="booking-health-group-title">Suggestions</div>
-                            {#if availabilityHealthSuggestions.length}
-                                {#each availabilityHealthSuggestions as suggestion}
-                                    <div class="booking-health-item">
-                                        <span class="label label-sm booking-health-pill">Info</span>
-                                        <span>{suggestion}</span>
-                                    </div>
-                                {/each}
-                            {:else}
-                                <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
-                            {/if}
-                        </div>
-                    </section>
-
-                    <section class="booking-rail-block booking-slot-preview-panel">
-                        <div class="booking-health-head">
-                            <div class="booking-health-main">
-                                <h5 class="m-0">Slot preview</h5>
-                                <p class="txt-sm txt-hint m-b-0">
-                                    Preview the times visitors will be able to choose for a service and date.
-                                </p>
-                            </div>
-                            <div class="booking-health-meta">
-                                <span class="summary-pill">{slotPreviewSlots.length} slots</span>
                             </div>
                         </div>
 
-                        <div class="booking-slot-preview-controls m-t-sm">
-                            <div class="form-field m-b-0">
-                                <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
-                                <select
-                                    id="booking-slot-preview-service"
-                                    class="input input-sm"
-                                    value={slotPreviewServiceId}
-                                    disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
-                                    on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
+                        <aside class="booking-rail">
+                            <section class="booking-rail-block">
+                                <h5 class="m-0">Schedule actions</h5>
+                                <p class="txt-sm txt-hint m-b-0">Save schedule updates and apply common weekly presets.</p>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm"
+                                    class:btn-loading={isSavingAllAvailability}
+                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows || dirtyAvailabilityRowsCount === 0}
+                                    on:click={saveAllChangedAvailabilityRows}
                                 >
-                                    {#if !slotPreviewServiceOptions.length}
-                                        <option value="">No active services</option>
-                                    {:else}
-                                        {#each slotPreviewServiceOptions as service (service.id)}
-                                            <option value={service.id}>{service.label}</option>
+                                    <span class="txt">Save changes</span>
+                                </button>
+                                <div class="booking-availability-actions-list">
+                                    <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={setWeekdaysBusinessHours}>
+                                        <span class="txt">Set weekdays 09:00-17:00</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={applyMondayToWeekdays}>
+                                        <span class="txt">Apply Monday to weekdays</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={clearWeekendAvailability}>
+                                        <span class="txt">Clear weekend</span>
+                                    </button>
+                                </div>
+                            </section>
+
+                            <section class="booking-rail-block booking-health-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Availability health</h5>
+                                        <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
+                                        <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Warnings</div>
+                                    {#if availabilityHealthWarnings.length}
+                                        {#each availabilityHealthWarnings as warning}
+                                            <div class="booking-health-item warning">
+                                                <span class="label label-sm booking-health-pill warning">Warning</span>
+                                                <span>{warning}</span>
+                                            </div>
                                         {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
                                     {/if}
-                                </select>
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Suggestions</div>
+                                    {#if availabilityHealthSuggestions.length}
+                                        {#each availabilityHealthSuggestions as suggestion}
+                                            <div class="booking-health-item">
+                                                <span class="label label-sm booking-health-pill">Info</span>
+                                                <span>{suggestion}</span>
+                                            </div>
+                                        {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
+                                    {/if}
+                                </div>
+                            </section>
+
+                            <section class="booking-rail-block booking-slot-preview-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Slot preview</h5>
+                                        <p class="txt-sm txt-hint m-b-0">
+                                            Preview uses services, weekly hours, exceptions, booking rules, and existing appointments.
+                                        </p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class="summary-pill">{slotPreviewSlots.length} slots</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-slot-preview-controls m-t-sm">
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
+                                        <select
+                                            id="booking-slot-preview-service"
+                                            class="input input-sm"
+                                            value={slotPreviewServiceId}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
+                                        >
+                                            {#if !slotPreviewServiceOptions.length}
+                                                <option value="">No active services</option>
+                                            {:else}
+                                                {#each slotPreviewServiceOptions as service (service.id)}
+                                                    <option value={service.id}>{service.label}</option>
+                                                {/each}
+                                            {/if}
+                                        </select>
+                                    </div>
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
+                                        <input
+                                            id="booking-slot-preview-date"
+                                            class="input input-sm"
+                                            type="date"
+                                            value={slotPreviewDate}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {#if !slotPreviewServiceOptions.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
+                                {:else if activeAvailabilityDaysCount <= 0 && activeExceptionsCount <= 0}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
+                                {:else if !slotPreviewServiceId || !slotPreviewDate}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
+                                {:else if isLoadingSlotPreview}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
+                                {:else if slotPreviewError}
+                                    <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
+                                {:else if !slotPreviewSlots.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
+                                {:else}
+                                    <div class="booking-slot-preview-slots m-t-sm">
+                                        {#each slotPreviewSlots as slot}
+                                            <span class="summary-pill booking-slot-preview-pill">{slot}</span>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </section>
+                        </aside>
+                    </div>
+                {:else if activeAvailabilityTab === "exceptions"}
+                    <div class="booking-split-layout booking-split-layout--availability">
+                        <div class="booking-main-column booking-availability-main">
+                            <div class="booking-section-head-row">
+                                <div class="booking-section-head-copy">
+                                    <h4 class="m-0">Date exceptions</h4>
+                                    <p class="txt-sm txt-hint m-b-0">Override weekly schedule for closed dates or custom special-day hours.</p>
+                                </div>
+                                <div class="booking-section-head-actions">
+                                    <span class="summary-pill">{activeExceptionsCount} active exceptions</span>
+                                </div>
                             </div>
 
-                            <div class="form-field m-b-0">
-                                <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
-                                <input
-                                    id="booking-slot-preview-date"
-                                    class="input input-sm"
-                                    type="date"
-                                    value={slotPreviewDate}
-                                    disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
-                                    on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
-                                />
+                            <div class="booking-services-controls">
+                                <div class="booking-control-cell booking-control-cell--search">
+                                    <label class="txt-sm txt-hint" for="booking-exception-search">Search</label>
+                                    <input
+                                        id="booking-exception-search"
+                                        class="input input-sm"
+                                        type="search"
+                                        placeholder="Search by date or note"
+                                        bind:value={exceptionSearch}
+                                    />
+                                </div>
+                                <div class="booking-control-cell booking-control-cell--select">
+                                    <label class="txt-sm txt-hint" for="booking-exception-type-filter">Type</label>
+                                    <select id="booking-exception-type-filter" class="input input-sm" bind:value={exceptionTypeFilter}>
+                                        {#each exceptionTypeFilterOptions as option (option.key)}
+                                            <option value={option.key}>{option.label}</option>
+                                        {/each}
+                                    </select>
+                                </div>
+                                <div class="booking-control-cell booking-control-cell--select">
+                                    <label class="txt-sm txt-hint" for="booking-exception-active-filter">Active</label>
+                                    <select id="booking-exception-active-filter" class="input input-sm" bind:value={exceptionActiveFilter}>
+                                        {#each exceptionActiveFilterOptions as option (option.key)}
+                                            <option value={option.key}>{option.label}</option>
+                                        {/each}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {#if !normalizedExceptions.length}
+                                <div class="booking-empty-state m-b-0">
+                                    <h4 class="m-0">No exceptions yet</h4>
+                                    <p class="txt-sm txt-hint m-b-0">Add closed dates or custom hours for special days.</p>
+                                </div>
+                            {:else if !filteredExceptions.length}
+                                <div class="booking-empty-state m-b-0">
+                                    <h4 class="m-0">No exceptions match these filters</h4>
+                                    <p class="txt-sm txt-hint m-b-0">Try a different search or filter selection.</p>
+                                </div>
+                            {:else}
+                                <div class="booking-services-list" role="list">
+                                    {#each filteredExceptions as exception (exception.id)}
+                                        <article
+                                            role="listitem"
+                                            class="booking-service-item booking-exception-item"
+                                            class:selected={exception.id === selectedExceptionId}
+                                            on:click={() => selectException(exception)}
+                                        >
+                                            <div class="booking-service-main">
+                                                <div class="booking-service-title-row">
+                                                    <div class="booking-service-title">{formatDate(exception.date)}</div>
+                                                    <span class={`label label-sm ${exception.active ? "label-success" : "label-warning"}`}>
+                                                        {exception.active ? "Active" : "Inactive"}
+                                                    </span>
+                                                </div>
+                                                <div class="booking-service-meta txt-sm txt-hint">
+                                                    {exception.typeLabel} {#if exception.type === "customHours"}- {exception.timeRangeLabel}{/if}
+                                                </div>
+                                                {#if exception.note}
+                                                    <div class="txt-xs txt-hint m-t-4">{exception.note}</div>
+                                                {/if}
+                                            </div>
+                                        </article>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </div>
+
+                        <aside class="booking-rail">
+                            <section class="booking-rail-block">
+                                <h5 class="m-0">Exception details</h5>
+                                <div class="booking-actions-row">
+                                    <button type="button" class="btn btn-outline btn-sm" disabled={isSavingException} on:click={createNewException}>
+                                        <span class="txt">{exceptionForm.id ? "New exception" : "Reset form"}</span>
+                                    </button>
+                                </div>
+
+                                <div class="booking-form-stack">
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-exception-date">Date</label>
+                                        <input
+                                            id="booking-exception-date"
+                                            class="input input-sm"
+                                            type="date"
+                                            bind:value={exceptionForm.date}
+                                            disabled={isSavingException}
+                                        />
+                                    </div>
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-exception-type">Type</label>
+                                        <select
+                                            id="booking-exception-type"
+                                            class="input input-sm"
+                                            value={exceptionForm.type}
+                                            disabled={isSavingException}
+                                            on:change={(event) => setExceptionType(event.currentTarget.value)}
+                                        >
+                                            <option value="closed">Closed</option>
+                                            <option value="customHours">Custom hours</option>
+                                        </select>
+                                    </div>
+
+                                    {#if exceptionForm.type === "customHours"}
+                                        <div class="booking-manual-grid">
+                                            <div class="form-field m-b-0">
+                                                <label class="txt-sm txt-hint" for="booking-exception-start-time">Start time</label>
+                                                <input
+                                                    id="booking-exception-start-time"
+                                                    class="input input-sm"
+                                                    type="time"
+                                                    bind:value={exceptionForm.startTime}
+                                                    disabled={isSavingException}
+                                                />
+                                            </div>
+                                            <div class="form-field m-b-0">
+                                                <label class="txt-sm txt-hint" for="booking-exception-end-time">End time</label>
+                                                <input
+                                                    id="booking-exception-end-time"
+                                                    class="input input-sm"
+                                                    type="time"
+                                                    bind:value={exceptionForm.endTime}
+                                                    disabled={isSavingException}
+                                                />
+                                            </div>
+                                        </div>
+                                    {/if}
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-exception-note">Note</label>
+                                        <textarea
+                                            id="booking-exception-note"
+                                            class="input booking-notes-input"
+                                            rows="3"
+                                            placeholder="Optional note for this date..."
+                                            bind:value={exceptionForm.note}
+                                            disabled={isSavingException}
+                                        />
+                                    </div>
+
+                                    <label class="booking-checkbox-row" for="booking-exception-active">
+                                        <input
+                                            id="booking-exception-active"
+                                            type="checkbox"
+                                            bind:checked={exceptionForm.active}
+                                            disabled={isSavingException}
+                                        />
+                                        <span class="txt-sm">Active exception</span>
+                                    </label>
+
+                                    {#if exceptionFormError}
+                                        <p class="txt-xs txt-danger m-b-0">{exceptionFormError}</p>
+                                    {/if}
+
+                                    <div class="booking-actions-row">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm"
+                                            class:btn-loading={isSavingException}
+                                            disabled={isSavingException}
+                                            on:click={saveException}
+                                        >
+                                            <span class="txt">{exceptionForm.id ? "Update exception" : "Create exception"}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="booking-rail-block booking-slot-preview-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Slot preview</h5>
+                                        <p class="txt-sm txt-hint m-b-0">
+                                            Preview uses services, weekly hours, exceptions, booking rules, and existing appointments.
+                                        </p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class="summary-pill">{slotPreviewSlots.length} slots</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-slot-preview-controls m-t-sm">
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
+                                        <select
+                                            id="booking-slot-preview-service"
+                                            class="input input-sm"
+                                            value={slotPreviewServiceId}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
+                                        >
+                                            {#if !slotPreviewServiceOptions.length}
+                                                <option value="">No active services</option>
+                                            {:else}
+                                                {#each slotPreviewServiceOptions as service (service.id)}
+                                                    <option value={service.id}>{service.label}</option>
+                                                {/each}
+                                            {/if}
+                                        </select>
+                                    </div>
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
+                                        <input
+                                            id="booking-slot-preview-date"
+                                            class="input input-sm"
+                                            type="date"
+                                            value={slotPreviewDate}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {#if !slotPreviewServiceOptions.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
+                                {:else if activeAvailabilityDaysCount <= 0 && activeExceptionsCount <= 0}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
+                                {:else if !slotPreviewServiceId || !slotPreviewDate}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
+                                {:else if isLoadingSlotPreview}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
+                                {:else if slotPreviewError}
+                                    <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
+                                {:else if !slotPreviewSlots.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
+                                {:else}
+                                    <div class="booking-slot-preview-slots m-t-sm">
+                                        {#each slotPreviewSlots as slot}
+                                            <span class="summary-pill booking-slot-preview-pill">{slot}</span>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </section>
+                        </aside>
+                    </div>
+                {:else}
+                    <div class="booking-split-layout booking-split-layout--availability">
+                        <div class="booking-main-column booking-availability-main">
+                            <div class="booking-section-head-row">
+                                <div class="booking-section-head-copy">
+                                    <h4 class="m-0">Booking rules</h4>
+                                    <p class="txt-sm txt-hint m-b-0">Control notice time, booking window, and buffer between appointments.</p>
+                                </div>
+                                <div class="booking-section-head-actions">
+                                    <span class="summary-pill">{bookingRulesConfiguredCount} configured rules</span>
+                                </div>
+                            </div>
+
+                            <div class="booking-rail-block booking-rules-panel">
+                                <div class="booking-form-stack">
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-rules-min-notice">Minimum notice (hours)</label>
+                                        <input
+                                            id="booking-rules-min-notice"
+                                            class="input input-sm"
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            bind:value={bookingRulesDraft.minNoticeHours}
+                                            disabled={isSavingBookingRules}
+                                        />
+                                        <p class="txt-xs txt-hint m-b-0">How many hours in advance visitors must book.</p>
+                                    </div>
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-rules-window">Booking window (days)</label>
+                                        <input
+                                            id="booking-rules-window"
+                                            class="input input-sm"
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            bind:value={bookingRulesDraft.bookingWindowDays}
+                                            disabled={isSavingBookingRules}
+                                        />
+                                        <p class="txt-xs txt-hint m-b-0">How many days ahead visitors can book. Use 0 for no limit.</p>
+                                    </div>
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-rules-buffer">Buffer between appointments (minutes)</label>
+                                        <input
+                                            id="booking-rules-buffer"
+                                            class="input input-sm"
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            bind:value={bookingRulesDraft.bufferMinutes}
+                                            disabled={isSavingBookingRules}
+                                        />
+                                        <p class="txt-xs txt-hint m-b-0">Extra blocked time around appointments.</p>
+                                    </div>
+
+                                    {#if bookingRulesFormError}
+                                        <p class="txt-xs txt-danger m-b-0">{bookingRulesFormError}</p>
+                                    {/if}
+
+                                    <div class="booking-actions-row">
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm"
+                                            class:btn-loading={isSavingBookingRules}
+                                            disabled={isSavingBookingRules || !bookingRulesDirty}
+                                            on:click={saveBookingRules}
+                                        >
+                                            <span class="txt">Save rules</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        {#if !slotPreviewServiceOptions.length}
-                            <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
-                        {:else if activeAvailabilityDaysCount <= 0}
-                            <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
-                        {:else if !slotPreviewServiceId || !slotPreviewDate}
-                            <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
-                        {:else if isLoadingSlotPreview}
-                            <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
-                        {:else if slotPreviewError}
-                            <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
-                        {:else if !slotPreviewSlots.length}
-                            <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
-                        {:else}
-                            <div class="booking-slot-preview-slots m-t-sm">
-                                {#each slotPreviewSlots as slot}
-                                    <span class="summary-pill booking-slot-preview-pill">{slot}</span>
-                                {/each}
-                            </div>
-                        {/if}
-                    </section>
-                </aside>
+                        <aside class="booking-rail">
+                            <section class="booking-rail-block booking-health-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Availability health</h5>
+                                        <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
+                                        <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Warnings</div>
+                                    {#if availabilityHealthWarnings.length}
+                                        {#each availabilityHealthWarnings as warning}
+                                            <div class="booking-health-item warning">
+                                                <span class="label label-sm booking-health-pill warning">Warning</span>
+                                                <span>{warning}</span>
+                                            </div>
+                                        {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
+                                    {/if}
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Suggestions</div>
+                                    {#if availabilityHealthSuggestions.length}
+                                        {#each availabilityHealthSuggestions as suggestion}
+                                            <div class="booking-health-item">
+                                                <span class="label label-sm booking-health-pill">Info</span>
+                                                <span>{suggestion}</span>
+                                            </div>
+                                        {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
+                                    {/if}
+                                </div>
+                            </section>
+
+                            <section class="booking-rail-block booking-slot-preview-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Slot preview</h5>
+                                        <p class="txt-sm txt-hint m-b-0">
+                                            Preview uses services, weekly hours, exceptions, booking rules, and existing appointments.
+                                        </p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class="summary-pill">{slotPreviewSlots.length} slots</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-slot-preview-controls m-t-sm">
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
+                                        <select
+                                            id="booking-slot-preview-service"
+                                            class="input input-sm"
+                                            value={slotPreviewServiceId}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
+                                        >
+                                            {#if !slotPreviewServiceOptions.length}
+                                                <option value="">No active services</option>
+                                            {:else}
+                                                {#each slotPreviewServiceOptions as service (service.id)}
+                                                    <option value={service.id}>{service.label}</option>
+                                                {/each}
+                                            {/if}
+                                        </select>
+                                    </div>
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
+                                        <input
+                                            id="booking-slot-preview-date"
+                                            class="input input-sm"
+                                            type="date"
+                                            value={slotPreviewDate}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {#if !slotPreviewServiceOptions.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
+                                {:else if activeAvailabilityDaysCount <= 0 && activeExceptionsCount <= 0}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
+                                {:else if !slotPreviewServiceId || !slotPreviewDate}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
+                                {:else if isLoadingSlotPreview}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
+                                {:else if slotPreviewError}
+                                    <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
+                                {:else if !slotPreviewSlots.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
+                                {:else}
+                                    <div class="booking-slot-preview-slots m-t-sm">
+                                        {#each slotPreviewSlots as slot}
+                                            <span class="summary-pill booking-slot-preview-pill">{slot}</span>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </section>
+                        </aside>
+                    </div>
+                {/if}
             </div>
         {/if}
     </section>
@@ -2737,6 +4226,138 @@
                 on:click={createManualAppointment}
             >
                 <span class="txt">Create appointment</span>
+            </button>
+        </svelte:fragment>
+    </OverlayPanel>
+
+    <OverlayPanel
+        bind:active={isReschedulePanelOpen}
+        class="overlay-panel-lg booking-reschedule-panel"
+        overlayClose={true}
+        escClose={true}
+        on:hide={closeReschedulePanel}
+    >
+        <svelte:fragment slot="header">
+            <h4>Reschedule appointment</h4>
+        </svelte:fragment>
+
+        <div class="booking-manual-form">
+            {#if !rescheduleSourceAppointment}
+                <p class="txt-sm txt-hint m-b-0">Select an appointment to start rescheduling.</p>
+            {:else}
+                <div class="booking-reschedule-current">
+                    <p class="txt-xs txt-hint m-b-0">Current appointment</p>
+                    <p class="txt-sm m-b-0">
+                        {rescheduleSourceAppointment.serviceLabel} · {formatAppointmentDateTime(rescheduleSourceAppointment.date, rescheduleSourceAppointment.time)}
+                    </p>
+                </div>
+
+                {#if !manualAppointmentServiceOptions.length}
+                    <div class="alert alert-warning m-b-0">
+                        <div class="icon">
+                            <i class="ri-information-line" />
+                        </div>
+                        <div>Add and activate at least one service before rescheduling appointments.</div>
+                    </div>
+                {:else}
+                    <div class="booking-manual-grid">
+                        <div class="form-field m-b-0">
+                            <label class="txt-sm txt-hint" for="booking-reschedule-service">Service</label>
+                            <select
+                                id="booking-reschedule-service"
+                                class="input input-sm"
+                                value={rescheduleForm.serviceId}
+                                disabled={isSavingRescheduleAppointment}
+                                on:change={(event) => setRescheduleService(event.currentTarget.value)}
+                            >
+                                <option value="">Select service</option>
+                                {#each manualAppointmentServiceOptions as service (service.id)}
+                                    <option value={service.id}>{service.label}</option>
+                                {/each}
+                            </select>
+                        </div>
+
+                        <div class="form-field m-b-0">
+                            <label class="txt-sm txt-hint" for="booking-reschedule-date">Date</label>
+                            <input
+                                id="booking-reschedule-date"
+                                class="input input-sm"
+                                type="date"
+                                value={rescheduleForm.date}
+                                disabled={isSavingRescheduleAppointment}
+                                on:change={(event) => setRescheduleDate(event.currentTarget.value)}
+                            />
+                        </div>
+
+                        <div class="form-field m-b-0 booking-manual-slot-field">
+                            <label class="txt-sm txt-hint">Available slot</label>
+                            {#if !rescheduleForm.serviceId || !rescheduleForm.date}
+                                <div class="txt-xs txt-hint">Select service and date to load available times.</div>
+                            {:else if isLoadingRescheduleSlots}
+                                <div class="txt-xs txt-hint">Loading available times...</div>
+                            {:else if rescheduleSlotsError}
+                                <div class="txt-xs txt-danger">{rescheduleSlotsError}</div>
+                            {:else if !rescheduleAvailableSlots.length}
+                                <div class="txt-xs txt-hint">No available times for this date.</div>
+                            {:else}
+                                <div class="booking-manual-slots">
+                                    {#each rescheduleAvailableSlots as slot}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm booking-manual-slot-btn"
+                                            class:active={rescheduleForm.time === slot}
+                                            disabled={isSavingRescheduleAppointment}
+                                            on:click={() => selectRescheduleSlot(slot)}
+                                        >
+                                            <span class="txt">{slot}</span>
+                                        </button>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </div>
+                    </div>
+
+                    <label class="booking-checkbox-row booking-reschedule-email-row" for="booking-reschedule-send-email">
+                        <input
+                            id="booking-reschedule-send-email"
+                            type="checkbox"
+                            checked={rescheduleForm.sendEmail}
+                            disabled={isSavingRescheduleAppointment}
+                            on:change={(event) => {
+                                rescheduleForm = {
+                                    ...rescheduleForm,
+                                    sendEmail: !!event.currentTarget.checked,
+                                };
+                            }}
+                        />
+                        <span class="txt-sm">Send reschedule email to customer</span>
+                    </label>
+
+                    {#if rescheduleForm.serviceId && rescheduleForm.date && rescheduleForm.time}
+                        <p class="txt-sm txt-hint m-b-0">
+                            New selected time: {serviceLabelById.get(rescheduleForm.serviceId) || "Service"} · {formatAppointmentDateTime(rescheduleForm.date, rescheduleForm.time)}
+                        </p>
+                    {/if}
+                {/if}
+            {/if}
+
+            {#if rescheduleFormError}
+                <p class="txt-xs txt-danger m-b-0">{rescheduleFormError}</p>
+            {/if}
+        </div>
+
+        <svelte:fragment slot="footer">
+            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingRescheduleAppointment} on:click={closeReschedulePanel}>
+                <span class="txt">Cancel</span>
+            </button>
+            <button
+                type="button"
+                class="btn btn-sm"
+                class:btn-loading={isSavingRescheduleAppointment}
+                disabled={isSavingRescheduleAppointment || isLoadingRescheduleSlots || !rescheduleSourceAppointment || !manualAppointmentServiceOptions.length}
+                on:click={saveRescheduledAppointment}
+            >
+                <span class="txt">Save reschedule</span>
             </button>
         </svelte:fragment>
     </OverlayPanel>
@@ -2938,6 +4559,10 @@
         gap: 8px;
     }
 
+    .booking-actions-row--utility {
+        margin-top: 2px;
+    }
+
     .booking-notes-input {
         width: 100%;
         min-height: 108px;
@@ -3082,7 +4707,7 @@
     }
 
     .booking-split-layout--availability {
-        grid-template-columns: minmax(0, 1fr) 360px;
+        grid-template-columns: minmax(0, 1fr) 320px;
     }
 
     .booking-availability-main {
@@ -3097,11 +4722,20 @@
         gap: 8px;
     }
 
+    .booking-availability-grid-head {
+        display: grid;
+        grid-template-columns: minmax(112px, 1.1fr) minmax(110px, 0.9fr) minmax(102px, 0.85fr) minmax(102px, 0.85fr) minmax(86px, 0.7fr);
+        gap: 8px;
+        padding: 0 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
     .booking-availability-actions-list {
         display: flex;
         flex-direction: column;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
     }
 
     .booking-availability-helper {
@@ -3111,10 +4745,10 @@
     .booking-availability-row {
         border: 1px solid var(--baseAlt1);
         border-radius: var(--baseRadius);
-        padding: 8px 10px;
+        padding: 7px 10px;
         display: grid;
-        grid-template-columns: minmax(170px, 220px) minmax(190px, 280px);
-        gap: 10px;
+        grid-template-columns: minmax(112px, 1.1fr) minmax(110px, 0.9fr) minmax(102px, 0.85fr) minmax(102px, 0.85fr) minmax(86px, 0.7fr);
+        gap: 8px;
         align-items: center;
     }
 
@@ -3122,17 +4756,28 @@
         background: color-mix(in srgb, var(--baseAlt1) 16%, transparent);
     }
 
-    .booking-availability-day {
+    .booking-availability-cell {
+        min-width: 0;
+    }
+
+    .booking-availability-cell--status,
+    .booking-availability-cell--state {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+    }
+
+    .booking-availability-cell--state {
+        justify-content: flex-end;
+    }
+
+    .booking-checkbox-row--compact {
         gap: 10px;
     }
 
-    .booking-availability-day-meta {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
+    .booking-time-input {
+        width: 100%;
+        min-width: 0;
+        max-width: 108px;
     }
 
     .booking-availability-day-label {
@@ -3144,24 +4789,32 @@
         line-height: 1;
     }
 
-    .booking-availability-time-range {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(98px, 124px));
-        gap: 6px;
+    .booking-time-caption {
+        display: none;
     }
 
-    .booking-availability-time-range .form-field--compact {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
+    .booking-time-placeholder {
+        display: inline-block;
+        min-width: 18px;
+        text-align: center;
+    }
+
+    .booking-state-pill {
+        justify-content: center;
+    }
+
+    .booking-state-saved {
+        white-space: nowrap;
     }
 
     .booking-availability-error {
         grid-column: 1 / -1;
+        margin-top: -2px;
+        padding-left: 2px;
     }
 
     .booking-slot-preview-panel {
-        border-style: dashed;
+        background: var(--baseColor);
     }
 
     .booking-slot-preview-controls {
@@ -3182,7 +4835,7 @@
     }
 
     .booking-health-panel {
-        border-style: dashed;
+        background: var(--baseColor);
     }
 
     .booking-health-head {
@@ -3246,6 +4899,20 @@
         gap: 12px;
     }
 
+    .booking-reschedule-current {
+        border: 1px solid var(--baseAlt1);
+        border-radius: var(--baseRadius);
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        background: color-mix(in srgb, var(--baseAlt1) 12%, transparent);
+    }
+
+    .booking-reschedule-email-row {
+        margin-top: -2px;
+    }
+
     .booking-manual-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3295,13 +4962,32 @@
             order: 1;
         }
 
-        .booking-availability-row {
-            grid-template-columns: 1fr;
+        .booking-availability-grid-head {
+            display: none;
         }
 
-        .booking-availability-day {
-            align-items: flex-start;
-            flex-direction: column;
+        .booking-availability-row {
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 6px 8px;
+        }
+
+        .booking-availability-cell--day,
+        .booking-availability-cell--status,
+        .booking-availability-cell--state {
+            grid-column: 1 / -1;
+        }
+
+        .booking-availability-cell--state {
+            justify-content: flex-start;
+        }
+
+        .booking-time-caption {
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .booking-time-input {
+            max-width: none;
         }
 
         .booking-services-controls {
