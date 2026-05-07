@@ -1,4 +1,5 @@
 <script>
+    import OverlayPanel from "@/components/base/OverlayPanel.svelte";
     import PageWrapper from "@/components/base/PageWrapper.svelte";
     import RefreshButton from "@/components/base/RefreshButton.svelte";
     import { pageTitle } from "@/stores/app";
@@ -48,7 +49,11 @@
     ];
 
     const appointmentStatusFieldAliases = ["status"];
-    const appointmentNotesFieldAliases = ["notes", "note", "internalNotes", "internal_notes"];
+    const appointmentCustomerNotesFieldAliases = ["notes", "note"];
+    const appointmentInternalNotesFieldAliases = ["internalNotes", "internal_notes"];
+    const bookingDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const bookingTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const bookingEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     let activeTab = "appointments";
 
@@ -74,12 +79,22 @@
     let selectedAppointmentId = "";
     let isUpdatingAppointmentStatus = false;
     let updatingAppointmentId = "";
-    let appointmentNotesDraft = "";
-    let appointmentNotesDraftId = "";
-    let isSavingAppointmentNotes = false;
+    let appointmentInternalNotesDraft = "";
+    let appointmentInternalNotesDraftId = "";
+    let isSavingAppointmentInternalNotes = false;
+    let isManualAppointmentPanelOpen = false;
+    let isCreatingManualAppointment = false;
+    let isLoadingManualAppointmentSlots = false;
+    let manualAppointmentSlotsError = "";
+    let manualAppointmentFormError = "";
+    let manualAppointmentAvailableSlots = [];
+    let lastManualSlotsQueryKey = "";
+    let manualAppointmentForm = createDefaultManualAppointmentForm();
 
     let selectedServiceId = "";
     let isSavingService = false;
+    let serviceSearch = "";
+    let serviceStatusFilter = "all";
     let serviceForm = {
         id: "",
         name: "",
@@ -90,6 +105,13 @@
 
     let availabilityRows = createDefaultAvailabilityRows();
     let isSavingAvailability = {};
+    let isSavingAllAvailability = false;
+    let slotPreviewServiceId = "";
+    let slotPreviewDate = "";
+    let slotPreviewSlots = [];
+    let slotPreviewError = "";
+    let isLoadingSlotPreview = false;
+    let lastSlotPreviewQueryKey = "";
 
     loadCollections();
 
@@ -103,7 +125,8 @@
         && !!appointmentsCollection?.id;
 
     $: appointmentStatusFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentStatusFieldAliases) || "status";
-    $: appointmentNotesFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentNotesFieldAliases) || "notes";
+    $: appointmentCustomerNotesFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentCustomerNotesFieldAliases) || "notes";
+    $: appointmentInternalNotesFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentInternalNotesFieldAliases) || "internalNotes";
 
     $: if (!websitesCollection?.id) {
         websites = [];
@@ -134,12 +157,71 @@
         servicesRecords.map((service) => [service.id, normalizeString(service?.name) || "Untitled service"]),
     );
 
+    $: selectedWebsite = websites.find((website) => website.id === selectedWebsiteId) || null;
+    $: selectedWebsiteBookingSettings = resolveWebsiteBookingSettings(selectedWebsite?.settings);
+
     $: normalizedAppointments = appointmentRecords.map((record) => normalizeAppointment(record));
 
     $: pendingAppointmentsCount = normalizedAppointments.filter((appointment) => appointment.statusKey === "pending").length;
     $: confirmedAppointmentsCount = normalizedAppointments.filter((appointment) => appointment.statusKey === "confirmed").length;
     $: thisWeekAppointmentsCount = normalizedAppointments.filter((appointment) => isInCurrentWeek(appointment.date)).length;
     $: activeServicesCount = servicesRecords.filter((service) => !!service?.active).length;
+    $: activeAvailabilityDaysCount = availabilityRows.filter((row) => !!row?.active).length;
+    $: bookingReadinessWarnings = buildBookingReadinessWarnings({
+        activeServicesCount,
+        activeAvailabilityDaysCount,
+        bookingSettings: selectedWebsiteBookingSettings,
+    });
+    $: bookingReadinessSuggestions = buildBookingReadinessSuggestions({
+        activeServicesCount,
+        activeAvailabilityDaysCount,
+        bookingSettings: selectedWebsiteBookingSettings,
+    });
+    $: bookingReadinessState = resolveBookingReadinessState(bookingReadinessWarnings.length);
+    $: availabilityValidationIssuesCount = availabilityRows.filter((row) => !!row?.active && !!validateAvailabilityRow(row)).length;
+    $: availabilityHealthWarnings = buildAvailabilityHealthWarnings({
+        bookingWarnings: bookingReadinessWarnings,
+        availabilityValidationIssuesCount,
+        dirtyAvailabilityRowsCount,
+    });
+    $: availabilityHealthSuggestions = buildAvailabilityHealthSuggestions({
+        bookingSuggestions: bookingReadinessSuggestions,
+        dirtyAvailabilityRowsCount,
+        availabilityValidationIssuesCount,
+    });
+    $: availabilityHealthState = resolveBookingReadinessState(availabilityHealthWarnings.length);
+    $: normalizedServiceSearch = normalizeLower(serviceSearch);
+    $: filteredServices = servicesRecords.filter((service) => {
+        const isActive = !!service?.active;
+
+        if (serviceStatusFilter === "active" && !isActive) {
+            return false;
+        }
+
+        if (serviceStatusFilter === "inactive" && isActive) {
+            return false;
+        }
+
+        if (normalizedServiceSearch) {
+            const duration = `${service?.durationMinutes || ""}`.trim();
+            const searchable = [
+                normalizeString(service?.name),
+                duration,
+                duration ? `${duration} minutes` : "",
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLowerCase();
+
+            if (!searchable.includes(normalizedServiceSearch)) {
+                return false;
+            }
+        }
+
+        return true;
+    });
+    $: dirtyAvailabilityRowsCount = availabilityRows.filter((row) => !!row?.dirty).length;
+    $: hasSavingAvailabilityRows = Object.values(isSavingAvailability || {}).some((value) => !!value);
 
     $: appointmentServiceOptions = servicesRecords
         .map((service) => ({
@@ -148,6 +230,51 @@
         }))
         .filter((service) => service.id)
         .sort((a, b) => a.label.localeCompare(b.label));
+    $: manualAppointmentServiceOptions = appointmentServiceOptions.filter((service) => {
+        const record = servicesRecords.find((item) => normalizeString(item?.id) === service.id);
+        return !!record?.active;
+    });
+    $: slotPreviewServiceOptions = manualAppointmentServiceOptions;
+    $: manualAppointmentSlotsQueryKey = isManualAppointmentPanelOpen
+        ? `${selectedWebsiteId}:${manualAppointmentForm.serviceId}:${manualAppointmentForm.date}`
+        : "";
+    $: slotPreviewQueryKey = activeTab === "availability"
+        ? `${selectedWebsiteId}:${slotPreviewServiceId}:${slotPreviewDate}`
+        : "";
+    $: if (
+        isManualAppointmentPanelOpen
+        && manualAppointmentServiceOptions.length
+        && !manualAppointmentServiceOptions.some((service) => service.id === manualAppointmentForm.serviceId)
+    ) {
+        manualAppointmentForm = {
+            ...manualAppointmentForm,
+            serviceId: manualAppointmentServiceOptions[0].id,
+            time: "",
+        };
+    }
+    $: if (manualAppointmentSlotsQueryKey !== lastManualSlotsQueryKey) {
+        lastManualSlotsQueryKey = manualAppointmentSlotsQueryKey;
+        loadManualAppointmentSlots();
+    }
+    $: if (activeTab === "availability" && !slotPreviewDate) {
+        slotPreviewDate = getDefaultSlotPreviewDate();
+    }
+    $: if (
+        activeTab === "availability"
+        && slotPreviewServiceOptions.length
+        && !slotPreviewServiceOptions.some((service) => service.id === slotPreviewServiceId)
+    ) {
+        slotPreviewServiceId = slotPreviewServiceOptions[0].id;
+    }
+    $: if (activeTab === "availability" && !slotPreviewServiceOptions.length) {
+        slotPreviewServiceId = "";
+        slotPreviewSlots = [];
+        slotPreviewError = "";
+    }
+    $: if (slotPreviewQueryKey !== lastSlotPreviewQueryKey) {
+        lastSlotPreviewQueryKey = slotPreviewQueryKey;
+        loadSlotPreview();
+    }
 
     $: normalizedAppointmentSearch = normalizeLower(appointmentSearch);
 
@@ -171,7 +298,8 @@
                     appointment.email,
                     appointment.phone,
                     appointment.serviceLabel,
-                    appointment.notes,
+                    appointment.customerNotes,
+                    appointment.internalNotes,
                 ]
                     .filter(Boolean)
                     .join(" ")
@@ -209,13 +337,13 @@
         && (selectedAppointmentStatusKey === "pending" || selectedAppointmentStatusKey === "confirmed");
 
     $: if (selectedAppointment?.id) {
-        if (appointmentNotesDraftId !== selectedAppointment.id) {
-            appointmentNotesDraftId = selectedAppointment.id;
-            appointmentNotesDraft = selectedAppointment.notes || "";
+        if (appointmentInternalNotesDraftId !== selectedAppointment.id) {
+            appointmentInternalNotesDraftId = selectedAppointment.id;
+            appointmentInternalNotesDraft = selectedAppointment.internalNotes || "";
         }
-    } else if (appointmentNotesDraftId || appointmentNotesDraft) {
-        appointmentNotesDraftId = "";
-        appointmentNotesDraft = "";
+    } else if (appointmentInternalNotesDraftId || appointmentInternalNotesDraft) {
+        appointmentInternalNotesDraftId = "";
+        appointmentInternalNotesDraft = "";
     }
 
     $: selectedService = servicesRecords.find((service) => service.id === selectedServiceId) || null;
@@ -236,6 +364,262 @@
 
     function normalizeLower(value) {
         return normalizeString(value).toLowerCase();
+    }
+
+    function isPlainObject(value) {
+        return !!value && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function parseSettingsObject(rawSettings) {
+        if (isPlainObject(rawSettings)) {
+            return rawSettings;
+        }
+
+        if (typeof rawSettings === "string") {
+            const normalized = rawSettings.trim();
+            if (!normalized) {
+                return {};
+            }
+
+            try {
+                const parsed = JSON.parse(normalized);
+                return isPlainObject(parsed) ? parsed : {};
+            } catch (_) {
+                return {};
+            }
+        }
+
+        return {};
+    }
+
+    function readObject(value) {
+        return isPlainObject(value) ? value : {};
+    }
+
+    function readBoolean(value, fallback = false) {
+        if (typeof value === "boolean") {
+            return value;
+        }
+
+        if (typeof value === "string") {
+            const normalized = value.trim().toLowerCase();
+            if (normalized === "true") {
+                return true;
+            }
+            if (normalized === "false") {
+                return false;
+            }
+        }
+
+        return fallback;
+    }
+
+    function normalizeEmailList(rawValue) {
+        const source = Array.isArray(rawValue) ? rawValue : [rawValue];
+        const normalized = [];
+        const seen = new Set();
+
+        const appendCandidate = (candidateValue) => {
+            const textValue = normalizeLower(candidateValue);
+            if (!textValue) {
+                return;
+            }
+
+            const chunks = textValue
+                .replace(/[\n;]+/g, ",")
+                .split(",")
+                .map((chunk) => chunk.trim())
+                .filter(Boolean);
+
+            for (const chunk of chunks) {
+                if (!seen.has(chunk)) {
+                    seen.add(chunk);
+                    normalized.push(chunk);
+                }
+            }
+        };
+
+        for (const entry of source) {
+            if (typeof entry === "string") {
+                appendCandidate(entry);
+                continue;
+            }
+
+            if (isPlainObject(entry)) {
+                appendCandidate(entry.email);
+                appendCandidate(entry.address);
+                appendCandidate(entry.value);
+            }
+        }
+
+        return normalized;
+    }
+
+    function parseEmailNotifications(rawNotifications, legacyDestination = "") {
+        const hasExplicitConfig = isPlainObject(rawNotifications);
+        const source = readObject(rawNotifications);
+        const toRecipients = normalizeEmailList(source.to);
+        const legacyRecipient = normalizeLower(legacyDestination);
+        let enabled = readBoolean(source.enabled, false);
+
+        if (!toRecipients.length && legacyRecipient) {
+            toRecipients.push(legacyRecipient);
+            if (!hasExplicitConfig) {
+                enabled = true;
+            }
+        }
+
+        return {
+            enabled,
+            to: toRecipients,
+            cc: normalizeEmailList(source.cc),
+        };
+    }
+
+    function resolveWebsiteBookingSettings(rawSettings) {
+        const settings = parseSettingsObject(rawSettings);
+        const featureFlags = readObject(settings.featureFlags);
+        const booking = readObject(settings.booking);
+        const contactForm = readObject(settings.contactForm);
+
+        const bookingFeatureAvailable = readBoolean(featureFlags.booking, true);
+        const bookingEnabled = readBoolean(booking.enabled, true);
+
+        const bookingNotifications = parseEmailNotifications(
+            booking.emailNotifications,
+            normalizeString(booking.emailDestination),
+        );
+        const contactNotifications = parseEmailNotifications(
+            contactForm.emailNotifications,
+            normalizeString(contactForm.emailDestination),
+        );
+
+        const effectiveNotifications = {
+            enabled: bookingNotifications.enabled,
+            to: [...bookingNotifications.to],
+            cc: [...bookingNotifications.cc],
+        };
+
+        let usingContactFormFallback = false;
+        if (!effectiveNotifications.to.length && contactNotifications.to.length) {
+            usingContactFormFallback = true;
+            effectiveNotifications.to = [...contactNotifications.to];
+            effectiveNotifications.cc = [...contactNotifications.cc];
+            if (contactNotifications.enabled) {
+                effectiveNotifications.enabled = true;
+            }
+        }
+
+        const hasBusinessRecipients = effectiveNotifications.to.length > 0;
+        const businessNotificationsReady = effectiveNotifications.enabled && hasBusinessRecipients;
+
+        return {
+            featureAvailable: bookingFeatureAvailable,
+            enabled: bookingEnabled,
+            bookingNotifications,
+            contactNotifications,
+            effectiveNotifications,
+            usingContactFormFallback,
+            businessNotificationsReady,
+        };
+    }
+
+    function getDefaultSlotPreviewDate() {
+        const date = new Date();
+        date.setDate(date.getDate() + 1);
+        const year = date.getFullYear();
+        const month = `${date.getMonth() + 1}`.padStart(2, "0");
+        const day = `${date.getDate()}`.padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    }
+
+    function setSlotPreviewService(serviceId) {
+        slotPreviewServiceId = normalizeString(serviceId);
+        slotPreviewSlots = [];
+        slotPreviewError = "";
+    }
+
+    function setSlotPreviewDate(dateValue) {
+        slotPreviewDate = normalizeString(dateValue);
+        slotPreviewSlots = [];
+        slotPreviewError = "";
+    }
+
+    function isValidEmail(value) {
+        return bookingEmailPattern.test(normalizeString(value).toLowerCase());
+    }
+
+    function createDefaultManualAppointmentForm() {
+        return {
+            serviceId: "",
+            date: "",
+            time: "",
+            name: "",
+            email: "",
+            phone: "",
+            notes: "",
+            internalNotes: "",
+            status: "confirmed",
+        };
+    }
+
+    function resetManualAppointmentForm() {
+        manualAppointmentForm = createDefaultManualAppointmentForm();
+        manualAppointmentFormError = "";
+        manualAppointmentSlotsError = "";
+        manualAppointmentAvailableSlots = [];
+        lastManualSlotsQueryKey = "";
+    }
+
+    function openManualAppointmentPanel() {
+        if (!selectedWebsiteId) {
+            addErrorToast("Select a website before creating an appointment.");
+            return;
+        }
+
+        resetManualAppointmentForm();
+        if (manualAppointmentServiceOptions.length) {
+            manualAppointmentForm = {
+                ...manualAppointmentForm,
+                serviceId: manualAppointmentServiceOptions[0].id,
+            };
+        }
+        isManualAppointmentPanelOpen = true;
+    }
+
+    function closeManualAppointmentPanel() {
+        isManualAppointmentPanelOpen = false;
+        isLoadingManualAppointmentSlots = false;
+        isCreatingManualAppointment = false;
+        resetManualAppointmentForm();
+    }
+
+    function setManualAppointmentService(serviceId) {
+        manualAppointmentForm = {
+            ...manualAppointmentForm,
+            serviceId: normalizeString(serviceId),
+            time: "",
+        };
+        manualAppointmentFormError = "";
+        manualAppointmentSlotsError = "";
+    }
+
+    function setManualAppointmentDate(dateValue) {
+        manualAppointmentForm = {
+            ...manualAppointmentForm,
+            date: normalizeString(dateValue),
+            time: "",
+        };
+        manualAppointmentFormError = "";
+        manualAppointmentSlotsError = "";
+    }
+
+    function selectManualAppointmentSlot(slot) {
+        manualAppointmentForm = {
+            ...manualAppointmentForm,
+            time: normalizeString(slot),
+        };
+        manualAppointmentFormError = "";
     }
 
     function normalizeRelationId(value) {
@@ -397,6 +781,242 @@
         isLoadingBookingData = false;
     }
 
+    async function loadSlotPreview() {
+        if (activeTab !== "availability") {
+            return;
+        }
+
+        const serviceId = normalizeString(slotPreviewServiceId);
+        const dateValue = normalizeString(slotPreviewDate);
+        const hasValidService = slotPreviewServiceOptions.some((service) => service.id === serviceId);
+        const requestScopeKey = `${selectedWebsiteId}:${serviceId}:${dateValue}`;
+
+        if (!selectedWebsiteId || !serviceId || !hasValidService || !bookingDatePattern.test(dateValue)) {
+            slotPreviewSlots = [];
+            slotPreviewError = "";
+            isLoadingSlotPreview = false;
+            return;
+        }
+
+        isLoadingSlotPreview = true;
+        slotPreviewError = "";
+
+        try {
+            const query = new URLSearchParams({
+                websiteId: selectedWebsiteId,
+                serviceId,
+                date: dateValue,
+            });
+
+            const response = await ApiClient.send(`/api/nuvio/booking/slots?${query.toString()}`, {
+                method: "GET",
+                requestKey: `nuvio_booking_slot_preview_${selectedWebsiteId}_${serviceId}_${dateValue}`,
+            });
+
+            const slots = Array.isArray(response?.slots)
+                ? response.slots.map((slot) => normalizeString(slot)).filter((slot) => bookingTimePattern.test(slot))
+                : [];
+
+            if (slotPreviewQueryKey !== requestScopeKey) {
+                return;
+            }
+
+            slotPreviewSlots = slots;
+        } catch (err) {
+            ApiClient.error(err, false);
+            if (slotPreviewQueryKey !== requestScopeKey) {
+                return;
+            }
+
+            slotPreviewSlots = [];
+            slotPreviewError = "Unable to load available times right now.";
+        } finally {
+            if (slotPreviewQueryKey === requestScopeKey) {
+                isLoadingSlotPreview = false;
+            }
+        }
+    }
+
+    async function loadManualAppointmentSlots() {
+        if (!isManualAppointmentPanelOpen) {
+            manualAppointmentAvailableSlots = [];
+            manualAppointmentSlotsError = "";
+            return;
+        }
+
+        const serviceId = normalizeString(manualAppointmentForm.serviceId);
+        const dateValue = normalizeString(manualAppointmentForm.date);
+        const requestScopeKey = `${selectedWebsiteId}:${serviceId}:${dateValue}`;
+
+        if (!selectedWebsiteId || !serviceId || !bookingDatePattern.test(dateValue)) {
+            manualAppointmentAvailableSlots = [];
+            manualAppointmentSlotsError = "";
+            isLoadingManualAppointmentSlots = false;
+            return;
+        }
+
+        isLoadingManualAppointmentSlots = true;
+        manualAppointmentSlotsError = "";
+
+        try {
+            const query = new URLSearchParams({
+                websiteId: selectedWebsiteId,
+                serviceId,
+                date: dateValue,
+            });
+
+            const response = await ApiClient.send(`/api/nuvio/booking/slots?${query.toString()}`, {
+                method: "GET",
+                requestKey: `nuvio_booking_manual_slots_${selectedWebsiteId}_${serviceId}_${dateValue}`,
+            });
+
+            const slots = Array.isArray(response?.slots)
+                ? response.slots.map((slot) => normalizeString(slot)).filter((slot) => bookingTimePattern.test(slot))
+                : [];
+
+            if (!isManualAppointmentPanelOpen || manualAppointmentSlotsQueryKey !== requestScopeKey) {
+                return;
+            }
+
+            manualAppointmentAvailableSlots = slots;
+
+            if (!slots.includes(normalizeString(manualAppointmentForm.time))) {
+                manualAppointmentForm = {
+                    ...manualAppointmentForm,
+                    time: "",
+                };
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+
+            if (!isManualAppointmentPanelOpen || manualAppointmentSlotsQueryKey !== requestScopeKey) {
+                return;
+            }
+
+            manualAppointmentAvailableSlots = [];
+            manualAppointmentSlotsError = "Unable to load available times right now.";
+            manualAppointmentForm = {
+                ...manualAppointmentForm,
+                time: "",
+            };
+        } finally {
+            isLoadingManualAppointmentSlots = false;
+        }
+    }
+
+    function validateManualAppointmentForm() {
+        const serviceId = normalizeString(manualAppointmentForm.serviceId);
+        const dateValue = normalizeString(manualAppointmentForm.date);
+        const timeValue = normalizeString(manualAppointmentForm.time);
+        const nameValue = normalizeString(manualAppointmentForm.name);
+        const emailValue = normalizeString(manualAppointmentForm.email);
+        const statusValue = normalizeLower(manualAppointmentForm.status);
+
+        if (!selectedWebsiteId) {
+            return "Select a website before creating an appointment.";
+        }
+
+        if (!serviceId) {
+            return "Service is required.";
+        }
+
+        if (!bookingDatePattern.test(dateValue)) {
+            return "Date is required.";
+        }
+
+        if (!timeValue || !bookingTimePattern.test(timeValue)) {
+            return "Select an available time.";
+        }
+
+        if (
+            Array.isArray(manualAppointmentAvailableSlots)
+            && manualAppointmentAvailableSlots.length
+            && !manualAppointmentAvailableSlots.includes(timeValue)
+        ) {
+            return "Select an available time.";
+        }
+
+        if (!nameValue) {
+            return "Customer name is required.";
+        }
+
+        if (!isValidEmail(emailValue)) {
+            return "A valid customer email is required.";
+        }
+
+        if (!["pending", "confirmed"].includes(statusValue)) {
+            return "Status must be pending or confirmed.";
+        }
+
+        return "";
+    }
+
+    async function createManualAppointment() {
+        if (isCreatingManualAppointment || isLoadingManualAppointmentSlots) {
+            return;
+        }
+
+        const validationError = validateManualAppointmentForm();
+        if (validationError) {
+            manualAppointmentFormError = validationError;
+            return;
+        }
+
+        isCreatingManualAppointment = true;
+        manualAppointmentFormError = "";
+
+        const payload = {
+            websiteId: selectedWebsiteId,
+            serviceId: normalizeString(manualAppointmentForm.serviceId),
+            date: normalizeString(manualAppointmentForm.date),
+            time: normalizeString(manualAppointmentForm.time),
+            name: normalizeString(manualAppointmentForm.name),
+            email: normalizeString(manualAppointmentForm.email).toLowerCase(),
+            phone: normalizeString(manualAppointmentForm.phone),
+            notes: normalizeString(manualAppointmentForm.notes),
+            internalNotes: normalizeString(manualAppointmentForm.internalNotes),
+            status: normalizeLower(manualAppointmentForm.status) || "confirmed",
+            createContact: true,
+            sendConfirmationEmail: false,
+        };
+
+        try {
+            const response = await ApiClient.send("/api/nuvio/booking/admin/appointments", {
+                method: "POST",
+                body: payload,
+                requestKey: `nuvio_booking_manual_create_${selectedWebsiteId}`,
+            });
+
+            await loadBookingData();
+
+            const createdAppointmentId = normalizeString(response?.appointmentId);
+            if (createdAppointmentId) {
+                selectedAppointmentId = createdAppointmentId;
+            }
+
+            closeManualAppointmentPanel();
+            addSuccessToast("Appointment created.");
+
+            if (normalizeString(response?.warning)) {
+                addErrorToast(normalizeString(response.warning));
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+
+            const statusCode = (err?.status << 0) || 0;
+            const conflictMessage = "This time is no longer available. Please choose another time.";
+            if (statusCode === 409) {
+                manualAppointmentFormError = conflictMessage;
+                addErrorToast(conflictMessage);
+                await loadManualAppointmentSlots();
+            } else {
+                addErrorToast("Unable to create appointment right now.");
+            }
+        } finally {
+            isCreatingManualAppointment = false;
+        }
+    }
+
     function toLocalDateParts(dateValue) {
         const raw = normalizeString(dateValue);
         const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -499,6 +1119,140 @@
         return { label: "Pending", className: "label-warning" };
     }
 
+    function resolveBookingReadinessState(warningsCount) {
+        if (warningsCount >= 2) {
+            return {
+                label: "Missing basics",
+                badgeClass: "label-danger",
+            };
+        }
+
+        if (warningsCount === 1) {
+            return {
+                label: "Needs attention",
+                badgeClass: "label-warning",
+            };
+        }
+
+        return {
+            label: "Ready",
+            badgeClass: "label-success",
+        };
+    }
+
+    function buildBookingReadinessWarnings({
+        activeServicesCount = 0,
+        activeAvailabilityDaysCount = 0,
+        bookingSettings = {},
+    } = {}) {
+        const warnings = [];
+        const settings = isPlainObject(bookingSettings) ? bookingSettings : {};
+        const featureAvailable = settings.featureAvailable !== false;
+        const bookingEnabled = settings.enabled !== false;
+        const notificationsReady = !!settings.businessNotificationsReady;
+
+        if (activeServicesCount <= 0) {
+            warnings.push("Add at least one active service.");
+        }
+
+        if (activeAvailabilityDaysCount <= 0) {
+            warnings.push("Set at least one active availability day.");
+        }
+
+        if (!featureAvailable) {
+            warnings.push("Booking feature availability is turned off for this website.");
+        }
+
+        if (featureAvailable && !bookingEnabled) {
+            warnings.push("Booking request intake is disabled in Website Settings.");
+        }
+
+        if (featureAvailable && bookingEnabled && !notificationsReady) {
+            warnings.push("Business email notifications are missing or disabled for Booking requests.");
+        }
+
+        return warnings;
+    }
+
+    function buildBookingReadinessSuggestions({
+        activeServicesCount = 0,
+        activeAvailabilityDaysCount = 0,
+        bookingSettings = {},
+    } = {}) {
+        const settings = isPlainObject(bookingSettings) ? bookingSettings : {};
+        const featureAvailable = settings.featureAvailable !== false;
+        const bookingEnabled = settings.enabled !== false;
+        const notificationsReady = !!settings.businessNotificationsReady;
+        const usingContactFormFallback = !!settings.usingContactFormFallback;
+        const suggestions = [
+            "Publish a page with the Booking block in CMS to start receiving requests.",
+        ];
+
+        if (!featureAvailable) {
+            suggestions.unshift("Ask an admin to enable Booking in Website Settings feature availability.");
+        } else if (!bookingEnabled) {
+            suggestions.unshift("Enable Booking in Website Settings > Features > Booking to accept new requests.");
+        }
+
+        if (featureAvailable && bookingEnabled && !notificationsReady) {
+            suggestions.push("Configure Booking email notifications so your team is alerted when new requests arrive.");
+        }
+
+        if (usingContactFormFallback) {
+            suggestions.push("Booking notifications are currently using Contact Form recipients. Add Booking recipients when ready.");
+        }
+
+        if (featureAvailable && bookingEnabled && activeServicesCount > 0 && activeAvailabilityDaysCount > 0) {
+            suggestions.unshift("Booking setup basics are ready. New requests can arrive once the public block is live.");
+        } else {
+            suggestions.push("Keep service durations and weekly schedule aligned with your team capacity.");
+        }
+
+        return suggestions;
+    }
+
+    function buildAvailabilityHealthWarnings({
+        bookingWarnings = [],
+        availabilityValidationIssuesCount = 0,
+        dirtyAvailabilityRowsCount = 0,
+    } = {}) {
+        const warnings = Array.isArray(bookingWarnings) ? [...bookingWarnings] : [];
+
+        if (availabilityValidationIssuesCount > 0) {
+            warnings.push(
+                `${availabilityValidationIssuesCount} active day${availabilityValidationIssuesCount === 1 ? "" : "s"} need valid start and end times.`,
+            );
+        }
+
+        if (dirtyAvailabilityRowsCount > 0) {
+            warnings.push("There are unsaved availability changes.");
+        }
+
+        return [...new Set(warnings)];
+    }
+
+    function buildAvailabilityHealthSuggestions({
+        bookingSuggestions = [],
+        dirtyAvailabilityRowsCount = 0,
+        availabilityValidationIssuesCount = 0,
+    } = {}) {
+        const suggestions = Array.isArray(bookingSuggestions) ? [...bookingSuggestions] : [];
+
+        if (dirtyAvailabilityRowsCount > 0) {
+            suggestions.unshift("Save changes after updating schedule rows or using presets.");
+        }
+
+        if (availabilityValidationIssuesCount > 0) {
+            suggestions.unshift("Fix active day time ranges where end time is not after start time.");
+        }
+
+        if (!dirtyAvailabilityRowsCount && !availabilityValidationIssuesCount) {
+            suggestions.unshift("Use Slot preview to verify what visitors can book for each service.");
+        }
+
+        return [...new Set(suggestions)];
+    }
+
     function normalizeAppointment(record) {
         const id = normalizeString(record?.id);
         const serviceId = normalizeRelationId(record?.service);
@@ -523,7 +1277,8 @@
             phone: normalizeString(record?.phone),
             date: normalizeString(record?.date),
             time: normalizeString(record?.time),
-            notes: normalizeString(record?.[appointmentNotesFieldName]),
+            customerNotes: normalizeString(record?.[appointmentCustomerNotesFieldName]),
+            internalNotes: normalizeString(record?.[appointmentInternalNotesFieldName]),
             statusKey,
             statusLabel: statusMeta.label,
             statusClassName: statusMeta.className,
@@ -659,28 +1414,28 @@
         }
     }
 
-    async function saveSelectedAppointmentNotes() {
-        if (!selectedAppointment?.id || !appointmentsCollection?.id || isSavingAppointmentNotes) {
+    async function saveSelectedAppointmentInternalNotes() {
+        if (!selectedAppointment?.id || !appointmentsCollection?.id || isSavingAppointmentInternalNotes) {
             return;
         }
 
-        isSavingAppointmentNotes = true;
+        isSavingAppointmentInternalNotes = true;
 
         try {
             await ApiClient.collection(appointmentsCollection.id).update(selectedAppointment.id, {
-                [appointmentNotesFieldName]: appointmentNotesDraft,
+                [appointmentInternalNotesFieldName]: appointmentInternalNotesDraft,
             });
 
             patchAppointmentRecord(selectedAppointment.id, {
-                [appointmentNotesFieldName]: appointmentNotesDraft,
+                [appointmentInternalNotesFieldName]: appointmentInternalNotesDraft,
             });
 
-            addSuccessToast("Appointment notes saved.");
+            addSuccessToast("Internal notes saved.");
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to save appointment notes right now.");
+            addErrorToast("Unable to save internal notes right now.");
         } finally {
-            isSavingAppointmentNotes = false;
+            isSavingAppointmentInternalNotes = false;
         }
     }
 
@@ -799,6 +1554,10 @@
             active: false,
             startTime: "09:00",
             endTime: "17:00",
+            initialActive: false,
+            initialStartTime: "09:00",
+            initialEndTime: "17:00",
+            dirty: false,
             error: "",
         }));
     }
@@ -823,18 +1582,39 @@
                 active: !!record?.active,
                 startTime: normalizeString(record?.startTime) || "09:00",
                 endTime: normalizeString(record?.endTime) || "17:00",
+                initialActive: !!record?.active,
+                initialStartTime: normalizeString(record?.startTime) || "09:00",
+                initialEndTime: normalizeString(record?.endTime) || "17:00",
+                dirty: false,
                 error: "",
             };
         });
     }
 
+    function isAvailabilityRowDirty(row) {
+        if (!row) {
+            return false;
+        }
+
+        return !!row.active !== !!row.initialActive
+            || normalizeString(row.startTime) !== normalizeString(row.initialStartTime)
+            || normalizeString(row.endTime) !== normalizeString(row.initialEndTime);
+    }
+
     function updateAvailabilityRow(dayKey, patchData = {}) {
         availabilityRows = availabilityRows.map((row) =>
             row.dayOfWeek === dayKey
-                ? {
-                    ...row,
-                    ...patchData,
-                }
+                ? (() => {
+                    const next = {
+                        ...row,
+                        ...patchData,
+                    };
+
+                    return {
+                        ...next,
+                        dirty: isAvailabilityRowDirty(next),
+                    };
+                })()
                 : row,
         );
     }
@@ -873,26 +1653,30 @@
         return "";
     }
 
-    async function saveAvailabilityRow(row) {
+    async function saveAvailabilityRow(row, options = {}) {
         if (!row || !selectedWebsiteId || !bookingAvailabilityCollection?.id) {
-            return;
+            return false;
         }
 
         const validationError = validateAvailabilityRow(row);
         if (validationError) {
             updateAvailabilityRow(row.dayOfWeek, { error: validationError });
-            return;
+            return false;
         }
 
         updateAvailabilityRow(row.dayOfWeek, { error: "" });
         isSavingAvailability = { ...isSavingAvailability, [row.dayOfWeek]: true };
 
+        const normalizedStartTime = normalizeString(row.startTime) || "09:00";
+        const normalizedEndTime = normalizeString(row.endTime) || "17:00";
+        const normalizedActive = !!row.active;
+
         const payload = {
             website: selectedWebsiteId,
             dayOfWeek: row.dayOfWeek,
-            startTime: normalizeString(row.startTime) || "09:00",
-            endTime: normalizeString(row.endTime) || "17:00",
-            active: !!row.active,
+            startTime: normalizedStartTime,
+            endTime: normalizedEndTime,
+            active: normalizedActive,
         };
 
         try {
@@ -903,18 +1687,38 @@
                         ? { ...record, ...updated }
                         : record,
                 );
-                updateAvailabilityRow(row.dayOfWeek, { recordId: updated.id, error: "" });
-                addSuccessToast(`${row.label} availability updated.`);
+                updateAvailabilityRow(row.dayOfWeek, {
+                    recordId: updated.id,
+                    initialActive: normalizedActive,
+                    initialStartTime: normalizedStartTime,
+                    initialEndTime: normalizedEndTime,
+                    error: "",
+                });
+                if (!options?.silent) {
+                    addSuccessToast(`${row.label} availability updated.`);
+                }
             } else {
                 const created = await ApiClient.collection(bookingAvailabilityCollection.id).create(payload);
                 availabilityRecords = [created, ...availabilityRecords];
-                updateAvailabilityRow(row.dayOfWeek, { recordId: created.id, error: "" });
-                addSuccessToast(`${row.label} availability saved.`);
+                updateAvailabilityRow(row.dayOfWeek, {
+                    recordId: created.id,
+                    initialActive: normalizedActive,
+                    initialStartTime: normalizedStartTime,
+                    initialEndTime: normalizedEndTime,
+                    error: "",
+                });
+                if (!options?.silent) {
+                    addSuccessToast(`${row.label} availability saved.`);
+                }
             }
+            return true;
         } catch (err) {
             ApiClient.error(err, false);
             updateAvailabilityRow(row.dayOfWeek, { error: "Unable to save this day right now." });
-            addErrorToast("Unable to save availability right now.");
+            if (!options?.silent) {
+                addErrorToast("Unable to save availability right now.");
+            }
+            return false;
         } finally {
             isSavingAvailability = { ...isSavingAvailability, [row.dayOfWeek]: false };
         }
@@ -922,6 +1726,101 @@
 
     function isDaySaving(dayKey) {
         return !!isSavingAvailability?.[dayKey];
+    }
+
+    function applyMondayToWeekdays() {
+        const mondayRow = availabilityRows.find((row) => row.dayOfWeek === "mon");
+        if (!mondayRow) {
+            return;
+        }
+
+        const weekdayKeys = ["tue", "wed", "thu", "fri"];
+
+        for (const dayKey of weekdayKeys) {
+            updateAvailabilityRow(dayKey, {
+                active: !!mondayRow.active,
+                startTime: mondayRow.startTime,
+                endTime: mondayRow.endTime,
+                error: "",
+            });
+        }
+    }
+
+    function setWeekdaysBusinessHours() {
+        const weekdayKeys = ["mon", "tue", "wed", "thu", "fri"];
+
+        for (const dayKey of weekdayKeys) {
+            updateAvailabilityRow(dayKey, {
+                active: true,
+                startTime: "09:00",
+                endTime: "17:00",
+                error: "",
+            });
+        }
+    }
+
+    function clearWeekendAvailability() {
+        const weekendKeys = ["sat", "sun"];
+
+        for (const dayKey of weekendKeys) {
+            updateAvailabilityRow(dayKey, {
+                active: false,
+                error: "",
+            });
+        }
+    }
+
+    async function saveAllChangedAvailabilityRows() {
+        if (isSavingAllAvailability || hasSavingAvailabilityRows) {
+            return;
+        }
+
+        const dirtyRows = availabilityRows.filter((row) => !!row.dirty);
+        if (!dirtyRows.length) {
+            addSuccessToast("No unsaved availability changes.");
+            return;
+        }
+
+        let invalidRowsCount = 0;
+        const rowsToSave = [];
+
+        for (const row of dirtyRows) {
+            const validationError = validateAvailabilityRow(row);
+            if (validationError) {
+                updateAvailabilityRow(row.dayOfWeek, { error: validationError });
+                invalidRowsCount += 1;
+                continue;
+            }
+
+            updateAvailabilityRow(row.dayOfWeek, { error: "" });
+            rowsToSave.push(row);
+        }
+
+        if (!rowsToSave.length) {
+            addErrorToast("Fix validation errors before saving changed days.");
+            return;
+        }
+
+        isSavingAllAvailability = true;
+
+        try {
+            const saveResults = await Promise.all(
+                rowsToSave.map((row) => saveAvailabilityRow(row, { silent: true })),
+            );
+
+            const savedCount = saveResults.filter(Boolean).length;
+            const failedCount = saveResults.length - savedCount;
+
+            if (savedCount > 0) {
+                addSuccessToast(`${savedCount} availability day${savedCount === 1 ? "" : "s"} saved.`);
+            }
+
+            if (failedCount > 0 || invalidRowsCount > 0) {
+                addErrorToast("Some availability changes could not be saved.");
+            }
+        } finally {
+            isSavingAllAvailability = false;
+        }
     }
 
     function clearAppointmentFilters() {
@@ -973,6 +1872,20 @@
         </div>
 
         <div class="head-tools">
+            <div class="tabs-header compact combined left operations-tabs booking-tabs booking-head-tabs">
+                {#each bookingTabs as tab (tab.key)}
+                    <button
+                        type="button"
+                        class="tab-item"
+                        class:active={activeTab === tab.key}
+                        on:click={() => (activeTab = tab.key)}
+                    >
+                        <i class={`${tab.icon} tab-icon`} aria-hidden="true" />
+                        <span class="tab-label">{tab.label}</span>
+                    </button>
+                {/each}
+            </div>
+
             <div class="summary-badges">
                 <span class="summary-pill">
                     <i class="ri-time-line" />
@@ -995,20 +1908,6 @@
     </section>
 
     <section class="panel booking-body m-b-base">
-        <div class="tabs-header compact combined left operations-tabs booking-tabs">
-            {#each bookingTabs as tab (tab.key)}
-                <button
-                    type="button"
-                    class="tab-item"
-                    class:active={activeTab === tab.key}
-                    on:click={() => (activeTab = tab.key)}
-                >
-                    <i class={`${tab.icon} tab-icon`} aria-hidden="true" />
-                    <span class="tab-label">{tab.label}</span>
-                </button>
-            {/each}
-        </div>
-
         {#if !hasBookingCollections}
             <div class="alert alert-warning m-b-0">
                 <div class="icon">
@@ -1040,6 +1939,21 @@
         {:else if activeTab === "appointments"}
             <div class="booking-split-layout">
                 <div class="booking-main-column">
+                    <div class="booking-section-head-row booking-section-head-row--appointments">
+                        <div class="booking-section-head-copy">
+                            <h4 class="m-0">Appointments inbox</h4>
+                            <p class="txt-sm txt-hint m-b-0">
+                                Monitor appointment requests, update status, and keep follow-up notes.
+                            </p>
+                        </div>
+                        <div class="booking-section-head-meta">
+                            <span class="summary-pill">{filteredAppointments.length} visible</span>
+                            <button type="button" class="btn btn-outline btn-sm" on:click={openManualAppointmentPanel}>
+                                <span class="txt">New appointment</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="booking-controls booking-controls--appointments">
                         <div class="booking-control-cell booking-control-cell--search">
                             <label class="txt-sm txt-hint" for="booking-appointment-search">Search</label>
@@ -1097,8 +2011,29 @@
                     </div>
 
                     {#if !normalizedAppointments.length}
-                        <div class="empty-state m-b-0">
-                            No appointments yet. Appointment requests will appear here.
+                        <div class="booking-empty-state m-b-0">
+                            <h5 class="m-0">No appointment requests yet.</h5>
+                            <p class="txt-sm txt-hint m-b-0">
+                                Appointment requests will appear here once visitors submit the booking form.
+                            </p>
+                            <div class="booking-empty-readiness">
+                                <div class="booking-empty-readiness-row">
+                                    <span class="txt-sm">Active services</span>
+                                    <span class={`label label-sm ${activeServicesCount > 0 ? "label-success" : "label-warning"}`}>
+                                        {activeServicesCount > 0 ? `${activeServicesCount} ready` : "Missing"}
+                                    </span>
+                                </div>
+                                <div class="booking-empty-readiness-row">
+                                    <span class="txt-sm">Active availability days</span>
+                                    <span class={`label label-sm ${activeAvailabilityDaysCount > 0 ? "label-success" : "label-warning"}`}>
+                                        {activeAvailabilityDaysCount > 0 ? `${activeAvailabilityDaysCount} active` : "Missing"}
+                                    </span>
+                                </div>
+                                <div class="booking-empty-readiness-row">
+                                    <span class="txt-sm">Public booking block</span>
+                                    <span class="txt-xs txt-hint">Configure in CMS pages</span>
+                                </div>
+                            </div>
                         </div>
                     {:else if !filteredAppointments.length}
                         <div class="empty-state m-b-0">
@@ -1144,40 +2079,16 @@
                     {#if selectedAppointment}
                         <section class="booking-rail-block">
                             <h5 class="m-0">Appointment summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">Overview of this appointment request.</p>
+                            <p class="txt-sm txt-hint m-b-0">Overview of this appointment request and customer details.</p>
                             <div class="booking-summary-grid">
                                 <div class="booking-summary-row">
                                     <span class="txt-xs txt-hint">Status</span>
                                     <span class={`label label-sm ${selectedAppointment.statusClassName}`}>{selectedAppointment.statusLabel}</span>
                                 </div>
                                 <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Created</span>
-                                    <span class="txt-sm">{formatDateTime(selectedAppointment.created)}</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="booking-rail-block">
-                            <h5 class="m-0">Contact</h5>
-                            <div class="booking-summary-grid">
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Name</span>
+                                    <span class="txt-xs txt-hint">Customer</span>
                                     <span class="txt-sm">{selectedAppointment.name}</span>
                                 </div>
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Email</span>
-                                    <span class="txt-sm">{selectedAppointment.email || "No email provided"}</span>
-                                </div>
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Phone</span>
-                                    <span class="txt-sm">{selectedAppointment.phone || "No phone provided"}</span>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="booking-rail-block">
-                            <h5 class="m-0">Service &amp; time</h5>
-                            <div class="booking-summary-grid">
                                 <div class="booking-summary-row">
                                     <span class="txt-xs txt-hint">Service</span>
                                     <span class="txt-sm">{selectedAppointment.serviceLabel}</span>
@@ -1185,6 +2096,18 @@
                                 <div class="booking-summary-row">
                                     <span class="txt-xs txt-hint">Date &amp; time</span>
                                     <span class="txt-sm">{formatAppointmentDateTime(selectedAppointment.date, selectedAppointment.time)}</span>
+                                </div>
+                                <div class="booking-summary-row">
+                                    <span class="txt-xs txt-hint">Created</span>
+                                    <span class="txt-sm">{formatDateTime(selectedAppointment.created)}</span>
+                                </div>
+                                <div class="booking-summary-row">
+                                    <span class="txt-xs txt-hint">Customer email</span>
+                                    <span class="txt-sm">{selectedAppointment.email || "No email provided"}</span>
+                                </div>
+                                <div class="booking-summary-row">
+                                    <span class="txt-xs txt-hint">Customer phone</span>
+                                    <span class="txt-sm">{selectedAppointment.phone || "No phone provided"}</span>
                                 </div>
                             </div>
                         </section>
@@ -1232,28 +2155,45 @@
 
                         <section class="booking-rail-block">
                             <h5 class="m-0">Notes</h5>
-                            <p class="txt-sm txt-hint m-b-0">Keep internal context for follow-up.</p>
+                            <div class="booking-form-stack">
+                                <div>
+                                    <p class="txt-xs txt-hint m-b-0">Customer notes</p>
+                                    {#if selectedAppointment.customerNotes}
+                                        <p class="txt-sm m-b-0 booking-readonly-note">{selectedAppointment.customerNotes}</p>
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">No customer notes provided.</p>
+                                    {/if}
+                                </div>
+
+                                <div>
+                                    <p class="txt-xs txt-hint m-b-0">Internal notes</p>
+                                    <p class="txt-sm txt-hint m-b-0 booking-internal-notes-helper">Keep private follow-up notes for this appointment.</p>
+                                </div>
+                            </div>
                             <textarea
                                 class="input booking-notes-input"
                                 rows="5"
-                                placeholder="Add follow-up notes for this appointment..."
-                                bind:value={appointmentNotesDraft}
-                                disabled={isSavingAppointmentNotes}
+                                placeholder="Add internal follow-up notes..."
+                                bind:value={appointmentInternalNotesDraft}
+                                disabled={isSavingAppointmentInternalNotes}
                             />
                             <div class="booking-actions-row">
                                 <button
                                     type="button"
                                     class="btn btn-sm"
-                                    class:btn-loading={isSavingAppointmentNotes}
-                                    disabled={isSavingAppointmentNotes || appointmentNotesDraft === (selectedAppointment.notes || "")}
-                                    on:click={saveSelectedAppointmentNotes}
+                                    class:btn-loading={isSavingAppointmentInternalNotes}
+                                    disabled={isSavingAppointmentInternalNotes || appointmentInternalNotesDraft === (selectedAppointment.internalNotes || "")}
+                                    on:click={saveSelectedAppointmentInternalNotes}
                                 >
-                                    <span class="txt">Save notes</span>
+                                    <span class="txt">Save internal notes</span>
                                 </button>
                             </div>
                         </section>
                     {:else}
-                        <div class="empty-state m-b-0">Select an appointment to view details.</div>
+                        <section class="booking-rail-block">
+                            <h5 class="m-0">Appointment details</h5>
+                            <p class="txt-sm txt-hint m-b-0">Select an appointment to view details and update status.</p>
+                        </section>
                     {/if}
                 </aside>
             </div>
@@ -1261,19 +2201,50 @@
             <div class="booking-split-layout booking-split-layout--services">
                 <div class="booking-main-column">
                     <div class="booking-section-head-row">
-                        <h4 class="m-0">Services</h4>
-                        <button type="button" class="btn btn-outline btn-sm" on:click={createNewService}>
-                            <span class="txt">New service</span>
-                        </button>
+                        <div class="booking-section-head-copy">
+                            <h4 class="m-0">Services</h4>
+                            <p class="txt-sm txt-hint m-b-0">Define what visitors can book and how long each service takes.</p>
+                        </div>
+                        <div class="booking-section-head-actions">
+                            <span class="summary-pill">{activeServicesCount} active</span>
+                            <button type="button" class="btn btn-outline btn-sm" on:click={createNewService}>
+                                <span class="txt">New service</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="booking-services-controls">
+                        <div class="booking-control-cell booking-control-cell--search">
+                            <label class="txt-sm txt-hint" for="booking-services-search">Search</label>
+                            <input
+                                id="booking-services-search"
+                                class="input input-sm"
+                                type="text"
+                                placeholder="Search by service name or duration..."
+                                bind:value={serviceSearch}
+                            />
+                        </div>
+                        <div class="booking-control-cell booking-control-cell--select">
+                            <label class="txt-sm txt-hint" for="booking-services-status-filter">Status</label>
+                            <select id="booking-services-status-filter" class="input input-sm" bind:value={serviceStatusFilter}>
+                                <option value="all">All</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
                     </div>
 
                     {#if !servicesRecords.length}
                         <div class="empty-state m-b-0">
                             No services yet. Add a service to start accepting bookings.
                         </div>
+                    {:else if !filteredServices.length}
+                        <div class="empty-state m-b-0">
+                            No services match these filters.
+                        </div>
                     {:else}
                         <div class="booking-services-list" role="list">
-                            {#each servicesRecords as service (service.id)}
+                            {#each filteredServices as service (service.id)}
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <article
@@ -1284,13 +2255,15 @@
                                     on:click={() => selectService(service)}
                                 >
                                     <div class="booking-service-main">
-                                        <div class="booking-service-title">{service.name || "Untitled service"}</div>
-                                        <div class="txt-sm txt-hint">{service.durationMinutes || 0} minutes</div>
+                                        <div class="booking-service-title-row">
+                                            <div class="booking-service-title">{service.name || "Untitled service"}</div>
+                                            <span class={`label label-sm ${service.active ? "label-success" : "label-warning"}`}>
+                                                {service.active ? "Active" : "Inactive"}
+                                            </span>
+                                        </div>
+                                        <div class="booking-service-meta txt-sm txt-hint">{service.durationMinutes || 0} minutes</div>
                                     </div>
                                     <div class="booking-service-actions">
-                                        <span class={`label label-sm ${service.active ? "label-success" : "label-warning"}`}>
-                                            {service.active ? "Active" : "Inactive"}
-                                        </span>
                                         <button
                                             type="button"
                                             class="btn btn-outline btn-sm"
@@ -1307,8 +2280,11 @@
 
                 <aside class="booking-rail">
                     <section class="booking-rail-block">
-                        <h5 class="m-0">{serviceForm.id ? "Edit service" : "Create service"}</h5>
-                        <p class="txt-sm txt-hint m-b-0">Define service name, duration, and active status.</p>
+                        <h5 class="m-0">Service details</h5>
+                        <p class="txt-sm txt-hint m-b-0">Create or update service name, duration, and active status.</p>
+                        <div class="booking-actions-row">
+                            <span class="summary-pill">{serviceForm.id ? "Editing selected service" : "Creating a new service"}</span>
+                        </div>
 
                         <div class="booking-form-stack">
                             <div class="form-field">
@@ -1377,73 +2353,393 @@
                 </aside>
             </div>
         {:else}
-            <div class="booking-availability-layout">
-                <div class="booking-section-head-row">
-                    <h4 class="m-0">Weekly availability</h4>
-                    <p class="txt-sm txt-hint m-b-0">Set active days and time windows for appointment requests.</p>
+            <div class="booking-split-layout booking-split-layout--availability">
+                <div class="booking-main-column booking-availability-main">
+                    <div class="booking-section-head-row">
+                        <div class="booking-section-head-copy">
+                            <h4 class="m-0">Weekly availability</h4>
+                            <p class="txt-sm txt-hint m-b-0">Set active days and time windows for appointment requests.</p>
+                        </div>
+                        <div class="booking-section-head-actions">
+                            <span class="summary-pill">{activeAvailabilityDaysCount} active days</span>
+                            <span class="summary-pill" class:warning={dirtyAvailabilityRowsCount > 0}>
+                                {dirtyAvailabilityRowsCount} unsaved
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="booking-availability-helper txt-xs txt-hint">
+                        Changes are local until you save. Inactive days do not require start/end times.
+                    </div>
+
+                    <div class="booking-availability-list">
+                        {#each availabilityRows as row (row.dayOfWeek)}
+                            <article class="booking-availability-row" class:is-inactive={!row.active}>
+                                <div class="booking-availability-day">
+                                    <div class="booking-availability-day-meta">
+                                        <span class="txt-sm booking-availability-day-label">{row.label}</span>
+                                        {#if row.dirty}
+                                            <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
+                                        {/if}
+                                    </div>
+                                    <label class="booking-checkbox-row">
+                                        <input
+                                            type="checkbox"
+                                            checked={row.active}
+                                            on:change={(event) => updateAvailabilityRow(row.dayOfWeek, { active: !!event.currentTarget.checked, error: "" })}
+                                        />
+                                        <span class="txt-xs txt-hint">Active</span>
+                                    </label>
+                                </div>
+
+                                <div class="booking-availability-time-range">
+                                    <div class="form-field form-field--compact m-b-0">
+                                        <label class="txt-xs txt-hint" for={`booking-start-${row.dayOfWeek}`}>Start</label>
+                                        <input
+                                            id={`booking-start-${row.dayOfWeek}`}
+                                            class="input input-sm"
+                                            type="time"
+                                            value={row.startTime}
+                                            disabled={!row.active || isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
+                                            on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { startTime: event.currentTarget.value, error: "" })}
+                                        />
+                                    </div>
+                                    <div class="form-field form-field--compact m-b-0">
+                                        <label class="txt-xs txt-hint" for={`booking-end-${row.dayOfWeek}`}>End</label>
+                                        <input
+                                            id={`booking-end-${row.dayOfWeek}`}
+                                            class="input input-sm"
+                                            type="time"
+                                            value={row.endTime}
+                                            disabled={!row.active || isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
+                                            on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { endTime: event.currentTarget.value, error: "" })}
+                                        />
+                                    </div>
+                                </div>
+
+                                {#if row.error}
+                                    <p class="txt-xs txt-danger m-b-0 booking-availability-error">{row.error}</p>
+                                {/if}
+                            </article>
+                        {/each}
+                    </div>
                 </div>
 
-                <div class="booking-availability-list">
-                    {#each availabilityRows as row (row.dayOfWeek)}
-                        <article class="booking-availability-row" class:is-inactive={!row.active}>
-                            <div class="booking-availability-day">
-                                <span class="txt-sm booking-availability-day-label">{row.label}</span>
-                                <label class="booking-checkbox-row">
-                                    <input
-                                        type="checkbox"
-                                        checked={row.active}
-                                        on:change={(event) => updateAvailabilityRow(row.dayOfWeek, { active: !!event.currentTarget.checked, error: "" })}
-                                    />
-                                    <span class="txt-xs txt-hint">Active</span>
-                                </label>
-                            </div>
+                <aside class="booking-rail">
+                    <section class="booking-rail-block">
+                        <h5 class="m-0">Schedule actions</h5>
+                        <p class="txt-sm txt-hint m-b-0">Save schedule updates and apply common weekly presets.</p>
+                        <button
+                            type="button"
+                            class="btn btn-sm"
+                            class:btn-loading={isSavingAllAvailability}
+                            disabled={isSavingAllAvailability || hasSavingAvailabilityRows || dirtyAvailabilityRowsCount === 0}
+                            on:click={saveAllChangedAvailabilityRows}
+                        >
+                            <span class="txt">Save changes</span>
+                        </button>
+                        <div class="booking-availability-actions-list">
+                            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={setWeekdaysBusinessHours}>
+                                <span class="txt">Set weekdays 09:00-17:00</span>
+                            </button>
+                            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={applyMondayToWeekdays}>
+                                <span class="txt">Apply Monday to weekdays</span>
+                            </button>
+                            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={clearWeekendAvailability}>
+                                <span class="txt">Clear weekend</span>
+                            </button>
+                        </div>
+                    </section>
 
-                            <div class="booking-availability-time-range">
-                                <div class="form-field m-b-0">
-                                    <label class="txt-xs txt-hint" for={`booking-start-${row.dayOfWeek}`}>Start</label>
-                                    <input
-                                        id={`booking-start-${row.dayOfWeek}`}
-                                        class="input input-sm"
-                                        type="time"
-                                        value={row.startTime}
-                                        disabled={!row.active || isDaySaving(row.dayOfWeek)}
-                                        on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { startTime: event.currentTarget.value, error: "" })}
-                                    />
-                                </div>
-                                <div class="form-field m-b-0">
-                                    <label class="txt-xs txt-hint" for={`booking-end-${row.dayOfWeek}`}>End</label>
-                                    <input
-                                        id={`booking-end-${row.dayOfWeek}`}
-                                        class="input input-sm"
-                                        type="time"
-                                        value={row.endTime}
-                                        disabled={!row.active || isDaySaving(row.dayOfWeek)}
-                                        on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { endTime: event.currentTarget.value, error: "" })}
-                                    />
-                                </div>
+                    <section class="booking-rail-block booking-health-panel">
+                        <div class="booking-health-head">
+                            <div class="booking-health-main">
+                                <h5 class="m-0">Availability health</h5>
+                                <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
                             </div>
-
-                            <div class="booking-availability-actions">
-                                <button
-                                    type="button"
-                                    class="btn btn-sm btn-outline"
-                                    class:btn-loading={isDaySaving(row.dayOfWeek)}
-                                    disabled={isDaySaving(row.dayOfWeek)}
-                                    on:click={() => saveAvailabilityRow(row)}
-                                >
-                                    <span class="txt">Save</span>
-                                </button>
+                            <div class="booking-health-meta">
+                                <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
+                                <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
                             </div>
+                        </div>
 
-                            {#if row.error}
-                                <p class="txt-xs txt-danger m-b-0 booking-availability-error">{row.error}</p>
+                        <div class="booking-health-group m-t-8">
+                            <div class="booking-health-group-title">Warnings</div>
+                            {#if availabilityHealthWarnings.length}
+                                {#each availabilityHealthWarnings as warning}
+                                    <div class="booking-health-item warning">
+                                        <span class="label label-sm booking-health-pill warning">Warning</span>
+                                        <span>{warning}</span>
+                                    </div>
+                                {/each}
+                            {:else}
+                                <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
                             {/if}
-                        </article>
-                    {/each}
-                </div>
+                        </div>
+
+                        <div class="booking-health-group m-t-8">
+                            <div class="booking-health-group-title">Suggestions</div>
+                            {#if availabilityHealthSuggestions.length}
+                                {#each availabilityHealthSuggestions as suggestion}
+                                    <div class="booking-health-item">
+                                        <span class="label label-sm booking-health-pill">Info</span>
+                                        <span>{suggestion}</span>
+                                    </div>
+                                {/each}
+                            {:else}
+                                <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
+                            {/if}
+                        </div>
+                    </section>
+
+                    <section class="booking-rail-block booking-slot-preview-panel">
+                        <div class="booking-health-head">
+                            <div class="booking-health-main">
+                                <h5 class="m-0">Slot preview</h5>
+                                <p class="txt-sm txt-hint m-b-0">
+                                    Preview the times visitors will be able to choose for a service and date.
+                                </p>
+                            </div>
+                            <div class="booking-health-meta">
+                                <span class="summary-pill">{slotPreviewSlots.length} slots</span>
+                            </div>
+                        </div>
+
+                        <div class="booking-slot-preview-controls m-t-sm">
+                            <div class="form-field m-b-0">
+                                <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
+                                <select
+                                    id="booking-slot-preview-service"
+                                    class="input input-sm"
+                                    value={slotPreviewServiceId}
+                                    disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                    on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
+                                >
+                                    {#if !slotPreviewServiceOptions.length}
+                                        <option value="">No active services</option>
+                                    {:else}
+                                        {#each slotPreviewServiceOptions as service (service.id)}
+                                            <option value={service.id}>{service.label}</option>
+                                        {/each}
+                                    {/if}
+                                </select>
+                            </div>
+
+                            <div class="form-field m-b-0">
+                                <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
+                                <input
+                                    id="booking-slot-preview-date"
+                                    class="input input-sm"
+                                    type="date"
+                                    value={slotPreviewDate}
+                                    disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                    on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {#if !slotPreviewServiceOptions.length}
+                            <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
+                        {:else if activeAvailabilityDaysCount <= 0}
+                            <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
+                        {:else if !slotPreviewServiceId || !slotPreviewDate}
+                            <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
+                        {:else if isLoadingSlotPreview}
+                            <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
+                        {:else if slotPreviewError}
+                            <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
+                        {:else if !slotPreviewSlots.length}
+                            <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
+                        {:else}
+                            <div class="booking-slot-preview-slots m-t-sm">
+                                {#each slotPreviewSlots as slot}
+                                    <span class="summary-pill booking-slot-preview-pill">{slot}</span>
+                                {/each}
+                            </div>
+                        {/if}
+                    </section>
+                </aside>
             </div>
         {/if}
     </section>
+
+    <OverlayPanel
+        bind:active={isManualAppointmentPanelOpen}
+        class="overlay-panel-lg booking-manual-appointment-panel"
+        overlayClose={true}
+        escClose={true}
+        on:hide={closeManualAppointmentPanel}
+    >
+        <svelte:fragment slot="header">
+            <h4>New appointment</h4>
+        </svelte:fragment>
+
+        <div class="booking-manual-form">
+            <p class="txt-sm txt-hint m-b-0">
+                Add appointments received by phone, WhatsApp, email, or in person. Manual appointments do not send confirmation emails by default.
+            </p>
+
+            {#if !manualAppointmentServiceOptions.length}
+                <div class="alert alert-warning m-b-0">
+                    <div class="icon">
+                        <i class="ri-information-line" />
+                    </div>
+                    <div>Add and activate at least one service before creating manual appointments.</div>
+                </div>
+            {:else}
+                <div class="booking-manual-grid">
+                    <div class="form-field m-b-0">
+                        <label class="txt-sm txt-hint" for="booking-manual-service">Service</label>
+                        <select
+                            id="booking-manual-service"
+                            class="input input-sm"
+                            value={manualAppointmentForm.serviceId}
+                            disabled={isCreatingManualAppointment}
+                            on:change={(event) => setManualAppointmentService(event.currentTarget.value)}
+                        >
+                            <option value="">Select service</option>
+                            {#each manualAppointmentServiceOptions as service (service.id)}
+                                <option value={service.id}>{service.label}</option>
+                            {/each}
+                        </select>
+                    </div>
+
+                    <div class="form-field m-b-0">
+                        <label class="txt-sm txt-hint" for="booking-manual-date">Date</label>
+                        <input
+                            id="booking-manual-date"
+                            class="input input-sm"
+                            type="date"
+                            value={manualAppointmentForm.date}
+                            disabled={isCreatingManualAppointment}
+                            on:change={(event) => setManualAppointmentDate(event.currentTarget.value)}
+                        />
+                    </div>
+
+                    <div class="form-field m-b-0 booking-manual-slot-field">
+                        <label class="txt-sm txt-hint">Time</label>
+                        {#if !manualAppointmentForm.serviceId || !manualAppointmentForm.date}
+                            <div class="txt-xs txt-hint">Select service and date to load available times.</div>
+                        {:else if isLoadingManualAppointmentSlots}
+                            <div class="txt-xs txt-hint">Loading available times...</div>
+                        {:else if manualAppointmentSlotsError}
+                            <div class="txt-xs txt-danger">{manualAppointmentSlotsError}</div>
+                        {:else if !manualAppointmentAvailableSlots.length}
+                            <div class="txt-xs txt-hint">No available times for this date.</div>
+                        {:else}
+                            <div class="booking-manual-slots">
+                                {#each manualAppointmentAvailableSlots as slot}
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline btn-sm booking-manual-slot-btn"
+                                        class:active={manualAppointmentForm.time === slot}
+                                        disabled={isCreatingManualAppointment}
+                                        on:click={() => selectManualAppointmentSlot(slot)}
+                                    >
+                                        <span class="txt">{slot}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="form-field m-b-0">
+                        <label class="txt-sm txt-hint" for="booking-manual-status">Status</label>
+                        <select
+                            id="booking-manual-status"
+                            class="input input-sm"
+                            bind:value={manualAppointmentForm.status}
+                            disabled={isCreatingManualAppointment}
+                        >
+                            <option value="confirmed">Confirmed</option>
+                            <option value="pending">Pending</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="booking-manual-grid">
+                    <div class="form-field m-b-0">
+                        <label class="txt-sm txt-hint" for="booking-manual-name">Customer name</label>
+                        <input
+                            id="booking-manual-name"
+                            class="input input-sm"
+                            type="text"
+                            placeholder="Customer name"
+                            bind:value={manualAppointmentForm.name}
+                            disabled={isCreatingManualAppointment}
+                        />
+                    </div>
+
+                    <div class="form-field m-b-0">
+                        <label class="txt-sm txt-hint" for="booking-manual-email">Customer email</label>
+                        <input
+                            id="booking-manual-email"
+                            class="input input-sm"
+                            type="email"
+                            placeholder="customer@example.com"
+                            bind:value={manualAppointmentForm.email}
+                            disabled={isCreatingManualAppointment}
+                        />
+                    </div>
+
+                    <div class="form-field m-b-0">
+                        <label class="txt-sm txt-hint" for="booking-manual-phone">Customer phone</label>
+                        <input
+                            id="booking-manual-phone"
+                            class="input input-sm"
+                            type="text"
+                            placeholder="Optional"
+                            bind:value={manualAppointmentForm.phone}
+                            disabled={isCreatingManualAppointment}
+                        />
+                    </div>
+                </div>
+
+                <div class="form-field m-b-0">
+                    <label class="txt-sm txt-hint" for="booking-manual-notes">Customer notes</label>
+                    <textarea
+                        id="booking-manual-notes"
+                        class="input booking-notes-input"
+                        rows="4"
+                        placeholder="Optional notes shared by the customer..."
+                        bind:value={manualAppointmentForm.notes}
+                        disabled={isCreatingManualAppointment}
+                    />
+                </div>
+
+                <div class="form-field m-b-0">
+                    <label class="txt-sm txt-hint" for="booking-manual-internal-notes">Internal notes</label>
+                    <textarea
+                        id="booking-manual-internal-notes"
+                        class="input booking-notes-input"
+                        rows="4"
+                        placeholder="Private follow-up notes for the team..."
+                        bind:value={manualAppointmentForm.internalNotes}
+                        disabled={isCreatingManualAppointment}
+                    />
+                </div>
+            {/if}
+
+            {#if manualAppointmentFormError}
+                <p class="txt-xs txt-danger m-b-0">{manualAppointmentFormError}</p>
+            {/if}
+        </div>
+
+        <svelte:fragment slot="footer">
+            <button type="button" class="btn btn-outline btn-sm" disabled={isCreatingManualAppointment} on:click={closeManualAppointmentPanel}>
+                <span class="txt">Cancel</span>
+            </button>
+            <button
+                type="button"
+                class="btn btn-sm"
+                class:btn-loading={isCreatingManualAppointment}
+                disabled={isCreatingManualAppointment || isLoadingManualAppointmentSlots || !manualAppointmentServiceOptions.length}
+                on:click={createManualAppointment}
+            >
+                <span class="txt">Create appointment</span>
+            </button>
+        </svelte:fragment>
+    </OverlayPanel>
 </PageWrapper>
 
 <style>
@@ -1482,7 +2778,28 @@
 
     .booking-head.operations-head .head-tools {
         display: flex;
-        justify-content: flex-end;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .booking-head.operations-head .head-tools > * {
+        min-width: 0;
+    }
+
+    .booking-head-tabs {
+        width: fit-content;
+        margin-top: 0;
+        flex: 0 0 auto;
+    }
+
+    .booking-head.operations-head .head-tools .booking-head-tabs {
+        align-self: center;
+    }
+
+    .booking-head.operations-head .head-tools .summary-badges {
+        margin-left: auto;
     }
 
     .booking-head.operations-head .summary-badges {
@@ -1627,6 +2944,46 @@
         resize: vertical;
     }
 
+    .booking-internal-notes-helper {
+        margin-top: 4px;
+    }
+
+    .booking-readonly-note {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .booking-empty-state {
+        border: 1px dashed var(--baseAlt1);
+        border-radius: var(--baseRadius);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background: color-mix(in srgb, var(--baseAlt1) 14%, transparent);
+    }
+
+    .booking-empty-readiness {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 2px;
+    }
+
+    .booking-empty-readiness-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed var(--baseAlt1);
+    }
+
+    .booking-empty-readiness-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+    }
+
     .booking-section-head-row {
         display: flex;
         justify-content: space-between;
@@ -1635,9 +2992,32 @@
         margin-bottom: 12px;
     }
 
+    .booking-section-head-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .booking-section-head-meta,
+    .booking-section-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
     .booking-services-list {
         display: grid;
         gap: 8px;
+    }
+
+    .booking-services-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 190px;
+        gap: 10px;
+        margin-bottom: 12px;
     }
 
     .booking-service-item {
@@ -1665,6 +3045,17 @@
         font-weight: 600;
     }
 
+    .booking-service-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .booking-service-meta {
+        margin-top: 4px;
+    }
+
     .booking-service-actions {
         display: flex;
         gap: 8px;
@@ -1690,19 +3081,41 @@
         gap: 12px;
     }
 
+    .booking-split-layout--availability {
+        grid-template-columns: minmax(0, 1fr) 360px;
+    }
+
+    .booking-availability-main {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+    }
+
     .booking-availability-list {
         display: grid;
         gap: 8px;
     }
 
+    .booking-availability-actions-list {
+        display: flex;
+        flex-direction: column;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .booking-availability-helper {
+        margin-top: -4px;
+    }
+
     .booking-availability-row {
         border: 1px solid var(--baseAlt1);
         border-radius: var(--baseRadius);
-        padding: 10px 12px;
+        padding: 8px 10px;
         display: grid;
-        grid-template-columns: minmax(160px, 220px) minmax(220px, 1fr) auto;
-        gap: 12px;
-        align-items: end;
+        grid-template-columns: minmax(170px, 220px) minmax(190px, 280px);
+        gap: 10px;
+        align-items: center;
     }
 
     .booking-availability-row.is-inactive {
@@ -1711,7 +3124,14 @@
 
     .booking-availability-day {
         display: flex;
-        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .booking-availability-day-meta {
+        display: inline-flex;
+        align-items: center;
         gap: 8px;
     }
 
@@ -1719,19 +3139,132 @@
         font-weight: 600;
     }
 
-    .booking-availability-time-range {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(120px, 1fr));
-        gap: 8px;
+    .booking-unsaved-pill {
+        font-size: 0.66rem;
+        line-height: 1;
     }
 
-    .booking-availability-actions {
+    .booking-availability-time-range {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(98px, 124px));
+        gap: 6px;
+    }
+
+    .booking-availability-time-range .form-field--compact {
         display: flex;
-        justify-content: flex-end;
+        flex-direction: column;
+        gap: 4px;
     }
 
     .booking-availability-error {
         grid-column: 1 / -1;
+    }
+
+    .booking-slot-preview-panel {
+        border-style: dashed;
+    }
+
+    .booking-slot-preview-controls {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .booking-slot-preview-slots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .booking-slot-preview-pill {
+        min-width: 58px;
+        justify-content: center;
+    }
+
+    .booking-health-panel {
+        border-style: dashed;
+    }
+
+    .booking-health-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .booking-health-main {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .booking-health-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .booking-health-group-title {
+        font-size: 0.7rem;
+        line-height: 1.2;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        color: var(--txtHintColor);
+        margin-bottom: 6px;
+    }
+
+    .booking-health-item {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 0;
+        border-top: 1px dashed var(--baseAlt1);
+        font-size: 0.82rem;
+    }
+
+    .booking-health-item.warning {
+        color: var(--txtPrimaryColor);
+    }
+
+    .booking-health-pill {
+        align-self: start;
+    }
+
+    .booking-health-pill.warning {
+        background: color-mix(in srgb, var(--dangerColor) 12%, transparent);
+        color: var(--dangerColor);
+    }
+
+    .booking-manual-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .booking-manual-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .booking-manual-slot-field {
+        grid-column: 1 / -1;
+    }
+
+    .booking-manual-slots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .booking-manual-slot-btn.active {
+        border-color: var(--txtPrimaryColor);
+        background: color-mix(in srgb, var(--baseAlt1) 35%, transparent);
     }
 
     @media (max-width: 1280px) {
@@ -1766,12 +3299,29 @@
             grid-template-columns: 1fr;
         }
 
-        .booking-availability-actions {
-            justify-content: flex-start;
+        .booking-availability-day {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .booking-services-controls {
+            grid-template-columns: 1fr;
+        }
+
+        .booking-slot-preview-controls {
+            grid-template-columns: 1fr;
         }
     }
 
     @media (max-width: 860px) {
+        .booking-head.operations-head .head-tools {
+            align-items: flex-start;
+        }
+
+        .booking-head.operations-head .head-tools .summary-badges {
+            margin-left: 0;
+        }
+
         .booking-head.operations-head .selector-row {
             flex-direction: column;
             align-items: flex-start;
@@ -1803,6 +3353,11 @@
             align-items: flex-start;
         }
 
+        .booking-section-head-meta,
+        .booking-section-head-actions {
+            justify-content: flex-start;
+        }
+
         .booking-service-item {
             flex-direction: column;
             align-items: flex-start;
@@ -1811,6 +3366,10 @@
         .booking-service-actions {
             width: 100%;
             justify-content: space-between;
+        }
+
+        .booking-manual-grid {
+            grid-template-columns: 1fr;
         }
     }
 </style>

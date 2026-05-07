@@ -339,6 +339,64 @@ export const websiteSettingsSchema = {
             ],
         },
         {
+            key: "booking",
+            label: "Booking",
+            type: "object",
+            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+            fields: [
+                {
+                    key: "enabled",
+                    label: "Accept booking requests",
+                    type: "bool",
+                    default: true,
+                    editableBy: [ROLE_ADMIN],
+                },
+                {
+                    key: "emailNotifications",
+                    label: "Email notifications",
+                    type: "object",
+                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                    fields: [
+                        {
+                            key: "enabled",
+                            label: "Send business notifications",
+                            type: "bool",
+                            default: true,
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                        },
+                        {
+                            key: "to",
+                            label: "To recipients",
+                            type: "array",
+                            itemLabel: "Recipient",
+                            default: [],
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            item: {
+                                type: "text",
+                                label: "Email",
+                                default: "",
+                                editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            },
+                        },
+                        {
+                            key: "cc",
+                            label: "CC recipients",
+                            type: "array",
+                            itemLabel: "CC recipient",
+                            default: [],
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            item: {
+                                type: "text",
+                                label: "Email",
+                                default: "",
+                                editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            },
+                        },
+                    ],
+                },
+            ],
+        },
+        {
             key: "reports",
             label: "Reports",
             type: "object",
@@ -776,6 +834,18 @@ function normalizeWhatsappSettings(whatsappSettings) {
     };
 }
 
+function normalizeBookingSettings(bookingSettings) {
+    const source = isPlainObject(bookingSettings) ? bookingSettings : {};
+
+    return {
+        ...source,
+        enabled: typeof source.enabled === "boolean" ? source.enabled : true,
+        emailNotifications: normalizeEmailNotifications(source.emailNotifications, {
+            legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
+        }),
+    };
+}
+
 export function getWebsiteSettingsSchemaForRole(role = ROLE_ADMIN, rawSettings = null) {
     const normalizedRole = normalizeRole(role);
     const roleFilteredFields = filterHiddenWebsiteSettingsFields(
@@ -821,6 +891,10 @@ export function normalizeWebsiteSettingsValue(rawSettings, schemaFields = websit
 
     if (isPlainObject(normalized.whatsapp)) {
         normalized.whatsapp = normalizeWhatsappSettings(normalized.whatsapp);
+    }
+
+    if (isPlainObject(normalized.booking)) {
+        normalized.booking = normalizeBookingSettings(normalized.booking);
     }
 
     return normalized;

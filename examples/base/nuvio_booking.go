@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -51,9 +52,25 @@ type nuvioBookingCreateAppointmentPayload struct {
 	Notes     string `json:"notes"`
 }
 
+type nuvioBookingAdminCreateAppointmentPayload struct {
+	WebsiteID             string `json:"websiteId"`
+	ServiceID             string `json:"serviceId"`
+	Date                  string `json:"date"`
+	Time                  string `json:"time"`
+	Name                  string `json:"name"`
+	Email                 string `json:"email"`
+	Phone                 string `json:"phone"`
+	Notes                 string `json:"notes"`
+	InternalNotes         string `json:"internalNotes"`
+	Status                string `json:"status"`
+	CreateContact         *bool  `json:"createContact"`
+	SendConfirmationEmail *bool  `json:"sendConfirmationEmail"`
+}
+
 // NUVIO CUSTOM START: Booking MVP Phase 3 public booking endpoints.
 func registerNuvioBookingRoutes(e *core.ServeEvent) {
 	bookingGroup := e.Router.Group("/api/nuvio/booking")
+	bookingAdminGroup := bookingGroup.Group("/admin").Bind(apis.RequireSuperuserAuth())
 
 	bookingGroup.GET("/services", func(e *core.RequestEvent) error {
 		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
@@ -384,6 +401,262 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 				emailErr.Error(),
 			)
 			responsePayload["warning"] = "Booking request saved, but email notifications are temporarily unavailable."
+		}
+
+		return e.JSON(http.StatusOK, responsePayload)
+	})
+
+	bookingAdminGroup.POST("/appointments", func(e *core.RequestEvent) error {
+		payload := nuvioBookingAdminCreateAppointmentPayload{}
+		if err := e.BindBody(&payload); err != nil {
+			return e.BadRequestError("Invalid manual appointment payload.", nil)
+		}
+
+		websiteID := strings.TrimSpace(payload.WebsiteID)
+		if websiteID == "" {
+			websiteID = strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
+		}
+		if websiteID == "" {
+			return e.BadRequestError("Missing websiteId.", nil)
+		}
+
+		serviceID := strings.TrimSpace(payload.ServiceID)
+		if serviceID == "" {
+			return e.BadRequestError("Missing serviceId.", nil)
+		}
+
+		dateValue := strings.TrimSpace(payload.Date)
+		if !nuvioBookingDatePattern.MatchString(dateValue) {
+			return e.BadRequestError("Date must use YYYY-MM-DD format.", nil)
+		}
+
+		timeValue := strings.TrimSpace(payload.Time)
+		if !nuvioBookingTimePattern.MatchString(timeValue) {
+			return e.BadRequestError("Time must use HH:mm format.", nil)
+		}
+
+		name := strings.TrimSpace(payload.Name)
+		if name == "" {
+			return e.BadRequestError("Name is required.", nil)
+		}
+
+		email, ok := normalizeNuvioEmail(payload.Email)
+		if !ok {
+			return e.BadRequestError("A valid email is required.", nil)
+		}
+
+		phone := strings.TrimSpace(payload.Phone)
+		notes := strings.TrimSpace(payload.Notes)
+		internalNotes := strings.TrimSpace(payload.InternalNotes)
+
+		status := strings.ToLower(strings.TrimSpace(payload.Status))
+		if status == "" {
+			status = "confirmed"
+		}
+		if status != "pending" && status != "confirmed" {
+			return e.BadRequestError("Status must be pending or confirmed.", nil)
+		}
+
+		createContact := true
+		if payload.CreateContact != nil {
+			createContact = *payload.CreateContact
+		}
+
+		sendConfirmationEmail := false
+		if payload.SendConfirmationEmail != nil {
+			sendConfirmationEmail = *payload.SendConfirmationEmail
+		}
+
+		website, config, err := loadNuvioWebsiteBookingConfig(e.App, websiteID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Website not found.", nil)
+			}
+			return e.BadRequestError("Failed to load Booking settings.", nil)
+		}
+
+		serviceRecord, err := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Service not found.", nil)
+			}
+			e.App.Logger().Error(
+				"NUVIO booking admin service lookup failed",
+				"websiteId",
+				websiteID,
+				"serviceId",
+				serviceID,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Unable to load booking service right now.", nil)
+		}
+
+		if strings.TrimSpace(serviceRecord.GetString("website")) != websiteID {
+			return e.NotFoundError("Service not found.", nil)
+		}
+
+		if !isNuvioBookingServiceActive(serviceRecord) {
+			return e.BadRequestError("Service is not available.", nil)
+		}
+
+		serviceName := strings.TrimSpace(serviceRecord.GetString("name"))
+		if serviceName == "" {
+			serviceName = "Booking service"
+		}
+
+		var appointmentID string
+		transactionErr := e.App.RunInTransaction(func(txApp core.App) error {
+			txServiceRecord, err := txApp.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+			if err != nil {
+				return err
+			}
+
+			if strings.TrimSpace(txServiceRecord.GetString("website")) != websiteID || !isNuvioBookingServiceActive(txServiceRecord) {
+				return sql.ErrNoRows
+			}
+
+			slots, err := computeNuvioAvailableSlots(txApp, websiteID, txServiceRecord, dateValue)
+			if err != nil {
+				return err
+			}
+			if !containsNuvioBookingSlot(slots, timeValue) {
+				return errNuvioBookingSlotUnavailable
+			}
+
+			appointmentsCollection, err := txApp.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
+			if err != nil {
+				return err
+			}
+
+			appointmentRecord := core.NewRecord(appointmentsCollection)
+			appointmentRecord.Set("website", websiteID)
+			appointmentRecord.Set("service", serviceID)
+			appointmentRecord.Set("name", name)
+			appointmentRecord.Set("email", email)
+			appointmentRecord.Set("phone", phone)
+			appointmentRecord.Set("date", dateValue)
+			appointmentRecord.Set("time", timeValue)
+			appointmentRecord.Set("notes", notes)
+			appointmentRecord.Set("status", status)
+
+			if appointmentsCollection.Fields.GetByName("internalNotes") != nil {
+				appointmentRecord.Set("internalNotes", internalNotes)
+			} else if appointmentsCollection.Fields.GetByName("internal_notes") != nil {
+				appointmentRecord.Set("internal_notes", internalNotes)
+			}
+
+			if err := txApp.Save(appointmentRecord); err != nil {
+				return err
+			}
+
+			appointmentID = appointmentRecord.Id
+			return nil
+		})
+
+		if transactionErr != nil {
+			if errors.Is(transactionErr, errNuvioBookingSlotUnavailable) {
+				return e.JSON(http.StatusConflict, map[string]any{
+					"ok":    false,
+					"error": "This time is no longer available. Please choose another time.",
+				})
+			}
+
+			if errors.Is(transactionErr, sql.ErrNoRows) {
+				return e.NotFoundError("Service not found.", nil)
+			}
+
+			e.App.Logger().Error(
+				"NUVIO booking admin appointment create failed",
+				"websiteId",
+				websiteID,
+				"serviceId",
+				serviceID,
+				"date",
+				dateValue,
+				"time",
+				timeValue,
+				"error",
+				transactionErr.Error(),
+			)
+			return e.InternalServerError("Unable to create appointment right now.", nil)
+		}
+
+		responsePayload := map[string]any{
+			"ok":                    true,
+			"appointmentId":         appointmentID,
+			"status":                status,
+			"contactCreated":        false,
+			"confirmationEmailSent": false,
+		}
+		warnings := []string{}
+
+		if createContact {
+			if err := createNuvioBookingContactRecord(
+				e.App,
+				websiteID,
+				name,
+				email,
+				phone,
+				fmt.Sprintf("Manual booking - %s", serviceName),
+				buildNuvioBookingContactMessage(serviceName, dateValue, timeValue, notes),
+			); err != nil {
+				e.App.Logger().Error(
+					"NUVIO booking admin contact create failed",
+					"websiteId",
+					websiteID,
+					"appointmentId",
+					appointmentID,
+					"error",
+					err.Error(),
+				)
+				warnings = append(warnings, "Appointment created, but contact sync is temporarily unavailable.")
+			} else {
+				responsePayload["contactCreated"] = true
+			}
+		}
+
+		if sendConfirmationEmail {
+			visitorOnlyConfig := config
+			visitorOnlyConfig.EmailNotifications = nuvioEmailNotificationsConfig{
+				Enabled: false,
+				To:      []string{},
+				Cc:      []string{},
+			}
+
+			if emailErr := sendNuvioBookingEmails(
+				e.Request.Context(),
+				website,
+				visitorOnlyConfig,
+				serviceName,
+				nuvioBookingCreateAppointmentPayload{
+					WebsiteID: websiteID,
+					ServiceID: serviceID,
+					Date:      dateValue,
+					Time:      timeValue,
+					Name:      name,
+					Email:     email,
+					Phone:     phone,
+					Notes:     notes,
+				},
+			); emailErr != nil {
+				e.App.Logger().Error(
+					"NUVIO booking admin confirmation email failed",
+					"websiteId",
+					websiteID,
+					"appointmentId",
+					appointmentID,
+					"error",
+					emailErr.Error(),
+				)
+				warnings = append(warnings, "Appointment created, but confirmation email could not be sent.")
+			} else {
+				responsePayload["confirmationEmailSent"] = true
+			}
+		}
+
+		if len(warnings) > 0 {
+			responsePayload["warning"] = strings.Join(warnings, " ")
 		}
 
 		return e.JSON(http.StatusOK, responsePayload)
@@ -756,6 +1029,33 @@ func containsNuvioBookingSlot(slots []string, requestedTime string) bool {
 		}
 	}
 	return false
+}
+
+func createNuvioBookingContactRecord(
+	app core.App,
+	websiteID string,
+	name string,
+	email string,
+	phone string,
+	subject string,
+	message string,
+) error {
+	contactsCollection, err := app.FindCachedCollectionByNameOrId(nuvioContactsCollectionID)
+	if err != nil {
+		return err
+	}
+
+	contactRecord := core.NewRecord(contactsCollection)
+	contactRecord.Set("website", strings.TrimSpace(websiteID))
+	contactRecord.Set("channel", "booking")
+	contactRecord.Set("name", strings.TrimSpace(name))
+	contactRecord.Set("email", strings.TrimSpace(email))
+	contactRecord.Set("phone", strings.TrimSpace(phone))
+	contactRecord.Set("subject", strings.TrimSpace(subject))
+	contactRecord.Set("message", strings.TrimSpace(message))
+	contactRecord.Set("status", "new")
+
+	return app.Save(contactRecord)
 }
 
 func buildNuvioBookingContactMessage(
