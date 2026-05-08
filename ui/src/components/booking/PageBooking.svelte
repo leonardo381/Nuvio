@@ -158,7 +158,11 @@
     let isLoadingSlotPreview = false;
     let lastSlotPreviewQueryKey = "";
     let selectedExceptionId = "";
+    let selectedExceptionIds = [];
+    let selectedExceptionIdsSet = new Set();
+    let selectedExceptionsCount = 0;
     let isCreatingException = false;
+    let isBulkUpdatingExceptions = false;
     let exceptionSearch = "";
     let exceptionTypeFilter = "all";
     let exceptionActiveFilter = "all";
@@ -406,6 +410,12 @@
         selectedExceptionId = "";
     }
     $: selectedException = normalizedExceptions.find((exception) => exception.id === selectedExceptionId) || null;
+    $: selectedExceptionIdsSet = new Set(
+        selectedExceptionIds
+            .map((id) => normalizeString(id))
+            .filter(Boolean),
+    );
+    $: selectedExceptionsCount = selectedExceptionIdsSet.size;
     $: filteredExceptions = sortExceptions(
         normalizedExceptions.filter((exception) => {
             if (exceptionTypeFilter !== "all" && exception.type !== exceptionTypeFilter) {
@@ -434,6 +444,13 @@
             return true;
         }),
     );
+    $: {
+        const visibleIds = new Set(filteredExceptions.map((exception) => normalizeString(exception.id)).filter(Boolean));
+        const nextSelected = selectedExceptionIds.filter((id) => visibleIds.has(normalizeString(id)));
+        if (nextSelected.length !== selectedExceptionIds.length) {
+            selectedExceptionIds = nextSelected;
+        }
+    }
     $: if (selectedException?.id) {
         if (exceptionForm.id !== selectedException.id) {
             exceptionForm = createExceptionFormFromRecord(selectedException);
@@ -1355,6 +1372,7 @@
             availabilityRows = createDefaultAvailabilityRows();
             isSavingAvailability = {};
             selectedExceptionId = "";
+            selectedExceptionIds = [];
             isCreatingException = false;
             exceptionForm = createDefaultExceptionForm();
             exceptionFormError = "";
@@ -1399,6 +1417,7 @@
             availabilityWindowCounter = 0;
             availabilityRows = createAvailabilityRowsFromRecords(availabilityRecords);
             selectedExceptionId = "";
+            selectedExceptionIds = [];
             exceptionForm = createDefaultExceptionForm();
             exceptionFormError = "";
             isCreatingException = false;
@@ -1426,6 +1445,7 @@
             availabilityRows = createDefaultAvailabilityRows();
             isSavingAvailability = {};
             isCreatingException = false;
+            selectedExceptionIds = [];
         }
 
         isLoadingBookingData = false;
@@ -3358,6 +3378,131 @@
         selectedExceptionId = normalizeString(exception?.id);
     }
 
+    function isExceptionSelectedForBulk(exceptionId) {
+        return selectedExceptionIdsSet.has(normalizeString(exceptionId));
+    }
+
+    function toggleExceptionBulkSelection(exceptionId) {
+        const normalizedId = normalizeString(exceptionId);
+        if (!normalizedId) {
+            return;
+        }
+
+        if (selectedExceptionIdsSet.has(normalizedId)) {
+            selectedExceptionIds = selectedExceptionIds.filter((id) => normalizeString(id) !== normalizedId);
+            return;
+        }
+
+        selectedExceptionIds = [...selectedExceptionIds, normalizedId];
+    }
+
+    function clearExceptionBulkSelection() {
+        if (!selectedExceptionIds.length) {
+            return;
+        }
+        selectedExceptionIds = [];
+    }
+
+    async function applyBulkExceptionActive(targetActive) {
+        if (
+            !selectedWebsiteId
+            || !bookingExceptionsCollection?.id
+            || !selectedExceptionIds.length
+            || isBulkUpdatingExceptions
+            || isSavingException
+        ) {
+            return;
+        }
+
+        isBulkUpdatingExceptions = true;
+
+        try {
+            const selectedSet = new Set(selectedExceptionIds.map((id) => normalizeString(id)).filter(Boolean));
+            const selectedExceptions = normalizedExceptions.filter((exception) => selectedSet.has(normalizeString(exception.id)));
+
+            if (!selectedExceptions.length) {
+                clearExceptionBulkSelection();
+                isBulkUpdatingExceptions = false;
+                return;
+            }
+
+            const pendingUpdates = selectedExceptions
+                .map((exception) => {
+                    if (!!exception.active === !!targetActive) {
+                        return null;
+                    }
+
+                    return {
+                        id: normalizeString(exception.id),
+                        promise: ApiClient.collection(bookingExceptionsCollection.id).update(exception.id, {
+                            active: !!targetActive,
+                        }),
+                    };
+                })
+                .filter(Boolean);
+
+            if (!pendingUpdates.length) {
+                clearExceptionBulkSelection();
+                addSuccessToast(`Selected exceptions are already ${targetActive ? "active" : "inactive"}.`);
+                isBulkUpdatingExceptions = false;
+                return;
+            }
+
+            const results = await Promise.allSettled(pendingUpdates.map((item) => item.promise));
+
+            const updatedRecordsById = new Map();
+            const failedIds = [];
+            let firstFailureReason = null;
+
+            results.forEach((result, index) => {
+                const target = pendingUpdates[index];
+                if (!target?.id) {
+                    return;
+                }
+
+                if (result.status === "fulfilled") {
+                    updatedRecordsById.set(target.id, result.value);
+                } else {
+                    failedIds.push(target.id);
+                    if (!firstFailureReason) {
+                        firstFailureReason = result.reason;
+                    }
+                }
+            });
+
+            if (updatedRecordsById.size) {
+                exceptionsRecords = exceptionsRecords.map((record) => {
+                    const recordId = normalizeString(record?.id);
+                    if (!updatedRecordsById.has(recordId)) {
+                        return record;
+                    }
+                    return { ...record, ...updatedRecordsById.get(recordId) };
+                });
+                await loadSlotPreview();
+            }
+
+            if (updatedRecordsById.size && failedIds.length === 0) {
+                clearExceptionBulkSelection();
+                addSuccessToast(
+                    `${updatedRecordsById.size} exception${updatedRecordsById.size === 1 ? "" : "s"} marked ${targetActive ? "active" : "inactive"}.`,
+                );
+            } else if (updatedRecordsById.size && failedIds.length > 0) {
+                selectedExceptionIds = failedIds;
+                ApiClient.error(firstFailureReason, false);
+                addErrorToast("Some selected exceptions could not be updated.");
+            } else if (failedIds.length > 0) {
+                selectedExceptionIds = failedIds;
+                ApiClient.error(firstFailureReason, false);
+                addErrorToast("Unable to update selected exceptions right now.");
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+            addErrorToast("Unable to update selected exceptions right now.");
+        } finally {
+            isBulkUpdatingExceptions = false;
+        }
+    }
+
     function setExceptionType(nextType) {
         const normalizedType = normalizeExceptionType(nextType);
         exceptionForm = {
@@ -4515,9 +4660,9 @@
                         <div class="booking-main-column booking-availability-main">
                             <section class="booking-rules-exceptions-panel">
                                 <div class="booking-section-head-row booking-section-head-row--compact">
-                                    <div class="booking-section-head-copy">
+                                    <div class="booking-section-head-copy booking-section-head-copy--inline">
                                         <h4 class="m-0">Date exceptions</h4>
-                                        <p class="txt-sm txt-hint m-b-0">Override weekly schedule for closed dates or custom special-day hours.</p>
+                                        <span class="txt-sm txt-hint booking-section-helper-inline">Override weekly schedule for closed dates or custom special-day hours.</span>
                                     </div>
                                     <div class="booking-section-head-actions">
                                         <span class="summary-pill">{activeExceptionsCount} active exceptions</span>
@@ -4570,23 +4715,40 @@
                                                 {#each filteredExceptions as exception (exception.id)}
                                                     <article
                                                         role="listitem"
-                                                        class="booking-service-item booking-exception-item"
+                                                        class="booking-exception-item"
                                                         class:selected={exception.id === selectedExceptionId}
+                                                        class:bulk-selected={isExceptionSelectedForBulk(exception.id)}
                                                         on:click={() => selectException(exception)}
                                                     >
-                                                        <div class="booking-service-main">
-                                                            <div class="booking-service-title-row">
-                                                                <div class="booking-service-title">{formatDate(exception.date)}</div>
-                                                                <span class={`label label-sm ${exception.active ? "label-success" : "label-warning"}`}>
-                                                                    {exception.active ? "Active" : "Inactive"}
-                                                                </span>
+                                                        <label class="booking-exception-item-select booking-exception-item-select--leading" on:click|stopPropagation>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isExceptionSelectedForBulk(exception.id)}
+                                                                aria-label={`Select exception for ${formatDate(exception.date)}`}
+                                                                on:click|stopPropagation
+                                                                on:change|stopPropagation={() => toggleExceptionBulkSelection(exception.id)}
+                                                            />
+                                                        </label>
+                                                        <div class="booking-exception-item-main">
+                                                            <div class="booking-exception-item-date">
+                                                                <i class="ri-calendar-event-line" aria-hidden="true" />
+                                                                <span>{formatDate(exception.date)}</span>
                                                             </div>
-                                                            <div class="booking-service-meta txt-sm txt-hint">
-                                                                {exception.typeLabel} {#if exception.type === "customHours"}- {exception.timeRangeLabel}{/if}
+                                                            <div class="booking-exception-item-meta txt-sm txt-hint">
+                                                                <span>{exception.typeLabel}</span>
+                                                                {#if exception.type === "customHours" && exception.timeRangeLabel}
+                                                                    <span class="booking-service-meta-separator" aria-hidden="true">&middot;</span>
+                                                                    <span>{exception.timeRangeLabel}</span>
+                                                                {/if}
                                                             </div>
                                                             {#if exception.note}
-                                                                <div class="txt-xs txt-hint m-t-4">{exception.note}</div>
+                                                                <div class="booking-exception-item-note txt-xs txt-hint">{exception.note}</div>
                                                             {/if}
+                                                        </div>
+                                                        <div class="booking-exception-item-side">
+                                                            <span class={`label label-sm booking-exception-item-status ${exception.active ? "label-success" : "label-warning"}`}>
+                                                                {exception.active ? "Active" : "Inactive"}
+                                                            </span>
                                                         </div>
                                                     </article>
                                                 {/each}
@@ -4696,11 +4858,45 @@
                                 </div>
                             </section>
 
+                            {#if selectedExceptionsCount > 0}
+                                <div class="booking-exception-bulk-popover" role="status" aria-live="polite">
+                                    <span class="booking-exception-bulk-summary">
+                                        Selected {selectedExceptionsCount} exception(s)
+                                    </span>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline"
+                                        disabled={isBulkUpdatingExceptions}
+                                        on:click={clearExceptionBulkSelection}
+                                    >
+                                        <span class="txt">Clear selection</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-outline booking-exception-bulk-action"
+                                        class:btn-loading={isBulkUpdatingExceptions}
+                                        disabled={!selectedExceptionsCount || isBulkUpdatingExceptions || isSavingException}
+                                        on:click={() => applyBulkExceptionActive(true)}
+                                    >
+                                        <span class="txt">Activate selected</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-danger btn-outline booking-exception-bulk-action"
+                                        class:btn-loading={isBulkUpdatingExceptions}
+                                        disabled={!selectedExceptionsCount || isBulkUpdatingExceptions || isSavingException}
+                                        on:click={() => applyBulkExceptionActive(false)}
+                                    >
+                                        <span class="txt">Deactivate selected</span>
+                                    </button>
+                                </div>
+                            {/if}
+
                             <section class="booking-rail-block booking-rules-panel">
                                 <div class="booking-section-head-row booking-section-head-row--compact">
-                                    <div class="booking-section-head-copy">
+                                    <div class="booking-section-head-copy booking-section-head-copy--inline">
                                         <h4 class="m-0">Booking rules</h4>
-                                        <p class="txt-sm txt-hint m-b-0">Control notice time, booking window, and buffer between appointments.</p>
+                                        <span class="txt-sm txt-hint booking-section-helper-inline">Control notice time, booking window, and buffer between appointments.</span>
                                     </div>
                                     <div class="booking-section-head-actions">
                                         <span class="summary-pill">{bookingRulesConfiguredCount} configured rules</span>
@@ -5662,8 +5858,141 @@
     }
 
     .booking-exceptions-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         max-height: 520px;
         overflow: auto;
+    }
+
+    .booking-exception-item {
+        border: 2px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        border-radius: var(--baseRadius);
+        padding: 10px 11px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+        background: var(--baseColor);
+    }
+
+    .booking-exception-item:hover {
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 18%, transparent);
+    }
+
+    .booking-exception-item:active {
+        border-color: var(--txtPrimaryColor);
+    }
+
+    .booking-exception-item.selected {
+        border-color: var(--txtPrimaryColor);
+        background: color-mix(in srgb, var(--baseAlt1) 28%, transparent);
+    }
+
+    .booking-exception-item.bulk-selected {
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 55%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 22%, transparent);
+    }
+
+    .booking-exception-item.selected.bulk-selected {
+        border-color: var(--txtPrimaryColor);
+        background: color-mix(in srgb, var(--baseAlt1) 34%, transparent);
+    }
+
+    .booking-exception-item-main {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .booking-exception-item-date {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        font-weight: 600;
+        color: var(--txtPrimaryColor);
+    }
+
+    .booking-exception-item-date i {
+        font-size: 0.98rem;
+        line-height: 1;
+        color: var(--txtHintColor);
+    }
+
+    .booking-exception-item-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .booking-exception-item-note {
+        margin-top: 1px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+
+    .booking-exception-item-side {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+        min-width: max-content;
+    }
+
+    .booking-exception-item-select {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .booking-exception-item-select input {
+        margin: 0;
+    }
+
+    .booking-exception-item-select--leading {
+        align-self: flex-start;
+        margin-top: 1px;
+    }
+
+    .booking-exception-item-status {
+        white-space: nowrap;
+    }
+
+    .booking-exception-bulk-popover {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        z-index: 55;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseColor);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+        padding: 8px 10px;
+    }
+
+    .booking-exception-bulk-summary {
+        color: var(--txtPrimaryColor);
+        font-weight: 600;
+        font-size: var(--smFontSize);
+        padding: 0 3px;
+        white-space: nowrap;
+    }
+
+    .booking-exception-bulk-action {
+        min-width: 140px;
     }
 
     .booking-exception-details-panel {
@@ -5698,7 +6027,7 @@
     .booking-rules-panel {
         gap: 12px;
         padding-top: 10px;
-        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
     }
 
     .booking-rules-fields {
@@ -5725,6 +6054,10 @@
         align-items: baseline;
         gap: 8px;
         flex-wrap: wrap;
+    }
+
+    .booking-section-helper-inline {
+        display: inline;
     }
 
     .booking-weekly-actions-row {
@@ -6142,6 +6475,10 @@
             grid-template-columns: 1fr;
         }
 
+        .booking-exceptions-controls {
+            grid-template-columns: 1fr;
+        }
+
         .booking-rules-exceptions-grid {
             grid-template-columns: 1fr;
         }
@@ -6151,11 +6488,33 @@
         }
 
         .booking-exceptions-list {
+            grid-template-columns: 1fr;
             max-height: none;
         }
 
         .booking-slot-preview-controls {
             grid-template-columns: 1fr;
+        }
+
+        .booking-exception-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .booking-exception-item-side {
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .booking-exception-bulk-popover {
+            left: 10px;
+            right: 10px;
+            bottom: 12px;
+            transform: none;
+            border-radius: var(--baseRadius);
+            flex-wrap: wrap;
+            justify-content: center;
         }
     }
 
@@ -6216,6 +6575,18 @@
 
         .booking-manual-grid {
             grid-template-columns: 1fr;
+        }
+
+        .booking-exception-bulk-popover {
+            justify-content: flex-start;
+        }
+
+        .booking-exception-bulk-summary {
+            width: 100%;
+        }
+
+        .booking-exception-bulk-popover .btn {
+            width: 100%;
         }
     }
 </style>
