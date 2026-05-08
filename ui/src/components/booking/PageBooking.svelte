@@ -48,9 +48,8 @@
         { key: "sun", label: "Sunday" },
     ];
     const availabilityTabs = [
-        { key: "weekly", label: "Weekly schedule" },
-        { key: "exceptions", label: "Exceptions" },
-        { key: "rules", label: "Rules" },
+        { key: "weekly", label: "Weekly schedule", icon: "ri-calendar-week-line" },
+        { key: "rulesExceptions", label: "Rules & exceptions", icon: "ri-settings-5-line" },
     ];
     const exceptionTypeFilterOptions = [
         { key: "all", label: "All" },
@@ -61,6 +60,11 @@
         { key: "all", label: "All" },
         { key: "active", label: "Active" },
         { key: "inactive", label: "Inactive" },
+    ];
+    const servicePriorityOptions = [
+        { key: "high", label: "High" },
+        { key: "normal", label: "Normal" },
+        { key: "low", label: "Low" },
     ];
 
     const appointmentStatusFieldAliases = ["status"];
@@ -138,7 +142,7 @@
         name: "",
         durationMinutes: "30",
         description: "",
-        displayOrder: "0",
+        priority: "normal",
         active: true,
     };
     let serviceFormError = "";
@@ -284,7 +288,8 @@
             const searchable = [
                 normalizeString(service?.name),
                 normalizeString(service?.description),
-                `${service?.displayOrder ?? 0}`,
+                normalizeString(service?.priorityLabel),
+                normalizeString(service?.priorityKey),
                 duration,
                 duration ? `${duration} minutes` : "",
             ]
@@ -539,16 +544,15 @@
     $: serviceFormDurationValid = Number.isFinite(serviceFormDurationValue)
         && serviceFormDurationValue >= 5
         && serviceFormDurationValue <= 480;
-    $: serviceFormDisplayOrderParse = parseServiceDisplayOrderDraft(serviceForm.displayOrder);
+    $: serviceFormPriorityKey = normalizeServicePriority(serviceForm.priority);
     $: serviceHealthWarnings = buildServiceHealthWarnings({
         name: serviceForm.name,
         durationValid: serviceFormDurationValid,
-        displayOrderValid: serviceFormDisplayOrderParse.valid,
     });
     $: serviceHealthSuggestions = buildServiceHealthSuggestions({
         active: !!serviceForm.active,
         description: serviceForm.description,
-        displayOrder: serviceFormDisplayOrderParse.valid ? serviceFormDisplayOrderParse.value : 0,
+        priority: serviceFormPriorityKey,
         servicesCount: normalizedServices.length,
     });
     $: serviceHealthState = resolveBookingReadinessState(serviceHealthWarnings.length);
@@ -562,13 +566,17 @@
     }
 
     function normalizeServiceRecord(record) {
+        const displayOrder = readNonNegativeInteger(record?.displayOrder, 50);
+        const priorityKey = mapDisplayOrderToPriority(displayOrder);
         return {
             ...record,
             id: normalizeString(record?.id),
             name: normalizeString(record?.name),
             description: normalizeString(record?.description),
             durationMinutes: readNonNegativeInteger(record?.durationMinutes, 0),
-            displayOrder: readNonNegativeInteger(record?.displayOrder, 0),
+            displayOrder,
+            priorityKey,
+            priorityLabel: formatServicePriorityLabel(priorityKey),
             active: !!record?.active,
             created: normalizeString(record?.created),
         };
@@ -576,8 +584,8 @@
 
     function sortServicesForBackoffice(list = []) {
         return [...list].sort((a, b) => {
-            const firstOrder = readNonNegativeInteger(a?.displayOrder, 0);
-            const secondOrder = readNonNegativeInteger(b?.displayOrder, 0);
+            const firstOrder = readNonNegativeInteger(a?.displayOrder, 50);
+            const secondOrder = readNonNegativeInteger(b?.displayOrder, 50);
             if (firstOrder !== secondOrder) {
                 return firstOrder - secondOrder;
             }
@@ -598,28 +606,50 @@
         });
     }
 
-    function parseServiceDisplayOrderDraft(rawValue) {
-        const normalized = normalizeString(rawValue);
-        if (!normalized) {
-            return { valid: true, value: 0 };
+    function normalizeServicePriority(value) {
+        const normalized = normalizeLower(value);
+        if (normalized === "high" || normalized === "normal" || normalized === "low") {
+            return normalized;
         }
+        return "normal";
+    }
 
-        if (!/^-?\d+$/.test(normalized)) {
-            return { valid: false, value: 0, error: "Display order must be a whole number." };
+    function mapPriorityToDisplayOrder(priority) {
+        const normalized = normalizeServicePriority(priority);
+        if (normalized === "high") {
+            return 0;
         }
-
-        const parsed = Number.parseInt(normalized, 10);
-        if (!Number.isFinite(parsed)) {
-            return { valid: false, value: 0, error: "Display order must be a whole number." };
+        if (normalized === "low") {
+            return 100;
         }
+        return 50;
+    }
 
-        return { valid: true, value: Math.max(0, parsed) };
+    function mapDisplayOrderToPriority(displayOrderValue) {
+        const normalized = readNonNegativeInteger(displayOrderValue, 50);
+        if (normalized <= 24) {
+            return "high";
+        }
+        if (normalized >= 75) {
+            return "low";
+        }
+        return "normal";
+    }
+
+    function formatServicePriorityLabel(priority) {
+        const normalized = normalizeServicePriority(priority);
+        if (normalized === "high") {
+            return "High priority";
+        }
+        if (normalized === "low") {
+            return "Low priority";
+        }
+        return "Normal priority";
     }
 
     function buildServiceHealthWarnings({
         name = "",
         durationValid = true,
-        displayOrderValid = true,
     } = {}) {
         const warnings = [];
 
@@ -631,17 +661,13 @@
             warnings.push("Duration must be an integer between 5 and 480 minutes.");
         }
 
-        if (!displayOrderValid) {
-            warnings.push("Display order must be a whole number.");
-        }
-
         return warnings;
     }
 
     function buildServiceHealthSuggestions({
         active = true,
         description = "",
-        displayOrder = 0,
+        priority = "normal",
         servicesCount = 0,
     } = {}) {
         const suggestions = [];
@@ -654,8 +680,11 @@
             suggestions.push("Add a short description to help visitors choose this service.");
         }
 
-        if (servicesCount > 1 && readNonNegativeInteger(displayOrder, 0) === 0) {
-            suggestions.push("Set display order to control how services appear to visitors.");
+        if (servicesCount > 1) {
+            suggestions.push("Use priority to control which services appear first.");
+            if (normalizeServicePriority(priority) !== "high") {
+                suggestions.push("High priority services appear before normal and low priority services.");
+            }
         }
 
         return suggestions;
@@ -2500,7 +2529,7 @@
             name: "",
             durationMinutes: "30",
             description: "",
-            displayOrder: "0",
+            priority: "normal",
             active: true,
         };
         serviceFormError = "";
@@ -2512,7 +2541,7 @@
             name: normalizeString(service?.name),
             durationMinutes: `${service?.durationMinutes || "30"}`,
             description: normalizeString(service?.description),
-            displayOrder: `${readNonNegativeInteger(service?.displayOrder, 0)}`,
+            priority: mapDisplayOrderToPriority(service?.displayOrder),
             active: !!service?.active,
         };
         serviceFormError = "";
@@ -2561,7 +2590,7 @@
         const normalizedName = normalizeString(serviceForm.name);
         const duration = Number.parseInt(`${serviceForm.durationMinutes || ""}`.trim(), 10);
         const normalizedDescription = normalizeString(serviceForm.description);
-        const parsedDisplayOrder = parseServiceDisplayOrderDraft(serviceForm.displayOrder);
+        const normalizedPriority = normalizeServicePriority(serviceForm.priority);
 
         if (!normalizedName) {
             serviceFormError = "Service name is required.";
@@ -2573,11 +2602,6 @@
             return;
         }
 
-        if (!parsedDisplayOrder.valid) {
-            serviceFormError = parsedDisplayOrder.error || "Display order must be a whole number.";
-            return;
-        }
-
         serviceFormError = "";
         isSavingService = true;
 
@@ -2585,7 +2609,7 @@
             name: normalizedName,
             durationMinutes: duration,
             description: normalizedDescription,
-            displayOrder: parsedDisplayOrder.value,
+            displayOrder: mapPriorityToDisplayOrder(normalizedPriority),
             active: !!serviceForm.active,
         };
 
@@ -3961,7 +3985,7 @@
                                 id="booking-services-search"
                                 class="input input-sm"
                                 type="text"
-                                placeholder="Search by name, description, duration, or order..."
+                                placeholder="Search by name, description, duration, or priority..."
                                 bind:value={serviceSearch}
                             />
                         </div>
@@ -4005,7 +4029,7 @@
                                         <div class="booking-service-meta txt-sm txt-hint">
                                             {service.durationMinutes || 0} minutes
                                             <span class="booking-service-meta-separator">·</span>
-                                            <span>Order {service.displayOrder ?? 0}</span>
+                                            <span>{service.priorityLabel}</span>
                                         </div>
                                         {#if service.description}
                                             <p class="booking-service-description txt-xs txt-hint m-b-0">{service.description}</p>
@@ -4029,7 +4053,7 @@
                 <aside class="booking-rail">
                     <section class="booking-rail-block">
                         <h5 class="m-0">Service details</h5>
-                        <p class="txt-sm txt-hint m-b-0">Create or update service name, duration, description, order, and active status.</p>
+                        <p class="txt-sm txt-hint m-b-0">Create or update service name, duration, description, priority, and active status.</p>
                         <div class="booking-actions-row">
                             <span class="summary-pill">{serviceForm.id ? "Editing selected service" : "Creating a new service"}</span>
                         </div>
@@ -4062,17 +4086,18 @@
                             </div>
 
                             <div class="form-field">
-                                <label class="txt-sm txt-hint" for="booking-service-display-order">Display order</label>
-                                <input
-                                    id="booking-service-display-order"
+                                <label class="txt-sm txt-hint" for="booking-service-priority">Priority</label>
+                                <select
+                                    id="booking-service-priority"
                                     class="input input-sm"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    bind:value={serviceForm.displayOrder}
+                                    bind:value={serviceForm.priority}
                                     disabled={isSavingService}
-                                />
-                                <p class="txt-xs txt-hint m-b-0">Lower numbers appear first.</p>
+                                >
+                                    {#each servicePriorityOptions as option (option.key)}
+                                        <option value={option.key}>{option.label}</option>
+                                    {/each}
+                                </select>
+                                <p class="txt-xs txt-hint m-b-0">Higher priority services appear first when visitors choose a service.</p>
                             </div>
 
                             <div class="form-field">
@@ -4138,8 +4163,6 @@
                             </div>
                             <div class="booking-service-meta txt-sm txt-hint">
                                 {serviceFormDurationValid ? serviceFormDurationValue : 0} minutes
-                                <span class="booking-service-meta-separator">·</span>
-                                <span>Order {serviceFormDisplayOrderParse.valid ? serviceFormDisplayOrderParse.value : 0}</span>
                             </div>
                             {#if normalizeString(serviceForm.description)}
                                 <p class="booking-service-description txt-xs txt-hint m-b-0">{normalizeString(serviceForm.description)}</p>
@@ -4201,7 +4224,10 @@
                             class:active={activeAvailabilityTab === tab.key}
                             on:click={() => (activeAvailabilityTab = tab.key)}
                         >
-                            <span class="tab-label">{tab.label}</span>
+                            <span class="tab-label">
+                                <i class={tab.icon} aria-hidden="true" />
+                                {tab.label}
+                            </span>
                         </button>
                     {/each}
                 </div>
@@ -4209,9 +4235,9 @@
                 {#if activeAvailabilityTab === "weekly"}
                     <div class="booking-split-layout booking-split-layout--availability">
                         <div class="booking-main-column booking-availability-main">
-                            <div class="booking-section-head-row">
-                                <div class="booking-section-head-copy">
-                                    <h4 class="m-0">Weekly availability</h4>
+                            <div class="booking-section-head-row booking-section-head-row--compact">
+                                <div class="booking-section-head-copy booking-section-head-copy--inline">
+                                    <h4 class="m-0">Weekly schedule</h4>
                                     <p class="txt-sm txt-hint m-b-0">Set active days and time windows for appointment requests.</p>
                                 </div>
                                 <div class="booking-section-head-actions">
@@ -4220,10 +4246,6 @@
                                         {dirtyAvailabilityRowsCount} unsaved day{dirtyAvailabilityRowsCount === 1 ? "" : "s"} ({dirtyAvailabilityWindowsCount} window{dirtyAvailabilityWindowsCount === 1 ? "" : "s"})
                                     </span>
                                 </div>
-                            </div>
-
-                            <div class="booking-availability-helper txt-xs txt-hint">
-                                Changes are local until you save. Active windows must use valid HH:mm ranges and cannot overlap.
                             </div>
 
                             <div class="booking-availability-list">
@@ -4238,6 +4260,14 @@
                                                 {#if isAvailabilityDayDirty(row)}
                                                     <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
                                                 {/if}
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-outline btn-sm booking-day-add-window-btn"
+                                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows}
+                                                    on:click={() => addAvailabilityWindow(row.dayOfWeek)}
+                                                >
+                                                    <span class="txt">Add time window</span>
+                                                </button>
                                             </div>
                                         </div>
 
@@ -4317,24 +4347,122 @@
                                             <p class="txt-sm txt-hint m-b-0">No windows configured.</p>
                                         {/if}
 
-                                        <div class="booking-availability-day-actions">
-                                            <button
-                                                type="button"
-                                                class="btn btn-outline btn-sm"
-                                                disabled={isSavingAllAvailability || hasSavingAvailabilityRows}
-                                                on:click={() => addAvailabilityWindow(row.dayOfWeek)}
-                                            >
-                                                <span class="txt">Add time window</span>
-                                            </button>
-                                        </div>
                                     </article>
                                 {/each}
                             </div>
                         </div>
 
                         <aside class="booking-rail">
-                            <section class="booking-rail-block">
-                                <h5 class="m-0">Schedule actions</h5>
+                            <section class="booking-rail-block booking-health-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Availability health</h5>
+                                        <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
+                                        <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Warnings</div>
+                                    {#if availabilityHealthWarnings.length}
+                                        {#each availabilityHealthWarnings as warning}
+                                            <div class="booking-health-item warning">
+                                                <span class="label label-sm booking-health-pill warning">Warning</span>
+                                                <span>{warning}</span>
+                                            </div>
+                                        {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
+                                    {/if}
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Suggestions</div>
+                                    {#if availabilityHealthSuggestions.length}
+                                        {#each availabilityHealthSuggestions as suggestion}
+                                            <div class="booking-health-item">
+                                                <span class="label label-sm booking-health-pill">Info</span>
+                                                <span>{suggestion}</span>
+                                            </div>
+                                        {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
+                                    {/if}
+                                </div>
+                            </section>
+
+                            <section class="booking-rail-block booking-slot-preview-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Slot preview</h5>
+                                        <p class="txt-sm txt-hint m-b-0">
+                                            Preview uses services, weekly hours, exceptions, booking rules, and existing appointments.
+                                        </p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class="summary-pill">{slotPreviewSlots.length} slots</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-slot-preview-controls m-t-sm">
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
+                                        <select
+                                            id="booking-slot-preview-service"
+                                            class="input input-sm"
+                                            value={slotPreviewServiceId}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
+                                        >
+                                            {#if !slotPreviewServiceOptions.length}
+                                                <option value="">No active services</option>
+                                            {:else}
+                                                {#each slotPreviewServiceOptions as service (service.id)}
+                                                    <option value={service.id}>{service.label}</option>
+                                                {/each}
+                                            {/if}
+                                        </select>
+                                    </div>
+
+                                    <div class="form-field m-b-0">
+                                        <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
+                                        <input
+                                            id="booking-slot-preview-date"
+                                            class="input input-sm"
+                                            type="date"
+                                            value={slotPreviewDate}
+                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
+                                            on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {#if !slotPreviewServiceOptions.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
+                                {:else if activeAvailabilityDaysCount <= 0 && activeExceptionsCount <= 0}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
+                                {:else if !slotPreviewServiceId || !slotPreviewDate}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
+                                {:else if isLoadingSlotPreview}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
+                                {:else if slotPreviewError}
+                                    <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
+                                {:else if !slotPreviewSlots.length}
+                                    <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
+                                {:else}
+                                    <div class="booking-slot-preview-slots m-t-sm">
+                                        {#each slotPreviewSlots as slot}
+                                            <span class="summary-pill booking-slot-preview-pill">{slot}</span>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </section>
+
+                            <section class="booking-rail-block booking-quick-actions-panel">
+                                <h5 class="m-0">Quick actions</h5>
                                 <p class="txt-sm txt-hint m-b-0">Save schedule updates and apply common weekly presets.</p>
                                 <button
                                     type="button"
@@ -4357,427 +4485,255 @@
                                     </button>
                                 </div>
                             </section>
-
-                            <section class="booking-rail-block booking-health-panel">
-                                <div class="booking-health-head">
-                                    <div class="booking-health-main">
-                                        <h5 class="m-0">Availability health</h5>
-                                        <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
-                                    </div>
-                                    <div class="booking-health-meta">
-                                        <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
-                                        <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
-                                    </div>
-                                </div>
-
-                                <div class="booking-health-group m-t-8">
-                                    <div class="booking-health-group-title">Warnings</div>
-                                    {#if availabilityHealthWarnings.length}
-                                        {#each availabilityHealthWarnings as warning}
-                                            <div class="booking-health-item warning">
-                                                <span class="label label-sm booking-health-pill warning">Warning</span>
-                                                <span>{warning}</span>
-                                            </div>
-                                        {/each}
-                                    {:else}
-                                        <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
-                                    {/if}
-                                </div>
-
-                                <div class="booking-health-group m-t-8">
-                                    <div class="booking-health-group-title">Suggestions</div>
-                                    {#if availabilityHealthSuggestions.length}
-                                        {#each availabilityHealthSuggestions as suggestion}
-                                            <div class="booking-health-item">
-                                                <span class="label label-sm booking-health-pill">Info</span>
-                                                <span>{suggestion}</span>
-                                            </div>
-                                        {/each}
-                                    {:else}
-                                        <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
-                                    {/if}
-                                </div>
-                            </section>
-
-                            <section class="booking-rail-block booking-slot-preview-panel">
-                                <div class="booking-health-head">
-                                    <div class="booking-health-main">
-                                        <h5 class="m-0">Slot preview</h5>
-                                        <p class="txt-sm txt-hint m-b-0">
-                                            Preview uses services, weekly hours, exceptions, booking rules, and existing appointments.
-                                        </p>
-                                    </div>
-                                    <div class="booking-health-meta">
-                                        <span class="summary-pill">{slotPreviewSlots.length} slots</span>
-                                    </div>
-                                </div>
-
-                                <div class="booking-slot-preview-controls m-t-sm">
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
-                                        <select
-                                            id="booking-slot-preview-service"
-                                            class="input input-sm"
-                                            value={slotPreviewServiceId}
-                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
-                                            on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
-                                        >
-                                            {#if !slotPreviewServiceOptions.length}
-                                                <option value="">No active services</option>
-                                            {:else}
-                                                {#each slotPreviewServiceOptions as service (service.id)}
-                                                    <option value={service.id}>{service.label}</option>
-                                                {/each}
-                                            {/if}
-                                        </select>
-                                    </div>
-
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
-                                        <input
-                                            id="booking-slot-preview-date"
-                                            class="input input-sm"
-                                            type="date"
-                                            value={slotPreviewDate}
-                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
-                                            on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
-                                        />
-                                    </div>
-                                </div>
-
-                                {#if !slotPreviewServiceOptions.length}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
-                                {:else if activeAvailabilityDaysCount <= 0 && activeExceptionsCount <= 0}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
-                                {:else if !slotPreviewServiceId || !slotPreviewDate}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
-                                {:else if isLoadingSlotPreview}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
-                                {:else if slotPreviewError}
-                                    <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
-                                {:else if !slotPreviewSlots.length}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
-                                {:else}
-                                    <div class="booking-slot-preview-slots m-t-sm">
-                                        {#each slotPreviewSlots as slot}
-                                            <span class="summary-pill booking-slot-preview-pill">{slot}</span>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </section>
-                        </aside>
-                    </div>
-                {:else if activeAvailabilityTab === "exceptions"}
-                    <div class="booking-split-layout booking-split-layout--availability">
-                        <div class="booking-main-column booking-availability-main">
-                            <div class="booking-section-head-row">
-                                <div class="booking-section-head-copy">
-                                    <h4 class="m-0">Date exceptions</h4>
-                                    <p class="txt-sm txt-hint m-b-0">Override weekly schedule for closed dates or custom special-day hours.</p>
-                                </div>
-                                <div class="booking-section-head-actions">
-                                    <span class="summary-pill">{activeExceptionsCount} active exceptions</span>
-                                </div>
-                            </div>
-
-                            <div class="booking-services-controls">
-                                <div class="booking-control-cell booking-control-cell--search">
-                                    <label class="txt-sm txt-hint" for="booking-exception-search">Search</label>
-                                    <input
-                                        id="booking-exception-search"
-                                        class="input input-sm"
-                                        type="search"
-                                        placeholder="Search by date or note"
-                                        bind:value={exceptionSearch}
-                                    />
-                                </div>
-                                <div class="booking-control-cell booking-control-cell--select">
-                                    <label class="txt-sm txt-hint" for="booking-exception-type-filter">Type</label>
-                                    <select id="booking-exception-type-filter" class="input input-sm" bind:value={exceptionTypeFilter}>
-                                        {#each exceptionTypeFilterOptions as option (option.key)}
-                                            <option value={option.key}>{option.label}</option>
-                                        {/each}
-                                    </select>
-                                </div>
-                                <div class="booking-control-cell booking-control-cell--select">
-                                    <label class="txt-sm txt-hint" for="booking-exception-active-filter">Active</label>
-                                    <select id="booking-exception-active-filter" class="input input-sm" bind:value={exceptionActiveFilter}>
-                                        {#each exceptionActiveFilterOptions as option (option.key)}
-                                            <option value={option.key}>{option.label}</option>
-                                        {/each}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {#if !normalizedExceptions.length}
-                                <div class="booking-empty-state m-b-0">
-                                    <h4 class="m-0">No exceptions yet</h4>
-                                    <p class="txt-sm txt-hint m-b-0">Add closed dates or custom hours for special days.</p>
-                                </div>
-                            {:else if !filteredExceptions.length}
-                                <div class="booking-empty-state m-b-0">
-                                    <h4 class="m-0">No exceptions match these filters</h4>
-                                    <p class="txt-sm txt-hint m-b-0">Try a different search or filter selection.</p>
-                                </div>
-                            {:else}
-                                <div class="booking-services-list" role="list">
-                                    {#each filteredExceptions as exception (exception.id)}
-                                        <article
-                                            role="listitem"
-                                            class="booking-service-item booking-exception-item"
-                                            class:selected={exception.id === selectedExceptionId}
-                                            on:click={() => selectException(exception)}
-                                        >
-                                            <div class="booking-service-main">
-                                                <div class="booking-service-title-row">
-                                                    <div class="booking-service-title">{formatDate(exception.date)}</div>
-                                                    <span class={`label label-sm ${exception.active ? "label-success" : "label-warning"}`}>
-                                                        {exception.active ? "Active" : "Inactive"}
-                                                    </span>
-                                                </div>
-                                                <div class="booking-service-meta txt-sm txt-hint">
-                                                    {exception.typeLabel} {#if exception.type === "customHours"}- {exception.timeRangeLabel}{/if}
-                                                </div>
-                                                {#if exception.note}
-                                                    <div class="txt-xs txt-hint m-t-4">{exception.note}</div>
-                                                {/if}
-                                            </div>
-                                        </article>
-                                    {/each}
-                                </div>
-                            {/if}
-                        </div>
-
-                        <aside class="booking-rail">
-                            <section class="booking-rail-block">
-                                <h5 class="m-0">Exception details</h5>
-                                <div class="booking-actions-row">
-                                    <button type="button" class="btn btn-outline btn-sm" disabled={isSavingException} on:click={createNewException}>
-                                        <span class="txt">{exceptionForm.id ? "New exception" : "Reset form"}</span>
-                                    </button>
-                                </div>
-
-                                <div class="booking-form-stack">
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-exception-date">Date</label>
-                                        <input
-                                            id="booking-exception-date"
-                                            class="input input-sm"
-                                            type="date"
-                                            bind:value={exceptionForm.date}
-                                            disabled={isSavingException}
-                                        />
-                                    </div>
-
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-exception-type">Type</label>
-                                        <select
-                                            id="booking-exception-type"
-                                            class="input input-sm"
-                                            value={exceptionForm.type}
-                                            disabled={isSavingException}
-                                            on:change={(event) => setExceptionType(event.currentTarget.value)}
-                                        >
-                                            <option value="closed">Closed</option>
-                                            <option value="customHours">Custom hours</option>
-                                        </select>
-                                    </div>
-
-                                    {#if exceptionForm.type === "customHours"}
-                                        <div class="booking-manual-grid">
-                                            <div class="form-field m-b-0">
-                                                <label class="txt-sm txt-hint" for="booking-exception-start-time">Start time</label>
-                                                <input
-                                                    id="booking-exception-start-time"
-                                                    class="input input-sm"
-                                                    type="time"
-                                                    bind:value={exceptionForm.startTime}
-                                                    disabled={isSavingException}
-                                                />
-                                            </div>
-                                            <div class="form-field m-b-0">
-                                                <label class="txt-sm txt-hint" for="booking-exception-end-time">End time</label>
-                                                <input
-                                                    id="booking-exception-end-time"
-                                                    class="input input-sm"
-                                                    type="time"
-                                                    bind:value={exceptionForm.endTime}
-                                                    disabled={isSavingException}
-                                                />
-                                            </div>
-                                        </div>
-                                    {/if}
-
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-exception-note">Note</label>
-                                        <textarea
-                                            id="booking-exception-note"
-                                            class="input booking-notes-input"
-                                            rows="3"
-                                            placeholder="Optional note for this date..."
-                                            bind:value={exceptionForm.note}
-                                            disabled={isSavingException}
-                                        />
-                                    </div>
-
-                                    <label class="booking-checkbox-row" for="booking-exception-active">
-                                        <input
-                                            id="booking-exception-active"
-                                            type="checkbox"
-                                            bind:checked={exceptionForm.active}
-                                            disabled={isSavingException}
-                                        />
-                                        <span class="txt-sm">Active exception</span>
-                                    </label>
-
-                                    {#if exceptionFormError}
-                                        <p class="txt-xs txt-danger m-b-0">{exceptionFormError}</p>
-                                    {/if}
-
-                                    <div class="booking-actions-row">
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm"
-                                            class:btn-loading={isSavingException}
-                                            disabled={isSavingException}
-                                            on:click={saveException}
-                                        >
-                                            <span class="txt">{exceptionForm.id ? "Update exception" : "Create exception"}</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section class="booking-rail-block booking-slot-preview-panel">
-                                <div class="booking-health-head">
-                                    <div class="booking-health-main">
-                                        <h5 class="m-0">Slot preview</h5>
-                                        <p class="txt-sm txt-hint m-b-0">
-                                            Preview uses services, weekly hours, exceptions, booking rules, and existing appointments.
-                                        </p>
-                                    </div>
-                                    <div class="booking-health-meta">
-                                        <span class="summary-pill">{slotPreviewSlots.length} slots</span>
-                                    </div>
-                                </div>
-
-                                <div class="booking-slot-preview-controls m-t-sm">
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-slot-preview-service">Service</label>
-                                        <select
-                                            id="booking-slot-preview-service"
-                                            class="input input-sm"
-                                            value={slotPreviewServiceId}
-                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
-                                            on:change={(event) => setSlotPreviewService(event.currentTarget.value)}
-                                        >
-                                            {#if !slotPreviewServiceOptions.length}
-                                                <option value="">No active services</option>
-                                            {:else}
-                                                {#each slotPreviewServiceOptions as service (service.id)}
-                                                    <option value={service.id}>{service.label}</option>
-                                                {/each}
-                                            {/if}
-                                        </select>
-                                    </div>
-
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-slot-preview-date">Date</label>
-                                        <input
-                                            id="booking-slot-preview-date"
-                                            class="input input-sm"
-                                            type="date"
-                                            value={slotPreviewDate}
-                                            disabled={!slotPreviewServiceOptions.length || isLoadingSlotPreview}
-                                            on:change={(event) => setSlotPreviewDate(event.currentTarget.value)}
-                                        />
-                                    </div>
-                                </div>
-
-                                {#if !slotPreviewServiceOptions.length}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
-                                {:else if activeAvailabilityDaysCount <= 0 && activeExceptionsCount <= 0}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
-                                {:else if !slotPreviewServiceId || !slotPreviewDate}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
-                                {:else if isLoadingSlotPreview}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
-                                {:else if slotPreviewError}
-                                    <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
-                                {:else if !slotPreviewSlots.length}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
-                                {:else}
-                                    <div class="booking-slot-preview-slots m-t-sm">
-                                        {#each slotPreviewSlots as slot}
-                                            <span class="summary-pill booking-slot-preview-pill">{slot}</span>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </section>
                         </aside>
                     </div>
                 {:else}
                     <div class="booking-split-layout booking-split-layout--availability">
                         <div class="booking-main-column booking-availability-main">
-                            <div class="booking-section-head-row">
-                                <div class="booking-section-head-copy">
-                                    <h4 class="m-0">Booking rules</h4>
-                                    <p class="txt-sm txt-hint m-b-0">Control notice time, booking window, and buffer between appointments.</p>
+                            <section class="booking-rules-exceptions-panel">
+                                <div class="booking-section-head-row booking-section-head-row--compact">
+                                    <div class="booking-section-head-copy">
+                                        <h4 class="m-0">Date exceptions</h4>
+                                        <p class="txt-sm txt-hint m-b-0">Override weekly schedule for closed dates or custom special-day hours.</p>
+                                    </div>
+                                    <div class="booking-section-head-actions">
+                                        <span class="summary-pill">{activeExceptionsCount} active exceptions</span>
+                                    </div>
                                 </div>
-                                <div class="booking-section-head-actions">
-                                    <span class="summary-pill">{bookingRulesConfiguredCount} configured rules</span>
-                                </div>
-                            </div>
 
-                            <div class="booking-rail-block booking-rules-panel">
+                                <div class="booking-rules-exceptions-grid">
+                                    <div class="booking-rules-exceptions-list">
+                                        <div class="booking-services-controls booking-exceptions-controls">
+                                            <div class="booking-control-cell booking-control-cell--search">
+                                                <label class="txt-sm txt-hint" for="booking-exception-search">Search</label>
+                                                <input
+                                                    id="booking-exception-search"
+                                                    class="input input-sm"
+                                                    type="search"
+                                                    placeholder="Search by date or note"
+                                                    bind:value={exceptionSearch}
+                                                />
+                                            </div>
+                                            <div class="booking-control-cell booking-control-cell--select">
+                                                <label class="txt-sm txt-hint" for="booking-exception-type-filter">Type</label>
+                                                <select id="booking-exception-type-filter" class="input input-sm" bind:value={exceptionTypeFilter}>
+                                                    {#each exceptionTypeFilterOptions as option (option.key)}
+                                                        <option value={option.key}>{option.label}</option>
+                                                    {/each}
+                                                </select>
+                                            </div>
+                                            <div class="booking-control-cell booking-control-cell--select">
+                                                <label class="txt-sm txt-hint" for="booking-exception-active-filter">Active</label>
+                                                <select id="booking-exception-active-filter" class="input input-sm" bind:value={exceptionActiveFilter}>
+                                                    {#each exceptionActiveFilterOptions as option (option.key)}
+                                                        <option value={option.key}>{option.label}</option>
+                                                    {/each}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {#if !normalizedExceptions.length}
+                                            <div class="booking-empty-state m-b-0">
+                                                <h4 class="m-0">No exceptions yet</h4>
+                                                <p class="txt-sm txt-hint m-b-0">Add closed dates or custom hours for special days.</p>
+                                            </div>
+                                        {:else if !filteredExceptions.length}
+                                            <div class="booking-empty-state m-b-0">
+                                                <h4 class="m-0">No exceptions match these filters</h4>
+                                                <p class="txt-sm txt-hint m-b-0">Try a different search or filter selection.</p>
+                                            </div>
+                                        {:else}
+                                            <div class="booking-services-list booking-exceptions-list" role="list">
+                                                {#each filteredExceptions as exception (exception.id)}
+                                                    <article
+                                                        role="listitem"
+                                                        class="booking-service-item booking-exception-item"
+                                                        class:selected={exception.id === selectedExceptionId}
+                                                        on:click={() => selectException(exception)}
+                                                    >
+                                                        <div class="booking-service-main">
+                                                            <div class="booking-service-title-row">
+                                                                <div class="booking-service-title">{formatDate(exception.date)}</div>
+                                                                <span class={`label label-sm ${exception.active ? "label-success" : "label-warning"}`}>
+                                                                    {exception.active ? "Active" : "Inactive"}
+                                                                </span>
+                                                            </div>
+                                                            <div class="booking-service-meta txt-sm txt-hint">
+                                                                {exception.typeLabel} {#if exception.type === "customHours"}- {exception.timeRangeLabel}{/if}
+                                                            </div>
+                                                            {#if exception.note}
+                                                                <div class="txt-xs txt-hint m-t-4">{exception.note}</div>
+                                                            {/if}
+                                                        </div>
+                                                    </article>
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                    </div>
+
+                                    <section class="booking-rail-block booking-exception-details-panel">
+                                        <h5 class="m-0">Exception details</h5>
+                                        <p class="txt-sm txt-hint m-b-0">Create, update, or disable special-day overrides.</p>
+                                        <div class="booking-actions-row booking-exception-actions-row">
+                                            <button type="button" class="btn btn-outline btn-sm" disabled={isSavingException} on:click={createNewException}>
+                                                <span class="txt">{exceptionForm.id ? "New exception" : "Reset form"}</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm"
+                                                class:btn-loading={isSavingException}
+                                                disabled={isSavingException}
+                                                on:click={saveException}
+                                            >
+                                                <span class="txt">{exceptionForm.id ? "Update exception" : "Create exception"}</span>
+                                            </button>
+                                        </div>
+
+                                        <div class="booking-form-stack">
+                                            <div class="form-field m-b-0">
+                                                <label class="txt-sm txt-hint" for="booking-exception-date">Date</label>
+                                                <input
+                                                    id="booking-exception-date"
+                                                    class="input input-sm"
+                                                    type="date"
+                                                    bind:value={exceptionForm.date}
+                                                    disabled={isSavingException}
+                                                />
+                                            </div>
+
+                                            <div class="form-field m-b-0">
+                                                <label class="txt-sm txt-hint" for="booking-exception-type">Type</label>
+                                                <select
+                                                    id="booking-exception-type"
+                                                    class="input input-sm"
+                                                    value={exceptionForm.type}
+                                                    disabled={isSavingException}
+                                                    on:change={(event) => setExceptionType(event.currentTarget.value)}
+                                                >
+                                                    <option value="closed">Closed</option>
+                                                    <option value="customHours">Custom hours</option>
+                                                </select>
+                                            </div>
+
+                                            {#if exceptionForm.type === "customHours"}
+                                                <div class="booking-manual-grid">
+                                                    <div class="form-field m-b-0">
+                                                        <label class="txt-sm txt-hint" for="booking-exception-start-time">Start time</label>
+                                                        <input
+                                                            id="booking-exception-start-time"
+                                                            class="input input-sm"
+                                                            type="time"
+                                                            bind:value={exceptionForm.startTime}
+                                                            disabled={isSavingException}
+                                                        />
+                                                    </div>
+                                                    <div class="form-field m-b-0">
+                                                        <label class="txt-sm txt-hint" for="booking-exception-end-time">End time</label>
+                                                        <input
+                                                            id="booking-exception-end-time"
+                                                            class="input input-sm"
+                                                            type="time"
+                                                            bind:value={exceptionForm.endTime}
+                                                            disabled={isSavingException}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            {/if}
+
+                                            <div class="form-field m-b-0">
+                                                <label class="txt-sm txt-hint" for="booking-exception-note">Note</label>
+                                                <textarea
+                                                    id="booking-exception-note"
+                                                    class="input booking-notes-input"
+                                                    rows="3"
+                                                    placeholder="Optional note for this date..."
+                                                    bind:value={exceptionForm.note}
+                                                    disabled={isSavingException}
+                                                />
+                                            </div>
+
+                                            <label class="booking-checkbox-row" for="booking-exception-active">
+                                                <input
+                                                    id="booking-exception-active"
+                                                    type="checkbox"
+                                                    bind:checked={exceptionForm.active}
+                                                    disabled={isSavingException}
+                                                />
+                                                <span class="txt-sm">Active exception</span>
+                                            </label>
+
+                                            {#if exceptionFormError}
+                                                <p class="txt-xs txt-danger m-b-0">{exceptionFormError}</p>
+                                            {/if}
+                                        </div>
+                                    </section>
+                                </div>
+                            </section>
+
+                            <section class="booking-rail-block booking-rules-panel">
+                                <div class="booking-section-head-row booking-section-head-row--compact">
+                                    <div class="booking-section-head-copy">
+                                        <h4 class="m-0">Booking rules</h4>
+                                        <p class="txt-sm txt-hint m-b-0">Control notice time, booking window, and buffer between appointments.</p>
+                                    </div>
+                                    <div class="booking-section-head-actions">
+                                        <span class="summary-pill">{bookingRulesConfiguredCount} configured rules</span>
+                                    </div>
+                                </div>
+
                                 <div class="booking-form-stack">
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-rules-min-notice">Minimum notice (hours)</label>
-                                        <input
-                                            id="booking-rules-min-notice"
-                                            class="input input-sm"
-                                            type="number"
-                                            min="0"
-                                            step="1"
-                                            bind:value={bookingRulesDraft.minNoticeHours}
-                                            disabled={isSavingBookingRules}
-                                        />
-                                        <p class="txt-xs txt-hint m-b-0">How many hours in advance visitors must book.</p>
-                                    </div>
+                                    <div class="booking-rules-fields">
+                                        <div class="form-field m-b-0">
+                                            <label class="txt-sm txt-hint" for="booking-rules-min-notice">Minimum notice (hours)</label>
+                                            <input
+                                                id="booking-rules-min-notice"
+                                                class="input input-sm"
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                bind:value={bookingRulesDraft.minNoticeHours}
+                                                disabled={isSavingBookingRules}
+                                            />
+                                            <p class="txt-xs txt-hint m-b-0">How many hours in advance visitors must book.</p>
+                                        </div>
 
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-rules-window">Booking window (days)</label>
-                                        <input
-                                            id="booking-rules-window"
-                                            class="input input-sm"
-                                            type="number"
-                                            min="0"
-                                            step="1"
-                                            bind:value={bookingRulesDraft.bookingWindowDays}
-                                            disabled={isSavingBookingRules}
-                                        />
-                                        <p class="txt-xs txt-hint m-b-0">How many days ahead visitors can book. Use 0 for no limit.</p>
-                                    </div>
+                                        <div class="form-field m-b-0">
+                                            <label class="txt-sm txt-hint" for="booking-rules-window">Booking window (days)</label>
+                                            <input
+                                                id="booking-rules-window"
+                                                class="input input-sm"
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                bind:value={bookingRulesDraft.bookingWindowDays}
+                                                disabled={isSavingBookingRules}
+                                            />
+                                            <p class="txt-xs txt-hint m-b-0">How many days ahead visitors can book. Use 0 for no limit.</p>
+                                        </div>
 
-                                    <div class="form-field m-b-0">
-                                        <label class="txt-sm txt-hint" for="booking-rules-buffer">Buffer between appointments (minutes)</label>
-                                        <input
-                                            id="booking-rules-buffer"
-                                            class="input input-sm"
-                                            type="number"
-                                            min="0"
-                                            step="1"
-                                            bind:value={bookingRulesDraft.bufferMinutes}
-                                            disabled={isSavingBookingRules}
-                                        />
-                                        <p class="txt-xs txt-hint m-b-0">Extra blocked time around appointments.</p>
+                                        <div class="form-field m-b-0">
+                                            <label class="txt-sm txt-hint" for="booking-rules-buffer">Buffer between appointments (minutes)</label>
+                                            <input
+                                                id="booking-rules-buffer"
+                                                class="input input-sm"
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                bind:value={bookingRulesDraft.bufferMinutes}
+                                                disabled={isSavingBookingRules}
+                                            />
+                                            <p class="txt-xs txt-hint m-b-0">Extra blocked time around appointments.</p>
+                                        </div>
                                     </div>
 
                                     {#if bookingRulesFormError}
                                         <p class="txt-xs txt-danger m-b-0">{bookingRulesFormError}</p>
                                     {/if}
 
-                                    <div class="booking-actions-row">
+                                    <div class="booking-actions-row booking-rules-footer">
+                                        <span class="summary-pill" class:warning={bookingRulesDirty}>
+                                            {bookingRulesDirty ? "Unsaved changes" : "All changes saved"}
+                                        </span>
                                         <button
                                             type="button"
                                             class="btn btn-sm"
@@ -4789,51 +4745,10 @@
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </section>
                         </div>
 
                         <aside class="booking-rail">
-                            <section class="booking-rail-block booking-health-panel">
-                                <div class="booking-health-head">
-                                    <div class="booking-health-main">
-                                        <h5 class="m-0">Availability health</h5>
-                                        <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
-                                    </div>
-                                    <div class="booking-health-meta">
-                                        <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
-                                        <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
-                                    </div>
-                                </div>
-
-                                <div class="booking-health-group m-t-8">
-                                    <div class="booking-health-group-title">Warnings</div>
-                                    {#if availabilityHealthWarnings.length}
-                                        {#each availabilityHealthWarnings as warning}
-                                            <div class="booking-health-item warning">
-                                                <span class="label label-sm booking-health-pill warning">Warning</span>
-                                                <span>{warning}</span>
-                                            </div>
-                                        {/each}
-                                    {:else}
-                                        <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
-                                    {/if}
-                                </div>
-
-                                <div class="booking-health-group m-t-8">
-                                    <div class="booking-health-group-title">Suggestions</div>
-                                    {#if availabilityHealthSuggestions.length}
-                                        {#each availabilityHealthSuggestions as suggestion}
-                                            <div class="booking-health-item">
-                                                <span class="label label-sm booking-health-pill">Info</span>
-                                                <span>{suggestion}</span>
-                                            </div>
-                                        {/each}
-                                    {:else}
-                                        <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
-                                    {/if}
-                                </div>
-                            </section>
-
                             <section class="booking-rail-block booking-slot-preview-panel">
                                 <div class="booking-health-head">
                                     <div class="booking-health-main">
@@ -4881,24 +4796,95 @@
                                 </div>
 
                                 {#if !slotPreviewServiceOptions.length}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add an active service to preview booking slots.</p>
+                                    <div class="booking-slot-preview-status m-t-sm">
+                                        <p class="txt-sm txt-hint m-b-0">Add an active service to preview booking slots.</p>
+                                    </div>
                                 {:else if activeAvailabilityDaysCount <= 0 && activeExceptionsCount <= 0}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Add active availability days to generate slots.</p>
+                                    <div class="booking-slot-preview-status m-t-sm">
+                                        <p class="txt-sm txt-hint m-b-0">Add active availability days to generate slots.</p>
+                                    </div>
                                 {:else if !slotPreviewServiceId || !slotPreviewDate}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Select a service and date to preview slots.</p>
+                                    <div class="booking-slot-preview-status m-t-sm">
+                                        <p class="txt-sm txt-hint m-b-0">Select a service and date to preview slots.</p>
+                                    </div>
                                 {:else if isLoadingSlotPreview}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">Loading available times...</p>
+                                    <div class="booking-slot-preview-status m-t-sm">
+                                        <p class="txt-sm txt-hint m-b-0">Loading available times...</p>
+                                    </div>
                                 {:else if slotPreviewError}
-                                    <p class="txt-sm txt-danger m-t-sm m-b-0">{slotPreviewError}</p>
+                                    <div class="booking-slot-preview-status m-t-sm">
+                                        <p class="txt-sm txt-danger m-b-0">{slotPreviewError}</p>
+                                    </div>
                                 {:else if !slotPreviewSlots.length}
-                                    <p class="txt-sm txt-hint m-t-sm m-b-0">No available times for this date.</p>
+                                    <div class="booking-slot-preview-status m-t-sm">
+                                        <p class="txt-sm txt-hint m-b-0">No available times for this date.</p>
+                                    </div>
                                 {:else}
-                                    <div class="booking-slot-preview-slots m-t-sm">
-                                        {#each slotPreviewSlots as slot}
-                                            <span class="summary-pill booking-slot-preview-pill">{slot}</span>
-                                        {/each}
+                                    <div class="booking-slot-preview-slots-wrap m-t-sm">
+                                        <div class="booking-slot-preview-slots">
+                                            {#each slotPreviewSlots as slot}
+                                                <span class="summary-pill booking-slot-preview-pill">{slot}</span>
+                                            {/each}
+                                        </div>
                                     </div>
                                 {/if}
+                            </section>
+
+                            <section class="booking-rail-block booking-health-panel">
+                                <div class="booking-health-head">
+                                    <div class="booking-health-main">
+                                        <h5 class="m-0">Availability health</h5>
+                                        <p class="txt-sm txt-hint m-b-0">Check schedule readiness before receiving booking requests.</p>
+                                    </div>
+                                    <div class="booking-health-meta">
+                                        <span class={`label label-sm ${availabilityHealthState.badgeClass}`}>{availabilityHealthState.label}</span>
+                                        <span class="summary-pill">{availabilityHealthWarnings.length} warnings - {availabilityHealthSuggestions.length} suggestions</span>
+                                    </div>
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Warnings</div>
+                                    {#if availabilityHealthWarnings.length}
+                                        {#each availabilityHealthWarnings as warning}
+                                            <div class="booking-health-item warning">
+                                                <span class="label label-sm booking-health-pill warning">Warning</span>
+                                                <span>{warning}</span>
+                                            </div>
+                                        {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">Availability is in a healthy state.</p>
+                                    {/if}
+                                </div>
+
+                                <div class="booking-health-group m-t-8">
+                                    <div class="booking-health-group-title">Suggestions</div>
+                                    {#if availabilityHealthSuggestions.length}
+                                        {#each availabilityHealthSuggestions as suggestion}
+                                            <div class="booking-health-item">
+                                                <span class="label label-sm booking-health-pill">Info</span>
+                                                <span>{suggestion}</span>
+                                            </div>
+                                        {/each}
+                                    {:else}
+                                        <p class="txt-sm txt-hint m-b-0">No suggestions right now.</p>
+                                    {/if}
+                                </div>
+                            </section>
+
+                            <section class="booking-rail-block booking-quick-actions-panel">
+                                <h5 class="m-0">Quick actions</h5>
+                                <p class="txt-sm txt-hint m-b-0">Move between key booking operations.</p>
+                                <div class="booking-availability-actions-list booking-quick-actions-list">
+                                    <button type="button" class="btn btn-outline btn-sm" on:click={() => (activeAvailabilityTab = "weekly")}>
+                                        <span class="txt">View weekly schedule</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline btn-sm" on:click={() => (activeTab = "services")}>
+                                        <span class="txt">Manage services</span>
+                                    </button>
+                                    <button type="button" class="btn btn-outline btn-sm" on:click={() => (activeTab = "appointments")}>
+                                        <span class="txt">View appointments</span>
+                                    </button>
+                                </div>
                             </section>
                         </aside>
                     </div>
@@ -5594,6 +5580,28 @@
         gap: 12px;
     }
 
+    .booking-availability-tabs {
+        align-self: flex-start;
+        width: auto;
+        max-width: 100%;
+    }
+
+    .booking-availability-tabs .tab-item {
+        flex: 0 0 auto;
+    }
+
+    .booking-availability-tabs .tab-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    .booking-availability-tabs .tab-label i {
+        font-size: 0.92rem;
+        line-height: 1;
+    }
+
     .booking-split-layout--availability {
         grid-template-columns: minmax(0, 1fr) 320px;
     }
@@ -5601,13 +5609,88 @@
     .booking-availability-main {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 12px;
         min-width: 0;
+    }
+
+    .booking-rules-exceptions-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .booking-rules-exceptions-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+        gap: 12px;
+        align-items: start;
+    }
+
+    .booking-rules-exceptions-list {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .booking-exceptions-controls {
+        margin-bottom: 2px;
+    }
+
+    .booking-exceptions-list {
+        max-height: 520px;
+        overflow: auto;
+    }
+
+    .booking-exception-details-panel {
+        gap: 10px;
+        height: 100%;
+    }
+
+    .booking-exception-actions-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: -2px;
+        padding-bottom: 8px;
+        border-bottom: 1px dashed var(--baseAlt1);
+    }
+
+    .booking-rules-panel {
+        gap: 12px;
+    }
+
+    .booking-rules-fields {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .booking-rules-footer {
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding-top: 8px;
+        border-top: 1px dashed var(--baseAlt1);
+    }
+
+    .booking-section-head-row--compact {
+        margin-bottom: 8px;
+    }
+
+    .booking-section-head-copy--inline {
+        flex-direction: row;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
     .booking-availability-list {
         display: grid;
-        gap: 8px;
+        gap: 10px;
     }
 
     .booking-availability-actions-list {
@@ -5617,17 +5700,13 @@
         gap: 6px;
     }
 
-    .booking-availability-helper {
-        margin-top: -4px;
-    }
-
     .booking-availability-day {
         border: 1px solid var(--baseAlt1);
         border-radius: var(--baseRadius);
-        padding: 9px 10px;
+        padding: 11px 12px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
     }
 
     .booking-availability-day-head {
@@ -5645,16 +5724,20 @@
         flex-wrap: wrap;
     }
 
+    .booking-day-add-window-btn {
+        margin-left: 2px;
+    }
+
     .booking-availability-window-list {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
     }
 
     .booking-availability-window {
         border: 1px solid var(--baseAlt1);
         border-radius: var(--baseRadius);
-        padding: 7px 8px;
+        padding: 8px 9px;
         display: grid;
         grid-template-columns: auto minmax(0, 1fr) auto auto;
         gap: 8px;
@@ -5681,11 +5764,6 @@
     .booking-availability-window-state,
     .booking-availability-window-actions {
         justify-content: flex-end;
-    }
-
-    .booking-availability-day-actions {
-        margin-top: 2px;
-        display: flex;
     }
 
     .booking-checkbox-row--compact {
@@ -5723,12 +5801,28 @@
 
     .booking-slot-preview-panel {
         background: var(--baseColor);
+        order: 1;
+        border-color: color-mix(in srgb, var(--baseAlt2) 68%, var(--baseAlt1));
+    }
+
+    .booking-slot-preview-panel,
+    .booking-health-panel,
+    .booking-quick-actions-panel {
+        box-shadow: inset 0 1px 0 color-mix(in srgb, var(--baseAlt2) 22%, transparent);
     }
 
     .booking-slot-preview-controls {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
+    }
+
+    .booking-slot-preview-status,
+    .booking-slot-preview-slots-wrap {
+        border: 1px dashed var(--baseAlt1);
+        border-radius: var(--baseRadius);
+        padding: 9px 10px;
+        background: color-mix(in srgb, var(--baseAlt1) 11%, transparent);
     }
 
     .booking-slot-preview-slots {
@@ -5744,6 +5838,8 @@
 
     .booking-health-panel {
         background: var(--baseColor);
+        order: 2;
+        gap: 12px;
     }
 
     .booking-health-head {
@@ -5776,6 +5872,8 @@
         font-weight: 600;
         color: var(--txtHintColor);
         margin-bottom: 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px dashed var(--baseAlt1);
     }
 
     .booking-health-item {
@@ -5799,6 +5897,19 @@
     .booking-health-pill.warning {
         background: color-mix(in srgb, var(--dangerColor) 12%, transparent);
         color: var(--dangerColor);
+    }
+
+    .booking-quick-actions-panel {
+        order: 3;
+        gap: 12px;
+    }
+
+    .booking-quick-actions-list {
+        gap: 8px;
+    }
+
+    .booking-quick-actions-list .btn {
+        justify-content: flex-start;
     }
 
     .booking-manual-form {
@@ -5855,6 +5966,10 @@
         .booking-control-cell--actions {
             justify-content: flex-start;
         }
+
+        .booking-rules-fields {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
     @media (max-width: 1100px) {
@@ -5892,6 +6007,18 @@
 
         .booking-services-controls {
             grid-template-columns: 1fr;
+        }
+
+        .booking-rules-exceptions-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .booking-rules-fields {
+            grid-template-columns: 1fr;
+        }
+
+        .booking-exceptions-list {
+            max-height: none;
         }
 
         .booking-slot-preview-controls {
