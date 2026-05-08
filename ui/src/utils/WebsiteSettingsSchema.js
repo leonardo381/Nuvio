@@ -2,6 +2,8 @@
 const ROLE_ADMIN = "admin";
 const ROLE_CLIENT = "client";
 const defaultEditableBy = [ROLE_ADMIN];
+const bookingCalendarBlockingModes = new Set(["service", "website", "none"]);
+const bookingConfirmationModes = new Set(["request", "autoConfirm"]);
 const websiteFeatureFlagKeys = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
 const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
 const hiddenWebsiteSettingsFeatureKeys = new Set(["reviews"]);
@@ -352,6 +354,18 @@ export const websiteSettingsSchema = {
                     editableBy: [ROLE_ADMIN],
                 },
                 {
+                    key: "confirmationMode",
+                    label: "Booking confirmation mode",
+                    type: "select",
+                    default: "request",
+                    editableBy: [ROLE_ADMIN],
+                    options: [
+                        { label: "Request approval", value: "request" },
+                        { label: "Auto-confirm bookings", value: "autoConfirm" },
+                    ],
+                    hint: "Choose whether public booking submissions become pending requests or confirmed appointments automatically.",
+                },
+                {
                     key: "emailNotifications",
                     label: "Email notifications",
                     type: "object",
@@ -433,6 +447,19 @@ export const websiteSettingsSchema = {
                                 pattern: "^[0-9]+$",
                             },
                             hint: "0 means no slot buffer. Applied in a later booking phase.",
+                        },
+                        {
+                            key: "calendarBlockingMode",
+                            label: "Calendar blocking mode",
+                            type: "select",
+                            default: "service",
+                            editableBy: [ROLE_ADMIN],
+                            options: [
+                                { label: "Same service only", value: "service" },
+                                { label: "Whole website calendar", value: "website" },
+                                { label: "Do not block by appointments", value: "none" },
+                            ],
+                            hint: "Controls how existing appointments will block available slots. Backend support is implemented in the next phase.",
                         },
                     ],
                 },
@@ -869,6 +896,40 @@ function normalizeNonNegativeInteger(value, fallback = 0) {
     return fallback;
 }
 
+function normalizeBookingCalendarBlockingMode(value) {
+    if (typeof value !== "string") {
+        return "service";
+    }
+
+    const normalized = value.trim();
+    if (!bookingCalendarBlockingModes.has(normalized)) {
+        return "service";
+    }
+
+    return normalized;
+}
+
+function normalizeBookingConfirmationMode(value) {
+    if (typeof value !== "string") {
+        return "request";
+    }
+
+    const normalized = value.trim();
+    if (bookingConfirmationModes.has(normalized)) {
+        return normalized;
+    }
+
+    if (normalized.toLowerCase() === "autoconfirm") {
+        return "autoConfirm";
+    }
+
+    if (normalized.toLowerCase() === "request") {
+        return "request";
+    }
+
+    return "request";
+}
+
 function normalizeBookingRules(rulesSettings) {
     const source = isPlainObject(rulesSettings) ? rulesSettings : {};
 
@@ -877,6 +938,7 @@ function normalizeBookingRules(rulesSettings) {
         minNoticeHours: normalizeNonNegativeInteger(source.minNoticeHours, 0),
         bookingWindowDays: normalizeNonNegativeInteger(source.bookingWindowDays, 0),
         bufferMinutes: normalizeNonNegativeInteger(source.bufferMinutes, 0),
+        calendarBlockingMode: normalizeBookingCalendarBlockingMode(source.calendarBlockingMode),
     };
 }
 
@@ -917,6 +979,7 @@ function normalizeBookingSettings(bookingSettings) {
     return {
         ...source,
         enabled: typeof source.enabled === "boolean" ? source.enabled : true,
+        confirmationMode: normalizeBookingConfirmationMode(source.confirmationMode),
         emailNotifications: normalizeEmailNotifications(source.emailNotifications, {
             legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
         }),

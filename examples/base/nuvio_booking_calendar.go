@@ -14,17 +14,18 @@ const (
 )
 
 type nuvioBookingCalendarInvitePayload struct {
-	WebsiteName     string
-	ServiceName     string
-	CustomerName    string
-	CustomerEmail   string
-	CustomerPhone   string
-	Date            string
-	Time            string
-	DurationMinutes int
-	Notes           string
-	Location        string
-	AppointmentID   string
+	WebsiteName        string
+	ServiceName        string
+	ServiceDescription string
+	CustomerName       string
+	CustomerEmail      string
+	CustomerPhone      string
+	Date               string
+	Time               string
+	DurationMinutes    int
+	Notes              string
+	Location           string
+	AppointmentID      string
 }
 
 func buildNuvioBookingICSContent(payload nuvioBookingCalendarInvitePayload) ([]byte, error) {
@@ -145,6 +146,12 @@ func buildNuvioBookingCalendarDescription(payload nuvioBookingCalendarInvitePayl
 
 	if websiteName := strings.TrimSpace(payload.WebsiteName); websiteName != "" {
 		lines = append(lines, fmt.Sprintf("Website: %s", websiteName))
+	}
+	if serviceName := strings.TrimSpace(payload.ServiceName); serviceName != "" {
+		lines = append(lines, fmt.Sprintf("Service: %s", serviceName))
+	}
+	if serviceDescription := strings.TrimSpace(payload.ServiceDescription); serviceDescription != "" {
+		lines = append(lines, fmt.Sprintf("Service details: %s", serviceDescription))
 	}
 	if customerName := strings.TrimSpace(payload.CustomerName); customerName != "" {
 		lines = append(lines, fmt.Sprintf("Customer: %s", customerName))

@@ -69,9 +69,14 @@
     const appointmentConfirmedAtFieldAliases = ["confirmedAt", "confirmed_at"];
     const appointmentCancelledAtFieldAliases = ["cancelledAt", "cancelled_at"];
     const appointmentRescheduledAtFieldAliases = ["rescheduledAt", "rescheduled_at"];
+    const appointmentServiceNameSnapshotFieldAliases = ["serviceNameSnapshot", "service_name_snapshot"];
+    const appointmentServiceDurationSnapshotFieldAliases = ["serviceDurationMinutesSnapshot", "service_duration_minutes_snapshot"];
+    const appointmentServiceDescriptionSnapshotFieldAliases = ["serviceDescriptionSnapshot", "service_description_snapshot"];
     const bookingDatePattern = /^\d{4}-\d{2}-\d{2}$/;
     const bookingTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
     const bookingEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const bookingConfirmationModes = new Set(["request", "autoConfirm"]);
+    const bookingCalendarBlockingModes = new Set(["service", "website", "none"]);
 
     let activeTab = "appointments";
     let activeAvailabilityTab = "weekly";
@@ -139,6 +144,7 @@
     let serviceFormError = "";
 
     let availabilityRows = createDefaultAvailabilityRows();
+    let availabilityWindowCounter = 0;
     let isSavingAvailability = {};
     let isSavingAllAvailability = false;
     let slotPreviewServiceId = "";
@@ -180,6 +186,9 @@
     $: appointmentConfirmedAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentConfirmedAtFieldAliases) || "";
     $: appointmentCancelledAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentCancelledAtFieldAliases) || "";
     $: appointmentRescheduledAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentRescheduledAtFieldAliases) || "";
+    $: appointmentServiceNameSnapshotFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentServiceNameSnapshotFieldAliases) || "";
+    $: appointmentServiceDurationSnapshotFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentServiceDurationSnapshotFieldAliases) || "";
+    $: appointmentServiceDescriptionSnapshotFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentServiceDescriptionSnapshotFieldAliases) || "";
 
     $: if (!websitesCollection?.id) {
         websites = [];
@@ -220,7 +229,7 @@
     $: confirmedAppointmentsCount = normalizedAppointments.filter((appointment) => appointment.statusKey === "confirmed").length;
     $: thisWeekAppointmentsCount = normalizedAppointments.filter((appointment) => isInCurrentWeek(appointment.date)).length;
     $: activeServicesCount = servicesRecords.filter((service) => !!service?.active).length;
-    $: activeAvailabilityDaysCount = availabilityRows.filter((row) => !!row?.active).length;
+    $: activeAvailabilityDaysCount = countActiveAvailabilityDays(availabilityRows);
     $: normalizedExceptions = normalizeExceptionsRecords(exceptionsRecords);
     $: activeExceptionsCount = normalizedExceptions.filter((exception) => !!exception.active).length;
     $: bookingRulesConfiguredCount = [
@@ -239,7 +248,7 @@
         bookingSettings: selectedWebsiteBookingSettings,
     });
     $: bookingReadinessState = resolveBookingReadinessState(bookingReadinessWarnings.length);
-    $: availabilityValidationIssuesCount = availabilityRows.filter((row) => !!row?.active && !!validateAvailabilityRow(row)).length;
+    $: availabilityValidationIssuesCount = countAvailabilityValidationIssues(availabilityRows);
     $: availabilityHealthWarnings = buildAvailabilityHealthWarnings({
         bookingWarnings: bookingReadinessWarnings,
         availabilityValidationIssuesCount,
@@ -290,7 +299,8 @@
 
         return true;
     });
-    $: dirtyAvailabilityRowsCount = availabilityRows.filter((row) => !!row?.dirty).length;
+    $: dirtyAvailabilityRowsCount = countDirtyAvailabilityDays(availabilityRows);
+    $: dirtyAvailabilityWindowsCount = countDirtyAvailabilityWindows(availabilityRows);
     $: hasSavingAvailabilityRows = Object.values(isSavingAvailability || {}).some((value) => !!value);
 
     $: appointmentServiceOptions = servicesRecords
@@ -787,12 +797,43 @@
         };
     }
 
+    function normalizeBookingConfirmationMode(value) {
+        if (typeof value !== "string") {
+            return "request";
+        }
+
+        const normalized = value.trim();
+        if (bookingConfirmationModes.has(normalized)) {
+            return normalized;
+        }
+
+        if (normalized.toLowerCase() === "autoconfirm") {
+            return "autoConfirm";
+        }
+
+        return "request";
+    }
+
+    function normalizeBookingCalendarBlockingMode(value) {
+        if (typeof value !== "string") {
+            return "service";
+        }
+
+        const normalized = value.trim();
+        if (bookingCalendarBlockingModes.has(normalized)) {
+            return normalized;
+        }
+
+        return "service";
+    }
+
     function parseBookingRules(rawRules) {
         const source = readObject(rawRules);
         return {
             minNoticeHours: readNonNegativeInteger(source.minNoticeHours, 0),
             bookingWindowDays: readNonNegativeInteger(source.bookingWindowDays, 0),
             bufferMinutes: readNonNegativeInteger(source.bufferMinutes, 0),
+            calendarBlockingMode: normalizeBookingCalendarBlockingMode(source.calendarBlockingMode),
         };
     }
 
@@ -804,6 +845,7 @@
 
         const bookingFeatureAvailable = readBoolean(featureFlags.booking, true);
         const bookingEnabled = readBoolean(booking.enabled, true);
+        const confirmationMode = normalizeBookingConfirmationMode(booking.confirmationMode);
         const rules = parseBookingRules(booking.rules);
 
         const bookingNotifications = parseEmailNotifications(
@@ -837,6 +879,7 @@
         return {
             featureAvailable: bookingFeatureAvailable,
             enabled: bookingEnabled,
+            confirmationMode,
             rules,
             bookingNotifications,
             contactNotifications,
@@ -1191,6 +1234,36 @@
         return "";
     }
 
+    function readRecordStringByAliases(record, resolvedFieldName, aliases = []) {
+        const candidates = [resolvedFieldName, ...aliases]
+            .map((candidate) => normalizeString(candidate))
+            .filter(Boolean);
+
+        for (const fieldName of candidates) {
+            const value = normalizeString(record?.[fieldName]);
+            if (value) {
+                return value;
+            }
+        }
+
+        return "";
+    }
+
+    function readRecordPositiveIntegerByAliases(record, resolvedFieldName, aliases = []) {
+        const candidates = [resolvedFieldName, ...aliases]
+            .map((candidate) => normalizeString(candidate))
+            .filter(Boolean);
+
+        for (const fieldName of candidates) {
+            const value = readNonNegativeInteger(record?.[fieldName], -1);
+            if (value > 0) {
+                return value;
+            }
+        }
+
+        return 0;
+    }
+
     function resolveWebsitesSort(collection) {
         const preferredSortFields = ["title", "name", "slug"];
         const availableFields = new Set(
@@ -1249,7 +1322,9 @@
             availabilityRecords = [];
             exceptionsRecords = [];
             appointmentRecords = [];
+            availabilityWindowCounter = 0;
             availabilityRows = createDefaultAvailabilityRows();
+            isSavingAvailability = {};
             selectedExceptionId = "";
             isCreatingException = false;
             exceptionForm = createDefaultExceptionForm();
@@ -1292,6 +1367,7 @@
             availabilityRecords = availability;
             exceptionsRecords = Array.isArray(exceptions) ? exceptions : [];
             appointmentRecords = appointments;
+            availabilityWindowCounter = 0;
             availabilityRows = createAvailabilityRowsFromRecords(availabilityRecords);
             selectedExceptionId = "";
             exceptionForm = createDefaultExceptionForm();
@@ -1317,7 +1393,9 @@
             availabilityRecords = [];
             exceptionsRecords = [];
             appointmentRecords = [];
+            availabilityWindowCounter = 0;
             availabilityRows = createDefaultAvailabilityRows();
+            isSavingAvailability = {};
             isCreatingException = false;
         }
 
@@ -1822,6 +1900,7 @@
         const serviceId = normalizeString(appointment.serviceId);
         const serviceRecord = servicesRecords.find((service) => normalizeString(service?.id) === serviceId);
         const candidates = [
+            appointment?.serviceDurationMinutes,
             serviceRecord?.durationMinutes,
             appointment?.expand?.service?.durationMinutes,
             Array.isArray(appointment?.expand?.service) ? appointment.expand.service[0]?.durationMinutes : "",
@@ -2039,6 +2118,8 @@
         const settings = isPlainObject(bookingSettings) ? bookingSettings : {};
         const featureAvailable = settings.featureAvailable !== false;
         const bookingEnabled = settings.enabled !== false;
+        const confirmationMode = normalizeBookingConfirmationMode(settings.confirmationMode);
+        const blockingMode = normalizeBookingCalendarBlockingMode(settings?.rules?.calendarBlockingMode);
         const notificationsReady = !!settings.businessNotificationsReady;
 
         if (activeServicesCount <= 0) {
@@ -2059,6 +2140,10 @@
 
         if (featureAvailable && bookingEnabled && !notificationsReady) {
             warnings.push("Business email notifications are missing or disabled for Booking requests.");
+        }
+
+        if (featureAvailable && bookingEnabled && confirmationMode === "autoConfirm" && blockingMode === "none") {
+            warnings.push("Auto-confirm is enabled while appointment blocking is disabled. Overlapping confirmed appointments may be created.");
         }
 
         return warnings;
@@ -2112,7 +2197,7 @@
 
         if (availabilityValidationIssuesCount > 0) {
             warnings.push(
-                `${availabilityValidationIssuesCount} active day${availabilityValidationIssuesCount === 1 ? "" : "s"} need valid start and end times.`,
+                `${availabilityValidationIssuesCount} active window${availabilityValidationIssuesCount === 1 ? "" : "s"} need valid, non-overlapping time ranges.`,
             );
         }
 
@@ -2141,11 +2226,11 @@
         const suggestions = Array.isArray(bookingSuggestions) ? [...bookingSuggestions] : [];
 
         if (dirtyAvailabilityRowsCount > 0) {
-            suggestions.unshift("Save changes after updating schedule rows or using presets.");
+            suggestions.unshift("Save changes after updating schedule windows or using presets.");
         }
 
         if (availabilityValidationIssuesCount > 0) {
-            suggestions.unshift("Fix active day time ranges where end time is not after start time.");
+            suggestions.unshift("Fix active windows where times are invalid or overlap.");
         }
 
         if (activeExceptionsCount <= 0) {
@@ -2169,10 +2254,35 @@
         const expandedService = Array.isArray(record?.expand?.service)
             ? record.expand.service[0]
             : record?.expand?.service;
+        const serviceRecord = servicesRecords.find((service) => normalizeString(service?.id) === serviceId);
+        const serviceNameSnapshot = readRecordStringByAliases(
+            record,
+            appointmentServiceNameSnapshotFieldName,
+            appointmentServiceNameSnapshotFieldAliases,
+        );
+        const serviceDurationSnapshot = readRecordPositiveIntegerByAliases(
+            record,
+            appointmentServiceDurationSnapshotFieldName,
+            appointmentServiceDurationSnapshotFieldAliases,
+        );
+        const serviceDescriptionSnapshot = readRecordStringByAliases(
+            record,
+            appointmentServiceDescriptionSnapshotFieldName,
+            appointmentServiceDescriptionSnapshotFieldAliases,
+        );
 
-        const serviceLabel = normalizeString(expandedService?.name)
+        const serviceLabel = serviceNameSnapshot
+            || normalizeString(expandedService?.name)
             || serviceLabelById.get(serviceId)
             || "Service not found";
+        const serviceDurationMinutes = [
+            serviceDurationSnapshot,
+            readNonNegativeInteger(expandedService?.durationMinutes, 0),
+            readNonNegativeInteger(serviceRecord?.durationMinutes, 0),
+        ].find((value) => Number.isFinite(value) && value > 0) || 0;
+        const serviceDescription = serviceDescriptionSnapshot
+            || normalizeString(expandedService?.description)
+            || normalizeString(serviceRecord?.description);
 
         const statusKey = normalizeStatus(record?.[appointmentStatusFieldName]);
         const statusMeta = getStatusMeta(statusKey);
@@ -2182,6 +2292,8 @@
             id,
             serviceId,
             serviceLabel,
+            serviceDurationMinutes,
+            serviceDescription,
             name: normalizeString(record?.name) || "Unnamed customer",
             email: normalizeString(record?.email),
             phone: normalizeString(record?.phone),
@@ -2505,77 +2617,170 @@
         }
     }
 
+    function nextAvailabilityWindowKey(dayKey = "day") {
+        availabilityWindowCounter += 1;
+        return `${dayKey}_window_${availabilityWindowCounter}`;
+    }
+
+    function normalizeAvailabilityTimeValue(value, fallback = "09:00") {
+        const normalized = normalizeString(value);
+        return bookingTimePattern.test(normalized) ? normalized : fallback;
+    }
+
+    function createAvailabilityWindowDraft(dayKey, source = {}, options = {}) {
+        const recordId = normalizeString(source?.recordId || source?.id);
+        const active = source?.active !== false;
+        const startTime = normalizeString(source?.startTime) || "09:00";
+        const endTime = normalizeString(source?.endTime) || "17:00";
+        const initialActive = typeof source?.initialActive === "boolean" ? source.initialActive : active;
+        const initialStartTime = normalizeString(source?.initialStartTime) || startTime;
+        const initialEndTime = normalizeString(source?.initialEndTime) || endTime;
+        const isNew = !!options?.isNew || !recordId;
+
+        const draft = {
+            key: recordId ? `availability_${recordId}` : nextAvailabilityWindowKey(dayKey),
+            recordId,
+            dayOfWeek: dayKey,
+            active: !!active,
+            startTime,
+            endTime,
+            initialActive: !!initialActive,
+            initialStartTime,
+            initialEndTime,
+            isNew,
+            dirty: false,
+            error: "",
+        };
+
+        draft.dirty = isAvailabilityWindowDirty(draft);
+        return draft;
+    }
+
+    function sortAvailabilityWindows(windows = []) {
+        return [...windows].sort((firstWindow, secondWindow) => {
+            const firstActive = firstWindow?.active ? 1 : 0;
+            const secondActive = secondWindow?.active ? 1 : 0;
+            if (firstActive !== secondActive) {
+                return secondActive - firstActive;
+            }
+
+            const firstStart = parseTimeToMinutes(firstWindow?.startTime);
+            const secondStart = parseTimeToMinutes(secondWindow?.startTime);
+            if (firstStart !== secondStart) {
+                if (firstStart < 0) {
+                    return 1;
+                }
+                if (secondStart < 0) {
+                    return -1;
+                }
+                return firstStart - secondStart;
+            }
+
+            const firstEnd = parseTimeToMinutes(firstWindow?.endTime);
+            const secondEnd = parseTimeToMinutes(secondWindow?.endTime);
+            if (firstEnd !== secondEnd) {
+                if (firstEnd < 0) {
+                    return 1;
+                }
+                if (secondEnd < 0) {
+                    return -1;
+                }
+                return firstEnd - secondEnd;
+            }
+
+            return normalizeString(firstWindow?.key).localeCompare(normalizeString(secondWindow?.key));
+        });
+    }
+
     function createDefaultAvailabilityRows() {
         return availabilityDays.map((day) => ({
             dayOfWeek: day.key,
             label: day.label,
-            recordId: "",
-            active: false,
-            startTime: "09:00",
-            endTime: "17:00",
-            initialActive: false,
-            initialStartTime: "09:00",
-            initialEndTime: "17:00",
-            dirty: false,
-            error: "",
+            windows: [],
         }));
     }
 
     function createAvailabilityRowsFromRecords(records = []) {
-        const byDay = new Map();
+        const rowsByDay = new Map(
+            availabilityDays.map((day) => [
+                day.key,
+                {
+                    dayOfWeek: day.key,
+                    label: day.label,
+                    windows: [],
+                },
+            ]),
+        );
 
-        for (const record of records) {
+        for (const record of records || []) {
             const dayKey = normalizeLower(record?.dayOfWeek);
-            if (!dayKey || byDay.has(dayKey)) {
+            if (!rowsByDay.has(dayKey)) {
                 continue;
             }
-            byDay.set(dayKey, record);
+
+            const row = rowsByDay.get(dayKey);
+            row.windows.push(
+                createAvailabilityWindowDraft(dayKey, {
+                    id: normalizeString(record?.id),
+                    active: !!record?.active,
+                    startTime: normalizeString(record?.startTime) || "09:00",
+                    endTime: normalizeString(record?.endTime) || "17:00",
+                    initialActive: !!record?.active,
+                    initialStartTime: normalizeString(record?.startTime) || "09:00",
+                    initialEndTime: normalizeString(record?.endTime) || "17:00",
+                }),
+            );
         }
 
-        return availabilityDays.map((day) => {
-            const record = byDay.get(day.key);
-            return {
+        const rows = availabilityDays.map((day) => {
+            const row = rowsByDay.get(day.key) || {
                 dayOfWeek: day.key,
                 label: day.label,
-                recordId: normalizeString(record?.id),
-                active: !!record?.active,
-                startTime: normalizeString(record?.startTime) || "09:00",
-                endTime: normalizeString(record?.endTime) || "17:00",
-                initialActive: !!record?.active,
-                initialStartTime: normalizeString(record?.startTime) || "09:00",
-                initialEndTime: normalizeString(record?.endTime) || "17:00",
-                dirty: false,
-                error: "",
+                windows: [],
+            };
+
+            return {
+                ...row,
+                windows: sortAvailabilityWindows(row.windows || []),
             };
         });
+
+        return applyAvailabilityValidation(rows);
     }
 
-    function isAvailabilityRowDirty(row) {
-        if (!row) {
+    function isAvailabilityWindowDirty(window) {
+        if (!window) {
             return false;
         }
 
-        return !!row.active !== !!row.initialActive
-            || normalizeString(row.startTime) !== normalizeString(row.initialStartTime)
-            || normalizeString(row.endTime) !== normalizeString(row.initialEndTime);
+        if (window.isNew) {
+            return true;
+        }
+
+        return !!window.active !== !!window.initialActive
+            || normalizeString(window.startTime) !== normalizeString(window.initialStartTime)
+            || normalizeString(window.endTime) !== normalizeString(window.initialEndTime);
     }
 
-    function updateAvailabilityRow(dayKey, patchData = {}) {
-        availabilityRows = availabilityRows.map((row) =>
-            row.dayOfWeek === dayKey
-                ? (() => {
-                    const next = {
-                        ...row,
-                        ...patchData,
-                    };
+    function isAvailabilityDayDirty(dayRow) {
+        return (dayRow?.windows || []).some((window) => !!window?.dirty);
+    }
 
-                    return {
-                        ...next,
-                        dirty: isAvailabilityRowDirty(next),
-                    };
-                })()
-                : row,
-        );
+    function countActiveWindowsForDay(dayRow) {
+        return (dayRow?.windows || []).filter((window) => !!window?.active).length;
+    }
+
+    function countActiveAvailabilityDays(rows = availabilityRows) {
+        return (rows || []).filter((dayRow) => countActiveWindowsForDay(dayRow) > 0).length;
+    }
+
+    function countDirtyAvailabilityWindows(rows = availabilityRows) {
+        return (rows || []).reduce((count, dayRow) =>
+            count + (dayRow?.windows || []).filter((window) => !!window?.dirty).length, 0);
+    }
+
+    function countDirtyAvailabilityDays(rows = availabilityRows) {
+        return (rows || []).filter((dayRow) => isAvailabilityDayDirty(dayRow)).length;
     }
 
     function parseTimeToMinutes(value) {
@@ -2593,18 +2798,19 @@
         return hour * 60 + minute;
     }
 
-    function validateAvailabilityRow(row) {
-        if (!row.active) {
+    function validateAvailabilityWindow(window) {
+        if (!window?.active) {
             return "";
         }
 
-        const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
-        if (!timePattern.test(normalizeString(row.startTime)) || !timePattern.test(normalizeString(row.endTime))) {
+        const normalizedStart = normalizeString(window?.startTime);
+        const normalizedEnd = normalizeString(window?.endTime);
+        if (!bookingTimePattern.test(normalizedStart) || !bookingTimePattern.test(normalizedEnd)) {
             return "Start and end time must use HH:mm format.";
         }
 
-        const startMinutes = parseTimeToMinutes(row.startTime);
-        const endMinutes = parseTimeToMinutes(row.endTime);
+        const startMinutes = parseTimeToMinutes(normalizedStart);
+        const endMinutes = parseTimeToMinutes(normalizedEnd);
         if (startMinutes < 0 || endMinutes < 0 || endMinutes <= startMinutes) {
             return "End time must be after start time.";
         }
@@ -2612,62 +2818,312 @@
         return "";
     }
 
-    async function saveAvailabilityRow(row, options = {}) {
-        if (!row || !selectedWebsiteId || !bookingAvailabilityCollection?.id) {
+    function buildAvailabilityValidationResult(rows = availabilityRows) {
+        const errorByWindowKey = new Map();
+        let invalidActiveWindowsCount = 0;
+
+        for (const dayRow of rows || []) {
+            const activeWindows = [];
+
+            for (const window of dayRow?.windows || []) {
+                const baseError = validateAvailabilityWindow(window);
+                if (baseError) {
+                    errorByWindowKey.set(window.key, baseError);
+                    if (window?.active) {
+                        invalidActiveWindowsCount += 1;
+                    }
+                    continue;
+                }
+
+                if (window?.active) {
+                    activeWindows.push({
+                        key: window.key,
+                        start: parseTimeToMinutes(window.startTime),
+                        end: parseTimeToMinutes(window.endTime),
+                    });
+                }
+            }
+
+            for (let index = 0; index < activeWindows.length; index += 1) {
+                const currentWindow = activeWindows[index];
+                if (currentWindow.start < 0 || currentWindow.end < 0 || currentWindow.end <= currentWindow.start) {
+                    continue;
+                }
+
+                for (let compareIndex = index + 1; compareIndex < activeWindows.length; compareIndex += 1) {
+                    const otherWindow = activeWindows[compareIndex];
+                    if (otherWindow.start < 0 || otherWindow.end < 0 || otherWindow.end <= otherWindow.start) {
+                        continue;
+                    }
+
+                    if (currentWindow.start < otherWindow.end && otherWindow.start < currentWindow.end) {
+                        errorByWindowKey.set(currentWindow.key, "Active windows cannot overlap.");
+                        errorByWindowKey.set(otherWindow.key, "Active windows cannot overlap.");
+                    }
+                }
+            }
+        }
+
+        const nextRows = (rows || []).map((dayRow) => ({
+            ...dayRow,
+            windows: sortAvailabilityWindows(
+                (dayRow?.windows || []).map((window) => {
+                    const nextError = errorByWindowKey.get(window.key) || "";
+                    const normalizedWindow = {
+                        ...window,
+                        error: nextError,
+                    };
+                    normalizedWindow.dirty = isAvailabilityWindowDirty(normalizedWindow);
+                    if (!nextError && !!normalizedWindow.active) {
+                        return normalizedWindow;
+                    }
+                    return normalizedWindow;
+                }),
+            ),
+        }));
+
+        invalidActiveWindowsCount = nextRows.reduce((count, dayRow) =>
+            count + (dayRow?.windows || []).filter((window) => !!window?.active && !!window?.error).length, 0);
+
+        return {
+            rows: nextRows,
+            invalidActiveWindowsCount,
+        };
+    }
+
+    function applyAvailabilityValidation(rows = availabilityRows) {
+        return buildAvailabilityValidationResult(rows).rows;
+    }
+
+    function countAvailabilityValidationIssues(rows = availabilityRows) {
+        return buildAvailabilityValidationResult(rows).invalidActiveWindowsCount;
+    }
+
+    function findAvailabilityWindow(dayKey, windowKey) {
+        const dayRow = availabilityRows.find((row) => row.dayOfWeek === dayKey);
+        if (!dayRow) {
+            return null;
+        }
+
+        const window = dayRow.windows.find((entry) => entry.key === windowKey);
+        if (!window) {
+            return null;
+        }
+
+        return { dayRow, window };
+    }
+
+    function updateAvailabilityWindow(dayKey, windowKey, patchData = {}) {
+        const nextRows = availabilityRows.map((dayRow) => {
+            if (dayRow.dayOfWeek !== dayKey) {
+                return dayRow;
+            }
+
+            const nextWindows = dayRow.windows.map((window) => {
+                if (window.key !== windowKey) {
+                    return window;
+                }
+
+                const nextWindow = {
+                    ...window,
+                    ...patchData,
+                    startTime: normalizeString(
+                        typeof patchData.startTime === "string" ? patchData.startTime : window.startTime,
+                    ),
+                    endTime: normalizeString(
+                        typeof patchData.endTime === "string" ? patchData.endTime : window.endTime,
+                    ),
+                };
+                nextWindow.dirty = isAvailabilityWindowDirty(nextWindow);
+                return nextWindow;
+            });
+
+            return {
+                ...dayRow,
+                windows: sortAvailabilityWindows(nextWindows),
+            };
+        });
+
+        availabilityRows = applyAvailabilityValidation(nextRows);
+    }
+
+    function addAvailabilityWindow(dayKey) {
+        const nextRows = availabilityRows.map((dayRow) => {
+            if (dayRow.dayOfWeek !== dayKey) {
+                return dayRow;
+            }
+
+            const newWindow = createAvailabilityWindowDraft(dayKey, {
+                startTime: "09:00",
+                endTime: "17:00",
+                active: true,
+                initialActive: false,
+                initialStartTime: "",
+                initialEndTime: "",
+            }, { isNew: true });
+
+            return {
+                ...dayRow,
+                windows: sortAvailabilityWindows([...dayRow.windows, newWindow]),
+            };
+        });
+
+        availabilityRows = applyAvailabilityValidation(nextRows);
+    }
+
+    function removeOrDeactivateAvailabilityWindow(dayKey, windowKey) {
+        const target = findAvailabilityWindow(dayKey, windowKey);
+        if (!target) {
+            return;
+        }
+
+        if (target.window.isNew || !target.window.recordId) {
+            const nextRows = availabilityRows.map((dayRow) => {
+                if (dayRow.dayOfWeek !== dayKey) {
+                    return dayRow;
+                }
+
+                return {
+                    ...dayRow,
+                    windows: sortAvailabilityWindows(dayRow.windows.filter((window) => window.key !== windowKey)),
+                };
+            });
+            availabilityRows = applyAvailabilityValidation(nextRows);
+            return;
+        }
+
+        updateAvailabilityWindow(dayKey, windowKey, {
+            active: false,
+            error: "",
+        });
+    }
+
+    function toggleAvailabilityWindowActive(dayKey, windowKey, nextActive) {
+        updateAvailabilityWindow(dayKey, windowKey, {
+            active: !!nextActive,
+            error: "",
+        });
+    }
+
+    async function saveAvailabilityWindow(dayKey, windowKey, options = {}) {
+        if (!selectedWebsiteId || !bookingAvailabilityCollection?.id) {
             return false;
         }
 
-        const validationError = validateAvailabilityRow(row);
-        if (validationError) {
-            updateAvailabilityRow(row.dayOfWeek, { error: validationError });
+        const target = findAvailabilityWindow(dayKey, windowKey);
+        if (!target?.window) {
             return false;
         }
 
-        updateAvailabilityRow(row.dayOfWeek, { error: "" });
-        isSavingAvailability = { ...isSavingAvailability, [row.dayOfWeek]: true };
+        const row = target.dayRow;
+        const window = target.window;
 
-        const normalizedStartTime = normalizeString(row.startTime) || "09:00";
-        const normalizedEndTime = normalizeString(row.endTime) || "17:00";
-        const normalizedActive = !!row.active;
+        if (window.isNew && !window.active) {
+            const nextRows = availabilityRows.map((dayRow) =>
+                dayRow.dayOfWeek === dayKey
+                    ? {
+                        ...dayRow,
+                        windows: sortAvailabilityWindows(dayRow.windows.filter((entry) => entry.key !== windowKey)),
+                    }
+                    : dayRow);
+            availabilityRows = applyAvailabilityValidation(nextRows);
+            return true;
+        }
+
+        isSavingAvailability = { ...isSavingAvailability, [windowKey]: true };
+
+        const normalizedStartTime = normalizeString(window.startTime) || "09:00";
+        const normalizedEndTime = normalizeString(window.endTime) || "17:00";
+        const normalizedActive = !!window.active;
 
         const payload = {
             website: selectedWebsiteId,
-            dayOfWeek: row.dayOfWeek,
+            dayOfWeek: dayKey,
             startTime: normalizedStartTime,
             endTime: normalizedEndTime,
             active: normalizedActive,
         };
 
         try {
-            if (row.recordId) {
-                const updated = await ApiClient.collection(bookingAvailabilityCollection.id).update(row.recordId, payload);
+            if (window.recordId) {
+                const updated = await ApiClient.collection(bookingAvailabilityCollection.id).update(window.recordId, payload);
                 availabilityRecords = availabilityRecords.map((record) =>
                     normalizeString(record?.id) === normalizeString(updated?.id)
                         ? { ...record, ...updated }
                         : record,
                 );
-                updateAvailabilityRow(row.dayOfWeek, {
-                    recordId: updated.id,
-                    initialActive: normalizedActive,
-                    initialStartTime: normalizedStartTime,
-                    initialEndTime: normalizedEndTime,
-                    error: "",
+
+                const nextRows = availabilityRows.map((dayRow) => {
+                    if (dayRow.dayOfWeek !== dayKey) {
+                        return dayRow;
+                    }
+
+                    return {
+                        ...dayRow,
+                        windows: dayRow.windows.map((entry) => {
+                            if (entry.key !== windowKey) {
+                                return entry;
+                            }
+
+                            const nextWindow = {
+                                ...entry,
+                                recordId: normalizeString(updated?.id) || entry.recordId,
+                                active: normalizedActive,
+                                startTime: normalizedStartTime,
+                                endTime: normalizedEndTime,
+                                initialActive: normalizedActive,
+                                initialStartTime: normalizedStartTime,
+                                initialEndTime: normalizedEndTime,
+                                isNew: false,
+                                error: "",
+                            };
+                            nextWindow.dirty = isAvailabilityWindowDirty(nextWindow);
+                            return nextWindow;
+                        }),
+                    };
                 });
+                availabilityRows = applyAvailabilityValidation(nextRows);
+
                 if (!options?.silent) {
-                    addSuccessToast(`${row.label} availability updated.`);
+                    addSuccessToast(`${row.label} window updated.`);
                 }
             } else {
                 const created = await ApiClient.collection(bookingAvailabilityCollection.id).create(payload);
                 availabilityRecords = [created, ...availabilityRecords];
-                updateAvailabilityRow(row.dayOfWeek, {
-                    recordId: created.id,
-                    initialActive: normalizedActive,
-                    initialStartTime: normalizedStartTime,
-                    initialEndTime: normalizedEndTime,
-                    error: "",
+
+                const nextRows = availabilityRows.map((dayRow) => {
+                    if (dayRow.dayOfWeek !== dayKey) {
+                        return dayRow;
+                    }
+
+                    return {
+                        ...dayRow,
+                        windows: dayRow.windows.map((entry) => {
+                            if (entry.key !== windowKey) {
+                                return entry;
+                            }
+
+                            const nextWindow = {
+                                ...entry,
+                                recordId: normalizeString(created?.id),
+                                active: normalizedActive,
+                                startTime: normalizedStartTime,
+                                endTime: normalizedEndTime,
+                                initialActive: normalizedActive,
+                                initialStartTime: normalizedStartTime,
+                                initialEndTime: normalizedEndTime,
+                                isNew: false,
+                                error: "",
+                            };
+                            nextWindow.dirty = isAvailabilityWindowDirty(nextWindow);
+                            return nextWindow;
+                        }),
+                    };
                 });
+                availabilityRows = applyAvailabilityValidation(nextRows);
+
                 if (!options?.silent) {
-                    addSuccessToast(`${row.label} availability saved.`);
+                    addSuccessToast(`${row.label} window saved.`);
                 }
             }
 
@@ -2677,18 +3133,82 @@
             return true;
         } catch (err) {
             ApiClient.error(err, false);
-            updateAvailabilityRow(row.dayOfWeek, { error: "Unable to save this day right now." });
+            updateAvailabilityWindow(dayKey, windowKey, { error: "Unable to save this window right now." });
             if (!options?.silent) {
                 addErrorToast("Unable to save availability right now.");
             }
             return false;
         } finally {
-            isSavingAvailability = { ...isSavingAvailability, [row.dayOfWeek]: false };
+            const nextSavingState = { ...isSavingAvailability };
+            delete nextSavingState[windowKey];
+            isSavingAvailability = nextSavingState;
         }
     }
 
-    function isDaySaving(dayKey) {
-        return !!isSavingAvailability?.[dayKey];
+    function isWindowSaving(windowKey) {
+        return !!isSavingAvailability?.[windowKey];
+    }
+
+    function replaceDayWindowsFromTemplates(dayKey, templates = []) {
+        const normalizedTemplates = (templates || []).map((template) => ({
+            startTime: normalizeAvailabilityTimeValue(template?.startTime, "09:00"),
+            endTime: normalizeAvailabilityTimeValue(template?.endTime, "17:00"),
+            active: template?.active !== false,
+        }));
+
+        const nextRows = availabilityRows.map((dayRow) => {
+            if (dayRow.dayOfWeek !== dayKey) {
+                return dayRow;
+            }
+
+            const persistedWindows = dayRow.windows.filter((window) => !!window.recordId);
+            const nextWindows = [];
+            let persistedIndex = 0;
+
+            for (const template of normalizedTemplates) {
+                const persistedWindow = persistedWindows[persistedIndex];
+                if (persistedWindow) {
+                    persistedIndex += 1;
+                    const nextWindow = {
+                        ...persistedWindow,
+                        active: !!template.active,
+                        startTime: template.startTime,
+                        endTime: template.endTime,
+                        error: "",
+                    };
+                    nextWindow.dirty = isAvailabilityWindowDirty(nextWindow);
+                    nextWindows.push(nextWindow);
+                } else {
+                    const newWindow = createAvailabilityWindowDraft(dayKey, {
+                        active: !!template.active,
+                        startTime: template.startTime,
+                        endTime: template.endTime,
+                        initialActive: false,
+                        initialStartTime: "",
+                        initialEndTime: "",
+                    }, { isNew: true });
+                    nextWindows.push(newWindow);
+                }
+            }
+
+            for (; persistedIndex < persistedWindows.length; persistedIndex += 1) {
+                const persistedWindow = persistedWindows[persistedIndex];
+                const nextWindow = {
+                    ...persistedWindow,
+                    active: false,
+                    error: "",
+                };
+                nextWindow.dirty = isAvailabilityWindowDirty(nextWindow);
+                nextWindows.push(nextWindow);
+            }
+
+            return {
+                ...dayRow,
+                windows: sortAvailabilityWindows(nextWindows),
+            };
+        });
+
+        availabilityRows = applyAvailabilityValidation(nextRows);
     }
 
     function applyMondayToWeekdays() {
@@ -2697,39 +3217,37 @@
             return;
         }
 
-        const weekdayKeys = ["tue", "wed", "thu", "fri"];
+        const mondayTemplates = (mondayRow.windows || [])
+            .filter((window) => !!window?.active)
+            .map((window) => ({
+                startTime: normalizeAvailabilityTimeValue(window.startTime, "09:00"),
+                endTime: normalizeAvailabilityTimeValue(window.endTime, "17:00"),
+                active: true,
+            }));
 
+        const weekdayKeys = ["tue", "wed", "thu", "fri"];
         for (const dayKey of weekdayKeys) {
-            updateAvailabilityRow(dayKey, {
-                active: !!mondayRow.active,
-                startTime: mondayRow.startTime,
-                endTime: mondayRow.endTime,
-                error: "",
-            });
+            replaceDayWindowsFromTemplates(dayKey, mondayTemplates);
         }
     }
 
     function setWeekdaysBusinessHours() {
         const weekdayKeys = ["mon", "tue", "wed", "thu", "fri"];
-
         for (const dayKey of weekdayKeys) {
-            updateAvailabilityRow(dayKey, {
-                active: true,
-                startTime: "09:00",
-                endTime: "17:00",
-                error: "",
-            });
+            replaceDayWindowsFromTemplates(dayKey, [
+                {
+                    startTime: "09:00",
+                    endTime: "17:00",
+                    active: true,
+                },
+            ]);
         }
     }
 
     function clearWeekendAvailability() {
         const weekendKeys = ["sat", "sun"];
-
         for (const dayKey of weekendKeys) {
-            updateAvailabilityRow(dayKey, {
-                active: false,
-                error: "",
-            });
+            replaceDayWindowsFromTemplates(dayKey, []);
         }
     }
 
@@ -2738,48 +3256,62 @@
             return;
         }
 
-        const dirtyRows = availabilityRows.filter((row) => !!row.dirty);
-        if (!dirtyRows.length) {
+        const validationResult = buildAvailabilityValidationResult(availabilityRows);
+        availabilityRows = validationResult.rows;
+
+        const dirtyWindows = [];
+        let invalidDirtyWindowsCount = 0;
+        for (const dayRow of availabilityRows) {
+            for (const window of dayRow.windows || []) {
+                if (!window?.dirty) {
+                    continue;
+                }
+
+                if (window.error) {
+                    invalidDirtyWindowsCount += 1;
+                    continue;
+                }
+
+                dirtyWindows.push({
+                    dayOfWeek: dayRow.dayOfWeek,
+                    key: window.key,
+                });
+            }
+        }
+
+        if (!dirtyWindows.length && !invalidDirtyWindowsCount) {
             addSuccessToast("No unsaved availability changes.");
             return;
         }
 
-        let invalidRowsCount = 0;
-        const rowsToSave = [];
-
-        for (const row of dirtyRows) {
-            const validationError = validateAvailabilityRow(row);
-            if (validationError) {
-                updateAvailabilityRow(row.dayOfWeek, { error: validationError });
-                invalidRowsCount += 1;
-                continue;
-            }
-
-            updateAvailabilityRow(row.dayOfWeek, { error: "" });
-            rowsToSave.push(row);
-        }
-
-        if (!rowsToSave.length) {
-            addErrorToast("Fix validation errors before saving changed days.");
+        if (!dirtyWindows.length && invalidDirtyWindowsCount > 0) {
+            addErrorToast("Fix invalid windows before saving schedule changes.");
             return;
         }
 
         isSavingAllAvailability = true;
 
         try {
-            const saveResults = await Promise.all(
-                rowsToSave.map((row) => saveAvailabilityRow(row, { silent: true, skipSlotPreviewRefresh: true })),
-            );
-
-            const savedCount = saveResults.filter(Boolean).length;
-            const failedCount = saveResults.length - savedCount;
-
-            if (savedCount > 0) {
-                addSuccessToast(`${savedCount} availability day${savedCount === 1 ? "" : "s"} saved.`);
+            let savedCount = 0;
+            let failedCount = 0;
+            for (const entry of dirtyWindows) {
+                const saved = await saveAvailabilityWindow(entry.dayOfWeek, entry.key, {
+                    silent: true,
+                    skipSlotPreviewRefresh: true,
+                });
+                if (saved) {
+                    savedCount += 1;
+                } else {
+                    failedCount += 1;
+                }
             }
 
-            if (failedCount > 0 || invalidRowsCount > 0) {
-                addErrorToast("Some availability changes could not be saved.");
+            if (savedCount > 0) {
+                addSuccessToast(`${savedCount} schedule window${savedCount === 1 ? "" : "s"} saved.`);
+            }
+
+            if (failedCount > 0 || invalidDirtyWindowsCount > 0) {
+                addErrorToast("Some schedule changes could not be saved.");
             }
 
             if (savedCount > 0) {
@@ -3236,6 +3768,18 @@
                                     <span class="txt-xs txt-hint">Service</span>
                                     <span class="txt-sm">{selectedAppointment.serviceLabel}</span>
                                 </div>
+                                {#if selectedAppointment.serviceDurationMinutes > 0}
+                                    <div class="booking-summary-row">
+                                        <span class="txt-xs txt-hint">Duration</span>
+                                        <span class="txt-sm">{selectedAppointment.serviceDurationMinutes} min</span>
+                                    </div>
+                                {/if}
+                                {#if selectedAppointment.serviceDescription}
+                                    <div class="booking-summary-row">
+                                        <span class="txt-xs txt-hint">Description</span>
+                                        <span class="txt-sm">{selectedAppointment.serviceDescription}</span>
+                                    </div>
+                                {/if}
                                 <div class="booking-summary-row">
                                     <span class="txt-xs txt-hint">Date &amp; time</span>
                                     <span class="txt-sm">{formatAppointmentDateTime(selectedAppointment.date, selectedAppointment.time)}</span>
@@ -3673,87 +4217,116 @@
                                 <div class="booking-section-head-actions">
                                     <span class="summary-pill">{activeAvailabilityDaysCount} active days</span>
                                     <span class="summary-pill" class:warning={dirtyAvailabilityRowsCount > 0}>
-                                        {dirtyAvailabilityRowsCount} unsaved
+                                        {dirtyAvailabilityRowsCount} unsaved day{dirtyAvailabilityRowsCount === 1 ? "" : "s"} ({dirtyAvailabilityWindowsCount} window{dirtyAvailabilityWindowsCount === 1 ? "" : "s"})
                                     </span>
                                 </div>
                             </div>
 
                             <div class="booking-availability-helper txt-xs txt-hint">
-                                Changes are local until you save. Inactive days do not require start/end times.
+                                Changes are local until you save. Active windows must use valid HH:mm ranges and cannot overlap.
                             </div>
 
                             <div class="booking-availability-list">
-                                <div class="booking-availability-grid-head txt-xs txt-hint" aria-hidden="true">
-                                    <span>Day</span>
-                                    <span>Status</span>
-                                    <span>Start</span>
-                                    <span>End</span>
-                                    <span>State</span>
-                                </div>
-
                                 {#each availabilityRows as row (row.dayOfWeek)}
-                                    <article class="booking-availability-row" class:is-inactive={!row.active}>
-                                        <div class="booking-availability-cell booking-availability-cell--day">
-                                            <span class="txt-sm booking-availability-day-label">{row.label}</span>
+                                    <article class="booking-availability-day">
+                                        <div class="booking-availability-day-head">
+                                            <div class="booking-availability-day-title">
+                                                <span class="txt-sm booking-availability-day-label">{row.label}</span>
+                                            </div>
+                                            <div class="booking-availability-day-meta">
+                                                <span class="summary-pill">{countActiveWindowsForDay(row)} active</span>
+                                                {#if isAvailabilityDayDirty(row)}
+                                                    <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
+                                                {/if}
+                                            </div>
                                         </div>
 
-                                        <div class="booking-availability-cell booking-availability-cell--status">
-                                            <label class="booking-checkbox-row booking-checkbox-row--compact">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={row.active}
-                                                    disabled={isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
-                                                    on:change={(event) => updateAvailabilityRow(row.dayOfWeek, { active: !!event.currentTarget.checked, error: "" })}
-                                                />
-                                                <span class="txt-xs" class:txt-hint={!row.active}>{row.active ? "Active" : "Inactive"}</span>
-                                            </label>
-                                        </div>
+                                        {#if row.windows.length}
+                                            <div class="booking-availability-window-list">
+                                                {#each row.windows as window (window.key)}
+                                                    <div class="booking-availability-window" class:is-inactive={!window.active}>
+                                                        <label class="booking-checkbox-row booking-checkbox-row--compact">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={window.active}
+                                                                disabled={isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
+                                                                on:change={(event) => toggleAvailabilityWindowActive(row.dayOfWeek, window.key, !!event.currentTarget.checked)}
+                                                            />
+                                                            <span class="txt-xs" class:txt-hint={!window.active}>{window.active ? "Active" : "Inactive"}</span>
+                                                        </label>
 
-                                        <div class="booking-availability-cell booking-availability-cell--time">
-                                            <span class="txt-xs txt-hint booking-time-caption">Start</span>
-                                            {#if row.active}
-                                                <input
-                                                    id={`booking-start-${row.dayOfWeek}`}
-                                                    class="input input-sm booking-time-input"
-                                                    type="time"
-                                                    value={row.startTime}
-                                                    disabled={isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
-                                                    on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { startTime: event.currentTarget.value, error: "" })}
-                                                />
-                                            {:else}
-                                                <span class="txt-xs txt-hint booking-time-placeholder">&mdash;</span>
-                                            {/if}
-                                        </div>
+                                                        <div class="booking-availability-window-time">
+                                                            <input
+                                                                id={`booking-start-${row.dayOfWeek}-${window.key}`}
+                                                                class="input input-sm booking-time-input"
+                                                                type="time"
+                                                                value={window.startTime}
+                                                                disabled={!window.active || isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
+                                                                on:input={(event) => updateAvailabilityWindow(row.dayOfWeek, window.key, { startTime: event.currentTarget.value, error: "" })}
+                                                            />
+                                                            <span class="txt-xs txt-hint">→</span>
+                                                            <input
+                                                                id={`booking-end-${row.dayOfWeek}-${window.key}`}
+                                                                class="input input-sm booking-time-input"
+                                                                type="time"
+                                                                value={window.endTime}
+                                                                disabled={!window.active || isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
+                                                                on:input={(event) => updateAvailabilityWindow(row.dayOfWeek, window.key, { endTime: event.currentTarget.value, error: "" })}
+                                                            />
+                                                        </div>
 
-                                        <div class="booking-availability-cell booking-availability-cell--time">
-                                            <span class="txt-xs txt-hint booking-time-caption">End</span>
-                                            {#if row.active}
-                                                <input
-                                                    id={`booking-end-${row.dayOfWeek}`}
-                                                    class="input input-sm booking-time-input"
-                                                    type="time"
-                                                    value={row.endTime}
-                                                    disabled={isDaySaving(row.dayOfWeek) || isSavingAllAvailability || hasSavingAvailabilityRows}
-                                                    on:input={(event) => updateAvailabilityRow(row.dayOfWeek, { endTime: event.currentTarget.value, error: "" })}
-                                                />
-                                            {:else}
-                                                <span class="txt-xs txt-hint booking-time-placeholder">&mdash;</span>
-                                            {/if}
-                                        </div>
+                                                        <div class="booking-availability-window-state">
+                                                            {#if window.error}
+                                                                <span class="label label-sm label-danger booking-state-pill">Invalid</span>
+                                                            {:else if window.dirty}
+                                                                <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
+                                                            {:else}
+                                                                <span class="txt-xs txt-hint booking-state-saved">Saved</span>
+                                                            {/if}
+                                                        </div>
 
-                                        <div class="booking-availability-cell booking-availability-cell--state">
-                                            {#if row.error}
-                                                <span class="label label-sm label-danger booking-state-pill">Invalid</span>
-                                            {:else if row.dirty}
-                                                <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
-                                            {:else}
-                                                <span class="txt-xs txt-hint booking-state-saved">Saved</span>
-                                            {/if}
-                                        </div>
+                                                        <div class="booking-availability-window-actions">
+                                                            {#if window.isNew}
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-outline btn-sm"
+                                                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
+                                                                    on:click={() => removeOrDeactivateAvailabilityWindow(row.dayOfWeek, window.key)}
+                                                                >
+                                                                    <span class="txt">Remove</span>
+                                                                </button>
+                                                            {:else}
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-outline btn-sm"
+                                                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
+                                                                    on:click={() => toggleAvailabilityWindowActive(row.dayOfWeek, window.key, !window.active)}
+                                                                >
+                                                                    <span class="txt">{window.active ? "Disable" : "Restore"}</span>
+                                                                </button>
+                                                            {/if}
+                                                        </div>
 
-                                        {#if row.error}
-                                            <p class="txt-xs txt-danger m-b-0 booking-availability-error">{row.error}</p>
+                                                        {#if window.error}
+                                                            <p class="txt-xs txt-danger m-b-0 booking-availability-error">{window.error}</p>
+                                                        {/if}
+                                                    </div>
+                                                {/each}
+                                            </div>
+                                        {:else}
+                                            <p class="txt-sm txt-hint m-b-0">No windows configured.</p>
                                         {/if}
+
+                                        <div class="booking-availability-day-actions">
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline btn-sm"
+                                                disabled={isSavingAllAvailability || hasSavingAvailabilityRows}
+                                                on:click={() => addAvailabilityWindow(row.dayOfWeek)}
+                                            >
+                                                <span class="txt">Add time window</span>
+                                            </button>
+                                        </div>
                                     </article>
                                 {/each}
                             </div>
@@ -5037,15 +5610,6 @@
         gap: 8px;
     }
 
-    .booking-availability-grid-head {
-        display: grid;
-        grid-template-columns: minmax(112px, 1.1fr) minmax(110px, 0.9fr) minmax(102px, 0.85fr) minmax(102px, 0.85fr) minmax(86px, 0.7fr);
-        gap: 8px;
-        padding: 0 10px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-
     .booking-availability-actions-list {
         display: flex;
         flex-direction: column;
@@ -5057,32 +5621,71 @@
         margin-top: -4px;
     }
 
-    .booking-availability-row {
+    .booking-availability-day {
         border: 1px solid var(--baseAlt1);
         border-radius: var(--baseRadius);
-        padding: 7px 10px;
+        padding: 9px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .booking-availability-day-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .booking-availability-day-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .booking-availability-window-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .booking-availability-window {
+        border: 1px solid var(--baseAlt1);
+        border-radius: var(--baseRadius);
+        padding: 7px 8px;
         display: grid;
-        grid-template-columns: minmax(112px, 1.1fr) minmax(110px, 0.9fr) minmax(102px, 0.85fr) minmax(102px, 0.85fr) minmax(86px, 0.7fr);
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
         gap: 8px;
         align-items: center;
     }
 
-    .booking-availability-row.is-inactive {
-        background: color-mix(in srgb, var(--baseAlt1) 16%, transparent);
+    .booking-availability-window.is-inactive {
+        background: color-mix(in srgb, var(--baseAlt1) 14%, transparent);
     }
 
-    .booking-availability-cell {
+    .booking-availability-window-time {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         min-width: 0;
     }
 
-    .booking-availability-cell--status,
-    .booking-availability-cell--state {
+    .booking-availability-window-state,
+    .booking-availability-window-actions {
         display: flex;
         align-items: center;
     }
 
-    .booking-availability-cell--state {
+    .booking-availability-window-state,
+    .booking-availability-window-actions {
         justify-content: flex-end;
+    }
+
+    .booking-availability-day-actions {
+        margin-top: 2px;
+        display: flex;
     }
 
     .booking-checkbox-row--compact {
@@ -5102,16 +5705,6 @@
     .booking-unsaved-pill {
         font-size: 0.66rem;
         line-height: 1;
-    }
-
-    .booking-time-caption {
-        display: none;
-    }
-
-    .booking-time-placeholder {
-        display: inline-block;
-        min-width: 18px;
-        text-align: center;
     }
 
     .booking-state-pill {
@@ -5277,28 +5870,20 @@
             order: 1;
         }
 
-        .booking-availability-grid-head {
-            display: none;
+        .booking-availability-window {
+            grid-template-columns: 1fr;
+            align-items: flex-start;
+            gap: 6px;
         }
 
-        .booking-availability-row {
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-            gap: 6px 8px;
+        .booking-availability-window-time {
+            width: 100%;
+            flex-wrap: wrap;
         }
 
-        .booking-availability-cell--day,
-        .booking-availability-cell--status,
-        .booking-availability-cell--state {
-            grid-column: 1 / -1;
-        }
-
-        .booking-availability-cell--state {
+        .booking-availability-window-state,
+        .booking-availability-window-actions {
             justify-content: flex-start;
-        }
-
-        .booking-time-caption {
-            display: block;
-            margin-bottom: 2px;
         }
 
         .booking-time-input {

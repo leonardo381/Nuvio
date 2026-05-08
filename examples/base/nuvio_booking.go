@@ -23,12 +23,20 @@ const (
 	nuvioBookingAvailabilityCollectionID = "pbc_1661203800"
 	nuvioBookingExceptionsCollectionID   = "pbc_1778803400"
 	nuvioAppointmentsCollectionID        = "pbc_1661203900"
+	nuvioBookingConfirmationModeRequest  = "request"
+	nuvioBookingConfirmationModeAuto     = "autoConfirm"
+	nuvioBookingBlockingModeService      = "service"
+	nuvioBookingBlockingModeWebsite      = "website"
+	nuvioBookingBlockingModeNone         = "none"
 )
 
 var (
 	nuvioBookingDatePattern             = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 	nuvioBookingTimePattern             = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
 	nuvioBookingIntegerValuePattern     = regexp.MustCompile(`^-?\d+$`)
+	nuvioServiceNameSnapshotAliases     = []string{"serviceNameSnapshot", "service_name_snapshot"}
+	nuvioServiceDurationSnapshotAliases = []string{"serviceDurationMinutesSnapshot", "service_duration_minutes_snapshot"}
+	nuvioServiceDescSnapshotAliases     = []string{"serviceDescriptionSnapshot", "service_description_snapshot"}
 	errNuvioBookingSlotUnavailable      = errors.New("nuvio booking slot unavailable")
 	errNuvioBookingDateOutsideWindow    = errors.New("nuvio booking date outside window")
 	errNuvioBookingTimeTooSoon          = errors.New("nuvio booking time too soon")
@@ -40,14 +48,16 @@ var (
 type nuvioWebsiteBookingConfig struct {
 	FeatureAvailable   bool
 	Enabled            bool
+	ConfirmationMode   string
 	EmailNotifications nuvioEmailNotificationsConfig
 	Rules              nuvioBookingRulesConfig
 }
 
 type nuvioBookingRulesConfig struct {
-	MinNoticeHours    int
-	BookingWindowDays int
-	BufferMinutes     int
+	MinNoticeHours       int
+	BookingWindowDays    int
+	BufferMinutes        int
+	CalendarBlockingMode string
 }
 
 type nuvioBookingDailyRange struct {
@@ -62,6 +72,12 @@ type nuvioBookingInterval struct {
 
 type nuvioBookingSlotComputationOptions struct {
 	ExcludeAppointmentID string
+}
+
+type nuvioBookingServiceSnapshot struct {
+	Name            string
+	DurationMinutes int
+	Description     string
 }
 
 type nuvioBookingPublicService struct {
@@ -317,12 +333,20 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("Service is not available.", nil)
 		}
 
-		serviceName := strings.TrimSpace(serviceRecord.GetString("name"))
+		serviceSnapshot := buildNuvioBookingServiceSnapshot(serviceRecord)
+		serviceName := strings.TrimSpace(serviceSnapshot.Name)
 		if serviceName == "" {
 			serviceName = "Booking service"
 		}
 
+		confirmationMode := normalizeNuvioBookingConfirmationMode(config.ConfirmationMode)
+		appointmentStatus := "pending"
+		if confirmationMode == nuvioBookingConfirmationModeAuto {
+			appointmentStatus = "confirmed"
+		}
+
 		var appointmentID string
+		confirmedAt := ""
 		transactionErr := e.App.RunInTransaction(func(txApp core.App) error {
 			txServiceRecord, err := txApp.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
 			if err != nil {
@@ -358,7 +382,22 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			appointmentRecord.Set("date", dateValue)
 			appointmentRecord.Set("time", timeValue)
 			appointmentRecord.Set("notes", notes)
-			appointmentRecord.Set("status", "pending")
+			appointmentRecord.Set("status", appointmentStatus)
+			setNuvioBookingAppointmentServiceSnapshot(
+				appointmentRecord,
+				appointmentsCollection,
+				buildNuvioBookingServiceSnapshot(txServiceRecord),
+			)
+			if appointmentStatus == "confirmed" {
+				nowISO := time.Now().UTC().Format(time.RFC3339)
+				if appointmentsCollection.Fields.GetByName("confirmedAt") != nil {
+					appointmentRecord.Set("confirmedAt", nowISO)
+					confirmedAt = nowISO
+				} else if appointmentsCollection.Fields.GetByName("confirmed_at") != nil {
+					appointmentRecord.Set("confirmed_at", nowISO)
+					confirmedAt = nowISO
+				}
+			}
 
 			if err := txApp.Save(appointmentRecord); err != nil {
 				return err
@@ -432,24 +471,118 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		responsePayload := map[string]any{
 			"ok":            true,
 			"appointmentId": appointmentID,
-			"status":        "pending",
+			"status":        appointmentStatus,
+		}
+		if confirmedAt != "" {
+			responsePayload["confirmedAt"] = confirmedAt
 		}
 
-		if emailErr := sendNuvioBookingEmails(
+		emailPayload := nuvioBookingCreateAppointmentPayload{
+			WebsiteID: websiteID,
+			ServiceID: serviceID,
+			Date:      dateValue,
+			Time:      timeValue,
+			Name:      name,
+			Email:     email,
+			Phone:     phone,
+			Notes:     notes,
+		}
+
+		if appointmentStatus == "confirmed" {
+			sendErrors := []string{}
+
+			attachments := []nuvioTransactionalEmailAttachment{}
+			durationMinutes := serviceSnapshot.DurationMinutes
+			if durationMinutes <= 0 {
+				durationMinutes, _ = parseNuvioBookingServiceDuration(serviceRecord)
+			}
+			if durationMinutes <= 0 {
+				e.App.Logger().Error(
+					"NUVIO booking calendar duration parse failed",
+					"websiteId",
+					websiteID,
+					"appointmentId",
+					appointmentID,
+					"serviceId",
+					serviceID,
+				)
+			} else {
+				attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+					WebsiteName:        resolveWebsiteDisplayName(website),
+					ServiceName:        serviceName,
+					ServiceDescription: serviceSnapshot.Description,
+					CustomerName:       name,
+					CustomerEmail:      email,
+					CustomerPhone:      phone,
+					Date:               dateValue,
+					Time:               timeValue,
+					DurationMinutes:    durationMinutes,
+					Notes:              notes,
+					Location:           resolveNuvioBookingCalendarLocation(website),
+					AppointmentID:      appointmentID,
+				})
+				if calendarErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking calendar attachment build failed",
+						"websiteId",
+						websiteID,
+						"appointmentId",
+						appointmentID,
+						"error",
+						calendarErr.Error(),
+					)
+				} else if attachment != nil {
+					attachments = append(attachments, *attachment)
+				}
+			}
+
+			if emailErr := sendNuvioBookingConfirmedVisitorEmail(
+				e.Request.Context(),
+				website,
+				serviceName,
+				emailPayload,
+				attachments,
+			); emailErr != nil {
+				e.App.Logger().Error(
+					"NUVIO booking visitor confirmation email send failed",
+					"websiteId",
+					websiteID,
+					"appointmentId",
+					appointmentID,
+					"error",
+					emailErr.Error(),
+				)
+				sendErrors = append(sendErrors, "visitor confirmation failed")
+			}
+
+			if emailErr := sendNuvioBookingBusinessNotificationEmail(
+				e.Request.Context(),
+				website,
+				config,
+				serviceName,
+				emailPayload,
+			); emailErr != nil {
+				e.App.Logger().Error(
+					"NUVIO booking business notification send failed",
+					"websiteId",
+					websiteID,
+					"appointmentId",
+					appointmentID,
+					"error",
+					emailErr.Error(),
+				)
+				sendErrors = append(sendErrors, "business notification failed")
+			}
+
+			if len(sendErrors) > 0 {
+				responsePayload["warning"] = "Appointment confirmed, but email notifications are temporarily unavailable."
+			}
+		} else if emailErr := sendNuvioBookingEmails(
 			e.Request.Context(),
 			website,
 			config,
 			serviceName,
-			nuvioBookingCreateAppointmentPayload{
-				WebsiteID: websiteID,
-				ServiceID: serviceID,
-				Date:      dateValue,
-				Time:      timeValue,
-				Name:      name,
-				Email:     email,
-				Phone:     phone,
-				Notes:     notes,
-			},
+			emailPayload,
 		); emailErr != nil {
 			e.App.Logger().Error(
 				"NUVIO booking email send failed",
@@ -564,6 +697,10 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		if serviceName == "" {
 			serviceName = "Booking service"
 		}
+		serviceSnapshot := buildNuvioBookingServiceSnapshot(serviceRecord)
+		if serviceSnapshot.Name != "" {
+			serviceName = serviceSnapshot.Name
+		}
 
 		var appointmentID string
 		transactionErr := e.App.RunInTransaction(func(txApp core.App) error {
@@ -602,6 +739,11 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			appointmentRecord.Set("time", timeValue)
 			appointmentRecord.Set("notes", notes)
 			appointmentRecord.Set("status", status)
+			setNuvioBookingAppointmentServiceSnapshot(
+				appointmentRecord,
+				appointmentsCollection,
+				buildNuvioBookingServiceSnapshot(txServiceRecord),
+			)
 
 			if status == "confirmed" {
 				confirmedAt := time.Now().UTC().Format(time.RFC3339)
@@ -707,8 +849,11 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 
 			if status == "confirmed" {
 				attachments := []nuvioTransactionalEmailAttachment{}
-				durationMinutes, durationErr := parseNuvioBookingServiceDuration(serviceRecord)
-				if durationErr != nil {
+				durationMinutes := serviceSnapshot.DurationMinutes
+				if durationMinutes <= 0 {
+					durationMinutes, _ = parseNuvioBookingServiceDuration(serviceRecord)
+				}
+				if durationMinutes <= 0 {
 					e.App.Logger().Error(
 						"NUVIO booking calendar duration parse failed",
 						"websiteId",
@@ -717,22 +862,21 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 						appointmentID,
 						"serviceId",
 						serviceID,
-						"error",
-						durationErr.Error(),
 					)
 				} else {
 					attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
-						WebsiteName:     resolveWebsiteDisplayName(website),
-						ServiceName:     serviceName,
-						CustomerName:    name,
-						CustomerEmail:   email,
-						CustomerPhone:   phone,
-						Date:            dateValue,
-						Time:            timeValue,
-						DurationMinutes: durationMinutes,
-						Notes:           notes,
-						Location:        resolveNuvioBookingCalendarLocation(website),
-						AppointmentID:   appointmentID,
+						WebsiteName:        resolveWebsiteDisplayName(website),
+						ServiceName:        serviceName,
+						ServiceDescription: serviceSnapshot.Description,
+						CustomerName:       name,
+						CustomerEmail:      email,
+						CustomerPhone:      phone,
+						Date:               dateValue,
+						Time:               timeValue,
+						DurationMinutes:    durationMinutes,
+						Notes:              notes,
+						Location:           resolveNuvioBookingCalendarLocation(website),
+						AppointmentID:      appointmentID,
 					})
 					if calendarErr != nil {
 						e.App.Logger().Error(
@@ -916,20 +1060,23 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("Service is not available.", nil)
 		}
 
-		newServiceName := strings.TrimSpace(serviceRecord.GetString("name"))
+		newServiceSnapshot := buildNuvioBookingServiceSnapshot(serviceRecord)
+		newServiceName := strings.TrimSpace(newServiceSnapshot.Name)
 		if newServiceName == "" {
 			newServiceName = "Booking service"
 		}
 
 		oldServiceID := strings.TrimSpace(appointmentRecord.GetString("service"))
-		oldServiceName := newServiceName
-		if oldServiceID != "" && oldServiceID != serviceID {
-			oldServiceRecord, oldServiceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, oldServiceID)
-			if oldServiceErr == nil {
-				if oldName := strings.TrimSpace(oldServiceRecord.GetString("name")); oldName != "" {
-					oldServiceName = oldName
-				}
+		var oldServiceRecord *core.Record
+		if oldServiceID != "" {
+			if resolvedOldServiceRecord, oldServiceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, oldServiceID); oldServiceErr == nil {
+				oldServiceRecord = resolvedOldServiceRecord
 			}
+		}
+		oldServiceSnapshot := resolveNuvioBookingAppointmentServiceSnapshot(appointmentRecord, oldServiceRecord)
+		oldServiceName := strings.TrimSpace(oldServiceSnapshot.Name)
+		if oldServiceName == "" {
+			oldServiceName = newServiceName
 		}
 		if oldServiceName == "" {
 			oldServiceName = "Booking service"
@@ -1003,9 +1150,16 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			txAppointmentRecord.Set("service", serviceID)
 			txAppointmentRecord.Set("date", dateValue)
 			txAppointmentRecord.Set("time", timeValue)
+			appointmentsCollection, collectionErr := txApp.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
+			if collectionErr == nil {
+				setNuvioBookingAppointmentServiceSnapshot(
+					txAppointmentRecord,
+					appointmentsCollection,
+					buildNuvioBookingServiceSnapshot(txServiceRecord),
+				)
+			}
 
 			rescheduledAt = time.Now().UTC().Format(time.RFC3339)
-			appointmentsCollection, collectionErr := txApp.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
 			if collectionErr == nil {
 				if appointmentsCollection.Fields.GetByName("rescheduledAt") != nil {
 					txAppointmentRecord.Set("rescheduledAt", rescheduledAt)
@@ -1086,8 +1240,11 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 				responsePayload["warning"] = "Appointment rescheduled, but customer email is missing."
 			} else {
 				attachments := []nuvioTransactionalEmailAttachment{}
-				durationMinutes, durationErr := parseNuvioBookingServiceDuration(serviceRecord)
-				if durationErr != nil {
+				durationMinutes := newServiceSnapshot.DurationMinutes
+				if durationMinutes <= 0 {
+					durationMinutes, _ = parseNuvioBookingServiceDuration(serviceRecord)
+				}
+				if durationMinutes <= 0 {
 					e.App.Logger().Error(
 						"NUVIO booking calendar duration parse failed",
 						"websiteId",
@@ -1096,22 +1253,21 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 						appointmentID,
 						"serviceId",
 						serviceID,
-						"error",
-						durationErr.Error(),
 					)
 				} else {
 					attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
-						WebsiteName:     resolveWebsiteDisplayName(website),
-						ServiceName:     newServiceName,
-						CustomerName:    visitorName,
-						CustomerEmail:   visitorEmail,
-						CustomerPhone:   visitorPhone,
-						Date:            dateValue,
-						Time:            timeValue,
-						DurationMinutes: durationMinutes,
-						Notes:           visitorNotes,
-						Location:        resolveNuvioBookingCalendarLocation(website),
-						AppointmentID:   appointmentID,
+						WebsiteName:        resolveWebsiteDisplayName(website),
+						ServiceName:        newServiceName,
+						ServiceDescription: newServiceSnapshot.Description,
+						CustomerName:       visitorName,
+						CustomerEmail:      visitorEmail,
+						CustomerPhone:      visitorPhone,
+						Date:               dateValue,
+						Time:               timeValue,
+						DurationMinutes:    durationMinutes,
+						Notes:              visitorNotes,
+						Location:           resolveNuvioBookingCalendarLocation(website),
+						AppointmentID:      appointmentID,
 					})
 					if calendarErr != nil {
 						e.App.Logger().Error(
@@ -1301,10 +1457,9 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 					)
 				}
 
-				serviceName := "Booking service"
-				attachments := []nuvioTransactionalEmailAttachment{}
+				var serviceRecord *core.Record
 				if serviceID != "" {
-					serviceRecord, serviceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+					resolvedServiceRecord, serviceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
 					if serviceErr != nil {
 						e.App.Logger().Error(
 							"NUVIO booking service lookup failed during status email",
@@ -1318,51 +1473,59 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 							serviceErr.Error(),
 						)
 					} else {
-						if normalizedName := strings.TrimSpace(serviceRecord.GetString("name")); normalizedName != "" {
-							serviceName = normalizedName
-						}
+						serviceRecord = resolvedServiceRecord
+					}
+				}
 
-						durationMinutes, durationErr := parseNuvioBookingServiceDuration(serviceRecord)
-						if durationErr != nil {
-							e.App.Logger().Error(
-								"NUVIO booking calendar duration parse failed",
-								"websiteId",
-								websiteID,
-								"appointmentId",
-								appointmentID,
-								"serviceId",
-								serviceID,
-								"error",
-								durationErr.Error(),
-							)
-						} else {
-							attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
-								WebsiteName:     resolveWebsiteDisplayName(website),
-								ServiceName:     serviceName,
-								CustomerName:    visitorName,
-								CustomerEmail:   visitorEmail,
-								CustomerPhone:   visitorPhone,
-								Date:            dateValue,
-								Time:            timeValue,
-								DurationMinutes: durationMinutes,
-								Notes:           visitorNotes,
-								Location:        resolveNuvioBookingCalendarLocation(website),
-								AppointmentID:   appointmentID,
-							})
-							if calendarErr != nil {
-								e.App.Logger().Error(
-									"NUVIO booking calendar attachment build failed",
-									"websiteId",
-									websiteID,
-									"appointmentId",
-									appointmentID,
-									"error",
-									calendarErr.Error(),
-								)
-							} else if attachment != nil {
-								attachments = append(attachments, *attachment)
-							}
-						}
+				serviceSnapshot := resolveNuvioBookingAppointmentServiceSnapshot(appointmentRecord, serviceRecord)
+				serviceName := strings.TrimSpace(serviceSnapshot.Name)
+				if serviceName == "" {
+					serviceName = "Booking service"
+				}
+
+				attachments := []nuvioTransactionalEmailAttachment{}
+				durationMinutes := serviceSnapshot.DurationMinutes
+				if durationMinutes <= 0 && serviceRecord != nil {
+					durationMinutes, _ = parseNuvioBookingServiceDuration(serviceRecord)
+				}
+
+				if durationMinutes <= 0 {
+					e.App.Logger().Error(
+						"NUVIO booking calendar duration parse failed",
+						"websiteId",
+						websiteID,
+						"appointmentId",
+						appointmentID,
+						"serviceId",
+						serviceID,
+					)
+				} else {
+					attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+						WebsiteName:        resolveWebsiteDisplayName(website),
+						ServiceName:        serviceName,
+						ServiceDescription: serviceSnapshot.Description,
+						CustomerName:       visitorName,
+						CustomerEmail:      visitorEmail,
+						CustomerPhone:      visitorPhone,
+						Date:               dateValue,
+						Time:               timeValue,
+						DurationMinutes:    durationMinutes,
+						Notes:              visitorNotes,
+						Location:           resolveNuvioBookingCalendarLocation(website),
+						AppointmentID:      appointmentID,
+					})
+					if calendarErr != nil {
+						e.App.Logger().Error(
+							"NUVIO booking calendar attachment build failed",
+							"websiteId",
+							websiteID,
+							"appointmentId",
+							appointmentID,
+							"error",
+							calendarErr.Error(),
+						)
+					} else if attachment != nil {
+						attachments = append(attachments, *attachment)
 					}
 				}
 
@@ -1415,15 +1578,17 @@ func loadNuvioWebsiteBookingConfig(
 	config := nuvioWebsiteBookingConfig{
 		FeatureAvailable: true,
 		Enabled:          true,
+		ConfirmationMode: nuvioBookingConfirmationModeRequest,
 		EmailNotifications: nuvioEmailNotificationsConfig{
 			Enabled: false,
 			To:      []string{},
 			Cc:      []string{},
 		},
 		Rules: nuvioBookingRulesConfig{
-			MinNoticeHours:    0,
-			BookingWindowDays: 0,
-			BufferMinutes:     0,
+			MinNoticeHours:       0,
+			BookingWindowDays:    0,
+			BufferMinutes:        0,
+			CalendarBlockingMode: nuvioBookingBlockingModeService,
 		},
 	}
 
@@ -1437,6 +1602,7 @@ func loadNuvioWebsiteBookingConfig(
 		if value, ok := parseBoolValue(bookingSettings["enabled"]); ok {
 			config.Enabled = value
 		}
+		config.ConfirmationMode = normalizeNuvioBookingConfirmationMode(bookingSettings["confirmationMode"])
 
 		legacyDestination := strings.TrimSpace(parseStringValue(bookingSettings["emailDestination"]))
 		config.EmailNotifications = parseNuvioEmailNotificationsConfig(
@@ -1472,9 +1638,10 @@ func loadNuvioWebsiteBookingConfig(
 
 func parseNuvioBookingRulesConfig(raw any) nuvioBookingRulesConfig {
 	rules := nuvioBookingRulesConfig{
-		MinNoticeHours:    0,
-		BookingWindowDays: 0,
-		BufferMinutes:     0,
+		MinNoticeHours:       0,
+		BookingWindowDays:    0,
+		BufferMinutes:        0,
+		CalendarBlockingMode: nuvioBookingBlockingModeService,
 	}
 
 	settings, ok := toStringAnyMap(raw)
@@ -1485,7 +1652,30 @@ func parseNuvioBookingRulesConfig(raw any) nuvioBookingRulesConfig {
 	rules.MinNoticeHours = parseNuvioNonNegativeInt(settings["minNoticeHours"], 0)
 	rules.BookingWindowDays = parseNuvioNonNegativeInt(settings["bookingWindowDays"], 0)
 	rules.BufferMinutes = parseNuvioNonNegativeInt(settings["bufferMinutes"], 0)
+	rules.CalendarBlockingMode = normalizeNuvioBookingCalendarBlockingMode(settings["calendarBlockingMode"])
 	return rules
+}
+
+func normalizeNuvioBookingConfirmationMode(raw any) string {
+	normalized := strings.TrimSpace(parseStringValue(raw))
+	switch {
+	case strings.EqualFold(normalized, nuvioBookingConfirmationModeAuto):
+		return nuvioBookingConfirmationModeAuto
+	case strings.EqualFold(normalized, nuvioBookingConfirmationModeRequest):
+		return nuvioBookingConfirmationModeRequest
+	default:
+		return nuvioBookingConfirmationModeRequest
+	}
+}
+
+func normalizeNuvioBookingCalendarBlockingMode(raw any) string {
+	normalized := strings.ToLower(strings.TrimSpace(parseStringValue(raw)))
+	switch normalized {
+	case nuvioBookingBlockingModeService, nuvioBookingBlockingModeWebsite, nuvioBookingBlockingModeNone:
+		return normalized
+	default:
+		return nuvioBookingBlockingModeService
+	}
 }
 
 func parseNuvioNonNegativeInt(raw any, fallback int) int {
@@ -1676,6 +1866,138 @@ func parseNuvioBookingServiceDuration(serviceRecord *core.Record) (int, error) {
 	return duration, nil
 }
 
+func resolveNuvioCollectionFieldNameByAliases(
+	collection *core.Collection,
+	aliases []string,
+) string {
+	if collection == nil {
+		return ""
+	}
+
+	for _, alias := range aliases {
+		fieldName := strings.TrimSpace(alias)
+		if fieldName == "" {
+			continue
+		}
+		if collection.Fields.GetByName(fieldName) != nil {
+			return fieldName
+		}
+	}
+
+	return ""
+}
+
+func readNuvioBookingRecordStringByAliases(record *core.Record, aliases []string) string {
+	if record == nil {
+		return ""
+	}
+
+	for _, alias := range aliases {
+		fieldName := strings.TrimSpace(alias)
+		if fieldName == "" {
+			continue
+		}
+		if value := strings.TrimSpace(record.GetString(fieldName)); value != "" {
+			return value
+		}
+	}
+
+	return ""
+}
+
+func readNuvioBookingRecordPositiveIntByAliases(record *core.Record, aliases []string) int {
+	if record == nil {
+		return 0
+	}
+
+	for _, alias := range aliases {
+		fieldName := strings.TrimSpace(alias)
+		if fieldName == "" {
+			continue
+		}
+
+		value := parseNuvioNonNegativeInt(record.Get(fieldName), 0)
+		if value > 0 {
+			return value
+		}
+	}
+
+	return 0
+}
+
+func buildNuvioBookingServiceSnapshot(serviceRecord *core.Record) nuvioBookingServiceSnapshot {
+	snapshot := nuvioBookingServiceSnapshot{}
+
+	if serviceRecord != nil {
+		snapshot.Name = strings.TrimSpace(serviceRecord.GetString("name"))
+		snapshot.Description = strings.TrimSpace(serviceRecord.GetString("description"))
+		if durationMinutes, err := parseNuvioBookingServiceDuration(serviceRecord); err == nil && durationMinutes > 0 {
+			snapshot.DurationMinutes = durationMinutes
+		} else {
+			parsedDuration := parseNuvioNonNegativeInt(serviceRecord.Get("durationMinutes"), 0)
+			if parsedDuration > 0 {
+				snapshot.DurationMinutes = parsedDuration
+			}
+		}
+	}
+
+	if snapshot.Name == "" {
+		snapshot.Name = "Booking service"
+	}
+
+	return snapshot
+}
+
+func resolveNuvioBookingAppointmentServiceSnapshot(
+	appointmentRecord *core.Record,
+	serviceRecord *core.Record,
+) nuvioBookingServiceSnapshot {
+	fallbackSnapshot := buildNuvioBookingServiceSnapshot(serviceRecord)
+	snapshot := nuvioBookingServiceSnapshot{
+		Name:            readNuvioBookingRecordStringByAliases(appointmentRecord, nuvioServiceNameSnapshotAliases),
+		DurationMinutes: readNuvioBookingRecordPositiveIntByAliases(appointmentRecord, nuvioServiceDurationSnapshotAliases),
+		Description:     readNuvioBookingRecordStringByAliases(appointmentRecord, nuvioServiceDescSnapshotAliases),
+	}
+
+	if snapshot.Name == "" {
+		snapshot.Name = fallbackSnapshot.Name
+	}
+	if snapshot.DurationMinutes <= 0 {
+		snapshot.DurationMinutes = fallbackSnapshot.DurationMinutes
+	}
+	if snapshot.Description == "" {
+		snapshot.Description = fallbackSnapshot.Description
+	}
+
+	return snapshot
+}
+
+func setNuvioBookingAppointmentServiceSnapshot(
+	appointmentRecord *core.Record,
+	collection *core.Collection,
+	snapshot nuvioBookingServiceSnapshot,
+) {
+	if appointmentRecord == nil || collection == nil {
+		return
+	}
+
+	if snapshotFieldName := resolveNuvioCollectionFieldNameByAliases(collection, nuvioServiceNameSnapshotAliases); snapshotFieldName != "" {
+		name := strings.TrimSpace(snapshot.Name)
+		if name == "" {
+			name = "Booking service"
+		}
+		appointmentRecord.Set(snapshotFieldName, name)
+	}
+
+	if snapshotFieldName := resolveNuvioCollectionFieldNameByAliases(collection, nuvioServiceDurationSnapshotAliases); snapshotFieldName != "" && snapshot.DurationMinutes > 0 {
+		appointmentRecord.Set(snapshotFieldName, snapshot.DurationMinutes)
+	}
+
+	if snapshotFieldName := resolveNuvioCollectionFieldNameByAliases(collection, nuvioServiceDescSnapshotAliases); snapshotFieldName != "" {
+		appointmentRecord.Set(snapshotFieldName, strings.TrimSpace(snapshot.Description))
+	}
+}
+
 func computeNuvioAvailableSlots(
 	app core.App,
 	websiteID string,
@@ -1727,15 +2049,36 @@ func computeNuvioAvailableSlotsWithOptions(
 		return []string{}, nil
 	}
 
-	dailyRange, err := resolveNuvioBookingDailyRange(app, websiteID, normalizedDate)
+	dailyRanges, err := resolveNuvioBookingDailyRanges(app, websiteID, normalizedDate)
 	if err != nil {
 		return nil, err
 	}
-	if dailyRange == nil {
+	if len(dailyRanges) == 0 {
 		return []string{}, nil
 	}
 
-	candidateSlots := generateNuvioBookingSlots(dailyRange.StartMinutes, dailyRange.EndMinutes, durationMinutes)
+	candidateSlotMinutesSet := map[int]struct{}{}
+	for _, dailyRange := range dailyRanges {
+		windowSlots := generateNuvioBookingSlots(dailyRange.StartMinutes, dailyRange.EndMinutes, durationMinutes)
+		for _, windowSlot := range windowSlots {
+			windowSlotMinutes, parseErr := parseNuvioBookingHHMM(windowSlot)
+			if parseErr != nil {
+				continue
+			}
+			candidateSlotMinutesSet[windowSlotMinutes] = struct{}{}
+		}
+	}
+
+	candidateSlotMinutes := make([]int, 0, len(candidateSlotMinutesSet))
+	for minutes := range candidateSlotMinutesSet {
+		candidateSlotMinutes = append(candidateSlotMinutes, minutes)
+	}
+	sort.Ints(candidateSlotMinutes)
+
+	candidateSlots := make([]string, 0, len(candidateSlotMinutes))
+	for _, minutes := range candidateSlotMinutes {
+		candidateSlots = append(candidateSlots, formatNuvioBookingHHMM(minutes))
+	}
 	if len(candidateSlots) == 0 {
 		return []string{}, nil
 	}
@@ -1747,6 +2090,7 @@ func computeNuvioAvailableSlotsWithOptions(
 		normalizedDate,
 		durationMinutes,
 		rules.BufferMinutes,
+		rules.CalendarBlockingMode,
 		options.ExcludeAppointmentID,
 	)
 	if err != nil {
@@ -1794,39 +2138,39 @@ func computeNuvioAvailableSlotsWithOptions(
 	return filtered, nil
 }
 
-func findNuvioBookingAvailabilityRecord(
+func findNuvioBookingAvailabilityRecords(
 	app core.App,
 	websiteID string,
 	dayOfWeek string,
-) (*core.Record, error) {
+) ([]*core.Record, error) {
 	availabilityCollection, err := app.FindCachedCollectionByNameOrId(nuvioBookingAvailabilityCollectionID)
 	if err != nil {
 		return nil, err
 	}
 
-	record, err := app.FindFirstRecordByFilter(
+	records, err := app.FindRecordsByFilter(
 		availabilityCollection,
 		"website={:website} && dayOfWeek={:dayOfWeek} && active=true",
+		"+startTime,+endTime,+created",
+		5000,
+		0,
 		dbx.Params{
 			"website":   websiteID,
 			"dayOfWeek": dayOfWeek,
 		},
 	)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
 		return nil, err
 	}
 
-	return record, nil
+	return records, nil
 }
 
-func resolveNuvioBookingDailyRange(
+func resolveNuvioBookingDailyRanges(
 	app core.App,
 	websiteID string,
 	dateValue string,
-) (*nuvioBookingDailyRange, error) {
+) ([]nuvioBookingDailyRange, error) {
 	exceptionRecord, err := findNuvioActiveBookingExceptionRecord(app, websiteID, dateValue)
 	if err != nil {
 		return nil, err
@@ -1835,7 +2179,7 @@ func resolveNuvioBookingDailyRange(
 	if exceptionRecord != nil {
 		exceptionType := strings.ToLower(strings.TrimSpace(exceptionRecord.GetString("type")))
 		if exceptionType == "closed" {
-			return nil, nil
+			return []nuvioBookingDailyRange{}, nil
 		}
 
 		if exceptionType == "customhours" {
@@ -1852,16 +2196,16 @@ func resolveNuvioBookingDailyRange(
 					"date",
 					dateValue,
 				)
-				return nil, nil
+				return []nuvioBookingDailyRange{}, nil
 			}
 
-			return &nuvioBookingDailyRange{
+			return []nuvioBookingDailyRange{{
 				StartMinutes: startMinutes,
 				EndMinutes:   endMinutes,
-			}, nil
+			}}, nil
 		}
 
-		return nil, nil
+		return []nuvioBookingDailyRange{}, nil
 	}
 
 	dayOfWeek, err := dateToNuvioBookingDayOfWeek(dateValue)
@@ -1869,31 +2213,52 @@ func resolveNuvioBookingDailyRange(
 		return nil, err
 	}
 
-	availabilityRecord, err := findNuvioBookingAvailabilityRecord(app, websiteID, dayOfWeek)
+	availabilityRecords, err := findNuvioBookingAvailabilityRecords(app, websiteID, dayOfWeek)
 	if err != nil {
 		return nil, err
 	}
-	if availabilityRecord == nil {
-		return nil, nil
+	if len(availabilityRecords) == 0 {
+		return []nuvioBookingDailyRange{}, nil
 	}
 
-	startMinutes, startErr := parseNuvioBookingHHMM(strings.TrimSpace(availabilityRecord.GetString("startTime")))
-	endMinutes, endErr := parseNuvioBookingHHMM(strings.TrimSpace(availabilityRecord.GetString("endTime")))
-	if startErr != nil || endErr != nil || endMinutes <= startMinutes {
-		app.Logger().Error(
-			"NUVIO booking weekly availability row is invalid",
-			"websiteId",
-			websiteID,
-			"dayOfWeek",
-			dayOfWeek,
-		)
-		return nil, nil
+	ranges := make([]nuvioBookingDailyRange, 0, len(availabilityRecords))
+	for _, availabilityRecord := range availabilityRecords {
+		startRaw := strings.TrimSpace(availabilityRecord.GetString("startTime"))
+		endRaw := strings.TrimSpace(availabilityRecord.GetString("endTime"))
+
+		startMinutes, startErr := parseNuvioBookingHHMM(startRaw)
+		endMinutes, endErr := parseNuvioBookingHHMM(endRaw)
+		if startErr != nil || endErr != nil || endMinutes <= startMinutes {
+			app.Logger().Error(
+				"NUVIO booking weekly availability row is invalid",
+				"websiteId",
+				websiteID,
+				"dayOfWeek",
+				dayOfWeek,
+				"availabilityId",
+				strings.TrimSpace(availabilityRecord.Id),
+			)
+			continue
+		}
+
+		ranges = append(ranges, nuvioBookingDailyRange{
+			StartMinutes: startMinutes,
+			EndMinutes:   endMinutes,
+		})
 	}
 
-	return &nuvioBookingDailyRange{
-		StartMinutes: startMinutes,
-		EndMinutes:   endMinutes,
-	}, nil
+	if len(ranges) == 0 {
+		return []nuvioBookingDailyRange{}, nil
+	}
+
+	sort.SliceStable(ranges, func(i, j int) bool {
+		if ranges[i].StartMinutes != ranges[j].StartMinutes {
+			return ranges[i].StartMinutes < ranges[j].StartMinutes
+		}
+		return ranges[i].EndMinutes < ranges[j].EndMinutes
+	})
+
+	return ranges, nil
 }
 
 func findNuvioActiveBookingExceptionRecord(
@@ -1935,6 +2300,7 @@ func loadNuvioBlockedAppointmentIntervals(
 	dateValue string,
 	serviceDurationMinutes int,
 	bufferMinutes int,
+	calendarBlockingMode string,
 	excludeAppointmentID string,
 ) ([]nuvioBookingInterval, error) {
 	if serviceDurationMinutes <= 0 {
@@ -1944,27 +2310,39 @@ func loadNuvioBlockedAppointmentIntervals(
 		bufferMinutes = 0
 	}
 
+	blockingMode := normalizeNuvioBookingCalendarBlockingMode(calendarBlockingMode)
+	if blockingMode == nuvioBookingBlockingModeNone {
+		return []nuvioBookingInterval{}, nil
+	}
+
 	appointmentsCollection, err := app.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
 	if err != nil {
 		return nil, err
 	}
 
+	filter := "website={:website} && date={:date}"
+	params := dbx.Params{
+		"website": websiteID,
+		"date":    dateValue,
+	}
+	if blockingMode == nuvioBookingBlockingModeService {
+		filter = "website={:website} && service={:service} && date={:date}"
+		params["service"] = serviceID
+	}
+
 	records, err := app.FindRecordsByFilter(
 		appointmentsCollection,
-		"website={:website} && service={:service} && date={:date}",
+		filter,
 		"-created",
 		5000,
 		0,
-		dbx.Params{
-			"website": websiteID,
-			"service": serviceID,
-			"date":    dateValue,
-		},
+		params,
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	serviceDurationByID := map[string]int{}
 	blocked := make([]nuvioBookingInterval, 0, len(records))
 	for _, record := range records {
 		if strings.TrimSpace(record.Id) != "" && strings.TrimSpace(record.Id) == strings.TrimSpace(excludeAppointmentID) {
@@ -1986,12 +2364,44 @@ func loadNuvioBlockedAppointmentIntervals(
 			continue
 		}
 
+		blockedDurationMinutes := serviceDurationMinutes
+		if snapshotDuration := readNuvioBookingRecordPositiveIntByAliases(record, nuvioServiceDurationSnapshotAliases); snapshotDuration > 0 {
+			blockedDurationMinutes = snapshotDuration
+		} else {
+			appointmentServiceID := strings.TrimSpace(record.GetString("service"))
+			if appointmentServiceID != "" {
+				if cachedDuration, ok := serviceDurationByID[appointmentServiceID]; ok {
+					if cachedDuration > 0 {
+						blockedDurationMinutes = cachedDuration
+					}
+				} else {
+					resolvedDuration := 0
+					if existingServiceRecord, findErr := app.FindRecordById(nuvioBookingServicesCollectionID, appointmentServiceID); findErr == nil {
+						if parsedDuration, parseErr := parseNuvioBookingServiceDuration(existingServiceRecord); parseErr == nil && parsedDuration > 0 {
+							resolvedDuration = parsedDuration
+						} else if fallbackDuration := parseNuvioNonNegativeInt(existingServiceRecord.Get("durationMinutes"), 0); fallbackDuration > 0 {
+							resolvedDuration = fallbackDuration
+						}
+					}
+
+					serviceDurationByID[appointmentServiceID] = resolvedDuration
+					if resolvedDuration > 0 {
+						blockedDurationMinutes = resolvedDuration
+					}
+				}
+			}
+		}
+
+		if blockedDurationMinutes <= 0 {
+			continue
+		}
+
 		blockedStart := appointmentStart - bufferMinutes
 		if blockedStart < 0 {
 			blockedStart = 0
 		}
 
-		blockedEnd := appointmentStart + serviceDurationMinutes + bufferMinutes
+		blockedEnd := appointmentStart + blockedDurationMinutes + bufferMinutes
 		if blockedEnd > 24*60 {
 			blockedEnd = 24 * 60
 		}
@@ -2331,6 +2741,59 @@ func sendNuvioBookingConfirmedVisitorEmail(
 		Subject:     "Appointment confirmed",
 		Text:        strings.Join(lines, "\n"),
 		Attachments: attachments,
+	})
+}
+
+func sendNuvioBookingBusinessNotificationEmail(
+	ctx context.Context,
+	website *core.Record,
+	config nuvioWebsiteBookingConfig,
+	serviceName string,
+	payload nuvioBookingCreateAppointmentPayload,
+) error {
+	if !config.EmailNotifications.Enabled || len(config.EmailNotifications.To) == 0 {
+		return nil
+	}
+
+	resendConfig, err := loadNuvioResendConfig()
+	if err != nil {
+		return err
+	}
+
+	visitorEmail, ok := normalizeNuvioEmail(payload.Email)
+	if !ok {
+		return fmt.Errorf("invalid visitor email")
+	}
+
+	websiteName := resolveWebsiteDisplayName(website)
+	if websiteName == "" {
+		websiteName = "Website"
+	}
+
+	businessLines := []string{
+		fmt.Sprintf("Website: %s", websiteName),
+		fmt.Sprintf("Submitted at: %s", time.Now().UTC().Format(time.RFC3339)),
+		fmt.Sprintf("Service: %s", strings.TrimSpace(serviceName)),
+		fmt.Sprintf("Date: %s", strings.TrimSpace(payload.Date)),
+		fmt.Sprintf("Time: %s", strings.TrimSpace(payload.Time)),
+		fmt.Sprintf("Name: %s", strings.TrimSpace(payload.Name)),
+		fmt.Sprintf("Email: %s", visitorEmail),
+	}
+
+	if phone := strings.TrimSpace(payload.Phone); phone != "" {
+		businessLines = append(businessLines, fmt.Sprintf("Phone: %s", phone))
+	}
+
+	if notes := strings.TrimSpace(payload.Notes); notes != "" {
+		businessLines = append(businessLines, "", "Notes:", notes)
+	}
+
+	return sendNuvioTransactionalEmailViaResend(ctx, resendConfig, nuvioTransactionalEmailMessage{
+		To:      config.EmailNotifications.To,
+		Cc:      config.EmailNotifications.Cc,
+		ReplyTo: []string{visitorEmail},
+		Subject: fmt.Sprintf("New booking request - %s", websiteName),
+		Text:    strings.Join(businessLines, "\n"),
 	})
 }
 
