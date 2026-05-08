@@ -48,7 +48,7 @@
         { key: "sun", label: "Sunday" },
     ];
     const availabilityTabs = [
-        { key: "weekly", label: "Weekly schedule", icon: "ri-calendar-week-line" },
+        { key: "weekly", label: "Weekly schedule", icon: "ri-calendar-check-line" },
         { key: "rulesExceptions", label: "Rules & exceptions", icon: "ri-settings-5-line" },
     ];
     const exceptionTypeFilterOptions = [
@@ -133,10 +133,15 @@
     let rescheduleForm = createDefaultRescheduleForm();
 
     let selectedServiceId = "";
+    let selectedServiceIds = [];
+    let selectedServiceIdsSet = new Set();
+    let selectedServicesCount = 0;
     let isCreatingService = false;
     let isSavingService = false;
+    let isBulkUpdatingServices = false;
     let serviceSearch = "";
     let serviceStatusFilter = "all";
+    let servicePriorityFilter = "all";
     let serviceForm = {
         id: "",
         name: "",
@@ -287,6 +292,10 @@
             return false;
         }
 
+        if (servicePriorityFilter !== "all" && normalizeServicePriority(service?.priorityKey) !== servicePriorityFilter) {
+            return false;
+        }
+
         if (normalizedServiceSearch) {
             const duration = `${service?.durationMinutes || ""}`.trim();
             const searchable = [
@@ -308,6 +317,19 @@
 
         return true;
     });
+    $: selectedServiceIdsSet = new Set(
+        selectedServiceIds
+            .map((id) => normalizeString(id))
+            .filter(Boolean),
+    );
+    $: selectedServicesCount = selectedServiceIdsSet.size;
+    $: {
+        const visibleIds = new Set(filteredServices.map((service) => normalizeString(service.id)).filter(Boolean));
+        const nextSelected = selectedServiceIds.filter((id) => visibleIds.has(normalizeString(id)));
+        if (nextSelected.length !== selectedServiceIds.length) {
+            selectedServiceIds = nextSelected;
+        }
+    }
     $: dirtyAvailabilityRowsCount = countDirtyAvailabilityDays(availabilityRows);
     $: dirtyAvailabilityWindowsCount = countDirtyAvailabilityWindows(availabilityRows);
     $: hasSavingAvailabilityRows = Object.values(isSavingAvailability || {}).some((value) => !!value);
@@ -557,21 +579,8 @@
         }
     }
 
-    $: serviceFormDurationValue = Number.parseInt(`${serviceForm.durationMinutes || ""}`.trim(), 10);
-    $: serviceFormDurationValid = Number.isFinite(serviceFormDurationValue)
-        && serviceFormDurationValue >= 5
-        && serviceFormDurationValue <= 480;
-    $: serviceFormPriorityKey = normalizeServicePriority(serviceForm.priority);
-    $: serviceHealthWarnings = buildServiceHealthWarnings({
-        name: serviceForm.name,
-        durationValid: serviceFormDurationValid,
-    });
-    $: serviceHealthSuggestions = buildServiceHealthSuggestions({
-        active: !!serviceForm.active,
-        description: serviceForm.description,
-        priority: serviceFormPriorityKey,
-        servicesCount: normalizedServices.length,
-    });
+    $: serviceHealthWarnings = buildServicesHealthWarnings(normalizedServices);
+    $: serviceHealthSuggestions = buildServicesHealthSuggestions(normalizedServices);
     $: serviceHealthState = resolveBookingReadinessState(serviceHealthWarnings.length);
 
     function normalizeString(value) {
@@ -664,43 +673,53 @@
         return "Normal priority";
     }
 
-    function buildServiceHealthWarnings({
-        name = "",
-        durationValid = true,
-    } = {}) {
+    function buildServicesHealthWarnings(services = []) {
         const warnings = [];
+        const list = Array.isArray(services) ? services : [];
 
-        if (!normalizeString(name)) {
-            warnings.push("Service name is required.");
+        if (!list.length) {
+            warnings.push("Add at least one service to start receiving booking requests.");
+            return warnings;
         }
 
-        if (!durationValid) {
-            warnings.push("Duration must be an integer between 5 and 480 minutes.");
+        const activeServices = list.filter((service) => !!service?.active);
+        if (!activeServices.length) {
+            warnings.push("At least one active service is required for new booking requests.");
+        }
+
+        const invalidDurationCount = list.filter((service) => {
+            const duration = Number.parseInt(`${service?.durationMinutes || ""}`.trim(), 10);
+            return !Number.isFinite(duration) || duration < 5 || duration > 480;
+        }).length;
+        if (invalidDurationCount > 0) {
+            warnings.push(`${invalidDurationCount} service${invalidDurationCount === 1 ? "" : "s"} have invalid duration. Use 5-480 minutes.`);
         }
 
         return warnings;
     }
 
-    function buildServiceHealthSuggestions({
-        active = true,
-        description = "",
-        priority = "normal",
-        servicesCount = 0,
-    } = {}) {
+    function buildServicesHealthSuggestions(services = []) {
         const suggestions = [];
+        const list = Array.isArray(services) ? services : [];
+        if (!list.length) {
+            return suggestions;
+        }
 
-        if (!active) {
+        const inactiveCount = list.filter((service) => !service?.active).length;
+        if (inactiveCount > 0) {
             suggestions.push("Inactive services are hidden from new booking requests.");
         }
 
-        if (!normalizeString(description)) {
-            suggestions.push("Add a short description to help visitors choose this service.");
+        const missingDescriptionCount = list.filter((service) => !normalizeString(service?.description)).length;
+        if (missingDescriptionCount > 0) {
+            suggestions.push(`${missingDescriptionCount} service${missingDescriptionCount === 1 ? "" : "s"} are missing a description.`);
         }
 
-        if (servicesCount > 1) {
+        if (list.length > 1) {
             suggestions.push("Use priority to control which services appear first.");
-            if (normalizeServicePriority(priority) !== "high") {
-                suggestions.push("High priority services appear before normal and low priority services.");
+            const hasHighPriority = list.some((service) => normalizeServicePriority(service?.priorityKey) === "high");
+            if (!hasHighPriority) {
+                suggestions.push("Set at least one high priority service to highlight your core offering.");
             }
         }
 
@@ -1373,6 +1392,7 @@
             isSavingAvailability = {};
             selectedExceptionId = "";
             selectedExceptionIds = [];
+            selectedServiceIds = [];
             isCreatingException = false;
             exceptionForm = createDefaultExceptionForm();
             exceptionFormError = "";
@@ -1418,6 +1438,7 @@
             availabilityRows = createAvailabilityRowsFromRecords(availabilityRecords);
             selectedExceptionId = "";
             selectedExceptionIds = [];
+            selectedServiceIds = [];
             exceptionForm = createDefaultExceptionForm();
             exceptionFormError = "";
             isCreatingException = false;
@@ -1446,6 +1467,7 @@
             isSavingAvailability = {};
             isCreatingException = false;
             selectedExceptionIds = [];
+            selectedServiceIds = [];
         }
 
         isLoadingBookingData = false;
@@ -2578,27 +2600,103 @@
         selectedServiceId = normalizeString(service?.id);
     }
 
-    async function toggleServiceActive(service, nextActive) {
-        const serviceId = normalizeString(service?.id);
-        if (!serviceId || !bookingServicesCollection?.id) {
+    function isServiceSelectedForBulk(serviceId) {
+        return selectedServiceIdsSet.has(normalizeString(serviceId));
+    }
+
+    function toggleServiceBulkSelection(serviceId) {
+        const normalizedId = normalizeString(serviceId);
+        if (!normalizedId) {
             return;
         }
 
-        try {
-            await ApiClient.collection(bookingServicesCollection.id).update(serviceId, {
-                active: !!nextActive,
-            });
+        if (selectedServiceIdsSet.has(normalizedId)) {
+            selectedServiceIds = selectedServiceIds.filter((id) => normalizeString(id) !== normalizedId);
+            return;
+        }
 
-            servicesRecords = servicesRecords.map((record) =>
-                normalizeString(record?.id) === serviceId
-                    ? { ...record, active: !!nextActive }
-                    : record,
+        selectedServiceIds = [...selectedServiceIds, normalizedId];
+    }
+
+    function clearServiceBulkSelection() {
+        if (!selectedServiceIds.length) {
+            return;
+        }
+        selectedServiceIds = [];
+    }
+
+    async function applyBulkServiceActive(targetActive) {
+        if (
+            !bookingServicesCollection?.id
+            || !selectedServiceIds.length
+            || isBulkUpdatingServices
+            || isSavingService
+        ) {
+            return;
+        }
+
+        isBulkUpdatingServices = true;
+
+        try {
+            const selectedSet = new Set(selectedServiceIds.map((id) => normalizeString(id)).filter(Boolean));
+            const selectedRecords = servicesRecords.filter((record) => selectedSet.has(normalizeString(record?.id)));
+
+            if (!selectedRecords.length) {
+                selectedServiceIds = [];
+                isBulkUpdatingServices = false;
+                return;
+            }
+
+            const results = await Promise.allSettled(
+                selectedRecords.map((record) =>
+                    ApiClient.collection(bookingServicesCollection.id).update(normalizeString(record?.id), {
+                        active: !!targetActive,
+                    })),
             );
 
-            addSuccessToast(`Service ${nextActive ? "activated" : "deactivated"}.`);
+            const succeededIds = new Set();
+            const failedIds = [];
+
+            results.forEach((result, index) => {
+                const serviceId = normalizeString(selectedRecords[index]?.id);
+                if (!serviceId) {
+                    return;
+                }
+
+                if (result.status === "fulfilled") {
+                    succeededIds.add(serviceId);
+                } else {
+                    ApiClient.error(result.reason, false);
+                    failedIds.push(serviceId);
+                }
+            });
+
+            if (succeededIds.size > 0) {
+                servicesRecords = servicesRecords.map((record) => {
+                    const recordId = normalizeString(record?.id);
+                    if (!succeededIds.has(recordId)) {
+                        return record;
+                    }
+
+                    return {
+                        ...record,
+                        active: !!targetActive,
+                    };
+                });
+            }
+
+            if (failedIds.length > 0) {
+                selectedServiceIds = failedIds;
+                addErrorToast("Some services could not be updated right now. Please try again.");
+            } else {
+                selectedServiceIds = [];
+                addSuccessToast(`Selected services ${targetActive ? "activated" : "deactivated"}.`);
+            }
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to update service status right now.");
+            addErrorToast("Unable to update selected services right now.");
+        } finally {
+            isBulkUpdatingServices = false;
         }
     }
 
@@ -3281,7 +3379,7 @@
             replaceDayWindowsFromTemplates(dayKey, [
                 {
                     startTime: "09:00",
-                    endTime: "17:00",
+                    endTime: "18:00",
                     active: true,
                 },
             ]);
@@ -4109,19 +4207,20 @@
             </div>
         {:else if activeTab === "services"}
             <div class="booking-split-layout booking-split-layout--services">
-                <div class="booking-main-column">
-                    <div class="booking-section-head-row">
-                        <div class="booking-section-head-copy">
+                <div class="booking-main-column booking-services-main">
+                    <section class="booking-services-panel">
+                        <div class="booking-section-head-row booking-section-head-row--compact">
+                            <div class="booking-section-head-copy booking-section-head-copy--inline">
                             <h4 class="m-0">Services</h4>
-                            <p class="txt-sm txt-hint m-b-0">Define what visitors can book and how long each service takes.</p>
+                                <span class="txt-sm txt-hint booking-section-helper-inline">Define what visitors can book and how long each service takes.</span>
+                            </div>
+                            <div class="booking-section-head-actions">
+                                <span class="summary-pill">{activeServicesCount} active</span>
+                            </div>
                         </div>
-                        <div class="booking-section-head-actions">
-                            <span class="summary-pill">{activeServicesCount} active</span>
-                            <button type="button" class="btn btn-outline btn-sm" on:click={createNewService}>
-                                <span class="txt">New service</span>
-                            </button>
-                        </div>
-                    </div>
+
+                        <div class="booking-services-workspace">
+                            <div class="booking-services-list-panel">
 
                     <div class="booking-services-controls">
                         <div class="booking-control-cell booking-control-cell--search">
@@ -4142,52 +4241,68 @@
                                 <option value="inactive">Inactive</option>
                             </select>
                         </div>
+                        <div class="booking-control-cell booking-control-cell--select">
+                            <label class="txt-sm txt-hint" for="booking-services-priority-filter">Priority</label>
+                            <select id="booking-services-priority-filter" class="input input-sm" bind:value={servicePriorityFilter}>
+                                <option value="all">All</option>
+                                <option value="high">High</option>
+                                <option value="normal">Normal</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
                     </div>
 
                     {#if !servicesRecords.length}
-                        <div class="empty-state m-b-0">
-                            No services yet. Add a service to start accepting bookings.
+                        <div class="booking-empty-state m-b-0">
+                            <h4 class="m-0">No services yet</h4>
+                            <p class="txt-sm txt-hint m-b-0">Add a service to start accepting bookings.</p>
                         </div>
                     {:else if !filteredServices.length}
-                        <div class="empty-state m-b-0">
-                            No services match these filters.
+                        <div class="booking-empty-state m-b-0">
+                            <h4 class="m-0">No services match these filters</h4>
+                            <p class="txt-sm txt-hint m-b-0">Try a different search or status filter.</p>
                         </div>
                     {:else}
-                        <div class="booking-services-list" role="list">
+                        <div class="booking-services-list booking-services-list--catalog" role="list">
                             {#each filteredServices as service (service.id)}
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <article
                                     class="booking-service-item"
                                     class:selected={selectedServiceId === service.id}
+                                    class:bulk-selected={isServiceSelectedForBulk(service.id)}
                                     role="button"
                                     tabindex="0"
                                     on:click={() => selectService(service)}
                                 >
+                                    <label class="booking-service-item-select booking-service-item-select--leading" on:click|stopPropagation>
+                                        <input
+                                            type="checkbox"
+                                            checked={isServiceSelectedForBulk(service.id)}
+                                            aria-label={`Select service ${service.name || "untitled"}`}
+                                            on:click|stopPropagation
+                                            on:change|stopPropagation={() => toggleServiceBulkSelection(service.id)}
+                                        />
+                                    </label>
                                     <div class="booking-service-main">
                                         <div class="booking-service-title-row">
                                             <div class="booking-service-title">{service.name || "Untitled service"}</div>
-                                            <span class={`label label-sm ${service.active ? "label-success" : "label-warning"}`}>
-                                                {service.active ? "Active" : "Inactive"}
-                                            </span>
                                         </div>
                                         <div class="booking-service-meta txt-sm txt-hint">
                                             {service.durationMinutes || 0} minutes
-                                            <span class="booking-service-meta-separator">·</span>
+                                            <span class="booking-service-meta-separator" aria-hidden="true">&middot;</span>
                                             <span>{service.priorityLabel}</span>
                                         </div>
                                         {#if service.description}
                                             <p class="booking-service-description txt-xs txt-hint m-b-0">{service.description}</p>
+                                        {:else}
+                                            <p class="booking-service-description txt-xs txt-hint m-b-0">No description yet.</p>
                                         {/if}
                                     </div>
-                                    <div class="booking-service-actions">
-                                        <button
-                                            type="button"
-                                            class="btn btn-outline btn-sm"
-                                            on:click|stopPropagation={() => toggleServiceActive(service, !service.active)}
-                                        >
-                                            <span class="txt">{service.active ? "Deactivate" : "Activate"}</span>
-                                        </button>
+                                    <div class="booking-service-item-side">
+                                        <span class={`label label-sm ${service.active ? "label-success" : "label-warning"}`}>
+                                            {service.active ? "Active" : "Inactive"}
+                                        </span>
                                     </div>
                                 </article>
                             {/each}
@@ -4195,16 +4310,14 @@
                     {/if}
                 </div>
 
-                <aside class="booking-rail">
-                    <section class="booking-rail-block">
-                        <h5 class="m-0">Service details</h5>
-                        <p class="txt-sm txt-hint m-b-0">Create or update service name, duration, description, priority, and active status.</p>
-                        <div class="booking-actions-row">
-                            <span class="summary-pill">{serviceForm.id ? "Editing selected service" : "Creating a new service"}</span>
+                            <section class="booking-rail-block booking-service-details-panel">
+                        <div class="booking-service-details-head">
+                            <h5 class="m-0">Service details</h5>
+                            <p class="txt-sm txt-hint m-b-0">Create or update service name, duration, description, priority, and active status.</p>
                         </div>
 
-                        <div class="booking-form-stack">
-                            <div class="form-field">
+                        <div class="booking-form-stack booking-service-form-stack">
+                            <div class="form-field m-b-0">
                                 <label class="txt-sm txt-hint" for="booking-service-name">Service name</label>
                                 <input
                                     id="booking-service-name"
@@ -4216,7 +4329,7 @@
                                 />
                             </div>
 
-                            <div class="form-field">
+                            <div class="form-field m-b-0">
                                 <label class="txt-sm txt-hint" for="booking-service-duration">Duration (minutes)</label>
                                 <input
                                     id="booking-service-duration"
@@ -4230,7 +4343,7 @@
                                 />
                             </div>
 
-                            <div class="form-field">
+                            <div class="form-field m-b-0">
                                 <label class="txt-sm txt-hint" for="booking-service-priority">Priority</label>
                                 <select
                                     id="booking-service-priority"
@@ -4245,7 +4358,7 @@
                                 <p class="txt-xs txt-hint m-b-0">Higher priority services appear first when visitors choose a service.</p>
                             </div>
 
-                            <div class="form-field">
+                            <div class="form-field m-b-0">
                                 <label class="txt-sm txt-hint" for="booking-service-description">Description</label>
                                 <textarea
                                     id="booking-service-description"
@@ -4272,7 +4385,15 @@
                                 <p class="txt-xs txt-danger m-b-0">{serviceFormError}</p>
                             {/if}
 
-                            <div class="booking-actions-row">
+                            <div class="booking-actions-row booking-service-details-actions">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline btn-sm"
+                                    disabled={isSavingService}
+                                    on:click={createNewService}
+                                >
+                                    <span class="txt">New service</span>
+                                </button>
                                 <button
                                     type="button"
                                     class="btn btn-sm"
@@ -4282,46 +4403,54 @@
                                 >
                                     <span class="txt">{serviceForm.id ? "Update service" : "Create service"}</span>
                                 </button>
-                                {#if serviceForm.id}
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline btn-sm"
-                                        disabled={isSavingService}
-                                        on:click={createNewService}
-                                    >
-                                        <span class="txt">New service</span>
-                                    </button>
-                                {/if}
                             </div>
                         </div>
                     </section>
 
-                    <section class="booking-rail-block">
-                        <h5 class="m-0">Public preview</h5>
-                        <p class="txt-sm txt-hint m-b-0">Approximate visitor-facing service presentation.</p>
-                        <div class="booking-service-preview-card">
-                            <div class="booking-service-title-row">
-                                <div class="booking-service-title">{normalizeString(serviceForm.name) || "Service name"}</div>
-                                <span class={`label label-sm ${serviceForm.active ? "label-success" : "label-warning"}`}>
-                                    {serviceForm.active ? "Active" : "Inactive"}
-                                </span>
-                            </div>
-                            <div class="booking-service-meta txt-sm txt-hint">
-                                {serviceFormDurationValid ? serviceFormDurationValue : 0} minutes
-                            </div>
-                            {#if normalizeString(serviceForm.description)}
-                                <p class="booking-service-description txt-xs txt-hint m-b-0">{normalizeString(serviceForm.description)}</p>
-                            {:else}
-                                <p class="txt-xs txt-hint m-b-0">No service description yet.</p>
-                            {/if}
                         </div>
                     </section>
 
+                    {#if selectedServicesCount > 0}
+                        <div class="booking-service-bulk-popover" role="status" aria-live="polite">
+                            <span class="booking-service-bulk-summary">
+                                Selected {selectedServicesCount} service(s)
+                            </span>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline"
+                                disabled={isBulkUpdatingServices}
+                                on:click={clearServiceBulkSelection}
+                            >
+                                <span class="txt">Clear selection</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline booking-service-bulk-action"
+                                class:btn-loading={isBulkUpdatingServices}
+                                disabled={!selectedServicesCount || isBulkUpdatingServices || isSavingService}
+                                on:click={() => applyBulkServiceActive(true)}
+                            >
+                                <span class="txt">Activate selected</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-danger btn-outline booking-service-bulk-action"
+                                class:btn-loading={isBulkUpdatingServices}
+                                disabled={!selectedServicesCount || isBulkUpdatingServices || isSavingService}
+                                on:click={() => applyBulkServiceActive(false)}
+                            >
+                                <span class="txt">Deactivate selected</span>
+                            </button>
+                        </div>
+                    {/if}
+                </div>
+
+                <aside class="booking-rail">
                     <section class="booking-rail-block booking-health-panel">
                         <div class="booking-health-head">
                             <div class="booking-health-main">
-                                <h5 class="m-0">Service health</h5>
-                                <p class="txt-sm txt-hint m-b-0">Check whether this service is ready for visitors.</p>
+                                <h5 class="m-0">Services health</h5>
+                                <p class="txt-sm txt-hint m-b-0">Review readiness across all configured services.</p>
                             </div>
                             <div class="booking-health-meta">
                                 <span class={`label label-sm ${serviceHealthState.badgeClass}`}>{serviceHealthState.label}</span>
@@ -4339,7 +4468,7 @@
                                     </div>
                                 {/each}
                             {:else}
-                                <p class="txt-sm txt-hint m-b-0">This service has no blocking issues.</p>
+                                <p class="txt-sm txt-hint m-b-0">Services setup has no blocking issues.</p>
                             {/if}
                         </div>
 
@@ -4380,38 +4509,20 @@
                 {#if activeAvailabilityTab === "weekly"}
                     <div class="booking-split-layout booking-split-layout--availability">
                         <div class="booking-main-column booking-availability-main">
-                            <div class="booking-section-head-row booking-section-head-row--compact">
-                                <div class="booking-section-head-copy booking-section-head-copy--inline">
-                                    <h4 class="m-0">Weekly schedule</h4>
-                                    <p class="txt-sm txt-hint m-b-0">Set active days and time windows for appointment requests.</p>
+                            <div class="booking-weekly-toolbar">
+                                <div class="booking-section-head-row booking-section-head-row--compact">
+                                    <div class="booking-section-head-copy booking-section-head-copy--inline">
+                                        <h4 class="m-0">Weekly schedule</h4>
+                                        <span class="txt-sm txt-hint booking-section-helper-inline">Set active days and time windows for appointment requests.</span>
+                                    </div>
+                                    <div class="booking-section-head-actions">
+                                        <span class="summary-pill">{activeAvailabilityDaysCount} active days</span>
+                                        <span class="summary-pill" class:warning={dirtyAvailabilityRowsCount > 0}>
+                                            {dirtyAvailabilityRowsCount} unsaved day{dirtyAvailabilityRowsCount === 1 ? "" : "s"} ({dirtyAvailabilityWindowsCount} window{dirtyAvailabilityWindowsCount === 1 ? "" : "s"})
+                                        </span>
+                                    </div>
                                 </div>
-                                <div class="booking-section-head-actions">
-                                    <span class="summary-pill">{activeAvailabilityDaysCount} active days</span>
-                                    <span class="summary-pill" class:warning={dirtyAvailabilityRowsCount > 0}>
-                                        {dirtyAvailabilityRowsCount} unsaved day{dirtyAvailabilityRowsCount === 1 ? "" : "s"} ({dirtyAvailabilityWindowsCount} window{dirtyAvailabilityWindowsCount === 1 ? "" : "s"})
-                                    </span>
-                                </div>
-                            </div>
 
-                            <div class="booking-weekly-actions-row">
-                                <button
-                                    type="button"
-                                    class="btn btn-sm"
-                                    class:btn-loading={isSavingAllAvailability}
-                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows || dirtyAvailabilityRowsCount === 0}
-                                    on:click={saveAllChangedAvailabilityRows}
-                                >
-                                    <span class="txt">Save changes</span>
-                                </button>
-                                <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={setWeekdaysBusinessHours}>
-                                    <span class="txt">Set weekdays 09:00-17:00</span>
-                                </button>
-                                <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={applyMondayToWeekdays}>
-                                    <span class="txt">Apply Monday to weekdays</span>
-                                </button>
-                                <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={clearWeekendAvailability}>
-                                    <span class="txt">Clear weekend</span>
-                                </button>
                             </div>
 
                             <div class="booking-availability-list">
@@ -4471,35 +4582,28 @@
                                                             />
                                                         </div>
 
-                                                        <div class="booking-availability-window-state">
-                                                            {#if window.error}
-                                                                <span class="label label-sm label-danger booking-state-pill">Invalid</span>
-                                                            {:else if window.dirty}
-                                                                <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
-                                                            {:else}
-                                                                <span class="txt-xs txt-hint booking-state-saved">Saved</span>
-                                                            {/if}
-                                                        </div>
+                                                        <div class="booking-availability-window-side">
+                                                            <div class="booking-availability-window-state">
+                                                                {#if window.error}
+                                                                    <span class="label label-sm label-danger booking-state-pill">Invalid</span>
+                                                                {:else if window.dirty}
+                                                                    <span class="label label-sm label-info booking-unsaved-pill">Unsaved</span>
+                                                                {:else}
+                                                                    <span class="txt-xs txt-hint booking-state-saved">Saved</span>
+                                                                {/if}
+                                                            </div>
 
-                                                        <div class="booking-availability-window-actions">
                                                             {#if window.isNew}
-                                                                <button
-                                                                    type="button"
-                                                                    class="btn btn-outline btn-sm"
-                                                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
-                                                                    on:click={() => removeOrDeactivateAvailabilityWindow(row.dayOfWeek, window.key)}
-                                                                >
-                                                                    <span class="txt">Remove</span>
-                                                                </button>
-                                                            {:else}
-                                                                <button
-                                                                    type="button"
-                                                                    class="btn btn-outline btn-sm"
-                                                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
-                                                                    on:click={() => toggleAvailabilityWindowActive(row.dayOfWeek, window.key, !window.active)}
-                                                                >
-                                                                    <span class="txt">{window.active ? "Disable" : "Restore"}</span>
-                                                                </button>
+                                                                <div class="booking-availability-window-actions">
+                                                                    <button
+                                                                        type="button"
+                                                                        class="btn btn-outline btn-sm"
+                                                                        disabled={isSavingAllAvailability || hasSavingAvailabilityRows || isWindowSaving(window.key)}
+                                                                        on:click={() => removeOrDeactivateAvailabilityWindow(row.dayOfWeek, window.key)}
+                                                                    >
+                                                                        <span class="txt">Remove</span>
+                                                                    </button>
+                                                                </div>
                                                             {/if}
                                                         </div>
 
@@ -4510,11 +4614,32 @@
                                                 {/each}
                                             </div>
                                         {:else}
-                                            <p class="txt-sm txt-hint m-b-0">No windows configured.</p>
+                                            <div class="booking-availability-empty txt-sm txt-hint">No windows configured.</div>
                                         {/if}
 
                                     </article>
                                 {/each}
+                            </div>
+
+                            <div class="booking-weekly-actions-row booking-weekly-actions-row--footer">
+                                <button
+                                    type="button"
+                                    class="btn btn-sm"
+                                    class:btn-loading={isSavingAllAvailability}
+                                    disabled={isSavingAllAvailability || hasSavingAvailabilityRows || dirtyAvailabilityRowsCount === 0}
+                                    on:click={saveAllChangedAvailabilityRows}
+                                >
+                                    <span class="txt">Save changes</span>
+                                </button>
+                                <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={setWeekdaysBusinessHours}>
+                                    <span class="txt">Set weekdays 09:00-18:00</span>
+                                </button>
+                                <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={applyMondayToWeekdays}>
+                                    <span class="txt">Apply Monday to weekdays</span>
+                                </button>
+                                <button type="button" class="btn btn-outline btn-sm" disabled={isSavingAllAvailability || hasSavingAvailabilityRows} on:click={clearWeekendAvailability}>
+                                    <span class="txt">Clear weekend</span>
+                                </button>
                             </div>
                         </div>
 
@@ -5693,32 +5818,69 @@
         justify-content: flex-end;
     }
 
+    .booking-split-layout--services {
+        grid-template-columns: minmax(0, 1fr) 340px;
+    }
+
+    .booking-services-main {
+        min-width: 0;
+    }
+
+    .booking-services-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .booking-services-workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+        gap: 12px;
+        align-items: start;
+    }
+
+    .booking-services-list-panel {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
     .booking-services-list {
         display: grid;
         gap: 8px;
     }
 
+    .booking-services-list--catalog {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-height: 580px;
+        overflow: auto;
+        align-content: start;
+    }
+
     .booking-services-controls {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 190px;
+        grid-template-columns: minmax(0, 1fr) 160px 160px;
         gap: 10px;
-        margin-bottom: 12px;
+        margin-bottom: 2px;
     }
 
     .booking-service-item {
-        border: 1px solid var(--baseAlt1);
+        border: 2px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
         border-radius: var(--baseRadius);
-        padding: 10px 12px;
+        padding: 10px 11px;
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        gap: 12px;
+        align-items: flex-start;
+        gap: 10px;
         cursor: pointer;
         transition: border-color 0.15s ease, background-color 0.15s ease;
+        background: var(--baseColor);
     }
 
     .booking-service-item:hover {
-        border-color: var(--baseAlt2);
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 18%, transparent);
     }
 
     .booking-service-item.selected {
@@ -5726,19 +5888,32 @@
         background: color-mix(in srgb, var(--baseAlt1) 28%, transparent);
     }
 
+    .booking-service-item.bulk-selected {
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 55%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 22%, transparent);
+    }
+
+    .booking-service-item.selected.bulk-selected {
+        border-color: var(--txtPrimaryColor);
+        background: color-mix(in srgb, var(--baseAlt1) 34%, transparent);
+    }
+
     .booking-service-title {
         font-weight: 600;
+        color: var(--txtPrimaryColor);
     }
 
     .booking-service-main {
         min-width: 0;
         flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
     }
 
     .booking-service-title-row {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: 10px;
     }
 
@@ -5759,25 +5934,59 @@
         word-break: break-word;
     }
 
-    .booking-service-actions {
-        display: flex;
-        gap: 8px;
+    .booking-service-item-side {
+        display: inline-flex;
         align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+        min-width: max-content;
+    }
+
+    .booking-service-item-select {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .booking-service-item-select input {
+        margin: 0;
+    }
+
+    .booking-service-item-select--leading {
+        align-self: flex-start;
+        margin-top: 1px;
+    }
+
+    .booking-service-details-panel {
+        gap: 8px;
+        height: 100%;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--baseAlt2) 24%, transparent),
+            0 1px 0 color-mix(in srgb, var(--baseColor) 72%, transparent);
+    }
+
+    .booking-service-details-head {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .booking-service-details-actions {
+        justify-content: flex-start;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 2px;
+        padding-top: 2px;
+    }
+
+    .booking-service-form-stack {
+        gap: 8px;
     }
 
     .booking-service-description-input {
         resize: vertical;
         min-height: 88px;
-    }
-
-    .booking-service-preview-card {
-        border: 1px solid var(--baseAlt1);
-        border-radius: var(--baseRadius);
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        background: color-mix(in srgb, var(--baseAlt1) 10%, transparent);
     }
 
     .booking-form-stack {
@@ -5967,7 +6176,8 @@
         white-space: nowrap;
     }
 
-    .booking-exception-bulk-popover {
+    .booking-exception-bulk-popover,
+    .booking-service-bulk-popover {
         position: fixed;
         left: 50%;
         bottom: 18px;
@@ -5983,7 +6193,8 @@
         padding: 8px 10px;
     }
 
-    .booking-exception-bulk-summary {
+    .booking-exception-bulk-summary,
+    .booking-service-bulk-summary {
         color: var(--txtPrimaryColor);
         font-weight: 600;
         font-size: var(--smFontSize);
@@ -5991,7 +6202,8 @@
         white-space: nowrap;
     }
 
-    .booking-exception-bulk-action {
+    .booking-exception-bulk-action,
+    .booking-service-bulk-action {
         min-width: 140px;
     }
 
@@ -6065,41 +6277,64 @@
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
-        padding-top: 2px;
-        margin-bottom: 2px;
+        padding-top: 8px;
+        margin-bottom: 0;
+        border-top: 1px solid var(--baseAlt1);
+    }
+
+    .booking-weekly-actions-row--footer {
+        margin-top: 2px;
+    }
+
+    .booking-weekly-toolbar {
+        border: 1px solid var(--baseAlt1);
+        border-radius: var(--baseRadius);
+        padding: 10px 11px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .booking-weekly-toolbar .booking-section-head-row--compact {
+        margin-bottom: 0;
     }
 
     .booking-availability-list {
         display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
+        align-items: start;
     }
 
     .booking-availability-day {
         border: 1px solid var(--baseAlt1);
         border-radius: var(--baseRadius);
-        padding: 11px 12px;
+        padding: 10px 11px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
+        min-width: 0;
+        background: var(--baseColor);
     }
 
     .booking-availability-day-head {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
     }
 
     .booking-availability-day-meta {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 7px;
         flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .booking-day-add-window-btn {
-        margin-left: 2px;
+        margin-left: 0;
     }
 
     .booking-availability-window-list {
@@ -6113,7 +6348,7 @@
         border-radius: var(--baseRadius);
         padding: 8px 9px;
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto auto;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         gap: 8px;
         align-items: center;
     }
@@ -6127,6 +6362,14 @@
         align-items: center;
         gap: 6px;
         min-width: 0;
+    }
+
+    .booking-availability-window-side {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
     .booking-availability-window-state,
@@ -6171,6 +6414,12 @@
         grid-column: 1 / -1;
         margin-top: -2px;
         padding-left: 2px;
+    }
+
+    .booking-availability-empty {
+        border: 1px dashed var(--baseAlt1);
+        border-radius: var(--baseRadius);
+        padding: 10px;
     }
 
     .booking-slot-preview-panel {
@@ -6462,6 +6711,11 @@
             flex-wrap: wrap;
         }
 
+        .booking-availability-window-side {
+            width: 100%;
+            justify-content: space-between;
+        }
+
         .booking-availability-window-state,
         .booking-availability-window-actions {
             justify-content: flex-start;
@@ -6472,6 +6726,15 @@
         }
 
         .booking-services-controls {
+            grid-template-columns: 1fr;
+        }
+
+        .booking-services-list--catalog {
+            grid-template-columns: 1fr;
+            max-height: none;
+        }
+
+        .booking-availability-list {
             grid-template-columns: 1fr;
         }
 
@@ -6507,7 +6770,8 @@
             justify-content: space-between;
         }
 
-        .booking-exception-bulk-popover {
+        .booking-exception-bulk-popover,
+        .booking-service-bulk-popover {
             left: 10px;
             right: 10px;
             bottom: 12px;
@@ -6568,7 +6832,7 @@
             align-items: flex-start;
         }
 
-        .booking-service-actions {
+        .booking-service-item-side {
             width: 100%;
             justify-content: space-between;
         }
@@ -6577,16 +6841,20 @@
             grid-template-columns: 1fr;
         }
 
-        .booking-exception-bulk-popover {
+        .booking-exception-bulk-popover,
+        .booking-service-bulk-popover {
             justify-content: flex-start;
         }
 
-        .booking-exception-bulk-summary {
+        .booking-exception-bulk-summary,
+        .booking-service-bulk-summary {
             width: 100%;
         }
 
-        .booking-exception-bulk-popover .btn {
+        .booking-exception-bulk-popover .btn,
+        .booking-service-bulk-popover .btn {
             width: 100%;
         }
     }
 </style>
+
