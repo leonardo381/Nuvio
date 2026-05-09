@@ -3882,11 +3882,11 @@
             <div class="booking-split-layout">
                 <div class="booking-main-column">
                     <div class="booking-section-head-row booking-section-head-row--appointments">
-                        <div class="booking-section-head-copy">
+                        <div class="booking-section-head-copy booking-section-head-copy--inline">
                             <h4 class="m-0">Appointments inbox</h4>
-                            <p class="txt-sm txt-hint m-b-0">
+                            <span class="txt-sm txt-hint booking-section-helper-inline">
                                 Monitor appointment requests, update status, and keep follow-up notes.
-                            </p>
+                            </span>
                         </div>
                         <div class="booking-section-head-meta">
                             <span class="summary-pill">{filteredAppointments.length} visible</span>
@@ -3978,8 +3978,9 @@
                             </div>
                         </div>
                     {:else if !filteredAppointments.length}
-                        <div class="empty-state m-b-0">
-                            No appointments match these filters.
+                        <div class="booking-empty-state m-b-0">
+                            <h5 class="m-0">No appointments match these filters.</h5>
+                            <p class="txt-sm txt-hint m-b-0">Try a different search or adjust your status, date, and service filters.</p>
                         </div>
                     {:else}
                         <div class="booking-appointments-list" role="list">
@@ -3993,24 +3994,28 @@
                                     tabindex="0"
                                     on:click={() => (selectedAppointmentId = appointment.id)}
                                 >
-                                    <div class="booking-appointment-head">
-                                        <span class={`label label-sm ${appointment.statusClassName}`}>{appointment.statusLabel}</span>
-                                        <span class="txt-xs txt-hint">{formatDateTime(appointment.created)}</span>
-                                    </div>
-
-                                    <div class="booking-appointment-title">{appointment.name}</div>
-
-                                    <div class="booking-appointment-meta txt-sm">
-                                        <span>{appointment.serviceLabel}</span>
-                                        <span aria-hidden="true">&middot;</span>
-                                        <span>{formatAppointmentDateTime(appointment.date, appointment.time)}</span>
-                                    </div>
-
-                                    {#if appointment.email || appointment.phone}
-                                        <div class="booking-appointment-contact txt-xs txt-hint">
-                                            {appointment.email || "No email"}{appointment.phone ? ` - ${appointment.phone}` : ""}
+                                    <div class="booking-appointment-primary">
+                                        <div class="booking-appointment-identity">
+                                            <div class="booking-appointment-title">{appointment.name}</div>
+                                            <div class="booking-appointment-meta txt-sm">
+                                                <span>{appointment.serviceLabel}</span>
+                                                <span aria-hidden="true">&middot;</span>
+                                                <span>{formatAppointmentDateTime(appointment.date, appointment.time)}</span>
+                                            </div>
                                         </div>
-                                    {/if}
+                                        <span class={`label label-sm ${appointment.statusClassName}`}>{appointment.statusLabel}</span>
+                                    </div>
+
+                                    <div class="booking-appointment-contact txt-xs txt-hint">
+                                        <span>{appointment.email || "No email provided"}</span>
+                                        <span aria-hidden="true">&middot;</span>
+                                        <span>{appointment.phone || "No phone provided"}</span>
+                                    </div>
+
+                                    <div class="booking-appointment-created txt-xs txt-hint">
+                                        <span>Created</span>
+                                        <span>{formatDateTime(appointment.created)}</span>
+                                    </div>
                                 </article>
                             {/each}
                         </div>
@@ -4019,9 +4024,11 @@
 
                 <aside class="booking-rail" aria-live="polite">
                     {#if selectedAppointment}
-                        <section class="booking-rail-block">
-                            <h5 class="m-0">Appointment summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">Overview of this appointment request and customer details.</p>
+                        <section class="booking-rail-block booking-appointment-summary-panel">
+                            <div class="booking-rail-section-head">
+                                <h5 class="m-0">Appointment summary</h5>
+                                <p class="txt-sm txt-hint m-b-0">Overview of this appointment request and customer details.</p>
+                            </div>
                             <div class="booking-summary-grid">
                                 <div class="booking-summary-row">
                                     <span class="txt-xs txt-hint">Status</span>
@@ -4084,117 +4091,135 @@
                             </div>
                         </section>
 
-                        <section class="booking-rail-block">
-                            <h5 class="m-0">Actions</h5>
-                            <div class="booking-actions-row">
-                                {#if canRescheduleSelectedAppointment}
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline btn-sm"
-                                        disabled={isUpdatingAppointmentStatus || isSavingRescheduleAppointment}
-                                        on:click={openReschedulePanel}
-                                    >
-                                        <span class="txt">Reschedule</span>
-                                    </button>
-                                {/if}
-
-                                {#if canSetSelectedAppointmentConfirmed}
-                                    <label class="booking-checkbox-row booking-actions-email-option">
-                                        <input
-                                            type="checkbox"
-                                            checked={sendConfirmationEmailOnConfirm}
+                        <section class="booking-rail-block booking-appointment-actions-panel">
+                            <div class="booking-rail-section-head">
+                                <h5 class="m-0">Actions</h5>
+                                <p class="txt-sm txt-hint m-b-0">Update appointment status, scheduling, and calendar details.</p>
+                            </div>
+                            <div class="booking-side-actions-group">
+                                <div class="txt-xs txt-hint txt-uppercase booking-side-actions-title">Status</div>
+                                <div class="booking-actions-row">
+                                    {#if canSetSelectedAppointmentConfirmed}
+                                        <label class="booking-checkbox-row booking-actions-email-option">
+                                            <input
+                                                type="checkbox"
+                                                checked={sendConfirmationEmailOnConfirm}
+                                                disabled={isUpdatingAppointmentStatus}
+                                                on:change={(event) => {
+                                                    sendConfirmationEmailOnConfirm = !!event.currentTarget.checked;
+                                                }}
+                                            />
+                                            <span class="txt-xs txt-hint">Send confirmation email</span>
+                                        </label>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm"
+                                            class:btn-loading={isUpdatingAppointmentStatus && updatingAppointmentId === selectedAppointment.id}
                                             disabled={isUpdatingAppointmentStatus}
-                                            on:change={(event) => {
-                                                sendConfirmationEmailOnConfirm = !!event.currentTarget.checked;
-                                            }}
-                                        />
-                                        <span class="txt-xs txt-hint">Send confirmation email</span>
-                                    </label>
-                                    <button
-                                        type="button"
-                                        class="btn btn-sm"
-                                        class:btn-loading={isUpdatingAppointmentStatus && updatingAppointmentId === selectedAppointment.id}
-                                        disabled={isUpdatingAppointmentStatus}
-                                        on:click={() => setSelectedAppointmentStatus("confirmed", { sendEmail: sendConfirmationEmailOnConfirm })}
-                                    >
-                                        <span class="txt">Confirm appointment</span>
-                                    </button>
-                                {/if}
+                                            on:click={() => setSelectedAppointmentStatus("confirmed", { sendEmail: sendConfirmationEmailOnConfirm })}
+                                        >
+                                            <span class="txt">Confirm appointment</span>
+                                        </button>
+                                    {/if}
 
-                                {#if canSetSelectedAppointmentCancelled}
+                                    {#if canSetSelectedAppointmentPending}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm"
+                                            class:btn-loading={isUpdatingAppointmentStatus && updatingAppointmentId === selectedAppointment.id}
+                                            disabled={isUpdatingAppointmentStatus}
+                                            on:click={() => setSelectedAppointmentStatus("pending")}
+                                        >
+                                            <span class="txt">Mark pending</span>
+                                        </button>
+                                    {/if}
+
+                                    {#if canSetSelectedAppointmentCancelled}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm"
+                                            class:btn-loading={isUpdatingAppointmentStatus && updatingAppointmentId === selectedAppointment.id}
+                                            disabled={isUpdatingAppointmentStatus}
+                                            on:click={() => setSelectedAppointmentStatus("cancelled")}
+                                        >
+                                            <span class="txt">Cancel appointment</span>
+                                        </button>
+                                    {/if}
+                                </div>
+                            </div>
+
+                            <div class="booking-side-actions-group">
+                                <div class="txt-xs txt-hint txt-uppercase booking-side-actions-title">Scheduling</div>
+                                <div class="booking-actions-row">
+                                    {#if canRescheduleSelectedAppointment}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm"
+                                            disabled={isUpdatingAppointmentStatus || isSavingRescheduleAppointment}
+                                            on:click={openReschedulePanel}
+                                        >
+                                            <span class="txt">Reschedule</span>
+                                        </button>
+                                    {/if}
+                                </div>
+                            </div>
+
+                            <div class="booking-side-actions-group">
+                                <div class="txt-xs txt-hint txt-uppercase booking-side-actions-title">Calendar</div>
+                                <div class="booking-actions-row booking-actions-row--utility">
                                     <button
                                         type="button"
                                         class="btn btn-outline btn-sm"
-                                        class:btn-loading={isUpdatingAppointmentStatus && updatingAppointmentId === selectedAppointment.id}
-                                        disabled={isUpdatingAppointmentStatus}
-                                        on:click={() => setSelectedAppointmentStatus("cancelled")}
+                                        disabled={!selectedAppointmentGoogleCalendar.available}
+                                        on:click={openGoogleCalendarForSelectedAppointment}
                                     >
-                                        <span class="txt">Cancel appointment</span>
+                                        <span class="txt">Add to Google Calendar</span>
                                     </button>
-                                {/if}
-
-                                {#if canSetSelectedAppointmentPending}
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline btn-sm"
-                                        class:btn-loading={isUpdatingAppointmentStatus && updatingAppointmentId === selectedAppointment.id}
-                                        disabled={isUpdatingAppointmentStatus}
-                                        on:click={() => setSelectedAppointmentStatus("pending")}
-                                    >
-                                        <span class="txt">Mark pending</span>
-                                    </button>
-                                {/if}
+                                </div>
+                                <p class="txt-xs txt-hint m-b-0">
+                                    {selectedAppointmentGoogleCalendar.helper || "Opens Google Calendar with this appointment pre-filled."}
+                                </p>
                             </div>
-
-                            <div class="booking-actions-row booking-actions-row--utility">
-                                <button
-                                    type="button"
-                                    class="btn btn-outline btn-sm"
-                                    disabled={!selectedAppointmentGoogleCalendar.available}
-                                    on:click={openGoogleCalendarForSelectedAppointment}
-                                >
-                                    <span class="txt">Add to Google Calendar</span>
-                                </button>
-                            </div>
-                            <p class="txt-xs txt-hint m-b-0">
-                                {selectedAppointmentGoogleCalendar.helper || "Opens Google Calendar with this appointment pre-filled."}
-                            </p>
                         </section>
 
-                        <section class="booking-rail-block">
-                            <h5 class="m-0">Notes</h5>
-                            <div class="booking-form-stack">
-                                <div>
-                                    <p class="txt-xs txt-hint m-b-0">Customer notes</p>
+                        <section class="booking-rail-block booking-appointment-notes-panel">
+                            <div class="booking-rail-section-head">
+                                <h5 class="m-0">Notes</h5>
+                                <p class="txt-sm txt-hint m-b-0">Keep customer context visible and store private team follow-up notes.</p>
+                            </div>
+                            <div class="booking-side-actions-group">
+                                <div class="txt-xs txt-hint txt-uppercase booking-side-actions-title">Customer notes</div>
+                                <div class="booking-readonly-note-box">
                                     {#if selectedAppointment.customerNotes}
                                         <p class="txt-sm m-b-0 booking-readonly-note">{selectedAppointment.customerNotes}</p>
                                     {:else}
                                         <p class="txt-sm txt-hint m-b-0">No customer notes provided.</p>
                                     {/if}
                                 </div>
-
+                            </div>
+                            <div class="booking-side-actions-group">
                                 <div>
                                     <p class="txt-xs txt-hint m-b-0">Internal notes</p>
                                     <p class="txt-sm txt-hint m-b-0 booking-internal-notes-helper">Keep private follow-up notes for this appointment.</p>
                                 </div>
-                            </div>
-                            <textarea
-                                class="input booking-notes-input"
-                                rows="5"
-                                placeholder="Add internal follow-up notes..."
-                                bind:value={appointmentInternalNotesDraft}
-                                disabled={isSavingAppointmentInternalNotes}
-                            />
-                            <div class="booking-actions-row">
-                                <button
-                                    type="button"
-                                    class="btn btn-sm"
-                                    class:btn-loading={isSavingAppointmentInternalNotes}
-                                    disabled={isSavingAppointmentInternalNotes || appointmentInternalNotesDraft === (selectedAppointment.internalNotes || "")}
-                                    on:click={saveSelectedAppointmentInternalNotes}
-                                >
-                                    <span class="txt">Save internal notes</span>
-                                </button>
+                                <textarea
+                                    class="input booking-notes-input"
+                                    rows="5"
+                                    placeholder="Add internal follow-up notes..."
+                                    bind:value={appointmentInternalNotesDraft}
+                                    disabled={isSavingAppointmentInternalNotes}
+                                />
+                                <div class="booking-actions-row">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        class:btn-loading={isSavingAppointmentInternalNotes}
+                                        disabled={isSavingAppointmentInternalNotes || appointmentInternalNotesDraft === (selectedAppointment.internalNotes || "")}
+                                        on:click={saveSelectedAppointmentInternalNotes}
+                                    >
+                                        <span class="txt">Save internal notes</span>
+                                    </button>
+                                </div>
                             </div>
                         </section>
                     {:else}
@@ -5662,7 +5687,7 @@
     .booking-summary-row {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         gap: 12px;
         padding-bottom: 8px;
         border-bottom: 1px dashed var(--baseAlt1);
@@ -5699,21 +5724,28 @@
     .booking-appointments-list {
         display: grid;
         gap: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .booking-appointment-item {
-        border: 1px solid var(--baseAlt1);
+        border: 2px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
         border-radius: var(--baseRadius);
-        padding: 10px 12px;
+        padding: 10px 11px;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 7px;
         transition: border-color 0.15s ease, background-color 0.15s ease;
         cursor: pointer;
+        background: var(--baseColor);
     }
 
     .booking-appointment-item:hover {
-        border-color: var(--baseAlt2);
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 18%, transparent);
+    }
+
+    .booking-appointment-item:active {
+        border-color: var(--txtPrimaryColor);
     }
 
     .booking-appointment-item.selected {
@@ -5721,21 +5753,74 @@
         background: color-mix(in srgb, var(--baseAlt1) 28%, transparent);
     }
 
-    .booking-appointment-head {
+    .booking-appointment-primary {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 8px;
+        gap: 10px;
+    }
+
+    .booking-appointment-identity {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
     }
 
     .booking-appointment-title {
         font-weight: 600;
+        color: var(--txtPrimaryColor);
     }
 
     .booking-appointment-meta {
         display: inline-flex;
         align-items: center;
         gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .booking-appointment-contact {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        word-break: break-word;
+    }
+
+    .booking-appointment-created {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding-top: 6px;
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
+    .booking-section-head-row--appointments {
+        margin-bottom: 10px;
+    }
+
+    .booking-rail-section-head {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .booking-appointment-summary-panel,
+    .booking-appointment-actions-panel,
+    .booking-appointment-notes-panel {
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--baseAlt2) 24%, transparent),
+            0 1px 0 color-mix(in srgb, var(--baseColor) 72%, transparent);
+    }
+
+    .booking-readonly-note-box {
+        border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+        border-radius: var(--baseRadius);
+        padding: 9px 10px;
+        background: color-mix(in srgb, var(--baseAlt1) 13%, transparent);
     }
 
     .booking-actions-row {
@@ -6726,6 +6811,10 @@
         }
 
         .booking-services-controls {
+            grid-template-columns: 1fr;
+        }
+
+        .booking-appointments-list {
             grid-template-columns: 1fr;
         }
 
