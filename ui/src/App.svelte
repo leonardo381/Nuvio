@@ -19,8 +19,10 @@
     let oldLocation = undefined;
 
     let showAppSidebar = false;
+    let isClientSuperuser = false;
     let canAccessAdminAreas = false;
-    $: canAccessAdminAreas = ApiClient.isAdminSuperuser();
+    $: isClientSuperuser = !!$superuser?.id && ApiClient.isClientSuperuser();
+    $: canAccessAdminAreas = !!$superuser?.id && !isClientSuperuser && ApiClient.isAdminSuperuser();
 
     let isTinyMCEPreloaded = false;
 
