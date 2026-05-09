@@ -37,6 +37,10 @@
         { key: "oldest", label: "Oldest" },
         { key: "upcoming", label: "Upcoming first" },
     ];
+    const appointmentViewOptions = [
+        { key: "inbox", label: "Inbox", icon: "ri-inbox-line" },
+        { key: "archived", label: "Archived", icon: "ri-archive-line" },
+    ];
 
     const availabilityDays = [
         { key: "mon", label: "Monday" },
@@ -73,6 +77,7 @@
     const appointmentConfirmedAtFieldAliases = ["confirmedAt", "confirmed_at"];
     const appointmentCancelledAtFieldAliases = ["cancelledAt", "cancelled_at"];
     const appointmentRescheduledAtFieldAliases = ["rescheduledAt", "rescheduled_at"];
+    const appointmentArchivedAtFieldAliases = ["archivedAt", "archived_at"];
     const appointmentServiceNameSnapshotFieldAliases = ["serviceNameSnapshot", "service_name_snapshot"];
     const appointmentServiceDurationSnapshotFieldAliases = ["serviceDurationMinutesSnapshot", "service_duration_minutes_snapshot"];
     const appointmentServiceDescriptionSnapshotFieldAliases = ["serviceDescriptionSnapshot", "service_description_snapshot"];
@@ -105,8 +110,14 @@
     let appointmentServiceFilter = "all";
     let appointmentSearch = "";
     let appointmentSort = "newest";
+    let selectedAppointmentIds = [];
+    let selectedAppointmentIdsSet = new Set();
+    let selectedAppointmentsCount = 0;
+    let appointmentsView = "inbox";
     let selectedAppointmentId = "";
     let isUpdatingAppointmentStatus = false;
+    let isUpdatingAppointmentArchive = false;
+    let isBulkUpdatingAppointments = false;
     let updatingAppointmentId = "";
     let sendConfirmationEmailOnConfirm = false;
     let sendConfirmationEmailTargetAppointmentId = "";
@@ -199,6 +210,7 @@
     $: appointmentConfirmedAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentConfirmedAtFieldAliases) || "";
     $: appointmentCancelledAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentCancelledAtFieldAliases) || "";
     $: appointmentRescheduledAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentRescheduledAtFieldAliases) || "";
+    $: appointmentArchivedAtFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentArchivedAtFieldAliases) || "";
     $: appointmentServiceNameSnapshotFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentServiceNameSnapshotFieldAliases) || "";
     $: appointmentServiceDurationSnapshotFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentServiceDurationSnapshotFieldAliases) || "";
     $: appointmentServiceDescriptionSnapshotFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentServiceDescriptionSnapshotFieldAliases) || "";
@@ -241,6 +253,12 @@
     $: pendingAppointmentsCount = normalizedAppointments.filter((appointment) => appointment.statusKey === "pending").length;
     $: confirmedAppointmentsCount = normalizedAppointments.filter((appointment) => appointment.statusKey === "confirmed").length;
     $: thisWeekAppointmentsCount = normalizedAppointments.filter((appointment) => isInCurrentWeek(appointment.date)).length;
+    $: normalizedAppointmentsView = appointmentsView === "archived" ? "archived" : "inbox";
+    $: inboxAppointmentsCount = normalizedAppointments.filter((appointment) => !isAppointmentArchived(appointment)).length;
+    $: archivedAppointmentsCount = normalizedAppointments.filter((appointment) => isAppointmentArchived(appointment)).length;
+    $: appointmentsInCurrentViewCount = normalizedAppointmentsView === "archived"
+        ? archivedAppointmentsCount
+        : inboxAppointmentsCount;
     $: activeServicesCount = servicesRecords.filter((service) => !!service?.active).length;
     $: activeAvailabilityDaysCount = countActiveAvailabilityDays(availabilityRows);
     $: normalizedExceptions = normalizeExceptionsRecords(exceptionsRecords);
@@ -484,6 +502,14 @@
 
     $: filteredAppointments = sortAppointments(
         normalizedAppointments.filter((appointment) => {
+            const appointmentArchived = isAppointmentArchived(appointment);
+            if (normalizedAppointmentsView === "inbox" && appointmentArchived) {
+                return false;
+            }
+            if (normalizedAppointmentsView === "archived" && !appointmentArchived) {
+                return false;
+            }
+
             if (appointmentStatusFilter !== "all" && appointment.statusKey !== appointmentStatusFilter) {
                 return false;
             }
@@ -518,6 +544,19 @@
         }),
         appointmentSort,
     );
+    $: selectedAppointmentIdsSet = new Set(
+        selectedAppointmentIds
+            .map((id) => normalizeString(id))
+            .filter(Boolean),
+    );
+    $: selectedAppointmentsCount = selectedAppointmentIdsSet.size;
+    $: {
+        const visibleIds = new Set(filteredAppointments.map((appointment) => normalizeString(appointment.id)).filter(Boolean));
+        const nextSelected = selectedAppointmentIds.filter((id) => visibleIds.has(normalizeString(id)));
+        if (nextSelected.length !== selectedAppointmentIds.length) {
+            selectedAppointmentIds = nextSelected;
+        }
+    }
 
     $: if (filteredAppointments.length) {
         const hasSelected = selectedAppointmentId
@@ -531,6 +570,7 @@
     }
 
     $: selectedAppointment = filteredAppointments.find((appointment) => appointment.id === selectedAppointmentId) || null;
+    $: selectedAppointmentIsArchived = isAppointmentArchived(selectedAppointment);
     $: selectedAppointmentStatusKey = selectedAppointment?.statusKey || "";
     $: selectedAppointmentDurationMinutes = resolveAppointmentDurationMinutes(selectedAppointment);
     $: selectedAppointmentGoogleCalendar = buildGoogleCalendarEventForAppointment(
@@ -538,6 +578,8 @@
         selectedWebsite,
         selectedAppointmentDurationMinutes,
     );
+    $: canArchiveSelectedAppointment = !!selectedAppointment && !selectedAppointmentIsArchived;
+    $: canMoveSelectedAppointmentToInbox = !!selectedAppointment && selectedAppointmentIsArchived;
 
     $: canSetSelectedAppointmentPending = !!selectedAppointment
         && selectedAppointmentStatusKey !== "pending";
@@ -1393,6 +1435,7 @@
             selectedExceptionId = "";
             selectedExceptionIds = [];
             selectedServiceIds = [];
+            selectedAppointmentIds = [];
             isCreatingException = false;
             exceptionForm = createDefaultExceptionForm();
             exceptionFormError = "";
@@ -1439,6 +1482,7 @@
             selectedExceptionId = "";
             selectedExceptionIds = [];
             selectedServiceIds = [];
+            selectedAppointmentIds = [];
             exceptionForm = createDefaultExceptionForm();
             exceptionFormError = "";
             isCreatingException = false;
@@ -1468,6 +1512,7 @@
             isCreatingException = false;
             selectedExceptionIds = [];
             selectedServiceIds = [];
+            selectedAppointmentIds = [];
         }
 
         isLoadingBookingData = false;
@@ -2372,6 +2417,9 @@
             time: normalizeString(record?.time),
             customerNotes: normalizeString(record?.[appointmentCustomerNotesFieldName]),
             internalNotes: normalizeString(record?.[appointmentInternalNotesFieldName]),
+            archivedAt: appointmentArchivedAtFieldName
+                ? normalizeString(record?.[appointmentArchivedAtFieldName])
+                : normalizeString(record?.archivedAt || record?.archived_at),
             confirmedAt: appointmentConfirmedAtFieldName
                 ? normalizeString(record?.[appointmentConfirmedAtFieldName])
                 : normalizeString(record?.confirmedAt || record?.confirmed_at),
@@ -2489,6 +2537,41 @@
         });
     }
 
+    function isAppointmentArchived(appointment) {
+        return !!normalizeString(appointment?.archivedAt);
+    }
+
+    function setAppointmentsView(nextView) {
+        const normalizedView = normalizeLower(nextView);
+        appointmentsView = normalizedView === "archived" ? "archived" : "inbox";
+        selectedAppointmentIds = [];
+    }
+
+    function isAppointmentSelectedForBulk(appointmentId) {
+        return selectedAppointmentIdsSet.has(normalizeString(appointmentId));
+    }
+
+    function toggleAppointmentBulkSelection(appointmentId) {
+        const normalizedId = normalizeString(appointmentId);
+        if (!normalizedId) {
+            return;
+        }
+
+        if (selectedAppointmentIdsSet.has(normalizedId)) {
+            selectedAppointmentIds = selectedAppointmentIds.filter((id) => normalizeString(id) !== normalizedId);
+            return;
+        }
+
+        selectedAppointmentIds = [...selectedAppointmentIds, normalizedId];
+    }
+
+    function clearAppointmentBulkSelection() {
+        if (!selectedAppointmentIds.length) {
+            return;
+        }
+        selectedAppointmentIds = [];
+    }
+
     async function setSelectedAppointmentStatus(nextStatus, options = {}) {
         if (!selectedAppointment?.id || !nextStatus || isUpdatingAppointmentStatus || !appointmentsCollection?.id) {
             return;
@@ -2562,6 +2645,129 @@
             addErrorToast("Unable to save internal notes right now.");
         } finally {
             isSavingAppointmentInternalNotes = false;
+        }
+    }
+
+    async function setSelectedAppointmentArchiveState(nextArchived) {
+        if (
+            !selectedAppointment?.id
+            || !appointmentsCollection?.id
+            || isUpdatingAppointmentArchive
+            || isBulkUpdatingAppointments
+        ) {
+            return;
+        }
+
+        isUpdatingAppointmentArchive = true;
+        const archivedAtValue = nextArchived ? new Date().toISOString() : "";
+        const patchFieldName = appointmentArchivedAtFieldName || "archivedAt";
+
+        try {
+            await ApiClient.collection(appointmentsCollection.id).update(selectedAppointment.id, {
+                [patchFieldName]: archivedAtValue,
+            });
+
+            patchAppointmentRecord(selectedAppointment.id, {
+                [patchFieldName]: archivedAtValue,
+            });
+
+            addSuccessToast(nextArchived ? "Appointment archived." : "Appointment moved to inbox.");
+        } catch (err) {
+            ApiClient.error(err, false);
+            addErrorToast(nextArchived
+                ? "Unable to archive appointment right now."
+                : "Unable to move appointment to inbox right now.");
+        } finally {
+            isUpdatingAppointmentArchive = false;
+        }
+    }
+
+    async function applyBulkAppointmentArchiveState(nextArchived) {
+        if (
+            !appointmentsCollection?.id
+            || !selectedAppointmentIds.length
+            || isBulkUpdatingAppointments
+            || isUpdatingAppointmentArchive
+        ) {
+            return;
+        }
+
+        isBulkUpdatingAppointments = true;
+        const patchFieldName = appointmentArchivedAtFieldName || "archivedAt";
+        const archivedAtValue = nextArchived ? new Date().toISOString() : "";
+
+        try {
+            const selectedSet = new Set(selectedAppointmentIds.map((id) => normalizeString(id)).filter(Boolean));
+            const selectedAppointments = normalizedAppointments.filter((appointment) =>
+                selectedSet.has(normalizeString(appointment.id)));
+
+            if (!selectedAppointments.length) {
+                clearAppointmentBulkSelection();
+                isBulkUpdatingAppointments = false;
+                return;
+            }
+
+            const updates = selectedAppointments.map((appointment) => ({
+                id: normalizeString(appointment.id),
+                promise: ApiClient.collection(appointmentsCollection.id).update(appointment.id, {
+                    [patchFieldName]: archivedAtValue,
+                }),
+            }));
+
+            const results = await Promise.allSettled(updates.map((item) => item.promise));
+            const succeededIds = new Set();
+            const failedIds = [];
+            let firstFailureReason = null;
+
+            results.forEach((result, index) => {
+                const target = updates[index];
+                if (!target?.id) {
+                    return;
+                }
+
+                if (result.status === "fulfilled") {
+                    succeededIds.add(target.id);
+                } else {
+                    failedIds.push(target.id);
+                    if (!firstFailureReason) {
+                        firstFailureReason = result.reason;
+                    }
+                }
+            });
+
+            if (succeededIds.size > 0) {
+                appointmentRecords = appointmentRecords.map((record) => {
+                    const recordId = normalizeString(record?.id);
+                    if (!succeededIds.has(recordId)) {
+                        return record;
+                    }
+
+                    return {
+                        ...record,
+                        [patchFieldName]: archivedAtValue,
+                    };
+                });
+            }
+
+            if (succeededIds.size && !failedIds.length) {
+                clearAppointmentBulkSelection();
+                addSuccessToast(nextArchived
+                    ? `${succeededIds.size} appointment${succeededIds.size === 1 ? "" : "s"} archived.`
+                    : `${succeededIds.size} appointment${succeededIds.size === 1 ? "" : "s"} moved to inbox.`);
+            } else if (succeededIds.size && failedIds.length) {
+                selectedAppointmentIds = failedIds;
+                ApiClient.error(firstFailureReason, false);
+                addErrorToast("Some selected appointments could not be updated.");
+            } else if (failedIds.length) {
+                selectedAppointmentIds = failedIds;
+                ApiClient.error(firstFailureReason, false);
+                addErrorToast("Unable to update selected appointments right now.");
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+            addErrorToast("Unable to update selected appointments right now.");
+        } finally {
+            isBulkUpdatingAppointments = false;
         }
     }
 
@@ -3896,6 +4102,22 @@
                         </div>
                     </div>
 
+                    <div class="tabs-header compact combined left operations-tabs booking-appointments-view-tabs">
+                        {#each appointmentViewOptions as option (option.key)}
+                            <button
+                                type="button"
+                                class="tab-item"
+                                class:active={normalizedAppointmentsView === option.key}
+                                on:click={() => setAppointmentsView(option.key)}
+                            >
+                                <i class={`${option.icon} tab-icon`} aria-hidden="true" />
+                                <span class="tab-label">
+                                    {option.label} ({option.key === "archived" ? archivedAppointmentsCount : inboxAppointmentsCount})
+                                </span>
+                            </button>
+                        {/each}
+                    </div>
+
                     <div class="booking-controls booking-controls--appointments">
                         <div class="booking-control-cell booking-control-cell--search">
                             <label class="txt-sm txt-hint" for="booking-appointment-search">Search</label>
@@ -3977,6 +4199,16 @@
                                 </div>
                             </div>
                         </div>
+                    {:else if !appointmentsInCurrentViewCount}
+                        <div class="booking-empty-state m-b-0">
+                            {#if normalizedAppointmentsView === "archived"}
+                                <h5 class="m-0">No archived appointments.</h5>
+                                <p class="txt-sm txt-hint m-b-0">Archive appointments from Inbox to keep your active list focused.</p>
+                            {:else}
+                                <h5 class="m-0">No inbox appointments.</h5>
+                                <p class="txt-sm txt-hint m-b-0">Appointments moved to archive will appear in the Archived view.</p>
+                            {/if}
+                        </div>
                     {:else if !filteredAppointments.length}
                         <div class="booking-empty-state m-b-0">
                             <h5 class="m-0">No appointments match these filters.</h5>
@@ -3990,34 +4222,92 @@
                                 <article
                                     class="booking-appointment-item"
                                     class:selected={selectedAppointmentId === appointment.id}
+                                    class:bulk-selected={isAppointmentSelectedForBulk(appointment.id)}
                                     role="button"
                                     tabindex="0"
                                     on:click={() => (selectedAppointmentId = appointment.id)}
                                 >
                                     <div class="booking-appointment-primary">
-                                        <div class="booking-appointment-identity">
-                                            <div class="booking-appointment-title">{appointment.name}</div>
-                                            <div class="booking-appointment-meta txt-sm">
-                                                <span>{appointment.serviceLabel}</span>
-                                                <span aria-hidden="true">&middot;</span>
-                                                <span>{formatAppointmentDateTime(appointment.date, appointment.time)}</span>
+                                        <div class="booking-appointment-primary-main">
+                                            <label class="booking-appointment-item-select booking-appointment-item-select--leading" on:click|stopPropagation>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isAppointmentSelectedForBulk(appointment.id)}
+                                                    aria-label={`Select appointment ${appointment.name || "untitled"}`}
+                                                    on:click|stopPropagation
+                                                    on:change|stopPropagation={() => toggleAppointmentBulkSelection(appointment.id)}
+                                                />
+                                            </label>
+                                            <div class="booking-appointment-identity">
+                                                <div class="booking-appointment-title">{appointment.name}</div>
+                                                <div class="booking-appointment-meta txt-sm">
+                                                    <span class="booking-appointment-meta-item">
+                                                        <i class="ri-briefcase-4-line" aria-hidden="true" />
+                                                        <span>{appointment.serviceLabel}</span>
+                                                    </span>
+                                                    <span class="booking-appointment-meta-item">
+                                                        <i class="ri-calendar-event-line" aria-hidden="true" />
+                                                        <span>{formatAppointmentDateTime(appointment.date, appointment.time)}</span>
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                         <span class={`label label-sm ${appointment.statusClassName}`}>{appointment.statusLabel}</span>
                                     </div>
 
                                     <div class="booking-appointment-contact txt-xs txt-hint">
-                                        <span>{appointment.email || "No email provided"}</span>
-                                        <span aria-hidden="true">&middot;</span>
-                                        <span>{appointment.phone || "No phone provided"}</span>
+                                        <span class="booking-appointment-meta-item">
+                                            <i class="ri-mail-line" aria-hidden="true" />
+                                            <span>{appointment.email || "No email provided"}{appointment.phone ? ` - ${appointment.phone}` : ""}</span>
+                                        </span>
                                     </div>
 
                                     <div class="booking-appointment-created txt-xs txt-hint">
-                                        <span>Created</span>
+                                        <span class="booking-appointment-meta-item">
+                                            <i class="ri-time-line" aria-hidden="true" />
+                                            <span>Created</span>
+                                        </span>
                                         <span>{formatDateTime(appointment.created)}</span>
                                     </div>
                                 </article>
                             {/each}
+                        </div>
+                    {/if}
+
+                    {#if selectedAppointmentsCount > 0}
+                        <div class="booking-appointment-bulk-popover" role="status" aria-live="polite">
+                            <span class="booking-appointment-bulk-summary">
+                                Selected {selectedAppointmentsCount} appointment(s)
+                            </span>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline"
+                                disabled={isBulkUpdatingAppointments}
+                                on:click={clearAppointmentBulkSelection}
+                            >
+                                <span class="txt">Clear selection</span>
+                            </button>
+                            {#if normalizedAppointmentsView === "archived"}
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline booking-appointment-bulk-action"
+                                    class:btn-loading={isBulkUpdatingAppointments}
+                                    disabled={!selectedAppointmentsCount || isBulkUpdatingAppointments || isUpdatingAppointmentArchive}
+                                    on:click={() => applyBulkAppointmentArchiveState(false)}
+                                >
+                                    <span class="txt">Move to inbox selected</span>
+                                </button>
+                            {:else}
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline booking-appointment-bulk-action"
+                                    class:btn-loading={isBulkUpdatingAppointments}
+                                    disabled={!selectedAppointmentsCount || isBulkUpdatingAppointments || isUpdatingAppointmentArchive}
+                                    on:click={() => applyBulkAppointmentArchiveState(true)}
+                                >
+                                    <span class="txt">Archive selected</span>
+                                </button>
+                            {/if}
                         </div>
                     {/if}
                 </div>
@@ -4159,6 +4449,33 @@
                                             on:click={openReschedulePanel}
                                         >
                                             <span class="txt">Reschedule</span>
+                                        </button>
+                                    {/if}
+                                </div>
+                            </div>
+
+                            <div class="booking-side-actions-group">
+                                <div class="txt-xs txt-hint txt-uppercase booking-side-actions-title">Inbox</div>
+                                <div class="booking-actions-row">
+                                    {#if canMoveSelectedAppointmentToInbox}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm"
+                                            class:btn-loading={isUpdatingAppointmentArchive}
+                                            disabled={isUpdatingAppointmentArchive}
+                                            on:click={() => setSelectedAppointmentArchiveState(false)}
+                                        >
+                                            <span class="txt">Move to inbox</span>
+                                        </button>
+                                    {:else if canArchiveSelectedAppointment}
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline btn-sm"
+                                            class:btn-loading={isUpdatingAppointmentArchive}
+                                            disabled={isUpdatingAppointmentArchive}
+                                            on:click={() => setSelectedAppointmentArchiveState(true)}
+                                        >
+                                            <span class="txt">Archive</span>
                                         </button>
                                     {/if}
                                 </div>
@@ -5753,10 +6070,28 @@
         background: color-mix(in srgb, var(--baseAlt1) 28%, transparent);
     }
 
+    .booking-appointment-item.bulk-selected {
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 55%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 22%, transparent);
+    }
+
+    .booking-appointment-item.selected.bulk-selected {
+        border-color: var(--txtPrimaryColor);
+        background: color-mix(in srgb, var(--baseAlt1) 34%, transparent);
+    }
+
     .booking-appointment-primary {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
+        gap: 10px;
+    }
+
+    .booking-appointment-primary-main {
+        min-width: 0;
+        flex: 1;
+        display: inline-flex;
+        align-items: flex-start;
         gap: 10px;
     }
 
@@ -5780,6 +6115,20 @@
         flex-wrap: wrap;
     }
 
+    .booking-appointment-meta-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+    }
+
+    .booking-appointment-meta-item i {
+        font-size: 0.92rem;
+        line-height: 1;
+        color: var(--txtHintColor);
+        flex: 0 0 auto;
+    }
+
     .booking-appointment-contact {
         display: inline-flex;
         align-items: center;
@@ -5795,6 +6144,21 @@
         gap: 10px;
         padding-top: 6px;
         border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
+    .booking-appointment-item-select {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .booking-appointment-item-select input {
+        margin: 0;
+    }
+
+    .booking-appointment-item-select--leading {
+        align-self: flex-start;
+        margin-top: 1px;
     }
 
     .booking-section-head-row--appointments {
@@ -5821,6 +6185,40 @@
         border-radius: var(--baseRadius);
         padding: 9px 10px;
         background: color-mix(in srgb, var(--baseAlt1) 13%, transparent);
+    }
+
+    .booking-appointment-bulk-popover,
+    .booking-exception-bulk-popover,
+    .booking-service-bulk-popover {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        z-index: 55;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseColor);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+        padding: 8px 10px;
+    }
+
+    .booking-appointment-bulk-summary,
+    .booking-exception-bulk-summary,
+    .booking-service-bulk-summary {
+        color: var(--txtPrimaryColor);
+        font-weight: 600;
+        font-size: var(--smFontSize);
+        padding: 0 3px;
+        white-space: nowrap;
+    }
+
+    .booking-appointment-bulk-action,
+    .booking-exception-bulk-action,
+    .booking-service-bulk-action {
+        min-width: 140px;
     }
 
     .booking-actions-row {
@@ -6261,37 +6659,6 @@
         white-space: nowrap;
     }
 
-    .booking-exception-bulk-popover,
-    .booking-service-bulk-popover {
-        position: fixed;
-        left: 50%;
-        bottom: 18px;
-        transform: translateX(-50%);
-        z-index: 55;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        border: 1px solid var(--baseAlt2Color);
-        border-radius: 999px;
-        background: var(--baseColor);
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
-        padding: 8px 10px;
-    }
-
-    .booking-exception-bulk-summary,
-    .booking-service-bulk-summary {
-        color: var(--txtPrimaryColor);
-        font-weight: 600;
-        font-size: var(--smFontSize);
-        padding: 0 3px;
-        white-space: nowrap;
-    }
-
-    .booking-exception-bulk-action,
-    .booking-service-bulk-action {
-        min-width: 140px;
-    }
-
     .booking-exception-details-panel {
         gap: 8px;
         height: 100%;
@@ -6355,6 +6722,24 @@
 
     .booking-section-helper-inline {
         display: inline;
+    }
+
+    .booking-appointments-view-tabs {
+        align-self: flex-start;
+        width: auto;
+        max-width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .booking-appointments-view-tabs .tab-item {
+        flex: 0 0 auto;
+    }
+
+    .booking-appointments-view-tabs .tab-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
     }
 
     .booking-weekly-actions-row {
@@ -6859,6 +7244,7 @@
             justify-content: space-between;
         }
 
+        .booking-appointment-bulk-popover,
         .booking-exception-bulk-popover,
         .booking-service-bulk-popover {
             left: 10px;
@@ -6930,16 +7316,19 @@
             grid-template-columns: 1fr;
         }
 
+        .booking-appointment-bulk-popover,
         .booking-exception-bulk-popover,
         .booking-service-bulk-popover {
             justify-content: flex-start;
         }
 
+        .booking-appointment-bulk-summary,
         .booking-exception-bulk-summary,
         .booking-service-bulk-summary {
             width: 100%;
         }
 
+        .booking-appointment-bulk-popover .btn,
         .booking-exception-bulk-popover .btn,
         .booking-service-bulk-popover .btn {
             width: 100%;
