@@ -54,14 +54,21 @@
     let searchTerm = "";
     let sortOrder = "newest";
     let selectedLeadKey = "";
+    let selectedLeadKeys = [];
+    let selectedLeadKeysSet = new Set();
+    let selectedLeadsCount = 0;
     let isLeadDetailsActive = false;
     let isDesktopMasterDetail = false;
     let isUpdatingLeadStatus = false;
+    let isBulkUpdatingLeads = false;
+    let bulkLeadActionKey = "";
     let updatingLeadStatusKey = "";
     let isSavingLeadFollowUp = false;
     let leadFollowUpError = "";
     let leadNotesDraft = "";
     let leadNotesDraftKey = "";
+    let isLeadFollowUpOpen = false;
+    let isLeadUtilitiesOpen = false;
 
     let isLoadingWebsites = false;
     let isLoadingLeads = false;
@@ -137,6 +144,19 @@
     $: leadsByPeriod = filterLeadsByPeriod(leadsByStatus, periodFilter);
     $: leadsBySearch = filterLeadsBySearch(leadsByPeriod, normalizedSearchTerm);
     $: filteredLeads = sortLeads(leadsBySearch, sortOrder);
+    $: selectedLeadKeysSet = new Set(
+        selectedLeadKeys
+            .map((key) => normalizeString(key))
+            .filter(Boolean),
+    );
+    $: selectedLeadsCount = selectedLeadKeysSet.size;
+    $: {
+        const visibleKeys = new Set(filteredLeads.map((lead) => normalizeString(lead?.key)).filter(Boolean));
+        const nextSelected = selectedLeadKeys.filter((key) => visibleKeys.has(normalizeString(key)));
+        if (nextSelected.length !== selectedLeadKeys.length) {
+            selectedLeadKeys = nextSelected;
+        }
+    }
     $: if (filteredLeads.length) {
         const isSelectedLeadVisible = selectedLeadKey
             ? filteredLeads.some((lead) => lead.key === selectedLeadKey)
@@ -149,6 +169,10 @@
         isLeadDetailsActive = false;
     }
     $: selectedLead = websiteScopedLeads.find((lead) => lead.key === selectedLeadKey) || null;
+    $: selectedLeads = websiteScopedLeads.filter((lead) => selectedLeadKeysSet.has(normalizeString(lead?.key)));
+    $: bulkMarkReadEligibleCount = selectedLeads.filter((lead) => canBulkMarkLeadAsRead(lead)).length;
+    $: bulkArchiveEligibleCount = selectedLeads.filter((lead) => canBulkArchiveLead(lead)).length;
+    $: bulkMoveInboxEligibleCount = selectedLeads.filter((lead) => canBulkMoveLeadToInbox(lead)).length;
     $: if (isDesktopMasterDetail && isLeadDetailsActive) {
         isLeadDetailsActive = false;
     }
@@ -1401,6 +1425,202 @@
         isLeadDetailsActive = false;
     }
 
+    function isLeadSelectedForBulk(leadKey) {
+        return selectedLeadKeysSet.has(normalizeString(leadKey));
+    }
+
+    function toggleLeadBulkSelection(leadKey) {
+        const normalizedKey = normalizeString(leadKey);
+        if (!normalizedKey) {
+            return;
+        }
+
+        if (selectedLeadKeysSet.has(normalizedKey)) {
+            selectedLeadKeys = selectedLeadKeys.filter((key) => normalizeString(key) !== normalizedKey);
+            return;
+        }
+
+        selectedLeadKeys = [...selectedLeadKeys, normalizedKey];
+    }
+
+    function clearLeadBulkSelection() {
+        if (!selectedLeadKeys.length) {
+            return;
+        }
+        selectedLeadKeys = [];
+    }
+
+    function resolveBulkLeadStatusTarget(lead, actionKey) {
+        if (!lead?.recordId) {
+            return null;
+        }
+
+        const statusSupport = resolveLeadStatusSupport(lead);
+        if (!statusSupport?.collectionId || !statusSupport?.fieldName) {
+            return null;
+        }
+
+        const normalizedStatusKey = normalizeLower(lead?.statusKey);
+        const normalizedCurrentStatus = normalizeLower(lead?.statusValue);
+
+        if (actionKey === "markRead") {
+            const nextStatus = normalizeString(statusSupport.readValue);
+            if (!statusSupport.supportsToggle || !nextStatus || normalizedStatusKey === "archived") {
+                return null;
+            }
+            if (normalizedCurrentStatus === normalizeLower(nextStatus)) {
+                return null;
+            }
+
+            return {
+                statusSupport,
+                nextStatus,
+            };
+        }
+
+        if (actionKey === "archive") {
+            const nextStatus = normalizeString(statusSupport.archiveValue);
+            if (!statusSupport.supportsArchive || !nextStatus || normalizedStatusKey === "archived") {
+                return null;
+            }
+            if (normalizedCurrentStatus === normalizeLower(nextStatus)) {
+                return null;
+            }
+
+            return {
+                statusSupport,
+                nextStatus,
+            };
+        }
+
+        if (actionKey === "moveInbox") {
+            const nextStatus = normalizeString(statusSupport.readValue);
+            if (!statusSupport.supportsToggle || !nextStatus || normalizedStatusKey !== "archived") {
+                return null;
+            }
+
+            return {
+                statusSupport,
+                nextStatus,
+            };
+        }
+
+        return null;
+    }
+
+    function canBulkMarkLeadAsRead(lead) {
+        return !!resolveBulkLeadStatusTarget(lead, "markRead");
+    }
+
+    function canBulkArchiveLead(lead) {
+        return !!resolveBulkLeadStatusTarget(lead, "archive");
+    }
+
+    function canBulkMoveLeadToInbox(lead) {
+        return !!resolveBulkLeadStatusTarget(lead, "moveInbox");
+    }
+
+    function resolveBulkLeadSuccessMessage(actionKey, count) {
+        const quantityLabel = `${count} lead${count === 1 ? "" : "s"}`;
+        if (actionKey === "markRead") {
+            return `${quantityLabel} marked as read.`;
+        }
+        if (actionKey === "archive") {
+            return `${quantityLabel} archived.`;
+        }
+        return `${quantityLabel} moved to inbox.`;
+    }
+
+    async function applyBulkLeadStatusUpdate(actionKey) {
+        if (!selectedLeadsCount || isBulkUpdatingLeads || isUpdatingLeadStatus) {
+            return;
+        }
+
+        const selectedSnapshot = [...selectedLeads];
+        const operations = selectedSnapshot
+            .map((lead) => {
+                const target = resolveBulkLeadStatusTarget(lead, actionKey);
+                if (!target) {
+                    return null;
+                }
+
+                return {
+                    lead,
+                    ...target,
+                };
+            })
+            .filter(Boolean);
+
+        const skippedCount = Math.max(0, selectedSnapshot.length - operations.length);
+        if (!operations.length) {
+            addErrorToast("Selected leads do not support this action.");
+            return;
+        }
+
+        isBulkUpdatingLeads = true;
+        bulkLeadActionKey = actionKey;
+
+        try {
+            const updateResults = await Promise.allSettled(
+                operations.map((operation) =>
+                    ApiClient.collection(operation.statusSupport.collectionId).update(operation.lead.recordId, {
+                        [operation.statusSupport.fieldName]: operation.nextStatus,
+                    })),
+            );
+
+            const successfulKeys = [];
+            let successCount = 0;
+            let failureCount = 0;
+
+            updateResults.forEach((result, index) => {
+                const operation = operations[index];
+                if (!operation) {
+                    return;
+                }
+
+                if (result.status === "fulfilled") {
+                    patchLeadRecord(operation.lead.sourceKey, operation.lead.recordId, {
+                        [operation.statusSupport.fieldName]: operation.nextStatus,
+                    });
+                    successCount += 1;
+                    successfulKeys.push(normalizeString(operation.lead.key));
+                    return;
+                }
+
+                failureCount += 1;
+                ApiClient.error(result.reason, false);
+            });
+
+            if (successfulKeys.length) {
+                const successfulKeySet = new Set(successfulKeys);
+                selectedLeadKeys = selectedLeadKeys.filter((key) => !successfulKeySet.has(normalizeString(key)));
+            }
+
+            if (successCount) {
+                addSuccessToast(resolveBulkLeadSuccessMessage(actionKey, successCount));
+            }
+
+            if (failureCount || skippedCount) {
+                addErrorToast("Some selected leads could not be updated.");
+            }
+        } finally {
+            isBulkUpdatingLeads = false;
+            bulkLeadActionKey = "";
+        }
+    }
+
+    async function markSelectedLeadsAsRead() {
+        await applyBulkLeadStatusUpdate("markRead");
+    }
+
+    async function archiveSelectedLeads() {
+        await applyBulkLeadStatusUpdate("archive");
+    }
+
+    async function moveSelectedLeadsToInbox() {
+        await applyBulkLeadStatusUpdate("moveInbox");
+    }
+
     function handleLeadCardKeyDown(event, lead) {
         if (event.key !== "Enter" && event.key !== " ") {
             return;
@@ -1420,6 +1640,7 @@
 
     function setLeadsView(nextView) {
         leadsView = nextView === "archived" ? "archived" : "inbox";
+        selectedLeadKeys = [];
         if (leadsView === "archived") {
             statusFilter = "all";
         }
@@ -1724,65 +1945,125 @@
                             <article
                                 class="leads-inbox-item"
                                 class:selected={selectedLeadKey === lead.key}
+                                class:bulk-selected={selectedLeadKeysSet.has(normalizeString(lead.key))}
                                 role="button"
                                 tabindex="0"
                                 aria-label={`Open ${lead.sourceLabel} lead details`}
                                 on:click={() => openLeadDetails(lead)}
                                 on:keydown={(event) => handleLeadCardKeyDown(event, lead)}
                             >
-                                <div class="leads-inbox-item-head">
-                                    <div class="leads-inbox-item-badges">
-                                        <span class={`label label-sm ${lead.sourceBadgeClass}`}>{lead.sourceLabel}</span>
-                                        {#if lead.statusLabel}
-                                            <span class={`label label-sm ${lead.statusBadgeClass}`}>{lead.statusLabel}</span>
-                                        {/if}
-                                    </div>
-                                    <span class="txt-xs txt-hint leads-inbox-item-date">{formatDateTime(lead.created)}</span>
-                                </div>
+                                <div class="leads-inbox-item-main">
+                                    <label class="leads-inbox-item-select leads-inbox-item-select--leading" on:click|stopPropagation>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedLeadKeysSet.has(normalizeString(lead.key))}
+                                            aria-label={`Select ${lead.sourceLabel} lead`}
+                                            on:click|stopPropagation
+                                            on:keydown|stopPropagation
+                                            on:change|stopPropagation={() => toggleLeadBulkSelection(lead.key)}
+                                        />
+                                    </label>
 
-                                <div class="leads-inbox-item-title">{lead.identity}</div>
+                                    <div class="leads-inbox-item-content">
+                                        <div class="leads-inbox-item-head">
+                                            <div class="leads-inbox-item-badges">
+                                                <span class={`label label-sm ${lead.sourceBadgeClass}`}>{lead.sourceLabel}</span>
+                                                {#if lead.statusLabel}
+                                                    <span class={`label label-sm ${lead.statusBadgeClass}`}>{lead.statusLabel}</span>
+                                                {/if}
+                                            </div>
+                                            <span class="txt-xs txt-hint leads-inbox-item-date">{formatDateTime(lead.created)}</span>
+                                        </div>
 
-                                {#if lead.email || lead.phone}
-                                    <div class="leads-inbox-item-contact txt-xs txt-hint">
-                                        <span class="leads-inbox-inline-label">Contact:</span>
-                                        {#if lead.email}
-                                            <span>{lead.email}</span>
-                                        {/if}
-                                        {#if lead.email && lead.phone}
-                                            <span aria-hidden="true" class="leads-inbox-item-contact-separator">&middot;</span>
-                                        {/if}
-                                        {#if lead.phone}
-                                            <span>{lead.phone}</span>
-                                        {/if}
-                                    </div>
-                                {/if}
+                                        <div class="leads-inbox-item-title">{lead.identity}</div>
 
-                                <div class="leads-inbox-item-message-row txt-sm">
-                                    <span class="leads-inbox-item-message-label leads-inbox-inline-label txt-xs txt-hint">Message:</span>
-                                    <span class="leads-inbox-item-preview">{resolveLeadPreviewText(lead)}</span>
-                                </div>
-
-                                {#if lead.notes}
-                                    <div class="leads-inbox-item-note txt-xs">
-                                        <span class="leads-inbox-item-note-label">Note:</span>
-                                        <span class="leads-inbox-item-note-text">{truncate(lead.notes, 120)}</span>
-                                    </div>
-                                {/if}
-
-                                <div class="leads-inbox-item-footer txt-xs txt-hint">
-                                    <div class="leads-inbox-item-attribution">
-                                        <span class="leads-inbox-inline-label">Origin:</span>
-                                        <span class="leads-inbox-item-attribution-main">{resolveLeadAttribution(lead)}</span>
-                                        {#if resolveLeadLocationHint(lead)}
-                                            <span class="leads-inbox-item-attribution-context">{resolveLeadLocationHint(lead)}</span>
+                                        {#if lead.email || lead.phone}
+                                            <div class="leads-inbox-item-contact txt-xs txt-hint">
+                                                <span class="leads-inbox-inline-label">Contact:</span>
+                                                {#if lead.email}
+                                                    <span>{lead.email}</span>
+                                                {/if}
+                                                {#if lead.email && lead.phone}
+                                                    <span aria-hidden="true" class="leads-inbox-item-contact-separator">&middot;</span>
+                                                {/if}
+                                                {#if lead.phone}
+                                                    <span>{lead.phone}</span>
+                                                {/if}
+                                            </div>
                                         {/if}
-                                    </div>
-                                    <div class="leads-inbox-item-last-contact">
-                                        Last contact: {lead.lastContactedAt ? resolveLastContactedLabel(lead.lastContactedAt) : "Not contacted yet"}
+
+                                        <div class="leads-inbox-item-message-row txt-sm">
+                                            <span class="leads-inbox-item-message-label leads-inbox-inline-label txt-xs txt-hint">Message:</span>
+                                            <span class="leads-inbox-item-preview">{resolveLeadPreviewText(lead)}</span>
+                                        </div>
+
+                                        {#if lead.notes}
+                                            <div class="leads-inbox-item-note txt-xs">
+                                                <span class="leads-inbox-item-note-label">Note:</span>
+                                                <span class="leads-inbox-item-note-text">{truncate(lead.notes, 120)}</span>
+                                            </div>
+                                        {/if}
+
+                                        <div class="leads-inbox-item-footer txt-xs txt-hint">
+                                            <div class="leads-inbox-item-attribution">
+                                                <span class="leads-inbox-inline-label">Origin:</span>
+                                                <span class="leads-inbox-item-attribution-main">{resolveLeadAttribution(lead)}</span>
+                                                {#if resolveLeadLocationHint(lead)}
+                                                    <span class="leads-inbox-item-attribution-context">{resolveLeadLocationHint(lead)}</span>
+                                                {/if}
+                                            </div>
+                                            <div class="leads-inbox-item-last-contact">
+                                                Last contact: {lead.lastContactedAt ? resolveLastContactedLabel(lead.lastContactedAt) : "Not contacted yet"}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </article>
                         {/each}
+                    </div>
+                {/if}
+
+                {#if selectedLeadsCount > 0}
+                    <div class="leads-bulk-popover" role="status" aria-live="polite">
+                        <span class="leads-bulk-summary">Selected {selectedLeadsCount} lead(s)</span>
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-outline"
+                            disabled={isBulkUpdatingLeads}
+                            on:click={clearLeadBulkSelection}
+                        >
+                            <span class="txt">Clear selection</span>
+                        </button>
+                        {#if normalizedLeadsView === "archived"}
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline"
+                                class:btn-loading={isBulkUpdatingLeads && bulkLeadActionKey === "moveInbox"}
+                                disabled={isBulkUpdatingLeads || !bulkMoveInboxEligibleCount}
+                                on:click={moveSelectedLeadsToInbox}
+                            >
+                                <span class="txt">Move to inbox selected</span>
+                            </button>
+                        {:else}
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline"
+                                class:btn-loading={isBulkUpdatingLeads && bulkLeadActionKey === "markRead"}
+                                disabled={isBulkUpdatingLeads || !bulkMarkReadEligibleCount}
+                                on:click={markSelectedLeadsAsRead}
+                            >
+                                <span class="txt">Mark selected as read</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline"
+                                class:btn-loading={isBulkUpdatingLeads && bulkLeadActionKey === "archive"}
+                                disabled={isBulkUpdatingLeads || !bulkArchiveEligibleCount}
+                                on:click={archiveSelectedLeads}
+                            >
+                                <span class="txt">Archive selected</span>
+                            </button>
+                        {/if}
                     </div>
                 {/if}
             </div>
@@ -1860,155 +2141,201 @@
                                             </div>
                                         {/if}
                                     </div>
-                                </section>
+                                    <div class="lead-summary-collapsible">
+                                        <button
+                                            type="button"
+                                            class="lead-summary-collapsible-toggle"
+                                            aria-expanded={isLeadFollowUpOpen}
+                                            on:click={() => (isLeadFollowUpOpen = !isLeadFollowUpOpen)}
+                                        >
+                                            <span class="lead-summary-collapsible-heading">
+                                                <span class="lead-summary-collapsible-title">Follow-up</span>
+                                                <span class="txt-xs txt-hint lead-summary-collapsible-helper">
+                                                    Update status, keep notes, and track contact progress.
+                                                </span>
+                                            </span>
+                                            <i class={`lead-summary-collapsible-icon ${isLeadFollowUpOpen ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"}`} />
+                                        </button>
 
-                                <section class="lead-detail-section lead-rail-block lead-rail-block--followup">
-                                    <div class="lead-detail-section-head lead-rail-head">
-                                        <div class="lead-rail-head-main">
-                                            <h5 class="m-0">Follow-up</h5>
-                                            <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
-                                                Update status, keep notes, and follow up quickly.
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div class="lead-detail-actions-block lead-actions-group">
-                                        <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Status actions</div>
-                                        <div class="lead-detail-actions">
-                                            {#if canMoveSelectedLeadToInbox}
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-sm"
-                                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
-                                                    disabled={isUpdatingLeadStatus}
-                                                    on:click={moveSelectedLeadToInbox}
-                                                >
-                                                    <span class="txt">Move to inbox</span>
-                                                </button>
-                                            {:else if canToggleSelectedLeadStatus}
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-sm"
-                                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
-                                                    disabled={isUpdatingLeadStatus}
-                                                    on:click={() => setSelectedLeadStatus(selectedLeadToggleActionTarget)}
-                                                >
-                                                    <span class="txt">{selectedLeadToggleActionLabel}</span>
-                                                </button>
-                                            {/if}
-                                            {#if canArchiveSelectedLead}
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-outline btn-sm"
-                                                    class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
-                                                    disabled={isUpdatingLeadStatus}
-                                                    on:click={archiveSelectedLead}
-                                                >
-                                                    <span class="txt">Archive</span>
-                                                </button>
-                                            {/if}
-                                        </div>
-
-                                        {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                                            <p class="txt-xs txt-hint m-b-0 lead-action-note">
-                                                Status actions are not available for WhatsApp interactions yet.
-                                            </p>
-                                        {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
-                                            <p class="txt-xs txt-hint m-b-0 lead-action-note">
-                                                {#if isSelectedLeadArchived}
-                                                    Move to inbox is not available for this lead source yet.
+                                        {#if !isLeadFollowUpOpen}
+                                            <p class="txt-xs txt-hint m-b-0 lead-summary-collapsible-preview">
+                                                {#if leadNotesDirty}
+                                                    Unsaved note changes.
                                                 {:else}
-                                                    Status actions are not available for this lead source yet.
+                                                    Last contacted: {selectedLeadLastContactedDisplay}.
                                                 {/if}
                                             </p>
-                                        {:else if !isSelectedLeadArchived && selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
-                                            <p class="txt-xs txt-hint m-b-0 lead-action-note">
-                                                Archive is not available for this source yet.
-                                            </p>
-                                        {/if}
-                                    </div>
+                                        {:else}
+                                            <div class="lead-summary-collapsible-content">
+                                                <div class="lead-detail-actions-block lead-actions-group">
+                                                    <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Status actions</div>
+                                                    <div class="lead-detail-actions">
+                                                        {#if canMoveSelectedLeadToInbox}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm"
+                                                                class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                                                disabled={isUpdatingLeadStatus}
+                                                                on:click={moveSelectedLeadToInbox}
+                                                            >
+                                                                <span class="txt">Move to inbox</span>
+                                                            </button>
+                                                        {:else if canToggleSelectedLeadStatus}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm"
+                                                                class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                                                disabled={isUpdatingLeadStatus}
+                                                                on:click={() => setSelectedLeadStatus(selectedLeadToggleActionTarget)}
+                                                            >
+                                                                <span class="txt">{selectedLeadToggleActionLabel}</span>
+                                                            </button>
+                                                        {/if}
+                                                        {#if canArchiveSelectedLead}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-outline btn-sm"
+                                                                class:btn-loading={isUpdatingLeadStatus && updatingLeadStatusKey === selectedLead.key}
+                                                                disabled={isUpdatingLeadStatus}
+                                                                on:click={archiveSelectedLead}
+                                                            >
+                                                                <span class="txt">Archive</span>
+                                                            </button>
+                                                        {/if}
+                                                    </div>
 
-                                    <div class="lead-detail-actions-block lead-actions-group">
-                                        <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Notes</div>
-                                        {#if canSaveSelectedLeadNote || canMarkSelectedLeadContacted}
-                                            <div class="lead-followup-stack">
-                                                <textarea
-                                                    id="lead-followup-notes"
-                                                    class="input lead-followup-notes"
-                                                    rows="4"
-                                                    placeholder="Add notes about next steps, context, or follow-up outcomes..."
-                                                    aria-label="Notes"
-                                                    bind:value={leadNotesDraft}
-                                                    disabled={isSavingLeadFollowUp || !canSaveSelectedLeadNote}
-                                                />
+                                                    {#if selectedLead.sourceKey === "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                                                        <p class="txt-xs txt-hint m-b-0 lead-action-note">
+                                                            Status actions are not available for WhatsApp interactions yet.
+                                                        </p>
+                                                    {:else if selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsToggle}
+                                                        <p class="txt-xs txt-hint m-b-0 lead-action-note">
+                                                            {#if isSelectedLeadArchived}
+                                                                Move to inbox is not available for this lead source yet.
+                                                            {:else}
+                                                                Status actions are not available for this lead source yet.
+                                                            {/if}
+                                                        </p>
+                                                    {:else if !isSelectedLeadArchived && selectedLead.sourceKey !== "whatsapp" && !selectedLeadStatusSupport.supportsArchive}
+                                                        <p class="txt-xs txt-hint m-b-0 lead-action-note">
+                                                            Archive is not available for this source yet.
+                                                        </p>
+                                                    {/if}
+                                                </div>
 
-                                                {#if leadFollowUpError}
-                                                    <p class="txt-xs txt-danger m-b-0">{leadFollowUpError}</p>
-                                                {/if}
+                                                <div class="lead-detail-actions-block lead-actions-group">
+                                                    <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Notes</div>
+                                                    {#if canSaveSelectedLeadNote || canMarkSelectedLeadContacted}
+                                                        <div class="lead-followup-stack">
+                                                            <textarea
+                                                                id="lead-followup-notes"
+                                                                class="input lead-followup-notes"
+                                                                rows="4"
+                                                                placeholder="Add notes about next steps, context, or follow-up outcomes..."
+                                                                aria-label="Notes"
+                                                                bind:value={leadNotesDraft}
+                                                                disabled={isSavingLeadFollowUp || !canSaveSelectedLeadNote}
+                                                            />
 
-                                                <div class="lead-detail-actions">
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-sm"
-                                                        class:btn-loading={isSavingLeadFollowUp}
-                                                        disabled={!canSaveSelectedLeadNote || isSavingLeadFollowUp || !leadNotesDirty}
-                                                        on:click={saveSelectedLeadNote}
-                                                    >
-                                                        <span class="txt">Save note</span>
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        class="btn btn-outline btn-sm"
-                                                        class:btn-loading={isSavingLeadFollowUp}
-                                                        disabled={!canMarkSelectedLeadContacted || isSavingLeadFollowUp}
-                                                        on:click={markSelectedLeadContactedNow}
-                                                    >
-                                                        <span class="txt">Mark contacted now</span>
-                                                    </button>
+                                                            {#if leadFollowUpError}
+                                                                <p class="txt-xs txt-danger m-b-0">{leadFollowUpError}</p>
+                                                            {/if}
+
+                                                            <div class="lead-detail-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-sm"
+                                                                    class:btn-loading={isSavingLeadFollowUp}
+                                                                    disabled={!canSaveSelectedLeadNote || isSavingLeadFollowUp || !leadNotesDirty}
+                                                                    on:click={saveSelectedLeadNote}
+                                                                >
+                                                                    <span class="txt">Save note</span>
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    class="btn btn-outline btn-sm"
+                                                                    class:btn-loading={isSavingLeadFollowUp}
+                                                                    disabled={!canMarkSelectedLeadContacted || isSavingLeadFollowUp}
+                                                                    on:click={markSelectedLeadContactedNow}
+                                                                >
+                                                                    <span class="txt">Mark contacted now</span>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    {:else}
+                                                        <p class="txt-sm txt-hint m-b-0">
+                                                            Follow-up fields are not available for this lead source yet.
+                                                        </p>
+                                                    {/if}
+
+                                                    <p class="txt-xs txt-hint m-b-0">Last contacted: {selectedLeadLastContactedDisplay}</p>
                                                 </div>
                                             </div>
-                                        {:else}
-                                            <p class="txt-sm txt-hint m-b-0">
-                                                Follow-up fields are not available for this lead source yet.
-                                            </p>
                                         {/if}
-
-                                        <p class="txt-xs txt-hint m-b-0">Last contacted: {selectedLeadLastContactedDisplay}</p>
                                     </div>
 
-                                    <div class="lead-detail-actions-block lead-actions-group">
-                                        <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Utilities</div>
-                                        <div class="lead-detail-actions">
-                                            {#if selectedLead.email}
-                                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
-                                                    <span class="txt">Copy email</span>
-                                                </button>
-                                            {/if}
-                                            {#if selectedLead.phone}
-                                                <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.phone, "Phone")}>
-                                                    <span class="txt">Copy phone</span>
-                                                </button>
-                                            {/if}
-                                            {#if selectedLead.message || selectedLead.whatsappTargetMessage}
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-outline btn-sm"
-                                                    on:click={() => copyValue(selectedLead.whatsappTargetMessage || selectedLead.message, "Message")}
-                                                >
-                                                    <span class="txt">Copy message</span>
-                                                </button>
-                                            {/if}
-                                            {#if selectedLeadMailto}
-                                                <a href={selectedLeadMailto} class="btn btn-sm">
-                                                    <span class="txt">Open email</span>
-                                                </a>
-                                            {/if}
-                                            {#if selectedLeadWhatsAppLink}
-                                                <a href={selectedLeadWhatsAppLink} target="_blank" rel="noopener noreferrer" class="btn btn-sm">
-                                                    <span class="txt">Open WhatsApp</span>
-                                                </a>
-                                            {/if}
-                                        </div>
+                                    <div class="lead-summary-collapsible">
+                                        <button
+                                            type="button"
+                                            class="lead-summary-collapsible-toggle"
+                                            aria-expanded={isLeadUtilitiesOpen}
+                                            on:click={() => (isLeadUtilitiesOpen = !isLeadUtilitiesOpen)}
+                                        >
+                                            <span class="lead-summary-collapsible-heading">
+                                                <span class="lead-summary-collapsible-title">Utilities</span>
+                                                <span class="txt-xs txt-hint lead-summary-collapsible-helper">
+                                                    Copy and open quick communication actions.
+                                                </span>
+                                            </span>
+                                            <i class={`lead-summary-collapsible-icon ${isLeadUtilitiesOpen ? "ri-arrow-up-s-line" : "ri-arrow-down-s-line"}`} />
+                                        </button>
+
+                                        {#if !isLeadUtilitiesOpen}
+                                            <p class="txt-xs txt-hint m-b-0 lead-summary-collapsible-preview">
+                                                {#if selectedLead.email || selectedLead.phone || selectedLead.message || selectedLead.whatsappTargetMessage || selectedLeadMailto || selectedLeadWhatsAppLink}
+                                                    Quick actions are available for this lead.
+                                                {:else}
+                                                    No utility actions available for this lead.
+                                                {/if}
+                                            </p>
+                                        {:else}
+                                            <div class="lead-summary-collapsible-content">
+                                                <div class="lead-detail-actions-block lead-actions-group">
+                                                    <div class="txt-xs txt-hint txt-uppercase lead-actions-title">Utilities</div>
+                                                    <div class="lead-detail-actions">
+                                                        {#if selectedLead.email}
+                                                            <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.email, "Email")}>
+                                                                <span class="txt">Copy email</span>
+                                                            </button>
+                                                        {/if}
+                                                        {#if selectedLead.phone}
+                                                            <button type="button" class="btn btn-outline btn-sm" on:click={() => copyValue(selectedLead.phone, "Phone")}>
+                                                                <span class="txt">Copy phone</span>
+                                                            </button>
+                                                        {/if}
+                                                        {#if selectedLead.message || selectedLead.whatsappTargetMessage}
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-outline btn-sm"
+                                                                on:click={() => copyValue(selectedLead.whatsappTargetMessage || selectedLead.message, "Message")}
+                                                            >
+                                                                <span class="txt">Copy message</span>
+                                                            </button>
+                                                        {/if}
+                                                        {#if selectedLeadMailto}
+                                                            <a href={selectedLeadMailto} class="btn btn-sm">
+                                                                <span class="txt">Open email</span>
+                                                            </a>
+                                                        {/if}
+                                                        {#if selectedLeadWhatsAppLink}
+                                                            <a href={selectedLeadWhatsAppLink} target="_blank" rel="noopener noreferrer" class="btn btn-sm">
+                                                                <span class="txt">Open WhatsApp</span>
+                                                            </a>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {/if}
                                     </div>
                                 </section>
 
@@ -2508,7 +2835,7 @@
     }
 
     .leads-inbox-item {
-        border: 1px solid var(--baseAlt2Color);
+        border: 2px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
         border-radius: var(--baseRadius);
         background: var(--baseColor);
         padding: 9px 11px;
@@ -2516,20 +2843,64 @@
         flex-direction: column;
         gap: 5px;
         cursor: pointer;
-        transition: border-color var(--baseAnimationSpeed), box-shadow var(--baseAnimationSpeed), background-color var(--baseAnimationSpeed);
+        transition: border-color var(--baseAnimationSpeed), background-color var(--baseAnimationSpeed);
     }
 
     .leads-inbox-item:hover,
     .leads-inbox-item:focus-visible {
-        border-color: var(--baseAlt3Color);
-        box-shadow: 0 0 0 2px var(--baseAltColor);
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 45%, var(--baseAlt2Color));
+        background: var(--baseColor);
         outline: none;
     }
 
+    .leads-inbox-item:active {
+        border-color: var(--txtPrimaryColor);
+    }
+
     .leads-inbox-item.selected {
-        border-color: color-mix(in srgb, var(--primaryColor) 40%, var(--baseAlt3Color));
-        background: color-mix(in srgb, var(--primaryColor) 6%, var(--baseColor));
-        box-shadow: 0 0 0 2px color-mix(in srgb, var(--primaryColor) 20%, transparent);
+        border-color: var(--txtPrimaryColor);
+        background: var(--baseColor);
+    }
+
+    .leads-inbox-item.bulk-selected {
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 55%, var(--baseAlt2Color));
+        background: var(--baseColor);
+    }
+
+    .leads-inbox-item.selected.bulk-selected {
+        border-color: var(--txtPrimaryColor);
+        background: var(--baseColor);
+    }
+
+    .leads-inbox-item-main {
+        min-width: 0;
+        width: 100%;
+        display: inline-flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .leads-inbox-item-content {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .leads-inbox-item-select {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .leads-inbox-item-select input {
+        margin: 0;
+    }
+
+    .leads-inbox-item-select--leading {
+        align-self: flex-start;
+        margin-top: 1px;
     }
 
     .leads-inbox-item-head {
@@ -2668,6 +3039,30 @@
         flex: 0 0 auto;
     }
 
+    .leads-bulk-popover {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        z-index: 55;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--baseAlt2Color);
+        border-radius: 999px;
+        background: var(--baseColor);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+        padding: 8px 10px;
+    }
+
+    .leads-bulk-summary {
+        color: var(--txtPrimaryColor);
+        font-weight: 600;
+        font-size: var(--smFontSize);
+        padding: 0 3px;
+        white-space: nowrap;
+    }
+
     .leads-detail-rail {
         border-left: 0;
         padding-left: 0;
@@ -2780,6 +3175,80 @@
 
     .lead-summary-value {
         color: var(--txtPrimaryColor);
+    }
+
+    .lead-summary-collapsible {
+        margin-top: 2px;
+        padding-top: 9px;
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .lead-summary-collapsible-toggle {
+        width: 100%;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        border-radius: var(--baseRadius);
+        background: color-mix(in srgb, var(--baseAlt1) 14%, transparent);
+        color: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 10px;
+        text-align: left;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .lead-summary-collapsible-toggle:hover {
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 38%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 20%, transparent);
+    }
+
+    .lead-summary-collapsible-heading {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .lead-summary-collapsible-title {
+        color: var(--txtPrimaryColor);
+        font-size: var(--smFontSize);
+        line-height: 1.3;
+        font-weight: 600;
+    }
+
+    .lead-summary-collapsible-helper {
+        display: block;
+        line-height: 1.3;
+    }
+
+    .lead-summary-collapsible-icon {
+        flex: 0 0 auto;
+        font-size: 1rem;
+        color: var(--txtHintColor);
+    }
+
+    .lead-summary-collapsible-content {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+    .lead-summary-collapsible-preview {
+        margin-top: 2px;
+        padding: 8px 10px;
+        border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+        border-radius: var(--baseRadius);
+        background: color-mix(in srgb, var(--baseAlt1) 10%, transparent);
+        word-break: break-word;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
 
     .lead-detail-grid {
@@ -3014,6 +3483,16 @@
 
         .leads-inbox-layout {
             grid-template-columns: 1fr;
+        }
+
+        .leads-bulk-popover {
+            left: 10px;
+            right: 10px;
+            bottom: 12px;
+            transform: none;
+            border-radius: var(--baseRadius);
+            flex-wrap: wrap;
+            justify-content: center;
         }
     }
 

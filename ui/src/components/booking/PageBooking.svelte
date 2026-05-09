@@ -4328,7 +4328,7 @@
                                 <article
                                     class="booking-appointment-item"
                                     class:selected={selectedAppointmentId === appointment.id}
-                                    class:bulk-selected={isAppointmentSelectedForBulk(appointment.id)}
+                                    class:bulk-selected={selectedAppointmentIdsSet.has(normalizeString(appointment.id))}
                                     role="button"
                                     tabindex="0"
                                     on:click={() => (selectedAppointmentId = appointment.id)}
@@ -4338,7 +4338,7 @@
                                             <label class="booking-appointment-item-select booking-appointment-item-select--leading" on:click|stopPropagation>
                                                 <input
                                                     type="checkbox"
-                                                    checked={isAppointmentSelectedForBulk(appointment.id)}
+                                                    checked={selectedAppointmentIdsSet.has(normalizeString(appointment.id))}
                                                     aria-label={`Select appointment ${appointment.name || "untitled"}`}
                                                     on:click|stopPropagation
                                                     on:change|stopPropagation={() => toggleAppointmentBulkSelection(appointment.id)}
@@ -4809,7 +4809,7 @@
                                 <article
                                     class="booking-service-item"
                                     class:selected={selectedServiceId === service.id}
-                                    class:bulk-selected={isServiceSelectedForBulk(service.id)}
+                                    class:bulk-selected={selectedServiceIdsSet.has(normalizeString(service.id))}
                                     role="button"
                                     tabindex="0"
                                     on:click={() => selectService(service)}
@@ -4817,7 +4817,7 @@
                                     <label class="booking-service-item-select booking-service-item-select--leading" on:click|stopPropagation>
                                         <input
                                             type="checkbox"
-                                            checked={isServiceSelectedForBulk(service.id)}
+                                            checked={selectedServiceIdsSet.has(normalizeString(service.id))}
                                             aria-label={`Select service ${service.name || "untitled"}`}
                                             on:click|stopPropagation
                                             on:change|stopPropagation={() => toggleServiceBulkSelection(service.id)}
@@ -5381,13 +5381,13 @@
                                                         role="listitem"
                                                         class="booking-exception-item"
                                                         class:selected={exception.id === selectedExceptionId}
-                                                        class:bulk-selected={isExceptionSelectedForBulk(exception.id)}
+                                                        class:bulk-selected={selectedExceptionIdsSet.has(normalizeString(exception.id))}
                                                         on:click={() => selectException(exception)}
                                                     >
                                                         <label class="booking-exception-item-select booking-exception-item-select--leading" on:click|stopPropagation>
                                                             <input
                                                                 type="checkbox"
-                                                                checked={isExceptionSelectedForBulk(exception.id)}
+                                                                checked={selectedExceptionIdsSet.has(normalizeString(exception.id))}
                                                                 aria-label={`Select exception for ${formatDate(exception.date)}`}
                                                                 on:click|stopPropagation
                                                                 on:change|stopPropagation={() => toggleExceptionBulkSelection(exception.id)}
@@ -6239,6 +6239,12 @@
         display: grid;
         gap: 8px;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    @media (min-width: 1600px) {
+        .booking-appointments-list {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
     }
 
     .booking-appointment-item {
