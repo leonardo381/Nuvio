@@ -4432,65 +4432,80 @@
                             <p class="txt-sm txt-hint m-b-0">Overview of this appointment request and customer details.</p>
                         </div>
                         {#if selectedAppointment}
-                            <div class="booking-summary-grid">
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Status</span>
+                            <div class="booking-summary-v2">
+                                <div class="booking-summary-v2-status">
                                     <span class={`label label-sm ${selectedAppointment.statusClassName}`}>{selectedAppointment.statusLabel}</span>
                                 </div>
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Customer</span>
-                                    <span class="txt-sm">{selectedAppointment.name}</span>
+
+                                <div class="booking-summary-v2-primary">{selectedAppointment.name || "Unknown customer"}</div>
+
+                                <div class="booking-summary-v2-group booking-summary-v2-group--compact">
+                                    <div class="booking-summary-v2-row">
+                                        <span class="txt-xs txt-hint booking-summary-v2-key">Service</span>
+                                        <span class="txt-sm booking-summary-v2-value">{selectedAppointment.serviceLabel}</span>
+                                    </div>
+                                    {#if selectedAppointment.serviceDurationMinutes > 0}
+                                        <div class="booking-summary-v2-row">
+                                            <span class="txt-xs txt-hint booking-summary-v2-key">Duration</span>
+                                            <span class="txt-sm booking-summary-v2-value">{selectedAppointment.serviceDurationMinutes} min</span>
+                                        </div>
+                                    {/if}
+                                    {#if selectedAppointment.serviceDescription && selectedAppointment.serviceDescription.length <= 110}
+                                        <div class="booking-summary-v2-row">
+                                            <span class="txt-xs txt-hint booking-summary-v2-key">Description</span>
+                                            <span class="txt-sm booking-summary-v2-value">{selectedAppointment.serviceDescription}</span>
+                                        </div>
+                                    {/if}
+                                    <div class="booking-summary-v2-row">
+                                        <span class="txt-xs txt-hint booking-summary-v2-key">Date &amp; time</span>
+                                        <span class="txt-sm booking-summary-v2-value">{formatAppointmentDateTime(selectedAppointment.date, selectedAppointment.time)}</span>
+                                    </div>
                                 </div>
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Service</span>
-                                    <span class="txt-sm">{selectedAppointment.serviceLabel}</span>
+
+                                <div class="booking-summary-v2-group booking-summary-v2-group--compact">
+                                    <div class="booking-summary-v2-row">
+                                        <span class="txt-xs txt-hint booking-summary-v2-key">Created</span>
+                                        <span class="txt-sm booking-summary-v2-value">{formatDateTime(selectedAppointment.created)}</span>
+                                    </div>
+                                    {#if selectedAppointment.confirmedAt}
+                                        <div class="booking-summary-v2-row">
+                                            <span class="txt-xs txt-hint booking-summary-v2-key">Confirmed at</span>
+                                            <span class="txt-sm booking-summary-v2-value">{formatDateTime(selectedAppointment.confirmedAt)}</span>
+                                        </div>
+                                    {/if}
+                                    {#if selectedAppointment.cancelledAt}
+                                        <div class="booking-summary-v2-row">
+                                            <span class="txt-xs txt-hint booking-summary-v2-key">Cancelled at</span>
+                                            <span class="txt-sm booking-summary-v2-value">{formatDateTime(selectedAppointment.cancelledAt)}</span>
+                                        </div>
+                                    {/if}
+                                    {#if selectedAppointment.rescheduledAt}
+                                        <div class="booking-summary-v2-row">
+                                            <span class="txt-xs txt-hint booking-summary-v2-key">Rescheduled at</span>
+                                            <span class="txt-sm booking-summary-v2-value">{formatDateTime(selectedAppointment.rescheduledAt)}</span>
+                                        </div>
+                                    {/if}
                                 </div>
-                                {#if selectedAppointment.serviceDurationMinutes > 0}
-                                    <div class="booking-summary-row">
-                                        <span class="txt-xs txt-hint">Duration</span>
-                                        <span class="txt-sm">{selectedAppointment.serviceDurationMinutes} min</span>
+
+                                <div class="booking-summary-v2-group booking-summary-v2-group--compact">
+                                    <div class="booking-summary-v2-row">
+                                        <span class="txt-xs txt-hint booking-summary-v2-key">Customer email</span>
+                                        <span class="txt-sm booking-summary-v2-value">{selectedAppointment.email || "No email provided"}</span>
+                                    </div>
+                                    <div class="booking-summary-v2-row">
+                                        <span class="txt-xs txt-hint booking-summary-v2-key">Customer phone</span>
+                                        <span class="txt-sm booking-summary-v2-value">{selectedAppointment.phone || "No phone provided"}</span>
+                                    </div>
+                                </div>
+
+                                {#if selectedAppointment.serviceDescription && selectedAppointment.serviceDescription.length > 110}
+                                    <div class="booking-summary-v2-group booking-summary-v2-group--long">
+                                        <div class="booking-summary-v2-long-field">
+                                            <span class="txt-xs txt-hint booking-summary-v2-key">Description</span>
+                                            <p class="txt-sm m-b-0 booking-summary-v2-long-copy">{selectedAppointment.serviceDescription}</p>
+                                        </div>
                                     </div>
                                 {/if}
-                                {#if selectedAppointment.serviceDescription}
-                                    <div class="booking-summary-row">
-                                        <span class="txt-xs txt-hint">Description</span>
-                                        <span class="txt-sm">{selectedAppointment.serviceDescription}</span>
-                                    </div>
-                                {/if}
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Date &amp; time</span>
-                                    <span class="txt-sm">{formatAppointmentDateTime(selectedAppointment.date, selectedAppointment.time)}</span>
-                                </div>
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Created</span>
-                                    <span class="txt-sm">{formatDateTime(selectedAppointment.created)}</span>
-                                </div>
-                                {#if selectedAppointment.confirmedAt}
-                                    <div class="booking-summary-row">
-                                        <span class="txt-xs txt-hint">Confirmed at</span>
-                                        <span class="txt-sm">{formatDateTime(selectedAppointment.confirmedAt)}</span>
-                                    </div>
-                                {/if}
-                                {#if selectedAppointment.cancelledAt}
-                                    <div class="booking-summary-row">
-                                        <span class="txt-xs txt-hint">Cancelled at</span>
-                                        <span class="txt-sm">{formatDateTime(selectedAppointment.cancelledAt)}</span>
-                                    </div>
-                                {/if}
-                                {#if selectedAppointment.rescheduledAt}
-                                    <div class="booking-summary-row">
-                                        <span class="txt-xs txt-hint">Rescheduled at</span>
-                                        <span class="txt-sm">{formatDateTime(selectedAppointment.rescheduledAt)}</span>
-                                    </div>
-                                {/if}
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Customer email</span>
-                                    <span class="txt-sm">{selectedAppointment.email || "No email provided"}</span>
-                                </div>
-                                <div class="booking-summary-row">
-                                    <span class="txt-xs txt-hint">Customer phone</span>
-                                    <span class="txt-sm">{selectedAppointment.phone || "No phone provided"}</span>
-                                </div>
                             </div>
                             <div class="booking-summary-collapsible">
                                 <button
@@ -6192,24 +6207,67 @@
         background: var(--baseColor);
     }
 
-    .booking-summary-grid {
+    .booking-summary-v2 {
         display: flex;
         flex-direction: column;
         gap: 8px;
     }
 
-    .booking-summary-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-        padding-bottom: 8px;
-        border-bottom: 1px dashed var(--baseAlt1);
+    .booking-summary-v2-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
     }
 
-    .booking-summary-row:last-child {
-        border-bottom: 0;
-        padding-bottom: 0;
+    .booking-summary-v2-primary {
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.3;
+        color: var(--txtPrimaryColor);
+        margin-top: -1px;
+    }
+
+    .booking-summary-v2-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .booking-summary-v2-group + .booking-summary-v2-group {
+        padding-top: 8px;
+        border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+    }
+
+    .booking-summary-v2-row {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        align-items: start;
+        gap: 10px;
+    }
+
+    .booking-summary-v2-key {
+        line-height: 1.35;
+        white-space: nowrap;
+    }
+
+    .booking-summary-v2-value {
+        min-width: 0;
+        line-height: 1.35;
+        color: var(--txtPrimaryColor);
+        word-break: break-word;
+    }
+
+    .booking-summary-v2-long-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .booking-summary-v2-long-copy {
+        line-height: 1.4;
+        color: var(--txtPrimaryColor);
+        white-space: pre-wrap;
+        word-break: break-word;
     }
 
     .booking-controls {

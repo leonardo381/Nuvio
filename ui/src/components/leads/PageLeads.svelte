@@ -2095,51 +2095,62 @@
                                         <div class="lead-detail-identity">{selectedLead.identity}</div>
                                     </div>
 
-                                    <div class="lead-summary-stack">
-                                        <div class="lead-summary-item">
-                                            <span class="txt-xs txt-hint lead-summary-key">Created</span>
-                                            <span class="txt-sm lead-summary-value">{formatDateTime(selectedLead.created)}</span>
-                                        </div>
-                                        <div class="lead-summary-item">
-                                            <span class="txt-xs txt-hint lead-summary-key">Last contacted</span>
-                                            <span class="txt-sm lead-summary-value">{selectedLeadLastContactedDisplay}</span>
-                                        </div>
-                                        <div class="lead-summary-item">
-                                            <span class="txt-xs txt-hint lead-summary-key">Contact</span>
-                                            <span class="txt-sm lead-summary-value">
-                                                {#if selectedLead.email || selectedLead.phone}
-                                                    {selectedLead.email || "No email"}{selectedLead.phone ? ` - ${selectedLead.phone}` : ""}
-                                                {:else}
-                                                    No contact details available.
-                                                {/if}
-                                            </span>
-                                        </div>
-                                        {#if selectedLead.subject}
-                                            <div class="lead-summary-item">
-                                                <span class="txt-xs txt-hint lead-summary-key">Subject</span>
-                                                <span class="txt-sm lead-summary-value">{selectedLead.subject}</span>
+                                    <div class="lead-summary-v2">
+                                        <div class="lead-summary-v2-group lead-summary-v2-group--compact">
+                                            <div class="lead-summary-v2-row">
+                                                <span class="txt-xs txt-hint lead-summary-v2-key">Created</span>
+                                                <span class="txt-sm lead-summary-v2-value">{formatDateTime(selectedLead.created)}</span>
                                             </div>
-                                        {/if}
-                                        <div class="lead-summary-item lead-summary-item--message">
-                                            <span class="txt-xs txt-hint lead-summary-key">Message preview</span>
-                                            <p class="txt-sm m-b-0 lead-summary-value">{resolveLeadPreviewText(selectedLead)}</p>
-                                        </div>
-                                        <div class="lead-summary-item">
-                                            <span class="txt-xs txt-hint lead-summary-key">Attribution</span>
-                                            <span class="txt-sm lead-summary-value">{resolveLeadAttribution(selectedLead)}</span>
-                                        </div>
-                                        {#if resolveLeadLocationHint(selectedLead)}
-                                            <div class="lead-summary-item">
-                                                <span class="txt-xs txt-hint lead-summary-key">Context</span>
-                                                <span class="txt-sm lead-summary-value">{resolveLeadLocationHint(selectedLead)}</span>
+                                            <div class="lead-summary-v2-row">
+                                                <span class="txt-xs txt-hint lead-summary-v2-key">Last contacted</span>
+                                                <span class="txt-sm lead-summary-v2-value">{selectedLeadLastContactedDisplay}</span>
                                             </div>
-                                        {/if}
-                                        {#if selectedLead.whatsappTargetPhone}
-                                            <div class="lead-summary-item">
-                                                <span class="txt-xs txt-hint lead-summary-key">WhatsApp target phone</span>
-                                                <span class="txt-sm lead-summary-value">{selectedLead.whatsappTargetPhone}</span>
+                                            <div class="lead-summary-v2-row">
+                                                <span class="txt-xs txt-hint lead-summary-v2-key">Contact</span>
+                                                <span class="txt-sm lead-summary-v2-value">
+                                                    {#if selectedLead.email || selectedLead.phone}
+                                                        {selectedLead.email || "No email"}{selectedLead.phone ? ` - ${selectedLead.phone}` : ""}
+                                                    {:else}
+                                                        No contact details available.
+                                                    {/if}
+                                                </span>
                                             </div>
-                                        {/if}
+                                            {#if selectedLead.subject}
+                                                <div class="lead-summary-v2-row">
+                                                    <span class="txt-xs txt-hint lead-summary-v2-key">Subject</span>
+                                                    <span class="txt-sm lead-summary-v2-value">{selectedLead.subject}</span>
+                                                </div>
+                                            {/if}
+                                            <div class="lead-summary-v2-row">
+                                                <span class="txt-xs txt-hint lead-summary-v2-key">Attribution</span>
+                                                <span class="txt-sm lead-summary-v2-value">{resolveLeadAttribution(selectedLead)}</span>
+                                            </div>
+                                            {#if resolveLeadLocationHint(selectedLead)}
+                                                <div class="lead-summary-v2-row">
+                                                    <span class="txt-xs txt-hint lead-summary-v2-key">Context</span>
+                                                    <span class="txt-sm lead-summary-v2-value">{resolveLeadLocationHint(selectedLead)}</span>
+                                                </div>
+                                            {/if}
+                                            {#if selectedLead.whatsappTargetPhone}
+                                                <div class="lead-summary-v2-row">
+                                                    <span class="txt-xs txt-hint lead-summary-v2-key">WhatsApp target phone</span>
+                                                    <span class="txt-sm lead-summary-v2-value">{selectedLead.whatsappTargetPhone}</span>
+                                                </div>
+                                            {/if}
+                                        </div>
+
+                                        <div class="lead-summary-v2-group lead-summary-v2-group--long">
+                                            <div class="lead-summary-v2-long-field">
+                                                <span class="txt-xs txt-hint lead-summary-v2-key">Message preview</span>
+                                                <p class="txt-sm m-b-0 lead-summary-v2-long-copy">{resolveLeadPreviewText(selectedLead)}</p>
+                                            </div>
+                                            {#if selectedLead.notes}
+                                                <div class="lead-summary-v2-long-field">
+                                                    <span class="txt-xs txt-hint lead-summary-v2-key">Notes</span>
+                                                    <p class="txt-sm m-b-0 lead-summary-v2-long-copy">{selectedLead.notes}</p>
+                                                </div>
+                                            {/if}
+                                        </div>
                                     </div>
                                     <div class="lead-summary-collapsible">
                                         <button
@@ -3150,31 +3161,53 @@
         line-height: 1.35;
     }
 
-    .lead-summary-stack {
+    .lead-summary-v2 {
         display: flex;
         flex-direction: column;
-        gap: 7px;
+        gap: 8px;
     }
 
-    .lead-summary-item {
+    .lead-summary-v2-group {
         display: flex;
         flex-direction: column;
-        gap: 3px;
-        padding-top: 7px;
+        gap: 6px;
+    }
+
+    .lead-summary-v2-group + .lead-summary-v2-group {
+        padding-top: 8px;
         border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
     }
 
-    .lead-summary-item:first-child {
-        border-top: 0;
-        padding-top: 0;
+    .lead-summary-v2-row {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        align-items: start;
+        gap: 10px;
     }
 
-    .lead-summary-item--message p {
-        white-space: pre-wrap;
+    .lead-summary-v2-key {
+        line-height: 1.35;
+        white-space: nowrap;
     }
 
-    .lead-summary-value {
+    .lead-summary-v2-value {
+        min-width: 0;
         color: var(--txtPrimaryColor);
+        line-height: 1.35;
+        word-break: break-word;
+    }
+
+    .lead-summary-v2-long-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .lead-summary-v2-long-copy {
+        color: var(--txtPrimaryColor);
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
     }
 
     .lead-summary-collapsible {
