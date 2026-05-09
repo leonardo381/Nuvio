@@ -4,7 +4,13 @@
     import RefreshButton from "@/components/base/RefreshButton.svelte";
     import { onMount } from "svelte";
     import { pageTitle } from "@/stores/app";
-    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";
+    import {
+        collections,
+        collectionsLoadError,
+        findCollectionByRequiredNames,
+        hasCollectionsLoaded,
+        isCollectionsLoading,
+    } from "@/stores/collections";
     import { addErrorToast, addSuccessToast } from "@/stores/toasts";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
@@ -39,7 +45,15 @@
     const leadLastContactedFieldAliases = ["lastContactedAt", "last_contacted_at", "lastContacted", "last_contacted"];
 
     const ALL_WEBSITES_KEY = "all";
-    const whatsappCollectionAliases = ["whatsapp", "whatsapp_interactions", "whatsapp_clicks"];
+    const contactsCollectionAliases = ["contacts", "contact", "Contacts"];
+    const whatsappCollectionAliases = [
+        "whatsapp",
+        "Whatsapp",
+        "WhatsApp",
+        "whatsapp_interactions",
+        "whatsappInteractions",
+        "whatsapp_clicks",
+    ];
     const desktopMasterDetailMinWidth = 1060;
 
     let websites = [];
@@ -77,10 +91,8 @@
     let lastWebsitesCollectionId = "";
     let lastLeadsDataKey = "";
 
-    loadCollections();
-
-    $: websitesCollection = resolveCollectionByAliases(["websites"]);
-    $: contactsCollection = resolveCollectionByAliases(["contacts"]);
+    $: websitesCollection = resolveCollectionByAliases(["websites", "Websites"]);
+    $: contactsCollection = resolveCollectionByAliases(contactsCollectionAliases);
     $: resolvedWhatsAppCollection = resolveWhatsAppCollection();
     $: whatsappCollection = resolvedWhatsAppCollection?.collection || null;
     $: resolvedWhatsAppAlias = resolvedWhatsAppCollection?.alias || "";
@@ -269,20 +281,7 @@
     }
 
     function resolveCollectionByAliases(aliases = []) {
-        if (!Array.isArray(aliases) || !aliases.length) {
-            return null;
-        }
-
-        const normalizedAliases = aliases.map((alias) => normalizeLower(alias)).filter(Boolean);
-
-        for (const alias of normalizedAliases) {
-            const match = $collections.find((collection) => normalizeLower(collection?.name) === alias);
-            if (match) {
-                return match;
-            }
-        }
-
-        return null;
+        return findCollectionByRequiredNames($collections, aliases);
     }
 
     function resolveWhatsAppCollection() {
@@ -1887,7 +1886,22 @@
                     </div>
                 </div>
 
-                {#if !hasAnyLeadCollections}
+                {#if $isCollectionsLoading || (!$hasCollectionsLoaded && !$collectionsLoadError)}
+                    <div class="placeholder-section m-b-0">
+                        <span class="loader loader-lg" />
+                        <h1>Loading leads...</h1>
+                    </div>
+                {:else if $collectionsLoadError}
+                    <div class="alert alert-danger m-b-0">
+                        <div class="icon">
+                            <i class="ri-error-warning-line" />
+                        </div>
+                        <div>
+                            Could not verify Leads collections.<br />
+                            Refresh the page or check your connection.
+                        </div>
+                    </div>
+                {:else if !hasAnyLeadCollections}
                     <div class="alert alert-warning m-b-0">
                         <div class="icon">
                             <i class="ri-information-line" />
@@ -1916,7 +1930,7 @@
                     </div>
                 {/if}
 
-                {#if $isCollectionsLoading || isLoadingLeads}
+                {#if isLoadingLeads}
                     <div class="placeholder-section m-b-0">
                         <span class="loader loader-lg" />
                         <h1>Loading leads...</h1>

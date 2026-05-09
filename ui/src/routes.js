@@ -15,6 +15,7 @@ import PageImportCollections from "@/components/settings/PageImportCollections.s
 import PageMail from "@/components/settings/PageMail.svelte";
 import PageStorage from "@/components/settings/PageStorage.svelte";
 import PageSuperuserLogin from "@/components/superusers/PageSuperuserLogin.svelte";
+import { loadCollections } from "@/stores/collections";
 import ApiClient from "@/utils/ApiClient";
 import { isTokenExpired } from "pocketbase";
 import { wrap } from "svelte-spa-router/wrap";
@@ -25,6 +26,16 @@ function isSuperuserAuth() {
 
 function isAdminSuperuser() {
     return ApiClient.isAdminSuperuser();
+}
+
+async function waitForCollectionsReadiness() {
+    try {
+        await loadCollections();
+    } catch (_) {
+        // no-op: pages keep their own missing/error panels for real failures.
+    }
+
+    return true;
 }
 
 const routes = {
@@ -68,19 +79,19 @@ const routes = {
 
     "/newsletter": wrap({
         component: PageNewsletter,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isSuperuserAuth(), waitForCollectionsReadiness],
         userData: { showAppSidebar: true },
     }),
 
     "/cms": wrap({
         component: PageCms,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isSuperuserAuth(), waitForCollectionsReadiness],
         userData: { showAppSidebar: true },
     }),
 
     "/booking": wrap({
         component: PageBooking,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isSuperuserAuth(), waitForCollectionsReadiness],
         userData: { showAppSidebar: true },
     }),
 
@@ -92,7 +103,7 @@ const routes = {
 
     "/leads": wrap({
         component: PageLeads,
-        conditions: [(_) => isSuperuserAuth()],
+        conditions: [(_) => isSuperuserAuth(), waitForCollectionsReadiness],
         userData: { showAppSidebar: true },
     }),
 

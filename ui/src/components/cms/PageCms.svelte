@@ -6,14 +6,19 @@
     import RefreshButton from "@/components/base/RefreshButton.svelte";
     import SchemaForm from "@/components/base/nuvio/schema/SchemaForm.svelte";
     import { pageTitle } from "@/stores/app";
-    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";
+    import {
+        collections,
+        collectionsLoadError,
+        findCollectionByRequiredNames,
+        hasCollectionsLoaded,
+        isCollectionsLoading,
+    } from "@/stores/collections";
     import { addSuccessToast } from "@/stores/toasts";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
     import { getWebsiteSettingsSchemaForRole, normalizeWebsiteSettingsValue } from "@/utils/WebsiteSettingsSchema";
 
     $pageTitle = "Website Content";
-    loadCollections();
 
     const initialQueryParams = new URLSearchParams($querystring);
     const cmsTabPagesKey = "pages";
@@ -150,21 +155,21 @@
     const faqQuestionSummaryKeys = ["question", "title", "heading", "label", "name"];
     const faqAnswerSummaryKeys = ["answer", "description", "body", "content", "text", "html"];
 
-    $: websitesCollection = findCollection("websites");
-    $: pagesCollection = findCollection("pages");
-    $: blocksCollection = findCollection("blocks");
-    $: componentsCollection = findCollection("components");
+    $: websitesCollection = findCollection(["websites", "Websites"]);
+    $: pagesCollection = findCollection(["pages", "Pages"]);
+    $: blocksCollection = findCollection(["blocks", "Blocks"]);
+    $: componentsCollection = findCollection(["components", "Components"]);
 
-    $: hasCmsCollections = !!websitesCollection?.id && !!pagesCollection?.id && !!blocksCollection?.id;
+    $: hasCmsCollections = !!websitesCollection && !!pagesCollection && !!blocksCollection;
 
     $: missingCollections = [];
-    $: if (!websitesCollection?.id) {
+    $: if (!websitesCollection) {
         missingCollections.push("websites");
     }
-    $: if (!pagesCollection?.id) {
+    $: if (!pagesCollection) {
         missingCollections.push("pages");
     }
-    $: if (!blocksCollection?.id) {
+    $: if (!blocksCollection) {
         missingCollections.push("blocks");
     }
 
@@ -603,8 +608,9 @@
         }
     }
 
-    function findCollection(name) {
-        return $collections.find((item) => `${item?.name || ""}`.toLowerCase() === `${name || ""}`.toLowerCase()) || null;
+    function findCollection(nameOrAliases) {
+        const aliases = Array.isArray(nameOrAliases) ? nameOrAliases : [nameOrAliases];
+        return findCollectionByRequiredNames($collections, aliases);
     }
 
     function getCollectionFieldNames(collection) {
@@ -2845,12 +2851,22 @@
 </script>
 
 <PageWrapper>
-    {#if $isCollectionsLoading && !hasCmsCollections}
+    {#if $isCollectionsLoading || (!$hasCollectionsLoaded && !$collectionsLoadError)}
         <div class="placeholder-section m-b-base">
             <span class="loader loader-lg" />
             <h1>Loading website content...</h1>
         </div>
-    {:else if !hasCmsCollections}
+    {:else if $collectionsLoadError}
+        <div class="alert alert-danger m-b-base">
+            <div class="icon">
+                <i class="ri-error-warning-line" />
+            </div>
+            <div>
+                Could not verify CMS collections.<br />
+                Refresh the page or check your connection.
+            </div>
+        </div>
+    {:else if $hasCollectionsLoaded && !hasCmsCollections}
         <div class="alert alert-danger m-b-base">
             <div class="icon">
                 <i class="ri-error-warning-line" />

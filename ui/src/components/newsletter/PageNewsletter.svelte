@@ -1,4 +1,4 @@
-<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";    import { addErrorToast, addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
+<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, collectionsLoadError, findCollectionByRequiredNames, hasCollectionsLoaded, isCollectionsLoading } from "@/stores/collections";    import { addErrorToast, addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
     $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    const subscriberGroupsFieldAliases = ["groups", "groupIds", "subscriberGroups", "subscriber_groups"];    const campaignRecipientsTypeFieldAliases = ["recipientsType", "recipientType", "recipients_type"];    const campaignRecipientsIdsFieldAliases = ["recipientsIds", "recipientIds", "recipients_ids"];    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
@@ -76,10 +76,17 @@
     let normalizedCampaignManualRecipientsCount = 0;
     let activeSubscriberIdsByGroupId = new Map();
     let groupSelectionMetaById = new Map();
-    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastPersistedContextKey = "";    loadCollections();    $: websitesCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "websites") || null;    $: subscribersCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribers") || null;
-    $: campaignsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "campaigns") || null;
-    $: subscriberGroupsCollection = $collections.find((c) => (c?.name || "").toLowerCase() === "subscribergroups") || null;
-    $: missingCollectionNames = [];    $: if (!subscribersCollection?.id) {        missingCollectionNames.push("Subscribers");    }    $: if (!campaignsCollection?.id) {        missingCollectionNames.push("Campaigns");    };    $: hasNewsletterCollections = missingCollectionNames.length === 0;
+    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastPersistedContextKey = "";    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
+    $: campaignsCollection = findCollectionByRequiredNames($collections, ["Campaigns", "campaigns"]);
+    $: subscriberGroupsCollection = findCollectionByRequiredNames($collections, ["SubscriberGroups", "subscribergroups"]);
+    $: missingCollectionNames = [];
+    $: if (!subscribersCollection) {
+        missingCollectionNames.push("Subscribers");
+    }
+    $: if (!campaignsCollection) {
+        missingCollectionNames.push("Campaigns");
+    }
+    $: hasNewsletterCollections = missingCollectionNames.length === 0;
     $: subscriberFieldKeys = new Set(
         Array.isArray(subscribersCollection?.fields)
             ? subscribersCollection.fields.map((field) => `${field?.name || ""}`.trim().toLowerCase()).filter(Boolean)
@@ -1641,12 +1648,33 @@
 </script>
 
 <PageWrapper>
-    {#if !hasNewsletterCollections}
+    {#if $isCollectionsLoading || (!$hasCollectionsLoaded && !$collectionsLoadError)}
+        <div class="placeholder-section m-b-base">
+            <span class="loader loader-lg" />
+            <h1>Loading Newsletter...</h1>
+        </div>
+    {:else if $collectionsLoadError}
+        <div class="alert alert-danger m-b-base">
+            <div class="icon">
+                <i class="ri-error-warning-line" />
+            </div>
+            <div>
+                Could not verify Newsletter collections.<br />
+                Refresh the page or check your connection.
+            </div>
+        </div>
+    {:else if $hasCollectionsLoaded && !hasNewsletterCollections}
         <div class="alert alert-warning m-b-base">
             <div class="icon">
                 <i class="ri-information-line" />
             </div>
-            <div>                Newsletter collections are missing:                <strong>{missingCollectionNames.join(", ")}</strong>.                Run the latest migrations to enable Newsletter V1.            </div>        </div>    {:else}
+            <div>
+                Newsletter collections are missing:
+                <strong>{missingCollectionNames.join(", ")}</strong>.
+                Run the latest migrations to enable Newsletter V1.
+            </div>
+        </div>
+    {:else}
         <section class="newsletter-head operations-head panel m-b-base">
             <div class="head-main">
                 <div class="summary-title-wrap">
@@ -1719,7 +1747,12 @@
                 </div>
             </div>
         </section>
-        {#if $isCollectionsLoading && !selectedWebsiteId}            <div class="placeholder-section m-b-base">                <span class="loader loader-lg" />                <h1>Loading Newsletter...</h1>            </div>        {:else if !selectedWebsiteId}            <div class="placeholder-section m-b-base">                <h1>Select a website to manage Newsletter.</h1>                <p class="txt-sm txt-hint m-b-0">Once selected, subscribers and campaigns will be loaded automatically.</p>            </div>        {:else}
+        {#if !selectedWebsiteId}
+            <div class="placeholder-section m-b-base">
+                <h1>Select a website to manage Newsletter.</h1>
+                <p class="txt-sm txt-hint m-b-0">Once selected, subscribers and campaigns will be loaded automatically.</p>
+            </div>
+        {:else}
             <div class="tabs">
                 <div class="tabs-content">
                     {#if activeSection === "subscribers"}

@@ -40,3 +40,4 @@ pb_data/*.db-wal
 pb_data/storage/
 nuvio-implementer.md
 ui/.env
+pb_data/auxiliary.db

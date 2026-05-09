@@ -5,21 +5,71 @@ import { get, writable } from "svelte/store";
 export const collections = writable([]);
 export const activeCollection = writable({});
 export const isCollectionsLoading = writable(false);
+export const hasCollectionsLoaded = writable(false);
+export const collectionsLoadError = writable("");
 export const protectedFilesCollectionsCache = writable({});
 export const scaffolds = writable({});
 
 let notifyChannel;
+let loadCollectionsPromise = null;
 
 if (typeof BroadcastChannel != "undefined") {
     notifyChannel = new BroadcastChannel("collections");
 
     notifyChannel.onmessage = () => {
-        loadCollections(get(activeCollection)?.id)
-    }
+        loadCollections(get(activeCollection)?.id);
+    };
 }
 
 function notifyOtherTabs() {
     notifyChannel?.postMessage("reload");
+}
+
+function normalizeCollectionLookupKey(value) {
+    return `${value || ""}`
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, "");
+}
+
+export function resolveCollectionName(collectionList = [], requestedNames = []) {
+    const list = Array.isArray(collectionList) ? collectionList : [];
+    const requested = (Array.isArray(requestedNames) ? requestedNames : [requestedNames])
+        .map((name) => normalizeCollectionLookupKey(name))
+        .filter(Boolean);
+
+    if (!requested.length) {
+        return "";
+    }
+
+    const namesByLookupKey = new Map();
+    for (const collection of list) {
+        const collectionName = `${collection?.name || ""}`.trim();
+        const lookupKey = normalizeCollectionLookupKey(collectionName);
+        if (lookupKey && collectionName && !namesByLookupKey.has(lookupKey)) {
+            namesByLookupKey.set(lookupKey, collectionName);
+        }
+    }
+
+    for (const lookupKey of requested) {
+        const resolvedName = namesByLookupKey.get(lookupKey);
+        if (resolvedName) {
+            return resolvedName;
+        }
+    }
+
+    return "";
+}
+
+export function findCollectionByRequiredNames(collectionList = [], requestedNames = []) {
+    const list = Array.isArray(collectionList) ? collectionList : [];
+    const resolvedName = resolveCollectionName(list, requestedNames);
+
+    if (!resolvedName) {
+        return null;
+    }
+
+    return list.find((collection) => `${collection?.name || ""}`.trim() === resolvedName) || null;
 }
 
 export function changeActiveCollectionByIdOrName(collectionIdOrName) {
@@ -77,34 +127,66 @@ export async function refreshScaffolds() {
 
 // load all collections
 export async function loadCollections(activeIdOrName = null) {
-    isCollectionsLoading.set(true);
-
-    try {
-        const promises = [];
-        promises.push(ApiClient.collections.getScaffolds());
-        promises.push(ApiClient.collections.getFullList());
-
-        let [resultScaffolds, resultCollections] = await Promise.all(promises);
-
-        scaffolds.set(resultScaffolds);
-
-        resultCollections = CommonHelper.sortCollections(resultCollections);
-
-        collections.set(resultCollections);
-
-        const found = activeIdOrName && resultCollections.find((c) => c.id == activeIdOrName || c.name == activeIdOrName);
-        if (found) {
-            activeCollection.set(found);
-        } else if (resultCollections.length) {
-            activeCollection.set(resultCollections.find((c) => !c.system) || resultCollections[0]);
-        }
-
-        refreshProtectedFilesCollectionsCache();
-    } catch (err) {
-        ApiClient.error(err);
+    if (loadCollectionsPromise) {
+        return loadCollectionsPromise;
     }
 
-    isCollectionsLoading.set(false);
+    isCollectionsLoading.set(true);
+    collectionsLoadError.set("");
+
+    loadCollectionsPromise = (async () => {
+        try {
+            if (typeof ApiClient.whenAuthReady === "function") {
+                await ApiClient.whenAuthReady();
+            }
+
+            let [resultScaffolds, resultCollections] = await Promise.all([
+                ApiClient.collections.getScaffolds(),
+                ApiClient.collections.getFullList(),
+            ]);
+
+            scaffolds.set(resultScaffolds);
+
+            resultCollections = CommonHelper.sortCollections(
+                Array.isArray(resultCollections) ? resultCollections : [],
+            );
+
+            // Some refresh paths can briefly return an empty list even though collections exist.
+            // Retry once before flagging the module as unavailable.
+            if (!resultCollections.length) {
+                await new Promise((resolve) => setTimeout(resolve, 150));
+                const retryCollections = await ApiClient.collections.getFullList();
+                resultCollections = CommonHelper.sortCollections(
+                    Array.isArray(retryCollections) ? retryCollections : [],
+                );
+            }
+
+            if (!resultCollections.length) {
+                throw new Error("Unable to verify collections right now. Empty collections response.");
+            }
+
+            collections.set(resultCollections);
+
+            const found = activeIdOrName && resultCollections.find((c) => c.id == activeIdOrName || c.name == activeIdOrName);
+            if (found) {
+                activeCollection.set(found);
+            } else if (resultCollections.length) {
+                activeCollection.set(resultCollections.find((c) => !c.system) || resultCollections[0]);
+            }
+
+            refreshProtectedFilesCollectionsCache();
+            hasCollectionsLoaded.set(true);
+        } catch (err) {
+            hasCollectionsLoaded.set(false);
+            collectionsLoadError.set(err?.message || "Unable to verify collections right now.");
+            ApiClient.error(err);
+        } finally {
+            isCollectionsLoading.set(false);
+            loadCollectionsPromise = null;
+        }
+    })();
+
+    return loadCollectionsPromise;
 }
 
 function refreshProtectedFilesCollectionsCache() {

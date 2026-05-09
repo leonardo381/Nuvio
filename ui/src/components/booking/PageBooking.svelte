@@ -3,7 +3,13 @@
     import PageWrapper from "@/components/base/PageWrapper.svelte";
     import RefreshButton from "@/components/base/RefreshButton.svelte";
     import { pageTitle } from "@/stores/app";
-    import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";
+    import {
+        collections,
+        collectionsLoadError,
+        findCollectionByRequiredNames,
+        hasCollectionsLoaded,
+        isCollectionsLoading,
+    } from "@/stores/collections";
     import { addErrorToast, addSuccessToast } from "@/stores/toasts";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
@@ -101,6 +107,7 @@
     let isLoadingWebsites = false;
     let isLoadingBookingData = false;
     let bookingLoadError = "";
+    let missingBookingCollections = [];
 
     let lastWebsitesCollectionId = "";
     let lastBookingDataKey = "";
@@ -193,18 +200,24 @@
     let bookingRulesFormError = "";
     let isSavingBookingRules = false;
 
-    loadCollections();
-
-    $: websitesCollection = resolveCollectionByAliases(["websites"]);
-    $: bookingServicesCollection = resolveCollectionByAliases(["bookingservices"]);
-    $: bookingAvailabilityCollection = resolveCollectionByAliases(["bookingavailability"]);
-    $: bookingExceptionsCollection = resolveCollectionByAliases(["bookingexceptions"]);
-    $: appointmentsCollection = resolveCollectionByAliases(["appointments"]);
+    $: websitesCollection = resolveCollectionByAliases(["websites", "Websites"]);
+    $: bookingServicesCollection = resolveCollectionByAliases(["BookingServices", "booking_services", "bookingservices"]);
+    $: bookingAvailabilityCollection = resolveCollectionByAliases(["BookingAvailability", "booking_availability", "bookingavailability"]);
+    $: bookingExceptionsCollection = resolveCollectionByAliases(["BookingExceptions", "bookingexceptions"]);
+    $: appointmentsCollection = resolveCollectionByAliases(["Appointments", "appointments"]);
     $: websiteSettingsFieldName = resolveCollectionFieldNameByAliases(websitesCollection, ["settings"]) || "settings";
 
-    $: hasBookingCollections = !!bookingServicesCollection?.id
-        && !!bookingAvailabilityCollection?.id
-        && !!appointmentsCollection?.id;
+    $: missingBookingCollections = [];
+    $: if (!bookingServicesCollection?.name) {
+        missingBookingCollections.push("BookingServices");
+    }
+    $: if (!bookingAvailabilityCollection?.name) {
+        missingBookingCollections.push("BookingAvailability");
+    }
+    $: if (!appointmentsCollection?.name) {
+        missingBookingCollections.push("Appointments");
+    }
+    $: hasBookingCollections = missingBookingCollections.length === 0;
 
     $: appointmentStatusFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentStatusFieldAliases) || "status";
     $: appointmentCustomerNotesFieldName = resolveCollectionFieldNameByAliases(appointmentsCollection, appointmentCustomerNotesFieldAliases) || "notes";
@@ -1421,16 +1434,7 @@
     }
 
     function resolveCollectionByAliases(aliases = []) {
-        const normalizedAliases = aliases.map((alias) => normalizeLower(alias)).filter(Boolean);
-
-        for (const alias of normalizedAliases) {
-            const match = $collections.find((collection) => normalizeLower(collection?.name) === alias);
-            if (match) {
-                return match;
-            }
-        }
-
-        return null;
+        return findCollectionByRequiredNames($collections, aliases);
     }
 
     function resolveCollectionFieldNameByAliases(collection, aliases = []) {
@@ -4162,13 +4166,29 @@
     </section>
 
     <section class="panel booking-body m-b-base">
-        {#if !hasBookingCollections}
+        {#if $isCollectionsLoading || (!$hasCollectionsLoaded && !$collectionsLoadError)}
+            <div class="placeholder-section m-b-0">
+                <span class="loader loader-lg" />
+                <h1>Loading booking data...</h1>
+            </div>
+        {:else if $collectionsLoadError}
+            <div class="alert alert-danger m-b-0">
+                <div class="icon">
+                    <i class="ri-error-warning-line" />
+                </div>
+                <div>
+                    Could not verify Booking collections.<br />
+                    Refresh the page or check your connection.
+                </div>
+            </div>
+        {:else if $hasCollectionsLoaded && !hasBookingCollections}
             <div class="alert alert-warning m-b-0">
                 <div class="icon">
                     <i class="ri-information-line" />
                 </div>
                 <div>
-                    Booking collections were not found. This page expects BookingServices, BookingAvailability, and Appointments.
+                    Booking collections are missing:
+                    <strong>{missingBookingCollections.join(", ")}</strong>.
                 </div>
             </div>
         {:else if !selectedWebsiteId}
@@ -4185,7 +4205,7 @@
                 </div>
                 <div>{bookingLoadError}</div>
             </div>
-        {:else if $isCollectionsLoading || isLoadingBookingData}
+        {:else if isLoadingBookingData}
             <div class="placeholder-section m-b-0">
                 <span class="loader loader-lg" />
                 <h1>Loading booking data...</h1>
