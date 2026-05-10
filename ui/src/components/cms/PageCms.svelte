@@ -39,6 +39,9 @@
     const websiteSettingsAreaIdentitySeoKey = "identity-seo";
     const websiteSettingsAreaFeaturesKey = "features";
     const websiteSettingsFeatureOrder = ["whatsapp", "contactForm", "newsletter", "booking", "reports", "i18n"];
+    const websiteSettingsLeadsFeatureKey = "leads";
+    const websiteSettingsLeadsChannelKeys = ["contactForm", "whatsapp"];
+    const websiteSettingsLeadsHelperText = "Configure how visitors can contact the business and become leads.";
     const websiteSettingsFeatureLabelByKey = {
         whatsapp: "WhatsApp",
         contactForm: "Contact form",
@@ -255,29 +258,68 @@
     $: selectedPage = pages.find((record) => record.id === selectedPageId) || null;
     $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
     $: clientWebsiteSettingsFields = filterClientWebsiteSettingsFields(roleScopedSettingsFields);
-    $: availableWebsiteSettingsFeatures = websiteSettingsFeatureOrder
-        .map((key) => {
-            const isAvailable = websiteSettingsFullDraft?.featureFlags?.[key] !== false;
-            if (!isAvailable) {
-                return null;
+    $: websiteSettingsFieldsByKey = new Map(
+        (clientWebsiteSettingsFields || []).map((field) => [normalizeString(field?.key), field]),
+    );
+    $: availableWebsiteSettingsFeatures = (() => {
+        const isFeatureAvailable = (key) => websiteSettingsFullDraft?.featureFlags?.[key] !== false;
+        const features = [];
+
+        const leadsChannels = websiteSettingsLeadsChannelKeys
+            .map((key) => {
+                if (!isFeatureAvailable(key)) {
+                    return null;
+                }
+
+                const field = websiteSettingsFieldsByKey.get(key) || null;
+                return {
+                    key,
+                    label: field?.label || websiteSettingsFeatureLabelByKey?.[key] || "Channel",
+                    icon: websiteSettingsFeatureIconByKey?.[key] || "ri-settings-3-line",
+                    field,
+                    hasEditableFields: !!field,
+                };
+            })
+            .filter(Boolean);
+
+        if (leadsChannels.length) {
+            features.push({
+                key: websiteSettingsLeadsFeatureKey,
+                label: "Leads",
+                icon: "ri-user-line",
+                field: null,
+                hasEditableFields: leadsChannels.some((channel) => channel.hasEditableFields),
+                groupedFeatures: leadsChannels,
+            });
+        }
+
+        for (const key of websiteSettingsFeatureOrder) {
+            if (websiteSettingsLeadsChannelKeys.includes(key)) {
+                continue;
             }
 
-            const field = (clientWebsiteSettingsFields || []).find((candidate) => `${candidate?.key || ""}` === key) || null;
-            return {
+            if (!isFeatureAvailable(key)) {
+                continue;
+            }
+
+            const field = websiteSettingsFieldsByKey.get(key) || null;
+            features.push({
                 key,
                 label: field?.label || websiteSettingsFeatureLabelByKey?.[key] || "Feature",
                 icon: websiteSettingsFeatureIconByKey?.[key] || "ri-settings-3-line",
                 field,
                 hasEditableFields: !!field,
-            };
-        })
-        .filter(Boolean);
+            });
+        }
+
+        return features;
+    })();
     $: activeWebsiteSettingsFeature = availableWebsiteSettingsFeatures.find(
         (feature) => feature.key === activeWebsiteSettingsFeatureKey,
     ) || null;
     $: activeWebsiteSettingsFeatureField = activeWebsiteSettingsFeature?.field || null;
     $: activeWebsiteSettingsFeatureValue = activeWebsiteSettingsFeatureField
-        ? { [activeWebsiteSettingsFeatureField.key]: structuredClone(websiteSettingsDraft?.[activeWebsiteSettingsFeatureField.key] ?? {}) }
+        ? buildWebsiteSettingsFeatureFormValue(activeWebsiteSettingsFeatureField.key)
         : {};
     $: if (!activeWebsiteSettingsFeatureKey && availableWebsiteSettingsFeatures.length) {
         activeWebsiteSettingsFeatureKey = availableWebsiteSettingsFeatures[0].key;
@@ -2604,6 +2646,17 @@
         });
     }
 
+    function buildWebsiteSettingsFeatureFormValue(featureKey) {
+        const normalizedFeatureKey = normalizeString(featureKey);
+        if (!normalizedFeatureKey) {
+            return {};
+        }
+
+        return {
+            [normalizedFeatureKey]: structuredClone(websiteSettingsDraft?.[normalizedFeatureKey] ?? {}),
+        };
+    }
+
     async function savePageSeo() {
         pageError = "";
 
@@ -4224,7 +4277,40 @@
                                             {/each}
                                         </div>
 
-                                        {#if activeWebsiteSettingsFeatureField}
+                                        {#if activeWebsiteSettingsFeature?.key === websiteSettingsLeadsFeatureKey}
+                                            <div class="settings-form-wrap m-t-sm">
+                                                <div class="settings-subhead">
+                                                    <h6 class="m-0">Leads</h6>
+                                                    <p class="txt-sm txt-hint m-b-0 settings-subhead-helper">{websiteSettingsLeadsHelperText}</p>
+                                                </div>
+
+                                                {#if activeWebsiteSettingsFeature.groupedFeatures?.length}
+                                                    <div class="leads-settings-groups m-t-sm">
+                                                        {#each activeWebsiteSettingsFeature.groupedFeatures as leadChannel}
+                                                            <section class="leads-settings-group">
+                                                                <div class="settings-subhead">
+                                                                    <h6 class="m-0">{leadChannel.label}</h6>
+                                                                </div>
+
+                                                                {#if leadChannel.field}
+                                                                    <SchemaForm
+                                                                        fields={[leadChannel.field]}
+                                                                        value={buildWebsiteSettingsFeatureFormValue(leadChannel.field.key)}
+                                                                        showImport={false}
+                                                                        path={`websites.${selectedWebsiteId}.settings.${leadChannel.field.key}`}
+                                                                        on:change={(event) => handleWebsiteSettingsFeatureGroupChange(leadChannel.field.key, event)}
+                                                                    />
+                                                                {:else}
+                                                                    <p class="txt-sm txt-hint m-b-0">No client-configurable settings are available for this channel yet.</p>
+                                                                {/if}
+                                                            </section>
+                                                        {/each}
+                                                    </div>
+                                                {:else}
+                                                    <p class="txt-sm txt-hint m-b-0 m-t-sm">No lead channels are currently available for this website.</p>
+                                                {/if}
+                                            </div>
+                                        {:else if activeWebsiteSettingsFeatureField}
                                             <div class="settings-form-wrap m-t-sm">
                                                 <SchemaForm
                                                     fields={[activeWebsiteSettingsFeatureField]}
@@ -5125,6 +5211,22 @@
     .settings-subhead-helper {
         flex: 1 1 320px;
         min-width: 220px;
+    }
+
+    .leads-settings-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .leads-settings-group {
+        border-top: 1px solid color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        padding-top: 10px;
+    }
+
+    .leads-settings-group:first-child {
+        border-top: 0;
+        padding-top: 0;
     }
 
     .settings-form-grid {
