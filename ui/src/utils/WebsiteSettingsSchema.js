@@ -142,6 +142,50 @@ export const websiteSettingsSchema = {
                                 editableBy: [ROLE_ADMIN, ROLE_CLIENT],
                             },
                         },
+                        {
+                            key: "template",
+                            label: "Business notification template",
+                            type: "object",
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            hint: "Customize operational emails sent to your team when new WhatsApp interactions are tracked.",
+                            fields: [
+                                {
+                                    key: "enabled",
+                                    label: "Enable custom template",
+                                    type: "bool",
+                                    default: false,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "subject",
+                                    label: "Subject",
+                                    type: "text",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "introText",
+                                    label: "Intro text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "includeLeadDetails",
+                                    label: "Include lead details",
+                                    type: "bool",
+                                    default: true,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "footerText",
+                                    label: "Footer text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                            ],
+                        },
                     ],
                 },
             ],
@@ -1026,6 +1070,7 @@ function normalizeContactFormSettings(contactFormSettings) {
 
 function normalizeWhatsappSettings(whatsappSettings) {
     const source = isPlainObject(whatsappSettings) ? whatsappSettings : {};
+    const normalizedEmailNotifications = normalizeEmailNotifications(source.emailNotifications);
 
     return {
         ...source,
@@ -1033,7 +1078,12 @@ function normalizeWhatsappSettings(whatsappSettings) {
         phone: typeof source.phone === "string" ? source.phone.trim() : "",
         defaultMessage: typeof source.defaultMessage === "string" ? source.defaultMessage : "",
         showFloatingButton: !!source.showFloatingButton,
-        emailNotifications: normalizeEmailNotifications(source.emailNotifications),
+        emailNotifications: {
+            ...normalizedEmailNotifications,
+            template: normalizeContactFormNotificationTemplateSettings(
+                normalizedEmailNotifications.template,
+            ),
+        },
     };
 }
 

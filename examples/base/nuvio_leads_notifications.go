@@ -42,12 +42,13 @@ type nuvioWebsiteContactFormConfig struct {
 }
 
 type nuvioWebsiteWhatsappConfig struct {
-	FeatureAvailable   bool
-	Enabled            bool
-	Phone              string
-	DefaultMessage     string
-	ShowFloatingButton bool
-	EmailNotifications nuvioEmailNotificationsConfig
+	FeatureAvailable             bool
+	Enabled                      bool
+	Phone                        string
+	DefaultMessage               string
+	ShowFloatingButton           bool
+	EmailNotifications           nuvioEmailNotificationsConfig
+	BusinessNotificationTemplate nuvioContactNotificationTemplateConfig
 }
 
 type nuvioContactSubmissionPayload struct {
@@ -334,6 +335,13 @@ func loadNuvioWebsiteWhatsappConfig(
 			To:      []string{},
 			Cc:      []string{},
 		},
+		BusinessNotificationTemplate: nuvioContactNotificationTemplateConfig{
+			Enabled:            false,
+			Subject:            "",
+			IntroText:          "",
+			FooterText:         "",
+			IncludeLeadDetails: true,
+		},
 	}
 
 	if featureFlags, ok := toStringAnyMap(settings["featureFlags"]); ok {
@@ -357,6 +365,12 @@ func loadNuvioWebsiteWhatsappConfig(
 			whatsappSettings["emailNotifications"],
 			"",
 		)
+
+		if emailNotificationsSettings, ok := toStringAnyMap(whatsappSettings["emailNotifications"]); ok {
+			config.BusinessNotificationTemplate = parseNuvioContactNotificationTemplateConfig(
+				emailNotificationsSettings["template"],
+			)
+		}
 	}
 
 	return website, config, nil
@@ -687,6 +701,128 @@ func buildNuvioContactNotificationTemplateEmail(
 	return subject, body, true
 }
 
+func buildNuvioDefaultWhatsappNotificationEmail(
+	websiteName string,
+	payload nuvioWhatsappInteractionPayload,
+	submittedAt time.Time,
+) (string, string) {
+	subject := "New WhatsApp interaction"
+	if websiteName != "" {
+		subject = fmt.Sprintf("%s - %s", subject, websiteName)
+	}
+
+	textBodyLines := []string{
+		fmt.Sprintf("Website: %s", websiteName),
+		fmt.Sprintf("Tracked at: %s", submittedAt.Format(time.RFC3339)),
+		fmt.Sprintf("Source: %s", strings.TrimSpace(payload.Source)),
+		fmt.Sprintf("Page: %s", strings.TrimSpace(payload.Page)),
+	}
+
+	return subject, strings.Join(textBodyLines, "\n")
+}
+
+func buildNuvioWhatsappTemplateVariables(
+	websiteName string,
+	submittedAt time.Time,
+	config nuvioWebsiteWhatsappConfig,
+	payload nuvioWhatsappInteractionPayload,
+) map[string]string {
+	displayWebsiteName := strings.TrimSpace(websiteName)
+	if displayWebsiteName == "" {
+		displayWebsiteName = "Website"
+	}
+
+	return map[string]string{
+		"websiteName":    displayWebsiteName,
+		"submittedAt":    submittedAt.Format(time.RFC3339),
+		"leadSource":     "WhatsApp",
+		"source":         sanitizeNuvioTemplateSingleLineValue(payload.Source, "Not provided"),
+		"pageUrl":        sanitizeNuvioTemplateSingleLineValue(payload.Page, "Not provided"),
+		"whatsappPhone":  sanitizeNuvioTemplateSingleLineValue(config.Phone, "Not configured"),
+		"defaultMessage": sanitizeNuvioTemplateMultilineValue(config.DefaultMessage, "Not configured"),
+	}
+}
+
+func replaceNuvioWhatsappTemplateVariables(raw string, values map[string]string) string {
+	replacer := strings.NewReplacer(
+		"{{websiteName}}", values["websiteName"],
+		"{{submittedAt}}", values["submittedAt"],
+		"{{leadSource}}", values["leadSource"],
+		"{{source}}", values["source"],
+		"{{pageUrl}}", values["pageUrl"],
+		"{{whatsappPhone}}", values["whatsappPhone"],
+		"{{defaultMessage}}", values["defaultMessage"],
+	)
+
+	return replacer.Replace(raw)
+}
+
+func buildNuvioWhatsappTemplateBodyDetails(values map[string]string) string {
+	lines := []string{
+		fmt.Sprintf("Website: %s", values["websiteName"]),
+		fmt.Sprintf("Tracked at: %s", values["submittedAt"]),
+		fmt.Sprintf("Lead source: %s", values["leadSource"]),
+		fmt.Sprintf("Source: %s", values["source"]),
+		fmt.Sprintf("Page URL: %s", values["pageUrl"]),
+		fmt.Sprintf("WhatsApp phone: %s", values["whatsappPhone"]),
+		"",
+		"Default message:",
+		values["defaultMessage"],
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func buildNuvioWhatsappNotificationTemplateEmail(
+	config nuvioContactNotificationTemplateConfig,
+	websiteName string,
+	submittedAt time.Time,
+	whatsappConfig nuvioWebsiteWhatsappConfig,
+	payload nuvioWhatsappInteractionPayload,
+) (string, string, bool) {
+	if !config.Enabled {
+		return "", "", false
+	}
+
+	values := buildNuvioWhatsappTemplateVariables(websiteName, submittedAt, whatsappConfig, payload)
+	subject := sanitizeNuvioTemplateSubject(
+		replaceNuvioWhatsappTemplateVariables(config.Subject, values),
+	)
+	if subject == "" {
+		return "", "", false
+	}
+
+	sections := []string{}
+
+	introText := sanitizeNuvioTemplateText(
+		replaceNuvioWhatsappTemplateVariables(config.IntroText, values),
+	)
+	if introText != "" {
+		sections = append(sections, introText)
+	}
+
+	if config.IncludeLeadDetails {
+		detailsText := sanitizeNuvioTemplateText(buildNuvioWhatsappTemplateBodyDetails(values))
+		if detailsText != "" {
+			sections = append(sections, detailsText)
+		}
+	}
+
+	footerText := sanitizeNuvioTemplateText(
+		replaceNuvioWhatsappTemplateVariables(config.FooterText, values),
+	)
+	if footerText != "" {
+		sections = append(sections, footerText)
+	}
+
+	body := strings.TrimSpace(strings.Join(sections, "\n\n"))
+	if body == "" {
+		return "", "", false
+	}
+
+	return subject, body, true
+}
+
 func maybeSendNuvioContactNotificationEmail(
 	ctx context.Context,
 	website *core.Record,
@@ -748,23 +884,24 @@ func maybeSendNuvioWhatsappNotificationEmail(
 	}
 
 	websiteName := resolveWebsiteDisplayName(website)
-	subject := "New WhatsApp interaction"
-	if websiteName != "" {
-		subject = fmt.Sprintf("%s - %s", subject, websiteName)
-	}
-
-	textBodyLines := []string{
-		fmt.Sprintf("Website: %s", websiteName),
-		fmt.Sprintf("Tracked at: %s", time.Now().UTC().Format(time.RFC3339)),
-		fmt.Sprintf("Source: %s", strings.TrimSpace(payload.Source)),
-		fmt.Sprintf("Page: %s", strings.TrimSpace(payload.Page)),
+	submittedAt := time.Now().UTC()
+	subject, textBody := buildNuvioDefaultWhatsappNotificationEmail(websiteName, payload, submittedAt)
+	if templateSubject, templateBody, ok := buildNuvioWhatsappNotificationTemplateEmail(
+		config.BusinessNotificationTemplate,
+		websiteName,
+		submittedAt,
+		config,
+		payload,
+	); ok {
+		subject = templateSubject
+		textBody = templateBody
 	}
 
 	return sendNuvioTransactionalEmailViaResend(ctx, resendConfig, nuvioTransactionalEmailMessage{
 		To:      config.EmailNotifications.To,
 		Cc:      config.EmailNotifications.Cc,
 		Subject: subject,
-		Text:    strings.Join(textBodyLines, "\n"),
+		Text:    textBody,
 	})
 }
 
