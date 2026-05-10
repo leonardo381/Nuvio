@@ -14,6 +14,8 @@ const (
 	nuvioContactsCollectionID  = "pbc_1661203100"
 	nuvioWhatsappCollectionID  = "pbc_1661203200"
 	nuvioDefaultReplyToMaxSize = 1
+	nuvioTemplateSubjectMaxLen = 160
+	nuvioTemplateTextMaxLen    = 4000
 )
 
 type nuvioEmailNotificationsConfig struct {
@@ -22,12 +24,21 @@ type nuvioEmailNotificationsConfig struct {
 	Cc      []string
 }
 
+type nuvioContactNotificationTemplateConfig struct {
+	Enabled            bool
+	Subject            string
+	IntroText          string
+	FooterText         string
+	IncludeLeadDetails bool
+}
+
 type nuvioWebsiteContactFormConfig struct {
-	FeatureAvailable    bool
-	Enabled             bool
-	PhoneFieldEnabled   bool
-	ConfirmationMessage string
-	EmailNotifications  nuvioEmailNotificationsConfig
+	FeatureAvailable             bool
+	Enabled                      bool
+	PhoneFieldEnabled            bool
+	ConfirmationMessage          string
+	EmailNotifications           nuvioEmailNotificationsConfig
+	BusinessNotificationTemplate nuvioContactNotificationTemplateConfig
 }
 
 type nuvioWebsiteWhatsappConfig struct {
@@ -258,6 +269,13 @@ func loadNuvioWebsiteContactFormConfig(
 			To:      []string{},
 			Cc:      []string{},
 		},
+		BusinessNotificationTemplate: nuvioContactNotificationTemplateConfig{
+			Enabled:            false,
+			Subject:            "",
+			IntroText:          "",
+			FooterText:         "",
+			IncludeLeadDetails: true,
+		},
 	}
 
 	if featureFlags, ok := toStringAnyMap(settings["featureFlags"]); ok {
@@ -284,6 +302,12 @@ func loadNuvioWebsiteContactFormConfig(
 			contactFormSettings["emailNotifications"],
 			legacyDestination,
 		)
+
+		if emailNotificationsSettings, ok := toStringAnyMap(contactFormSettings["emailNotifications"]); ok {
+			config.BusinessNotificationTemplate = parseNuvioContactNotificationTemplateConfig(
+				emailNotificationsSettings["template"],
+			)
+		}
 	}
 
 	return website, config, nil
@@ -369,6 +393,43 @@ func parseNuvioEmailNotificationsConfig(raw any, legacyTo string) nuvioEmailNoti
 	return config
 }
 
+func parseNuvioContactNotificationTemplateConfig(raw any) nuvioContactNotificationTemplateConfig {
+	config := nuvioContactNotificationTemplateConfig{
+		Enabled:            false,
+		Subject:            "",
+		IntroText:          "",
+		FooterText:         "",
+		IncludeLeadDetails: true,
+	}
+
+	settings, ok := toStringAnyMap(raw)
+	if !ok {
+		return config
+	}
+
+	if value, ok := parseBoolValue(settings["enabled"]); ok {
+		config.Enabled = value
+	}
+
+	if value, ok := settings["subject"].(string); ok && value != "" {
+		config.Subject = value
+	}
+
+	if value, ok := settings["introText"].(string); ok && value != "" {
+		config.IntroText = value
+	}
+
+	if value, ok := settings["footerText"].(string); ok && value != "" {
+		config.FooterText = value
+	}
+
+	if value, ok := parseBoolValue(settings["includeLeadDetails"]); ok {
+		config.IncludeLeadDetails = value
+	}
+
+	return config
+}
+
 func parseNuvioEmailList(raw any) []string {
 	normalized := []string{}
 	seen := map[string]struct{}{}
@@ -440,6 +501,192 @@ func splitNuvioEmailString(raw string) []string {
 	return result
 }
 
+func buildNuvioDefaultContactNotificationEmail(
+	websiteName string,
+	payload nuvioContactSubmissionPayload,
+	submittedAt time.Time,
+) (string, string) {
+	subjectPrefix := strings.TrimSpace(payload.Subject)
+	if subjectPrefix == "" {
+		subjectPrefix = "New contact form submission"
+	}
+
+	subject := subjectPrefix
+	if websiteName != "" {
+		subject = fmt.Sprintf("%s - %s", subjectPrefix, websiteName)
+	}
+
+	textBodyLines := []string{
+		fmt.Sprintf("Website: %s", websiteName),
+		fmt.Sprintf("Submitted at: %s", submittedAt.Format(time.RFC3339)),
+		fmt.Sprintf("Name: %s", strings.TrimSpace(payload.Name)),
+		fmt.Sprintf("Email: %s", strings.TrimSpace(payload.Email)),
+	}
+
+	trimmedPhone := strings.TrimSpace(payload.Phone)
+	if trimmedPhone != "" {
+		textBodyLines = append(textBodyLines, fmt.Sprintf("Phone: %s", trimmedPhone))
+	}
+
+	trimmedSubject := strings.TrimSpace(payload.Subject)
+	if trimmedSubject != "" {
+		textBodyLines = append(textBodyLines, fmt.Sprintf("Subject: %s", trimmedSubject))
+	}
+
+	textBodyLines = append(textBodyLines, "", "Message:", strings.TrimSpace(payload.Message))
+	return subject, strings.Join(textBodyLines, "\n")
+}
+
+func sanitizeNuvioTemplateSubject(raw string) string {
+	normalized := strings.NewReplacer("\r", " ", "\n", " ").Replace(raw)
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	normalized = strings.TrimSpace(normalized)
+	return truncateNuvioStringByRunes(normalized, nuvioTemplateSubjectMaxLen)
+}
+
+func sanitizeNuvioTemplateText(raw string) string {
+	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = strings.TrimSpace(normalized)
+	return truncateNuvioStringByRunes(normalized, nuvioTemplateTextMaxLen)
+}
+
+func truncateNuvioStringByRunes(raw string, maxLen int) string {
+	if maxLen <= 0 || raw == "" {
+		return ""
+	}
+
+	runes := []rune(raw)
+	if len(runes) <= maxLen {
+		return raw
+	}
+
+	return string(runes[:maxLen])
+}
+
+func sanitizeNuvioTemplateSingleLineValue(raw string, fallback string) string {
+	normalized := strings.NewReplacer("\r", " ", "\n", " ").Replace(raw)
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" {
+		return fallback
+	}
+	return normalized
+}
+
+func sanitizeNuvioTemplateMultilineValue(raw string, fallback string) string {
+	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" {
+		return fallback
+	}
+	return normalized
+}
+
+func buildNuvioContactTemplateVariables(
+	websiteName string,
+	submittedAt time.Time,
+	payload nuvioContactSubmissionPayload,
+) map[string]string {
+	displayWebsiteName := strings.TrimSpace(websiteName)
+	if displayWebsiteName == "" {
+		displayWebsiteName = "Website"
+	}
+
+	return map[string]string{
+		"websiteName": displayWebsiteName,
+		"submittedAt": submittedAt.Format(time.RFC3339),
+		"leadSource":  "Contact form",
+		"leadName":    sanitizeNuvioTemplateSingleLineValue(payload.Name, "Not provided"),
+		"leadEmail":   sanitizeNuvioTemplateSingleLineValue(payload.Email, "Not provided"),
+		"leadPhone":   sanitizeNuvioTemplateSingleLineValue(payload.Phone, "Not provided"),
+		"leadSubject": sanitizeNuvioTemplateSingleLineValue(payload.Subject, "Not provided"),
+		"leadMessage": sanitizeNuvioTemplateMultilineValue(payload.Message, "Not provided"),
+	}
+}
+
+func replaceNuvioContactTemplateVariables(raw string, values map[string]string) string {
+	replacer := strings.NewReplacer(
+		"{{websiteName}}", values["websiteName"],
+		"{{submittedAt}}", values["submittedAt"],
+		"{{leadSource}}", values["leadSource"],
+		"{{leadName}}", values["leadName"],
+		"{{leadEmail}}", values["leadEmail"],
+		"{{leadPhone}}", values["leadPhone"],
+		"{{leadSubject}}", values["leadSubject"],
+		"{{leadMessage}}", values["leadMessage"],
+	)
+
+	return replacer.Replace(raw)
+}
+
+func buildNuvioContactTemplateBodyDetails(values map[string]string) string {
+	lines := []string{
+		fmt.Sprintf("Website: %s", values["websiteName"]),
+		fmt.Sprintf("Submitted at: %s", values["submittedAt"]),
+		fmt.Sprintf("Lead source: %s", values["leadSource"]),
+		fmt.Sprintf("Name: %s", values["leadName"]),
+		fmt.Sprintf("Email: %s", values["leadEmail"]),
+		fmt.Sprintf("Phone: %s", values["leadPhone"]),
+		fmt.Sprintf("Subject: %s", values["leadSubject"]),
+		"",
+		"Message:",
+		values["leadMessage"],
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func buildNuvioContactNotificationTemplateEmail(
+	config nuvioContactNotificationTemplateConfig,
+	websiteName string,
+	submittedAt time.Time,
+	payload nuvioContactSubmissionPayload,
+) (string, string, bool) {
+	if !config.Enabled {
+		return "", "", false
+	}
+
+	values := buildNuvioContactTemplateVariables(websiteName, submittedAt, payload)
+	subject := sanitizeNuvioTemplateSubject(
+		replaceNuvioContactTemplateVariables(config.Subject, values),
+	)
+	if subject == "" {
+		return "", "", false
+	}
+
+	sections := []string{}
+
+	introText := sanitizeNuvioTemplateText(
+		replaceNuvioContactTemplateVariables(config.IntroText, values),
+	)
+	if introText != "" {
+		sections = append(sections, introText)
+	}
+
+	if config.IncludeLeadDetails {
+		detailsText := sanitizeNuvioTemplateText(buildNuvioContactTemplateBodyDetails(values))
+		if detailsText != "" {
+			sections = append(sections, detailsText)
+		}
+	}
+
+	footerText := sanitizeNuvioTemplateText(
+		replaceNuvioContactTemplateVariables(config.FooterText, values),
+	)
+	if footerText != "" {
+		sections = append(sections, footerText)
+	}
+
+	body := strings.TrimSpace(strings.Join(sections, "\n\n"))
+	if body == "" {
+		return "", "", false
+	}
+
+	return subject, body, true
+}
+
 func maybeSendNuvioContactNotificationEmail(
 	ctx context.Context,
 	website *core.Record,
@@ -456,34 +703,17 @@ func maybeSendNuvioContactNotificationEmail(
 	}
 
 	websiteName := resolveWebsiteDisplayName(website)
-	subjectPrefix := strings.TrimSpace(payload.Subject)
-	if subjectPrefix == "" {
-		subjectPrefix = "New contact form submission"
+	submittedAt := time.Now().UTC()
+	subject, textBody := buildNuvioDefaultContactNotificationEmail(websiteName, payload, submittedAt)
+	if templateSubject, templateBody, ok := buildNuvioContactNotificationTemplateEmail(
+		config.BusinessNotificationTemplate,
+		websiteName,
+		submittedAt,
+		payload,
+	); ok {
+		subject = templateSubject
+		textBody = templateBody
 	}
-
-	subject := subjectPrefix
-	if websiteName != "" {
-		subject = fmt.Sprintf("%s - %s", subjectPrefix, websiteName)
-	}
-
-	textBodyLines := []string{
-		fmt.Sprintf("Website: %s", websiteName),
-		fmt.Sprintf("Submitted at: %s", time.Now().UTC().Format(time.RFC3339)),
-		fmt.Sprintf("Name: %s", strings.TrimSpace(payload.Name)),
-		fmt.Sprintf("Email: %s", strings.TrimSpace(payload.Email)),
-	}
-
-	trimmedPhone := strings.TrimSpace(payload.Phone)
-	if trimmedPhone != "" {
-		textBodyLines = append(textBodyLines, fmt.Sprintf("Phone: %s", trimmedPhone))
-	}
-
-	trimmedSubject := strings.TrimSpace(payload.Subject)
-	if trimmedSubject != "" {
-		textBodyLines = append(textBodyLines, fmt.Sprintf("Subject: %s", trimmedSubject))
-	}
-
-	textBodyLines = append(textBodyLines, "", "Message:", strings.TrimSpace(payload.Message))
 
 	replyTo := []string{}
 	if normalizedReplyTo, ok := normalizeNuvioEmail(payload.Email); ok {
@@ -498,7 +728,7 @@ func maybeSendNuvioContactNotificationEmail(
 		Cc:      config.EmailNotifications.Cc,
 		ReplyTo: replyTo,
 		Subject: subject,
-		Text:    strings.Join(textBodyLines, "\n"),
+		Text:    textBody,
 	})
 }
 

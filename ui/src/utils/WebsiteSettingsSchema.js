@@ -200,6 +200,50 @@ export const websiteSettingsSchema = {
                                 editableBy: [ROLE_ADMIN, ROLE_CLIENT],
                             },
                         },
+                        {
+                            key: "template",
+                            label: "Business notification template",
+                            type: "object",
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            hint: "Customize operational emails sent to your team when new contact form leads arrive.",
+                            fields: [
+                                {
+                                    key: "enabled",
+                                    label: "Enable custom template",
+                                    type: "bool",
+                                    default: false,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "subject",
+                                    label: "Subject",
+                                    type: "text",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "introText",
+                                    label: "Intro text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "includeLeadDetails",
+                                    label: "Include lead details",
+                                    type: "bool",
+                                    default: true,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "footerText",
+                                    label: "Footer text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                            ],
+                        },
                     ],
                 },
                 {
@@ -942,8 +986,25 @@ function normalizeBookingRules(rulesSettings) {
     };
 }
 
+function normalizeContactFormNotificationTemplateSettings(templateSettings) {
+    const source = isPlainObject(templateSettings) ? templateSettings : {};
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        subject: typeof source.subject === "string" ? source.subject : "",
+        introText: typeof source.introText === "string" ? source.introText : "",
+        includeLeadDetails:
+            typeof source.includeLeadDetails === "boolean" ? source.includeLeadDetails : true,
+        footerText: typeof source.footerText === "string" ? source.footerText : "",
+    };
+}
+
 function normalizeContactFormSettings(contactFormSettings) {
     const source = isPlainObject(contactFormSettings) ? contactFormSettings : {};
+    const normalizedEmailNotifications = normalizeEmailNotifications(source.emailNotifications, {
+        legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
+    });
 
     return {
         ...source,
@@ -954,9 +1015,12 @@ function normalizeContactFormSettings(contactFormSettings) {
             ...(isPlainObject(source.fields) ? source.fields : {}),
             phone: !!source?.fields?.phone,
         },
-        emailNotifications: normalizeEmailNotifications(source.emailNotifications, {
-            legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
-        }),
+        emailNotifications: {
+            ...normalizedEmailNotifications,
+            template: normalizeContactFormNotificationTemplateSettings(
+                normalizedEmailNotifications.template,
+            ),
+        },
     };
 }
 
