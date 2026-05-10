@@ -494,6 +494,169 @@ export const websiteSettingsSchema = {
                                 editableBy: [ROLE_ADMIN, ROLE_CLIENT],
                             },
                         },
+                        {
+                            key: "businessTemplate",
+                            label: "Business notification template",
+                            type: "object",
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            hint: "Customize operational emails sent to your team when new booking requests arrive.",
+                            fields: [
+                                {
+                                    key: "enabled",
+                                    label: "Enable custom template",
+                                    type: "bool",
+                                    default: false,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "subject",
+                                    label: "Subject",
+                                    type: "text",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "introText",
+                                    label: "Intro text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "includeAppointmentDetails",
+                                    label: "Include appointment details",
+                                    type: "bool",
+                                    default: true,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "footerText",
+                                    label: "Footer text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                {
+                    key: "visitorEmails",
+                    label: "Visitor emails",
+                    type: "object",
+                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                    fields: [
+                        {
+                            key: "requestTemplate",
+                            label: "Visitor request email",
+                            type: "object",
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            hint: "Customize the email visitors receive after sending a booking request.",
+                            fields: [
+                                {
+                                    key: "enabled",
+                                    label: "Enable custom template",
+                                    type: "bool",
+                                    default: false,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "subject",
+                                    label: "Subject",
+                                    type: "text",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "introText",
+                                    label: "Intro text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "footerText",
+                                    label: "Footer text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                            ],
+                        },
+                        {
+                            key: "confirmationTemplate",
+                            label: "Visitor confirmation email",
+                            type: "object",
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            hint: "Customize the email visitors receive when an appointment is confirmed.",
+                            fields: [
+                                {
+                                    key: "enabled",
+                                    label: "Enable custom template",
+                                    type: "bool",
+                                    default: false,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "subject",
+                                    label: "Subject",
+                                    type: "text",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "introText",
+                                    label: "Intro text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "footerText",
+                                    label: "Footer text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                            ],
+                        },
+                        {
+                            key: "rescheduleTemplate",
+                            label: "Visitor reschedule email",
+                            type: "object",
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            hint: "Customize the email visitors receive when an appointment is rescheduled.",
+                            fields: [
+                                {
+                                    key: "enabled",
+                                    label: "Enable custom template",
+                                    type: "bool",
+                                    default: false,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "subject",
+                                    label: "Subject",
+                                    type: "text",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "introText",
+                                    label: "Intro text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "footerText",
+                                    label: "Footer text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                            ],
+                        },
                     ],
                 },
                 {
@@ -1044,6 +1207,34 @@ function normalizeContactFormNotificationTemplateSettings(templateSettings) {
     };
 }
 
+function normalizeBookingBusinessTemplateSettings(templateSettings) {
+    const source = isPlainObject(templateSettings) ? templateSettings : {};
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        subject: typeof source.subject === "string" ? source.subject : "",
+        introText: typeof source.introText === "string" ? source.introText : "",
+        includeAppointmentDetails:
+            typeof source.includeAppointmentDetails === "boolean"
+                ? source.includeAppointmentDetails
+                : true,
+        footerText: typeof source.footerText === "string" ? source.footerText : "",
+    };
+}
+
+function normalizeBookingVisitorTemplateSettings(templateSettings) {
+    const source = isPlainObject(templateSettings) ? templateSettings : {};
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        subject: typeof source.subject === "string" ? source.subject : "",
+        introText: typeof source.introText === "string" ? source.introText : "",
+        footerText: typeof source.footerText === "string" ? source.footerText : "",
+    };
+}
+
 function normalizeContactFormSettings(contactFormSettings) {
     const source = isPlainObject(contactFormSettings) ? contactFormSettings : {};
     const normalizedEmailNotifications = normalizeEmailNotifications(source.emailNotifications, {
@@ -1089,14 +1280,29 @@ function normalizeWhatsappSettings(whatsappSettings) {
 
 function normalizeBookingSettings(bookingSettings) {
     const source = isPlainObject(bookingSettings) ? bookingSettings : {};
+    const normalizedEmailNotifications = normalizeEmailNotifications(source.emailNotifications, {
+        legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
+    });
+    const visitorEmails = isPlainObject(source.visitorEmails) ? source.visitorEmails : {};
 
     return {
         ...source,
         enabled: typeof source.enabled === "boolean" ? source.enabled : true,
         confirmationMode: normalizeBookingConfirmationMode(source.confirmationMode),
-        emailNotifications: normalizeEmailNotifications(source.emailNotifications, {
-            legacyDestination: typeof source.emailDestination === "string" ? source.emailDestination : "",
-        }),
+        emailNotifications: {
+            ...normalizedEmailNotifications,
+            businessTemplate: normalizeBookingBusinessTemplateSettings(
+                normalizedEmailNotifications.businessTemplate,
+            ),
+        },
+        visitorEmails: {
+            ...visitorEmails,
+            requestTemplate: normalizeBookingVisitorTemplateSettings(visitorEmails.requestTemplate),
+            confirmationTemplate: normalizeBookingVisitorTemplateSettings(
+                visitorEmails.confirmationTemplate,
+            ),
+            rescheduleTemplate: normalizeBookingVisitorTemplateSettings(visitorEmails.rescheduleTemplate),
+        },
         rules: normalizeBookingRules(source.rules),
     };
 }
