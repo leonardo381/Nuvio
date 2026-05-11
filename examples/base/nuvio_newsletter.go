@@ -166,9 +166,10 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 		}
 
 		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
+		confirmPath := buildNuvioNewsletterConfirmPath(website)
 		confirmURL, err := buildNuvioNewsletterLifecycleURL(
 			baseURL,
-			"/api/nuvio/newsletter/confirm",
+			confirmPath,
 			rawToken,
 		)
 		if err != nil {
@@ -725,6 +726,19 @@ func normalizeNuvioNewsletterBaseURL(raw string) string {
 	parsed.RawPath = ""
 
 	return parsed.String()
+}
+
+func buildNuvioNewsletterConfirmPath(website *core.Record) string {
+	if website == nil {
+		return "/api/nuvio/newsletter/confirm"
+	}
+
+	slug := strings.TrimSpace(website.GetString("slug"))
+	if slug == "" {
+		return "/api/nuvio/newsletter/confirm"
+	}
+
+	return "/site/" + url.PathEscape(slug) + "/newsletter/confirm"
 }
 
 func buildNuvioNewsletterLifecycleURL(baseURL string, path string, rawToken string) (string, error) {
