@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -39,6 +40,23 @@ type resendSendEmailAttachment struct {
 
 type resendSendEmailResponse struct {
 	ID string `json:"id"`
+}
+
+type resendBatchSendEmailResponse struct {
+	Data   []resendSendEmailResponse     `json:"data"`
+	Errors []resendBatchSendEmailFailure `json:"errors"`
+}
+
+type resendBatchSendEmailFailure struct {
+	Index   int    `json:"index"`
+	Message string `json:"message"`
+}
+
+type nuvioBatchSendResult struct {
+	SentCount       int
+	FailedCount     int
+	FailedIndexes   []int
+	AmbiguousResult bool
 }
 
 type nuvioResendConfig struct {
@@ -198,6 +216,189 @@ func sendNuvioTransactionalEmailViaResend(
 	}
 
 	return nil
+}
+
+func sendNuvioTransactionalEmailBatchViaResend(
+	ctx context.Context,
+	config nuvioResendConfig,
+	messages []nuvioTransactionalEmailMessage,
+) (nuvioBatchSendResult, error) {
+	result := nuvioBatchSendResult{}
+
+	if len(messages) == 0 {
+		return result, fmt.Errorf("Email batch is empty")
+	}
+
+	requestPayload := make([]resendSendEmailRequest, 0, len(messages))
+	for i, message := range messages {
+		subject := strings.TrimSpace(message.Subject)
+		if subject == "" {
+			return result, fmt.Errorf("Email subject is required for batch item %d", i+1)
+		}
+
+		if len(message.To) == 0 && len(message.Bcc) == 0 {
+			return result, fmt.Errorf("Email recipients are required for batch item %d", i+1)
+		}
+
+		item := resendSendEmailRequest{
+			From:    strings.TrimSpace(config.From),
+			To:      message.To,
+			Cc:      message.Cc,
+			Bcc:     message.Bcc,
+			ReplyTo: message.ReplyTo,
+			Subject: subject,
+		}
+
+		htmlBody := strings.TrimSpace(message.HTML)
+		textBody := strings.TrimSpace(message.Text)
+		if htmlBody == "" && textBody == "" {
+			return result, fmt.Errorf("Email body is required for batch item %d", i+1)
+		}
+
+		if htmlBody != "" {
+			item.Html = htmlBody
+		}
+		if textBody != "" {
+			item.Text = textBody
+		}
+
+		if len(message.Attachments) > 0 {
+			return result, fmt.Errorf("Email attachments are not supported in batch item %d", i+1)
+		}
+
+		requestPayload = append(requestPayload, item)
+	}
+
+	rawPayload, err := json.Marshal(requestPayload)
+	if err != nil {
+		return result, fmt.Errorf("Failed to encode Resend batch payload: %w", err)
+	}
+
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		"https://api.resend.com/emails/batch",
+		bytes.NewBuffer(rawPayload),
+	)
+	if err != nil {
+		return result, fmt.Errorf("Failed to build Resend batch request: %w", err)
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(config.APIKey))
+
+	response, err := nuvioEmailHTTPClient.Do(request)
+	if err != nil {
+		return result, fmt.Errorf("Failed to send batch email via Resend: %w", err)
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	if err != nil {
+		return result, fmt.Errorf("Failed reading Resend batch response: %w", err)
+	}
+
+	if response.StatusCode >= 400 {
+		message := strings.TrimSpace(string(responseBody))
+
+		parsed := map[string]any{}
+		if err := json.Unmarshal(responseBody, &parsed); err == nil {
+			if parsedMessage, ok := parsed["message"].(string); ok && strings.TrimSpace(parsedMessage) != "" {
+				message = strings.TrimSpace(parsedMessage)
+			}
+		}
+
+		if message == "" {
+			message = "Unknown Resend error"
+		}
+
+		return result, fmt.Errorf("Resend rejected batch email send (%d): %s", response.StatusCode, message)
+	}
+
+	decoded := resendBatchSendEmailResponse{}
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		return result, fmt.Errorf("Failed to decode Resend batch success response: %w", err)
+	}
+
+	failedIndexesSet := map[int]struct{}{}
+	invalidIndexedErrorsCount := 0
+	for _, item := range decoded.Errors {
+		if strings.TrimSpace(item.Message) == "" {
+			continue
+		}
+		if item.Index >= 0 && item.Index < len(messages) {
+			failedIndexesSet[item.Index] = struct{}{}
+		} else {
+			result.AmbiguousResult = true
+			invalidIndexedErrorsCount++
+		}
+	}
+
+	if len(failedIndexesSet) > 0 {
+		result.FailedIndexes = make([]int, 0, len(failedIndexesSet))
+		for idx := range failedIndexesSet {
+			result.FailedIndexes = append(result.FailedIndexes, idx)
+		}
+		sort.Ints(result.FailedIndexes)
+		result.FailedCount = len(result.FailedIndexes)
+		result.SentCount = len(messages) - result.FailedCount
+
+		if len(decoded.Data) > 0 && len(decoded.Data) != result.SentCount {
+			result.AmbiguousResult = true
+			result.SentCount = 0
+			result.FailedCount = len(messages)
+			result.FailedIndexes = nil
+			return result, nil
+		}
+
+		if invalidIndexedErrorsCount > 0 {
+			result.AmbiguousResult = true
+			result.SentCount = 0
+			result.FailedCount = len(messages)
+			result.FailedIndexes = nil
+		}
+
+		return result, nil
+	}
+
+	if invalidIndexedErrorsCount > 0 {
+		result.SentCount = 0
+		result.FailedCount = len(messages)
+		result.AmbiguousResult = true
+		return result, nil
+	}
+
+	if len(decoded.Data) == 0 {
+		result.SentCount = 0
+		result.FailedCount = len(messages)
+		result.AmbiguousResult = true
+		return result, nil
+	}
+
+	sentIDsCount := 0
+	for _, item := range decoded.Data {
+		if strings.TrimSpace(item.ID) != "" {
+			sentIDsCount++
+		}
+	}
+
+	if sentIDsCount == 0 {
+		result.SentCount = 0
+		result.FailedCount = len(messages)
+		result.AmbiguousResult = true
+		return result, nil
+	}
+
+	if sentIDsCount != len(messages) {
+		result.SentCount = 0
+		result.FailedCount = len(messages)
+		result.AmbiguousResult = true
+		return result, nil
+	}
+
+	result.SentCount = len(messages)
+	result.FailedCount = 0
+	return result, nil
 }
 
 func buildNuvioResendAttachments(

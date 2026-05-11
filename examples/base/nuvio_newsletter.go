@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -33,6 +34,7 @@ const (
 	nuvioNewsletterMaxSubscriberScan  = 5000
 	nuvioNewsletterMaxNameLen         = 200
 	nuvioNewsletterPublicBaseURLEnv   = "NUVIO_PUBLIC_BASE_URL"
+	nuvioNewsletterCampaignBatchSize  = 100
 )
 
 type nuvioWebsiteNewsletterConfig struct {
@@ -44,6 +46,8 @@ type nuvioCampaignSendResult struct {
 	CampaignID      string `json:"campaignId"`
 	Status          string `json:"status"`
 	RecipientsCount int    `json:"recipientsCount"`
+	SentCount       int    `json:"sentCount"`
+	FailedCount     int    `json:"failedCount"`
 	SentAt          string `json:"sentAt"`
 }
 
@@ -51,6 +55,19 @@ type nuvioNewsletterSubscribePayload struct {
 	WebsiteID string `json:"websiteId"`
 	Email     string `json:"email"`
 	Name      string `json:"name"`
+}
+
+type nuvioCampaignRecipient struct {
+	Subscriber *core.Record
+	Email      string
+}
+
+type nuvioPreparedCampaignRecipient struct {
+	SubscriberID                  string
+	Email                         string
+	PreviousUnsubscribeTokenHash  string
+	RotatedUnsubscribeTokenStored bool
+	Message                       nuvioTransactionalEmailMessage
 }
 
 // NUVIO CUSTOM START: Newsletter V1 send endpoint (server-side campaign dispatch via Resend).
@@ -346,7 +363,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("Missing campaignId.", nil)
 		}
 
-		result, err := sendNuvioNewsletterCampaign(e.App, e.Request.Context(), campaignID)
+		result, err := sendNuvioNewsletterCampaign(e.App, e.Request.Context(), campaignID, e.Request)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return e.NotFoundError("Campaign not found.", nil)
@@ -359,7 +376,12 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	})
 }
 
-func sendNuvioNewsletterCampaign(app core.App, ctx context.Context, campaignID string) (*nuvioCampaignSendResult, error) {
+func sendNuvioNewsletterCampaign(
+	app core.App,
+	ctx context.Context,
+	campaignID string,
+	request *http.Request,
+) (*nuvioCampaignSendResult, error) {
 	campaign, err := app.FindRecordById(nuvioCampaignsCollectionID, campaignID)
 	if err != nil {
 		return nil, err
@@ -375,7 +397,7 @@ func sendNuvioNewsletterCampaign(app core.App, ctx context.Context, campaignID s
 		return nil, fmt.Errorf("Campaign is missing website relation")
 	}
 
-	_, newsletterConfig, err := loadNuvioWebsiteNewsletterConfig(app, websiteID)
+	website, newsletterConfig, err := loadNuvioWebsiteNewsletterConfig(app, websiteID)
 	if err != nil {
 		return nil, err
 	}
@@ -411,14 +433,169 @@ func sendNuvioNewsletterCampaign(app core.App, ctx context.Context, campaignID s
 		return nil, err
 	}
 
-	if err := sendNuvioCampaignEmailViaResend(ctx, resendConfig, subject, body, recipients); err != nil {
-		return nil, err
+	baseURL := resolveNuvioNewsletterPublicBaseURL(request)
+	unsubscribePath := buildNuvioNewsletterUnsubscribePath(website)
+	websiteName := strings.TrimSpace(resolveWebsiteDisplayName(website))
+	if websiteName == "" {
+		websiteName = "Website"
+	}
+
+	sentCount := 0
+	failedCount := 0
+	preparedRecipients := make([]nuvioPreparedCampaignRecipient, 0, len(recipients))
+
+	for _, recipient := range recipients {
+		if recipient.Subscriber == nil {
+			failedCount++
+			app.Logger().Warn(
+				"NUVIO newsletter campaign recipient missing subscriber record",
+				"campaignId",
+				campaignID,
+				"recipientEmail",
+				recipient.Email,
+			)
+			continue
+		}
+
+		previousTokenHash := strings.TrimSpace(recipient.Subscriber.GetString("unsubscribeTokenHash"))
+
+		rawToken, tokenHash, err := generateNuvioNewsletterTokenPair()
+		if err != nil {
+			failedCount++
+			app.Logger().Warn(
+				"NUVIO newsletter unsubscribe token generation failed",
+				"campaignId",
+				campaignID,
+				"subscriberId",
+				recipient.Subscriber.Id,
+				"error",
+				err.Error(),
+			)
+			continue
+		}
+
+		unsubscribeURL, err := buildNuvioNewsletterLifecycleURL(baseURL, unsubscribePath, rawToken)
+		if err != nil {
+			failedCount++
+			app.Logger().Warn(
+				"NUVIO newsletter unsubscribe URL build failed",
+				"campaignId",
+				campaignID,
+				"subscriberId",
+				recipient.Subscriber.Id,
+				"error",
+				err.Error(),
+			)
+			continue
+		}
+
+		subscriber := recipient.Subscriber.Clone()
+		subscriber.Set("unsubscribeTokenHash", tokenHash)
+		if err := app.Save(subscriber); err != nil {
+			failedCount++
+			app.Logger().Warn(
+				"NUVIO newsletter subscriber token hash save failed",
+				"campaignId",
+				campaignID,
+				"subscriberId",
+				recipient.Subscriber.Id,
+				"error",
+				err.Error(),
+			)
+			continue
+		}
+
+		preparedRecipients = append(preparedRecipients, nuvioPreparedCampaignRecipient{
+			SubscriberID:                  recipient.Subscriber.Id,
+			Email:                         recipient.Email,
+			PreviousUnsubscribeTokenHash:  previousTokenHash,
+			RotatedUnsubscribeTokenStored: true,
+			Message: buildNuvioCampaignRecipientMessage(
+				recipient.Email,
+				subject,
+				body,
+				websiteName,
+				unsubscribeURL,
+			),
+		})
+	}
+
+	if len(preparedRecipients) == 0 {
+		return nil, fmt.Errorf("No active recipients could be prepared for sending")
+	}
+
+	for start := 0; start < len(preparedRecipients); start += nuvioNewsletterCampaignBatchSize {
+		end := start + nuvioNewsletterCampaignBatchSize
+		if end > len(preparedRecipients) {
+			end = len(preparedRecipients)
+		}
+
+		chunk := preparedRecipients[start:end]
+		chunkMessages := make([]nuvioTransactionalEmailMessage, 0, len(chunk))
+		for _, prepared := range chunk {
+			chunkMessages = append(chunkMessages, prepared.Message)
+		}
+
+		chunkResult, chunkErr := sendNuvioTransactionalEmailBatchViaResend(ctx, resendConfig, chunkMessages)
+		if chunkErr != nil {
+			app.Logger().Warn(
+				"NUVIO newsletter campaign batch chunk send failed",
+				"campaignId",
+				campaignID,
+				"chunkStart",
+				start,
+				"chunkSize",
+				len(chunk),
+				"error",
+				chunkErr.Error(),
+			)
+
+			failedCount += len(chunk)
+			restoreNuvioCampaignChunkUnsubscribeHashes(app, campaignID, chunk)
+			continue
+		}
+
+		sentCount += chunkResult.SentCount
+		failedCount += chunkResult.FailedCount
+
+		if chunkResult.FailedCount > 0 {
+			restoreFailedIndexes := chunkResult.FailedIndexes
+			if len(restoreFailedIndexes) == 0 || chunkResult.AmbiguousResult {
+				restoreFailedIndexes = make([]int, 0, len(chunk))
+				for i := range chunk {
+					restoreFailedIndexes = append(restoreFailedIndexes, i)
+				}
+			}
+
+			restoreNuvioCampaignChunkUnsubscribeHashesByIndexes(
+				app,
+				campaignID,
+				chunk,
+				restoreFailedIndexes,
+			)
+		}
+	}
+
+	if sentCount == 0 {
+		return nil, fmt.Errorf("Newsletter campaign send failed for all recipients")
+	}
+
+	if failedCount > 0 {
+		app.Logger().Warn(
+			"NUVIO newsletter campaign partial send",
+			"campaignId",
+			campaignID,
+			"sentCount",
+			sentCount,
+			"failedCount",
+			failedCount,
+		)
 	}
 
 	sentAt := time.Now().UTC().Format(time.RFC3339)
 	campaign.Set("status", "sent")
 	campaign.Set("sentAt", sentAt)
-	campaign.Set("recipientsCount", len(recipients))
+	campaign.Set("recipientsCount", sentCount)
 
 	if err := app.Save(campaign); err != nil {
 		return nil, err
@@ -427,7 +604,9 @@ func sendNuvioNewsletterCampaign(app core.App, ctx context.Context, campaignID s
 	return &nuvioCampaignSendResult{
 		CampaignID:      campaign.Id,
 		Status:          "sent",
-		RecipientsCount: len(recipients),
+		RecipientsCount: sentCount,
+		SentCount:       sentCount,
+		FailedCount:     failedCount,
 		SentAt:          sentAt,
 	}, nil
 }
@@ -828,8 +1007,8 @@ func resolveNuvioCampaignRecipients(
 	websiteID string,
 	recipientsType string,
 	rawRecipientsIDs any,
-) ([]string, error) {
-	recipients := map[string]struct{}{}
+) ([]nuvioCampaignRecipient, error) {
+	recipientsByEmail := map[string]nuvioCampaignRecipient{}
 
 	switch recipientsType {
 	case "manual":
@@ -851,13 +1030,22 @@ func resolveNuvioCampaignRecipients(
 				continue
 			}
 
-			if strings.ToLower(strings.TrimSpace(subscriber.GetString("status"))) != "active" {
+			if normalizeNuvioSubscriberStatus(subscriber.GetString("status")) != nuvioNewsletterStatusActive {
 				continue
 			}
 
 			email, ok := normalizeNuvioEmail(subscriber.GetString("email"))
-			if ok {
-				recipients[email] = struct{}{}
+			if !ok {
+				continue
+			}
+
+			if _, exists := recipientsByEmail[email]; exists {
+				continue
+			}
+
+			recipientsByEmail[email] = nuvioCampaignRecipient{
+				Subscriber: subscriber,
+				Email:      email,
 			}
 		}
 	default:
@@ -870,7 +1058,7 @@ func resolveNuvioCampaignRecipients(
 			subscribersCollection,
 			"website={:website} && status='active'",
 			"-created",
-			5000,
+			nuvioNewsletterMaxSubscriberScan,
 			0,
 			dbx.Params{
 				"website": websiteID,
@@ -882,18 +1070,105 @@ func resolveNuvioCampaignRecipients(
 
 		for _, subscriber := range subscribers {
 			email, ok := normalizeNuvioEmail(subscriber.GetString("email"))
-			if ok {
-				recipients[email] = struct{}{}
+			if !ok {
+				continue
+			}
+
+			if _, exists := recipientsByEmail[email]; exists {
+				continue
+			}
+
+			recipientsByEmail[email] = nuvioCampaignRecipient{
+				Subscriber: subscriber,
+				Email:      email,
 			}
 		}
 	}
 
-	result := make([]string, 0, len(recipients))
-	for email := range recipients {
-		result = append(result, email)
+	result := make([]nuvioCampaignRecipient, 0, len(recipientsByEmail))
+	for _, recipient := range recipientsByEmail {
+		result = append(result, recipient)
 	}
 
 	return result, nil
+}
+
+func restoreNuvioCampaignChunkUnsubscribeHashes(
+	app core.App,
+	campaignID string,
+	chunk []nuvioPreparedCampaignRecipient,
+) {
+	indexes := make([]int, 0, len(chunk))
+	for i := range chunk {
+		indexes = append(indexes, i)
+	}
+
+	restoreNuvioCampaignChunkUnsubscribeHashesByIndexes(app, campaignID, chunk, indexes)
+}
+
+func restoreNuvioCampaignChunkUnsubscribeHashesByIndexes(
+	app core.App,
+	campaignID string,
+	chunk []nuvioPreparedCampaignRecipient,
+	indexes []int,
+) {
+	seen := map[int]struct{}{}
+	for _, idx := range indexes {
+		if idx < 0 || idx >= len(chunk) {
+			app.Logger().Warn(
+				"NUVIO newsletter campaign unsubscribe hash restore index out of range",
+				"campaignId",
+				campaignID,
+				"index",
+				idx,
+				"chunkSize",
+				len(chunk),
+			)
+			continue
+		}
+
+		if _, exists := seen[idx]; exists {
+			continue
+		}
+		seen[idx] = struct{}{}
+
+		prepared := chunk[idx]
+		if !prepared.RotatedUnsubscribeTokenStored {
+			continue
+		}
+
+		if err := restoreNuvioCampaignRecipientUnsubscribeHash(app, prepared); err != nil {
+			app.Logger().Warn(
+				"NUVIO newsletter campaign unsubscribe hash restore failed",
+				"campaignId",
+				campaignID,
+				"subscriberId",
+				prepared.SubscriberID,
+				"recipientEmail",
+				prepared.Email,
+				"error",
+				err.Error(),
+			)
+		}
+	}
+}
+
+func restoreNuvioCampaignRecipientUnsubscribeHash(
+	app core.App,
+	prepared nuvioPreparedCampaignRecipient,
+) error {
+	subscriberID := strings.TrimSpace(prepared.SubscriberID)
+	if subscriberID == "" {
+		return fmt.Errorf("missing subscriber id")
+	}
+
+	subscriber, err := app.FindRecordById(nuvioSubscribersCollectionID, subscriberID)
+	if err != nil {
+		return err
+	}
+
+	subscriber.Set("unsubscribeTokenHash", strings.TrimSpace(prepared.PreviousUnsubscribeTokenHash))
+	return app.Save(subscriber)
 }
 
 func parseNuvioRecipientIDs(raw any) []string {
@@ -969,28 +1244,80 @@ func normalizeNuvioEmail(raw string) (string, bool) {
 	return email, true
 }
 
-func sendNuvioCampaignEmailViaResend(
-	ctx context.Context,
-	config nuvioResendConfig,
+func buildNuvioNewsletterUnsubscribePath(website *core.Record) string {
+	if website == nil {
+		return "/api/nuvio/newsletter/unsubscribe"
+	}
+
+	slug := strings.TrimSpace(website.GetString("slug"))
+	if slug == "" {
+		return "/api/nuvio/newsletter/unsubscribe"
+	}
+
+	return "/site/" + url.PathEscape(slug) + "/newsletter/unsubscribe"
+}
+
+func buildNuvioCampaignRecipientMessage(
+	recipientEmail string,
 	subject string,
 	body string,
-	recipients []string,
-) error {
+	websiteName string,
+	unsubscribeURL string,
+) nuvioTransactionalEmailMessage {
 	trimmedBody := strings.TrimSpace(body)
+	footerText := buildNuvioCampaignUnsubscribeFooterText(websiteName, unsubscribeURL)
 
 	message := nuvioTransactionalEmailMessage{
-		To:      []string{config.From},
-		Bcc:     recipients,
+		To:      []string{recipientEmail},
 		Subject: subject,
 	}
 
 	if strings.Contains(trimmedBody, "<") && strings.Contains(trimmedBody, ">") {
-		message.HTML = trimmedBody
-	} else {
-		message.Text = trimmedBody
+		htmlFooter := buildNuvioCampaignUnsubscribeFooterHTML(websiteName, unsubscribeURL)
+		if trimmedBody == "" {
+			message.HTML = htmlFooter
+		} else {
+			message.HTML = trimmedBody + "\n\n" + htmlFooter
+		}
+		return message
 	}
 
-	return sendNuvioTransactionalEmailViaResend(ctx, config, message)
+	if trimmedBody == "" {
+		message.Text = footerText
+	} else {
+		message.Text = trimmedBody + "\n\n" + footerText
+	}
+
+	return message
+}
+
+func buildNuvioCampaignUnsubscribeFooterText(websiteName string, unsubscribeURL string) string {
+	safeWebsiteName := strings.TrimSpace(websiteName)
+	if safeWebsiteName == "" {
+		safeWebsiteName = "Website"
+	}
+
+	safeURL := strings.TrimSpace(unsubscribeURL)
+	return strings.Join([]string{
+		"---",
+		fmt.Sprintf("You are receiving this email because you subscribed to updates from %s.", safeWebsiteName),
+		fmt.Sprintf("Unsubscribe: %s", safeURL),
+	}, "\n")
+}
+
+func buildNuvioCampaignUnsubscribeFooterHTML(websiteName string, unsubscribeURL string) string {
+	safeWebsiteName := strings.TrimSpace(websiteName)
+	if safeWebsiteName == "" {
+		safeWebsiteName = "Website"
+	}
+
+	escapedWebsiteName := html.EscapeString(safeWebsiteName)
+	escapedURL := html.EscapeString(strings.TrimSpace(unsubscribeURL))
+	return strings.Join([]string{
+		"<hr>",
+		"<p>You are receiving this email because you subscribed to updates from " + escapedWebsiteName + ".</p>",
+		`<p>Unsubscribe: <a href="` + escapedURL + `">` + escapedURL + "</a></p>",
+	}, "")
 }
 
 // NUVIO CUSTOM END: Newsletter V1 send endpoint (server-side campaign dispatch via Resend).
