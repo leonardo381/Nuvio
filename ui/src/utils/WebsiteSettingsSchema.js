@@ -426,6 +426,51 @@ export const websiteSettingsSchema = {
                     default: false,
                     editableBy: [ROLE_ADMIN, ROLE_CLIENT],
                 },
+                {
+                    key: "lifecycle",
+                    label: "Lifecycle emails",
+                    type: "object",
+                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                    fields: [
+                        {
+                            key: "confirmationTemplate",
+                            label: "Confirmation email template",
+                            type: "object",
+                            editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                            hint: "Customize the email subscribers receive to confirm their newsletter subscription.",
+                            fields: [
+                                {
+                                    key: "enabled",
+                                    label: "Enable custom template",
+                                    type: "bool",
+                                    default: false,
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "subject",
+                                    label: "Subject",
+                                    type: "text",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "introText",
+                                    label: "Intro text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                                {
+                                    key: "footerText",
+                                    label: "Footer text",
+                                    type: "textarea",
+                                    default: "",
+                                    editableBy: [ROLE_ADMIN, ROLE_CLIENT],
+                                },
+                            ],
+                        },
+                    ],
+                },
             ],
         },
         {
@@ -664,7 +709,7 @@ export const websiteSettingsSchema = {
                     label: "Scheduling rules",
                     type: "object",
                     editableBy: [ROLE_ADMIN],
-                    hint: "Future-ready rules for upcoming booking slot controls.",
+                    hint: "These rules affect the available times shown to visitors.",
                     fields: [
                         {
                             key: "minNoticeHours",
@@ -675,7 +720,7 @@ export const websiteSettingsSchema = {
                             options: {
                                 pattern: "^[0-9]+$",
                             },
-                            hint: "0 means no minimum notice. Applied in a later booking phase.",
+                            hint: "0 means visitors can book any future slot.",
                         },
                         {
                             key: "bookingWindowDays",
@@ -686,7 +731,7 @@ export const websiteSettingsSchema = {
                             options: {
                                 pattern: "^[0-9]+$",
                             },
-                            hint: "0 means no forward booking window limit. Applied in a later booking phase.",
+                            hint: "0 means visitors can book any future date.",
                         },
                         {
                             key: "bufferMinutes",
@@ -697,7 +742,7 @@ export const websiteSettingsSchema = {
                             options: {
                                 pattern: "^[0-9]+$",
                             },
-                            hint: "0 means no slot buffer. Applied in a later booking phase.",
+                            hint: "0 means there is no buffer between appointments.",
                         },
                         {
                             key: "calendarBlockingMode",
@@ -710,7 +755,7 @@ export const websiteSettingsSchema = {
                                 { label: "Whole website calendar", value: "website" },
                                 { label: "Do not block by appointments", value: "none" },
                             ],
-                            hint: "Controls how existing appointments will block available slots. Backend support is implemented in the next phase.",
+                            hint: "Use this to define how appointments block future booking slots.",
                         },
                     ],
                 },
@@ -1235,6 +1280,34 @@ function normalizeBookingVisitorTemplateSettings(templateSettings) {
     };
 }
 
+function normalizeNewsletterConfirmationTemplateSettings(templateSettings) {
+    const source = isPlainObject(templateSettings) ? templateSettings : {};
+
+    return {
+        ...source,
+        enabled: !!source.enabled,
+        subject: typeof source.subject === "string" ? source.subject : "",
+        introText: typeof source.introText === "string" ? source.introText : "",
+        footerText: typeof source.footerText === "string" ? source.footerText : "",
+    };
+}
+
+function normalizeNewsletterSettings(newsletterSettings) {
+    const source = isPlainObject(newsletterSettings) ? newsletterSettings : {};
+    const lifecycle = isPlainObject(source.lifecycle) ? source.lifecycle : {};
+
+    return {
+        ...source,
+        doubleOptIn: typeof source.doubleOptIn === "boolean" ? source.doubleOptIn : false,
+        lifecycle: {
+            ...lifecycle,
+            confirmationTemplate: normalizeNewsletterConfirmationTemplateSettings(
+                lifecycle.confirmationTemplate,
+            ),
+        },
+    };
+}
+
 function normalizeContactFormSettings(contactFormSettings) {
     const source = isPlainObject(contactFormSettings) ? contactFormSettings : {};
     const normalizedEmailNotifications = normalizeEmailNotifications(source.emailNotifications, {
@@ -1344,6 +1417,10 @@ export function normalizeWebsiteSettingsValue(rawSettings, schemaFields = websit
 
     if (isPlainObject(normalized.reviews)) {
         normalized.reviews = normalizeReviewsSettings(normalized.reviews);
+    }
+
+    if (isPlainObject(normalized.newsletter)) {
+        normalized.newsletter = normalizeNewsletterSettings(normalized.newsletter);
     }
 
     if (isPlainObject(normalized.contactForm)) {

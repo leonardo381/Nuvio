@@ -11,7 +11,7 @@
         hasCollectionsLoaded,
         isCollectionsLoading,
     } from "@/stores/collections";
-    import { addErrorToast, addSuccessToast } from "@/stores/toasts";
+    import { addErrorToast, addSuccessToast, addWarningToast } from "@/stores/toasts";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
     import { normalizeWebsiteSettingsValue } from "@/utils/WebsiteSettingsSchema";
@@ -83,6 +83,7 @@
     let leadNotesDraftKey = "";
     let isLeadFollowUpOpen = false;
     let isLeadUtilitiesOpen = false;
+    let isInvitingLeadToNewsletter = false;
 
     let isLoadingWebsites = false;
     let isLoadingLeads = false;
@@ -192,6 +193,20 @@
     $: selectedLeadWhatsAppPhone = normalizeString(selectedLead?.whatsappTargetPhone || selectedLead?.phone);
     $: selectedLeadWhatsAppMessage = normalizeString(selectedLead?.whatsappTargetMessage || selectedLead?.message);
     $: selectedLeadWhatsAppLink = buildWhatsAppLink(selectedLeadWhatsAppPhone, selectedLeadWhatsAppMessage);
+    $: selectedLeadNewsletterInviteEmail = normalizeString(selectedLead?.email);
+    $: selectedLeadHasValidInviteEmail = isValidEmailAddress(selectedLeadNewsletterInviteEmail);
+    $: selectedLeadNewsletterInviteWebsiteId = normalizeString(selectedLead?.websiteId);
+    $: selectedLeadCanInviteToNewsletter = !!selectedLead?.recordId
+        && selectedLeadHasValidInviteEmail
+        && !!selectedLeadNewsletterInviteWebsiteId
+        && !isInvitingLeadToNewsletter;
+    $: selectedLeadInviteUnavailableMessage = !selectedLead
+        ? ""
+        : !selectedLeadHasValidInviteEmail
+            ? "This lead does not have a valid email address."
+            : !selectedLeadNewsletterInviteWebsiteId
+                ? "This lead is missing website context for newsletter invitation."
+                : "";
     $: websiteRecordById = new Map(
         websites.map((website) => [normalizeString(website?.id), website]),
     );
@@ -1203,6 +1218,15 @@
         return `mailto:${encodeURIComponent(value)}`;
     }
 
+    function isValidEmailAddress(email) {
+        const value = normalizeString(email);
+        if (!value) {
+            return false;
+        }
+
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    }
+
     function buildWhatsAppLink(phone, message) {
         const normalizedPhone = normalizeString(phone).replace(/[^\d]/g, "");
         if (!normalizedPhone) {
@@ -1406,6 +1430,67 @@
             addErrorToast("Unable to update follow-up details right now.");
         } finally {
             isSavingLeadFollowUp = false;
+        }
+    }
+
+    async function inviteSelectedLeadToNewsletter() {
+        if (isInvitingLeadToNewsletter) {
+            return;
+        }
+
+        if (!selectedLeadHasValidInviteEmail) {
+            addErrorToast("This lead does not have a valid email address.");
+            return;
+        }
+
+        if (!selectedLeadNewsletterInviteWebsiteId) {
+            addErrorToast("This lead is missing website context for newsletter invitation.");
+            return;
+        }
+
+        isInvitingLeadToNewsletter = true;
+
+        try {
+            const response = await ApiClient.send("/api/nuvio/newsletter/invite", {
+                method: "POST",
+                body: {
+                    websiteId: selectedLeadNewsletterInviteWebsiteId,
+                    email: selectedLeadNewsletterInviteEmail,
+                    name: normalizeString(selectedLead?.name),
+                    source: normalizeString(selectedLead?.sourceKey),
+                },
+                requestKey: `nuvio_leads_newsletter_invite_${selectedLead?.recordId || selectedLead?.key || "selected"}`,
+            });
+
+            const inviteResult = normalizeLower(response?.result);
+            if (inviteResult === "already_active") {
+                addWarningToast("This contact is already subscribed.");
+                return;
+            }
+
+            if (inviteResult === "unsubscribed") {
+                addWarningToast("This contact has unsubscribed and was not invited.");
+                return;
+            }
+
+            if (inviteResult === "resent") {
+                addSuccessToast("Confirmation email sent again.");
+                return;
+            }
+
+            addSuccessToast("Newsletter invitation sent.");
+        } catch (err) {
+            ApiClient.error(err, false);
+
+            const backendMessage = normalizeLower(err?.data?.message || err?.message);
+            if (backendMessage.includes("valid email")) {
+                addErrorToast("This lead does not have a valid email address.");
+                return;
+            }
+
+            addErrorToast("Unable to send newsletter invitation right now.");
+        } finally {
+            isInvitingLeadToNewsletter = false;
         }
     }
 
@@ -2357,7 +2442,19 @@
                                                                 <span class="txt">Open WhatsApp</span>
                                                             </a>
                                                         {/if}
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-outline btn-sm"
+                                                            class:btn-loading={isInvitingLeadToNewsletter}
+                                                            disabled={!selectedLeadCanInviteToNewsletter}
+                                                            on:click={inviteSelectedLeadToNewsletter}
+                                                        >
+                                                            <span class="txt">Invite to newsletter</span>
+                                                        </button>
                                                     </div>
+                                                    {#if selectedLeadInviteUnavailableMessage}
+                                                        <p class="txt-xs txt-hint m-b-0 lead-action-note">{selectedLeadInviteUnavailableMessage}</p>
+                                                    {/if}
                                                 </div>
                                             </div>
                                         {/if}
@@ -2735,7 +2832,19 @@
                                         <span class="txt">Open WhatsApp</span>
                                     </a>
                                 {/if}
+                                <button
+                                    type="button"
+                                    class="btn btn-outline btn-sm"
+                                    class:btn-loading={isInvitingLeadToNewsletter}
+                                    disabled={!selectedLeadCanInviteToNewsletter}
+                                    on:click={inviteSelectedLeadToNewsletter}
+                                >
+                                    <span class="txt">Invite to newsletter</span>
+                                </button>
                             </div>
+                            {#if selectedLeadInviteUnavailableMessage}
+                                <p class="txt-xs txt-hint m-b-0 lead-action-note">{selectedLeadInviteUnavailableMessage}</p>
+                            {/if}
                         </div>
                     </section>
                 </div>

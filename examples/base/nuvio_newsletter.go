@@ -33,13 +33,23 @@ const (
 	nuvioNewsletterConfirmationTTL    = 72 * time.Hour
 	nuvioNewsletterMaxSubscriberScan  = 5000
 	nuvioNewsletterMaxNameLen         = 200
+	nuvioNewsletterTemplateSubjectMax = 160
+	nuvioNewsletterTemplateTextMax    = 4000
 	nuvioNewsletterPublicBaseURLEnv   = "NUVIO_PUBLIC_BASE_URL"
 	nuvioNewsletterCampaignBatchSize  = 100
 )
 
+type nuvioNewsletterConfirmationTemplateConfig struct {
+	Enabled    bool
+	Subject    string
+	IntroText  string
+	FooterText string
+}
+
 type nuvioWebsiteNewsletterConfig struct {
-	FeatureAvailable bool
-	DoubleOptIn      bool
+	FeatureAvailable     bool
+	DoubleOptIn          bool
+	ConfirmationTemplate nuvioNewsletterConfirmationTemplateConfig
 }
 
 type nuvioCampaignSendResult struct {
@@ -55,6 +65,13 @@ type nuvioNewsletterSubscribePayload struct {
 	WebsiteID string `json:"websiteId"`
 	Email     string `json:"email"`
 	Name      string `json:"name"`
+}
+
+type nuvioNewsletterInvitePayload struct {
+	WebsiteID string `json:"websiteId"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	Source    string `json:"source"`
 }
 
 type nuvioCampaignRecipient struct {
@@ -198,6 +215,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 			website,
 			email,
 			confirmURL,
+			config.ConfirmationTemplate,
 		); err != nil {
 			e.App.Logger().Error(
 				"NUVIO newsletter confirmation email send failed",
@@ -343,6 +361,146 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 			"ok":      true,
 			"status":  nuvioNewsletterStatusUnsubscribed,
 			"message": "You have been unsubscribed.",
+		})
+	})
+
+	newsletterAdminGroup.POST("/invite", func(e *core.RequestEvent) error {
+		payload := nuvioNewsletterInvitePayload{}
+		if err := e.BindBody(&payload); err != nil {
+			return e.BadRequestError("Invalid newsletter invite payload.", nil)
+		}
+
+		websiteID := strings.TrimSpace(payload.WebsiteID)
+		if websiteID == "" {
+			return e.BadRequestError("Missing websiteId.", nil)
+		}
+
+		website, config, err := loadNuvioWebsiteNewsletterConfig(e.App, websiteID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Website not found.", nil)
+			}
+
+			return e.BadRequestError("Failed to load Newsletter settings.", nil)
+		}
+
+		if !config.FeatureAvailable {
+			return e.BadRequestError("Newsletter is unavailable for this website.", nil)
+		}
+
+		email, ok := normalizeNuvioEmail(payload.Email)
+		if !ok {
+			return e.BadRequestError("A valid email is required.", nil)
+		}
+
+		name := sanitizeNuvioNewsletterName(payload.Name)
+		source := sanitizeNuvioNewsletterName(payload.Source)
+
+		subscribersCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioSubscribersCollectionID)
+		if err != nil {
+			return e.InternalServerError("Newsletter subscribers collection is missing.", nil)
+		}
+
+		subscriber, err := findNuvioSubscriberByWebsiteEmail(
+			e.App,
+			subscribersCollection,
+			websiteID,
+			email,
+		)
+		isNewSubscriber := false
+		if err != nil {
+			if !errors.Is(err, sql.ErrNoRows) {
+				return e.InternalServerError("Failed to load newsletter subscriber.", nil)
+			}
+
+			subscriber = core.NewRecord(subscribersCollection)
+			isNewSubscriber = true
+		}
+
+		subscriber.Set("website", websiteID)
+		subscriber.Set("email", email)
+		if name != "" || isNewSubscriber {
+			subscriber.Set("name", name)
+		}
+
+		currentStatus := normalizeNuvioSubscriberStatus(subscriber.GetString("status"))
+		if currentStatus == nuvioNewsletterStatusActive {
+			return e.JSON(http.StatusOK, map[string]any{
+				"ok":      true,
+				"result":  "already_active",
+				"status":  nuvioNewsletterStatusActive,
+				"message": "This contact is already subscribed.",
+			})
+		}
+
+		if currentStatus == nuvioNewsletterStatusUnsubscribed {
+			return e.JSON(http.StatusOK, map[string]any{
+				"ok":      true,
+				"result":  "unsubscribed",
+				"status":  nuvioNewsletterStatusUnsubscribed,
+				"message": "This contact has unsubscribed and was not invited.",
+			})
+		}
+
+		if err := ensureNuvioSubscriberUnsubscribeTokenHash(subscriber); err != nil {
+			return e.InternalServerError("Failed to prepare subscriber lifecycle token.", nil)
+		}
+
+		now := time.Now().UTC()
+		rawToken, tokenHash, err := generateNuvioNewsletterTokenPair()
+		if err != nil {
+			return e.InternalServerError("Failed to generate confirmation token.", nil)
+		}
+
+		expiresAt := now.Add(nuvioNewsletterConfirmationTTL).UTC()
+		subscriber.Set("status", nuvioNewsletterStatusPending)
+		subscriber.Set("confirmedAt", "")
+		subscriber.Set("confirmationTokenHash", tokenHash)
+		subscriber.Set("confirmationTokenExpiresAt", expiresAt.Format(time.RFC3339))
+		subscriber.Set("unsubscribedAt", "")
+
+		if err := e.App.Save(subscriber); err != nil {
+			return e.InternalServerError("Failed to save newsletter subscriber.", nil)
+		}
+
+		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
+		confirmPath := buildNuvioNewsletterConfirmPath(website)
+		confirmURL, err := buildNuvioNewsletterLifecycleURL(baseURL, confirmPath, rawToken)
+		if err != nil {
+			return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
+		}
+
+		if err := sendNuvioNewsletterConfirmationEmail(
+			e.Request.Context(),
+			website,
+			email,
+			confirmURL,
+			config.ConfirmationTemplate,
+		); err != nil {
+			e.App.Logger().Error(
+				"NUVIO newsletter manual invite confirmation send failed",
+				"websiteId",
+				websiteID,
+				"source",
+				source,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Unable to send confirmation email right now. Please try again.", nil)
+		}
+
+		result := "invited"
+		message := "Newsletter invitation sent."
+		if !isNewSubscriber && currentStatus == nuvioNewsletterStatusPending {
+			result = "resent"
+			message = "Confirmation email sent again."
+		}
+
+		return e.JSON(http.StatusOK, map[string]any{
+			"ok":      true,
+			"result":  result,
+			"status":  nuvioNewsletterStatusPending,
+			"message": message,
 		})
 	})
 
@@ -620,8 +778,9 @@ func loadNuvioWebsiteNewsletterConfig(app core.App, websiteID string) (*core.Rec
 	settings := parseNuvioSettingsObject(website.Get("settings"))
 
 	config := nuvioWebsiteNewsletterConfig{
-		FeatureAvailable: true,
-		DoubleOptIn:      false,
+		FeatureAvailable:     true,
+		DoubleOptIn:          false,
+		ConfirmationTemplate: nuvioNewsletterConfirmationTemplateConfig{},
 	}
 
 	if featureFlags, ok := toStringAnyMap(settings["featureFlags"]); ok {
@@ -634,9 +793,48 @@ func loadNuvioWebsiteNewsletterConfig(app core.App, websiteID string) (*core.Rec
 		if value, ok := parseBoolValue(newsletterSettings["doubleOptIn"]); ok {
 			config.DoubleOptIn = value
 		}
+
+		config.ConfirmationTemplate = parseNuvioNewsletterConfirmationTemplateConfig(newsletterSettings)
 	}
 
 	return website, config, nil
+}
+
+func parseNuvioNewsletterConfirmationTemplateConfig(
+	newsletterSettings map[string]any,
+) nuvioNewsletterConfirmationTemplateConfig {
+	template := nuvioNewsletterConfirmationTemplateConfig{}
+	if len(newsletterSettings) == 0 {
+		return template
+	}
+
+	lifecycleSettings, ok := toStringAnyMap(newsletterSettings["lifecycle"])
+	if !ok {
+		return template
+	}
+
+	templateSettings, ok := toStringAnyMap(lifecycleSettings["confirmationTemplate"])
+	if !ok {
+		return template
+	}
+
+	if value, ok := parseBoolValue(templateSettings["enabled"]); ok {
+		template.Enabled = value
+	}
+
+	if value, ok := templateSettings["subject"].(string); ok {
+		template.Subject = value
+	}
+
+	if value, ok := templateSettings["introText"].(string); ok {
+		template.IntroText = value
+	}
+
+	if value, ok := templateSettings["footerText"].(string); ok {
+		template.FooterText = value
+	}
+
+	return template
 }
 
 func findNuvioSubscriberByWebsiteEmail(
@@ -969,6 +1167,7 @@ func sendNuvioNewsletterConfirmationEmail(
 	website *core.Record,
 	recipientEmail string,
 	confirmURL string,
+	templateConfig nuvioNewsletterConfirmationTemplateConfig,
 ) error {
 	resendConfig, err := loadNuvioResendConfig()
 	if err != nil {
@@ -985,6 +1184,27 @@ func sendNuvioNewsletterConfirmationEmail(
 		websiteName = "Website"
 	}
 
+	subject, textBody := buildNuvioDefaultNewsletterConfirmationEmail(websiteName, confirmURL)
+	if customSubject, customBody, ok := buildNuvioCustomNewsletterConfirmationEmail(
+		templateConfig,
+		websiteName,
+		normalizedEmail,
+		confirmURL,
+		time.Now().UTC(),
+		subject,
+	); ok {
+		subject = customSubject
+		textBody = customBody
+	}
+
+	return sendNuvioTransactionalEmailViaResend(ctx, resendConfig, nuvioTransactionalEmailMessage{
+		To:      []string{normalizedEmail},
+		Subject: subject,
+		Text:    textBody,
+	})
+}
+
+func buildNuvioDefaultNewsletterConfirmationEmail(websiteName string, confirmURL string) (string, string) {
 	subject := "Confirm your subscription"
 	textBody := strings.Join([]string{
 		fmt.Sprintf("You requested a newsletter subscription for %s.", websiteName),
@@ -995,11 +1215,129 @@ func sendNuvioNewsletterConfirmationEmail(
 		"If you did not request this, you can safely ignore this email.",
 	}, "\n")
 
-	return sendNuvioTransactionalEmailViaResend(ctx, resendConfig, nuvioTransactionalEmailMessage{
-		To:      []string{normalizedEmail},
-		Subject: subject,
-		Text:    textBody,
-	})
+	return subject, textBody
+}
+
+func buildNuvioCustomNewsletterConfirmationEmail(
+	templateConfig nuvioNewsletterConfirmationTemplateConfig,
+	websiteName string,
+	subscriberEmail string,
+	confirmURL string,
+	submittedAt time.Time,
+	defaultSubject string,
+) (string, string, bool) {
+	if !templateConfig.Enabled {
+		return "", "", false
+	}
+
+	values := buildNuvioNewsletterConfirmationTemplateVariables(
+		websiteName,
+		subscriberEmail,
+		confirmURL,
+		submittedAt,
+	)
+
+	subject := sanitizeNuvioNewsletterTemplateSubject(
+		replaceNuvioNewsletterConfirmationTemplateVariables(templateConfig.Subject, values),
+	)
+	introText := sanitizeNuvioNewsletterTemplateText(
+		replaceNuvioNewsletterConfirmationTemplateVariables(templateConfig.IntroText, values),
+	)
+	footerText := sanitizeNuvioNewsletterTemplateText(
+		replaceNuvioNewsletterConfirmationTemplateVariables(templateConfig.FooterText, values),
+	)
+
+	if subject == "" && introText == "" && footerText == "" {
+		return "", "", false
+	}
+
+	if subject == "" {
+		subject = sanitizeNuvioNewsletterTemplateSubject(defaultSubject)
+		if subject == "" {
+			subject = "Confirm your subscription"
+		}
+	}
+
+	requiredLines := []string{
+		fmt.Sprintf("You requested a newsletter subscription for %s.", values["websiteName"]),
+		"",
+		"Please confirm your subscription by opening this link:",
+		values["confirmationUrl"],
+		"",
+		"If you did not request this, you can safely ignore this email.",
+	}
+
+	lines := []string{}
+	if introText != "" {
+		lines = append(lines, introText, "")
+	}
+	lines = append(lines, requiredLines...)
+	if footerText != "" {
+		lines = append(lines, "", footerText)
+	}
+
+	textBody := strings.Join(lines, "\n")
+	if strings.TrimSpace(textBody) == "" {
+		return "", "", false
+	}
+
+	return subject, textBody, true
+}
+
+func buildNuvioNewsletterConfirmationTemplateVariables(
+	websiteName string,
+	subscriberEmail string,
+	confirmURL string,
+	submittedAt time.Time,
+) map[string]string {
+	displayWebsiteName := sanitizeNuvioNewsletterTemplateSingleLineValue(websiteName, "Website")
+	displaySubscriberEmail := sanitizeNuvioNewsletterTemplateSingleLineValue(subscriberEmail, "subscriber")
+	displayConfirmationURL := strings.TrimSpace(confirmURL)
+	if displayConfirmationURL == "" {
+		displayConfirmationURL = confirmURL
+	}
+
+	return map[string]string{
+		"websiteName":     displayWebsiteName,
+		"subscriberEmail": displaySubscriberEmail,
+		"confirmationUrl": displayConfirmationURL,
+		"submittedAt":     submittedAt.UTC().Format(time.RFC3339),
+	}
+}
+
+func replaceNuvioNewsletterConfirmationTemplateVariables(raw string, values map[string]string) string {
+	replacer := strings.NewReplacer(
+		"{{websiteName}}", values["websiteName"],
+		"{{subscriberEmail}}", values["subscriberEmail"],
+		"{{confirmationUrl}}", values["confirmationUrl"],
+		"{{submittedAt}}", values["submittedAt"],
+	)
+
+	return replacer.Replace(raw)
+}
+
+func sanitizeNuvioNewsletterTemplateSubject(raw string) string {
+	normalized := strings.NewReplacer("\r", " ", "\n", " ").Replace(raw)
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	normalized = strings.TrimSpace(normalized)
+	return truncateNuvioNewsletterStringByRunes(normalized, nuvioNewsletterTemplateSubjectMax)
+}
+
+func sanitizeNuvioNewsletterTemplateText(raw string) string {
+	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = strings.TrimSpace(normalized)
+	return truncateNuvioNewsletterStringByRunes(normalized, nuvioNewsletterTemplateTextMax)
+}
+
+func sanitizeNuvioNewsletterTemplateSingleLineValue(raw string, fallback string) string {
+	normalized := strings.NewReplacer("\r", " ", "\n", " ").Replace(raw)
+	normalized = strings.Join(strings.Fields(normalized), " ")
+	normalized = strings.TrimSpace(normalized)
+	if normalized == "" {
+		return fallback
+	}
+	return normalized
 }
 
 func resolveNuvioCampaignRecipients(

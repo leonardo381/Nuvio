@@ -1,5 +1,5 @@
-<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, collectionsLoadError, findCollectionByRequiredNames, hasCollectionsLoaded, isCollectionsLoading } from "@/stores/collections";    import { addErrorToast, addSuccessToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
-    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["pending", "active", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    const subscriberGroupsFieldAliases = ["groups", "groupIds", "subscriberGroups", "subscriber_groups"];    const campaignRecipientsTypeFieldAliases = ["recipientsType", "recipientType", "recipients_type"];    const campaignRecipientsIdsFieldAliases = ["recipientsIds", "recipientIds", "recipients_ids"];    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
+<script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, collectionsLoadError, findCollectionByRequiredNames, hasCollectionsLoaded, isCollectionsLoading } from "@/stores/collections";    import { addErrorToast, addSuccessToast, addWarningToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
+    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["active", "pending", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    const subscriberGroupsFieldAliases = ["groups", "groupIds", "subscriberGroups", "subscriber_groups"];    const campaignRecipientsTypeFieldAliases = ["recipientsType", "recipientType", "recipients_type"];    const campaignRecipientsIdsFieldAliases = ["recipientsIds", "recipientIds", "recipients_ids"];    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
     let isLoadingWebsites = false;    let isLoadingSubscribers = false;
@@ -340,7 +340,7 @@
     function getSubscriberStatusLabel(status) {
         const normalized = normalizeStatus(status);
         if (normalized === "pending") {
-            return "Pending";
+            return "Pending confirmation";
         }
         if (normalized === "active") {
             return "Active";
@@ -911,14 +911,27 @@
     }
 
     function resolveSubscribersTableConfirmedLabel() {
-        return "Subscribed";
+        return "Lifecycle";
     }
 
     function resolveSubscriberConfirmedValue(subscriber) {
-        if (subscriber?.confirmedAt) {
-            return formatDateTime(subscriber.confirmedAt);
+        const normalizedStatus = normalizeStatus(subscriber?.status);
+        if (normalizedStatus === "pending") {
+            if (subscriber?.confirmationTokenExpiresAt) {
+                return `Confirmation expires: ${formatDateTime(subscriber.confirmationTokenExpiresAt)}`;
+            }
+            return "Pending confirmation";
         }
-        return "Pending confirmation";
+        if (normalizedStatus === "unsubscribed") {
+            if (subscriber?.unsubscribedAt) {
+                return `Unsubscribed: ${formatDateTime(subscriber.unsubscribedAt)}`;
+            }
+            return "Unsubscribed";
+        }
+        if (subscriber?.confirmedAt) {
+            return `Confirmed: ${formatDateTime(subscriber.confirmedAt)}`;
+        }
+        return "Active";
     }
 
     function resolveSubscribersTableAddedLabel() {
@@ -1422,7 +1435,7 @@
                 isBulkUpdating = false;
                 return;
             }
-            await Promise.all(updates);            resetSubscriberSelection();            await loadSubscribers();            addSuccessToast(`Updated ${updates.length} subscriber(s).`);        } catch (err) {            ApiClient.error(err);        }        isBulkUpdating = false;    }    async function sendCampaign(campaign) {        if (!campaign?.id || isSendingCampaign[campaign.id]) {            return false;        }        isSendingCampaign[campaign.id] = true;        isSendingCampaign = { ...isSendingCampaign };        let sent = false;        try {            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {                method: "POST",                body: {                    campaignId: campaign.id,                },                requestKey: "nuvio_newsletter_send_" + campaign.id,            });            addSuccessToast(`Campaign sent to ${response?.recipientsCount || 0} recipient(s).`);            await loadCampaigns();            sent = true;        } catch (err) {            ApiClient.error(err);        }        delete isSendingCampaign[campaign.id];        isSendingCampaign = { ...isSendingCampaign };        return sent;    }    function resetCampaignComposer() {
+            await Promise.all(updates);            resetSubscriberSelection();            await loadSubscribers();            addSuccessToast(`Updated ${updates.length} subscriber(s).`);        } catch (err) {            ApiClient.error(err);        }        isBulkUpdating = false;    }    async function sendCampaign(campaign) {        if (!campaign?.id || isSendingCampaign[campaign.id]) {            return false;        }        isSendingCampaign[campaign.id] = true;        isSendingCampaign = { ...isSendingCampaign };        let sent = false;        try {            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {                method: "POST",                body: {                    campaignId: campaign.id,                },                requestKey: "nuvio_newsletter_send_" + campaign.id,            });            const sentCountValue = Number(response?.sentCount);            const failedCountValue = Number(response?.failedCount);            const recipientsCountValue = Number(response?.recipientsCount);            const hasSentCount = Number.isFinite(sentCountValue) && sentCountValue >= 0;            const hasFailedCount = Number.isFinite(failedCountValue) && failedCountValue >= 0;            const hasRecipientsCount = Number.isFinite(recipientsCountValue) && recipientsCountValue >= 0;            if (hasSentCount && hasFailedCount) {                if (sentCountValue > 0 && failedCountValue > 0) {                    addWarningToast(`Campaign sent to ${sentCountValue} subscriber(s). ${failedCountValue} recipient(s) failed.`);                    sent = true;                } else if (sentCountValue > 0) {                    addSuccessToast(`Campaign sent to ${sentCountValue} subscriber(s).`);                    sent = true;                } else if (failedCountValue > 0) {                    addErrorToast("Campaign could not be sent. Please try again or check email configuration.");                } else {                    addSuccessToast("Campaign sent.");                    sent = true;                }            } else if (hasRecipientsCount) {                addSuccessToast(`Campaign sent to ${recipientsCountValue} subscriber(s).`);                sent = true;            } else {                addSuccessToast("Campaign sent.");                sent = true;            }            await loadCampaigns();        } catch (err) {            ApiClient.error(err, false);            addErrorToast("Campaign could not be sent. Please try again or check email configuration.");        }        delete isSendingCampaign[campaign.id];        isSendingCampaign = { ...isSendingCampaign };        return sent;    }    function resetCampaignComposer() {
         campaignForm = {
             subject: "",
             body: "",
@@ -1887,7 +1900,7 @@
                                     <div class="control-item">
                                         <label class="txt-sm txt-hint block m-b-5" for="subscriber-search">Search</label>
                                         <input
-                                            id="subscriber-search"                                            type="text"                                            class="input input-sm"                                            placeholder="Search by name or email..."                                            bind:value={subscriberSearch}                                        />                                    </div>                                    <div class="control-item">                                        <label class="txt-sm txt-hint block m-b-5" for="subscriber-filter-status">Status</label>                                        <select                                            id="subscriber-filter-status"                                            class="input input-sm"                                            bind:value={subscriberStatusFilter}                                        >                                            <option value="all">All statuses</option>                                            {#each subscriberStatuses as status}                                                <option value={status}>{status}</option>                                            {/each}                                        </select>                                    </div>                                    <div class="control-item">
+                                            id="subscriber-search"                                            type="text"                                            class="input input-sm"                                            placeholder="Search by name or email..."                                            bind:value={subscriberSearch}                                        />                                    </div>                                    <div class="control-item">                                        <label class="txt-sm txt-hint block m-b-5" for="subscriber-filter-status">Status</label>                                        <select                                            id="subscriber-filter-status"                                            class="input input-sm"                                            bind:value={subscriberStatusFilter}                                        >                                            <option value="all">All</option>                                            {#each subscriberStatuses as status}                                                <option value={status}>{getSubscriberStatusLabel(status)}</option>                                            {/each}                                        </select>                                    </div>                                    <div class="control-item">
                                         <label class="txt-sm txt-hint block m-b-5" for="subscriber-sort">Sort</label>
                                         <select id="subscriber-sort" class="input input-sm" bind:value={subscriberSort}>
                                             {#each subscriberSortOptions as sortOption}
@@ -2541,6 +2554,10 @@
                                                     <div class="campaign-audience-summary-row">
                                                         <span class="audience-stat-label">Recipients</span>
                                                         <span class="audience-stat-value">{audienceRecipientsSummary}</span>
+                                                    </div>
+                                                    <div class="campaign-audience-summary-row">
+                                                        <span class="audience-stat-label">Delivery</span>
+                                                        <span class="audience-stat-value">Campaigns are sent only to active subscribers.</span>
                                                     </div>
                                                     <div class="campaign-audience-summary-row">
                                                         <span class="audience-stat-label">Groups available</span>
@@ -4593,6 +4610,7 @@
         }
     }
 </style>
+
 
 
 
