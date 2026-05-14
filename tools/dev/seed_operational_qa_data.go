@@ -20,7 +20,10 @@ import (
 )
 
 const (
-	seedConfirmToken = "SEED_OPERATIONAL_QA_DATA"
+	seedConfirmToken       = "SEED_OPERATIONAL_QA_DATA"
+	seedTargetContacts     = 50
+	seedTargetWhatsapp     = 30
+	seedTargetAppointments = 42
 
 	collectionWebsites            = "pbc_2619338178"
 	collectionContacts            = "pbc_1661203100"
@@ -743,13 +746,12 @@ func (r *seedRunner) seedBooking(websiteID string) error {
 
 	exceptions := buildSeedBookingExceptions(websiteID, time.Now().In(time.Local))
 	for _, payload := range exceptions {
+		// Date-relative exception windows are matched by stable QA seed identity.
 		filter := fmt.Sprintf(
-			"website=%s && date=%s && type=%s && startTime=%s && endTime=%s",
+			"website=%s && type=%s && note=%s",
 			pbFilterString(websiteID),
-			pbFilterString(toString(payload["date"])),
 			pbFilterString(toString(payload["type"])),
-			pbFilterString(toString(payload["startTime"])),
-			pbFilterString(toString(payload["endTime"])),
+			pbFilterString(toString(payload["note"])),
 		)
 		virtualID := "dry_exception_" + shortHash(filter)
 		if _, _, err := r.upsertRecord(collectionBookingExceptions, filter, payload, virtualID); err != nil {
@@ -762,12 +764,12 @@ func (r *seedRunner) seedBooking(websiteID string) error {
 		email := strings.TrimSpace(toString(payload["email"]))
 		date := strings.TrimSpace(toString(payload["date"]))
 		timeValue := strings.TrimSpace(toString(payload["time"]))
+		// Date-relative appointments are matched by stable QA seed identity (email),
+		// then updated with the new relative date/time on rerun.
 		filter := fmt.Sprintf(
-			"website=%s && email=%s && date=%s && time=%s",
+			"website=%s && email=%s",
 			pbFilterString(websiteID),
 			pbFilterString(email),
-			pbFilterString(date),
-			pbFilterString(timeValue),
 		)
 		virtualID := "dry_appointment_" + shortHash(email+"_"+date+"_"+timeValue)
 		if _, _, err := r.upsertRecord(collectionAppointments, filter, payload, virtualID); err != nil {
@@ -826,10 +828,10 @@ func (r *seedRunner) seedNewsletter(websiteID string) error {
 }
 
 func buildSeedContacts(websiteID string) []map[string]interface{} {
-	result := make([]map[string]interface{}, 0, 30)
+	result := make([]map[string]interface{}, 0, seedTargetContacts)
 	now := time.Now().UTC()
 
-	for i := 1; i <= 30; i++ {
+	for i := 1; i <= seedTargetContacts; i++ {
 		status := "new"
 		if i%3 == 2 {
 			status = "read"
@@ -876,11 +878,11 @@ func buildSeedContacts(websiteID string) []map[string]interface{} {
 }
 
 func buildSeedWhatsappInteractions(websiteID string) []map[string]interface{} {
-	result := make([]map[string]interface{}, 0, 20)
+	result := make([]map[string]interface{}, 0, seedTargetWhatsapp)
 	now := time.Now().UTC()
 
 	sources := []string{"floating_button", "footer_link", "contact_section"}
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= seedTargetWhatsapp; i++ {
 		status := "new"
 		if i%3 == 2 {
 			status = "read"
@@ -1073,6 +1075,53 @@ func buildSeedAppointments(
 		{10, "normal", "pending", 9, "13:00", "[QA SEED] Archived pending appointment", "", true},
 		{11, "extended", "confirmed", 18, "09:30", "[QA SEED] Confirmed future appointment 003", "[QA SEED] Internal note for calendar tests", false},
 		{12, "high", "cancelled", -2, "17:00", "[QA SEED] Archived cancelled appointment", "", true},
+	}
+
+	serviceCycle := []string{"high", "normal", "low", "extended"}
+	futureTimes := []string{"09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"}
+	pastTimes := []string{"09:30", "10:30", "11:30", "13:30", "14:30", "15:30", "16:30"}
+
+	for i := 13; i <= seedTargetAppointments; i++ {
+		serviceKey := serviceCycle[(i-13)%len(serviceCycle)]
+		status := "pending"
+		dateOffset := 0
+		timeValue := futureTimes[(i-13)%len(futureTimes)]
+		archived := false
+		internalNotes := ""
+
+		switch {
+		case i <= 24:
+			status = []string{"pending", "confirmed", "cancelled"}[(i-13)%3]
+			dateOffset = 16 + (i - 13)
+		case i <= 33:
+			status = []string{"confirmed", "cancelled"}[(i-25)%2]
+			dateOffset = -3 - (i - 25)
+			timeValue = pastTimes[(i-25)%len(pastTimes)]
+		default:
+			status = []string{"pending", "confirmed", "cancelled"}[(i-34)%3]
+			dateOffset = 6 + (i - 34)
+			archived = i%2 == 0
+		}
+
+		if i%2 == 0 {
+			internalNotes = fmt.Sprintf("[QA SEED] Internal note for appointment %03d", i)
+		}
+
+		statusLabel := status
+		if len(statusLabel) > 0 {
+			statusLabel = strings.ToUpper(statusLabel[:1]) + statusLabel[1:]
+		}
+
+		specs = append(specs, appointmentSpec{
+			Index:         i,
+			ServiceKey:    serviceKey,
+			Status:        status,
+			DateOffset:    dateOffset,
+			Time:          timeValue,
+			Notes:         fmt.Sprintf("[QA SEED] %s appointment %03d", statusLabel, i),
+			InternalNotes: internalNotes,
+			Archived:      archived,
+		})
 	}
 
 	result := make([]map[string]interface{}, 0, len(specs))
@@ -1292,6 +1341,13 @@ func (r *seedRunner) printSummary(websiteSlug string, websiteID string) {
 	fmt.Printf("Website slug: %s\n", websiteSlug)
 	fmt.Printf("Website id:   %s\n", websiteID)
 	fmt.Printf("Dry-run:      %t\n", r.opts.DryRun)
+	fmt.Printf(
+		"Target counts: Contacts=%d, Whatsapp=%d, Appointments=%d\n",
+		seedTargetContacts,
+		seedTargetWhatsapp,
+		seedTargetAppointments,
+	)
+	fmt.Println("Date-relative QA records are matched by stable seed identity and updated on rerun.")
 	fmt.Println("")
 
 	ordered := []struct {
