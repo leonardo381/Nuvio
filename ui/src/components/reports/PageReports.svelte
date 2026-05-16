@@ -1313,7 +1313,7 @@
             <div>{reportsLoadError}</div>
         </div>
     {:else}
-        <section class="panel reports-body m-b-base">
+        <section class="panel operations-content-panel reports-body m-b-base">
             <div class="tabs-header compact combined left operations-tabs reports-tabs m-b-sm">
                 {#each reportsTabs as tab (tab.key)}
                     <button

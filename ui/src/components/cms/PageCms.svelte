@@ -3114,7 +3114,7 @@
             </div>
         </section>
 
-        <section class="panel cms-section-panel m-b-base" class:is-pages-workspace={activeCmsTab === cmsTabPagesKey}>
+        <section class="panel operations-content-panel cms-section-panel m-b-base" class:is-pages-workspace={activeCmsTab === cmsTabPagesKey}>
             {#if activeCmsTab === cmsTabPagesKey}
                 <div class="content-workspace-grid">
                     <aside class="panel pages-list-panel">

@@ -83,6 +83,16 @@
     }
 }
 
+.operations-content-panel {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-left: 0;
+    margin-right: 0;
+    padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
+}
+
 .tabs-header.operations-tabs {
     margin: 0;
     display: inline-flex;
@@ -213,5 +223,9 @@
             justify-content: flex-start;
             margin-left: 0;
         }
+    }
+
+    .operations-content-panel {
+        padding: calc(var(--baseSpacing) - 12px) calc(var(--baseSpacing) - 10px);
     }
 }

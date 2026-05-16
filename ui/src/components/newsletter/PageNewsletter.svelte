@@ -1794,7 +1794,7 @@
             <div class="tabs">
                 <div class="tabs-content">
                     {#if activeSection === "subscribers"}
-                        <section class="panel subscribers-section-panel">
+                        <section class="panel operations-content-panel subscribers-section-panel">
                             <div class="subscribers-panel-header m-b-sm">
                                 <div class="section-head section-head-inline m-b-0">
                                     <h4 class="m-0">Subscribers</h4>
@@ -2219,7 +2219,7 @@
                         </section>
                     {:else}
                         <div class="campaign-layout-grid">
-                            <section class="panel campaign-composer-panel">
+                            <section class="panel operations-content-panel campaign-composer-panel">
                                 <div class="campaign-top-controls m-b-sm">
                                     <div class="tabs-header compact combined left operations-tabs operations-tabs--nested">
                                         <button
@@ -2723,7 +2723,7 @@
                                 {/if}
                             </section>
 
-                            <section class="panel campaign-list-panel">
+                            <section class="panel operations-content-panel campaign-list-panel">
                                 <div class="campaigns-header-row m-b-sm">
                                     <div class="section-head m-b-0">
                                         <h4 class="m-0">Campaigns</h4>

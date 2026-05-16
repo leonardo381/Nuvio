@@ -1934,7 +1934,7 @@
         </div>
     </section>
 
-    <section class="panel leads-body m-b-base">
+    <section class="panel operations-content-panel leads-body m-b-base">
         <div class="leads-inbox-layout">
             <div class="leads-left-column">
                 <div class="leads-controls">
@@ -2918,7 +2918,6 @@
     }
 
     .leads-body {
-        padding: calc(var(--baseSpacing) - 10px);
         display: flex;
         flex-direction: column;
         gap: 10px;

@@ -4279,7 +4279,7 @@
         </div>
     </section>
 
-    <section class="panel booking-body m-b-base">
+    <section class="panel operations-content-panel booking-body m-b-base">
         {#if $isCollectionsLoading || (!$hasCollectionsLoaded && !$collectionsLoadError)}
             <div class="placeholder-section m-b-0">
                 <span class="loader loader-lg" />
