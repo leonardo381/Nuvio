@@ -1947,6 +1947,7 @@
             }
 
             closeManualAppointmentPanel();
+            dispatchSidebarBadgeRefresh();
             addSuccessToast("Appointment created.");
 
             if (normalizeString(response?.warning)) {
@@ -2653,6 +2654,14 @@
         selectedAppointmentIds = [];
     }
 
+    function dispatchSidebarBadgeRefresh() {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        window.dispatchEvent(new CustomEvent("nuvio:sidebar-badges-refresh"));
+    }
+
     function isAppointmentSelectedForBulk(appointmentId) {
         return selectedAppointmentIdsSet.has(normalizeString(appointmentId));
     }
@@ -2715,6 +2724,7 @@
             }
 
             patchAppointmentRecord(selectedAppointment.id, patchPayload);
+            dispatchSidebarBadgeRefresh();
 
             addSuccessToast(`Appointment marked as ${resolvedStatus}.`);
             if (normalizeString(response?.warning)) {
@@ -2776,6 +2786,7 @@
             patchAppointmentRecord(selectedAppointment.id, {
                 [patchFieldName]: archivedAtValue,
             });
+            dispatchSidebarBadgeRefresh();
 
             addSuccessToast(nextArchived ? "Appointment archived." : "Appointment moved to inbox.");
         } catch (err) {
@@ -2853,6 +2864,7 @@
                         [patchFieldName]: archivedAtValue,
                     };
                 });
+                dispatchSidebarBadgeRefresh();
             }
 
             if (succeededIds.size && !failedIds.length) {

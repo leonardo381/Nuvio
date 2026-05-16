@@ -1235,6 +1235,14 @@
         return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(normalizedMessage)}`;
     }
 
+    function dispatchSidebarBadgeRefresh() {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        window.dispatchEvent(new CustomEvent("nuvio:sidebar-badges-refresh"));
+    }
+
     async function copyValue(value, label) {
         const normalizedValue = normalizeString(value);
         if (!normalizedValue) {
@@ -1341,6 +1349,7 @@
             });
 
             patchLeadRecord(sourceKey, recordId, { [statusSupport.fieldName]: nextStatusValue });
+            dispatchSidebarBadgeRefresh();
 
             const nextLabel = normalizedTargetStatus === normalizeLower(statusSupport.readValue)
                 ? "read"
@@ -1676,6 +1685,7 @@
 
             if (successCount) {
                 addSuccessToast(resolveBulkLeadSuccessMessage(actionKey, successCount));
+                dispatchSidebarBadgeRefresh();
             }
 
             if (failureCount || skippedCount) {
