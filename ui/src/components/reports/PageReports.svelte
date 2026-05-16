@@ -504,11 +504,7 @@
     }
 
     function resolveWebsiteLabel(website) {
-        return (
-            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim()
-            || website?.id
-            || ""
-        );
+        return CommonHelper.websiteDisplayLabel(website, { missingValue: "" });
     }
 
     function clearDataRecords() {
@@ -1228,8 +1224,8 @@
                 <p class="head-description txt-sm txt-hint m-b-0">Track business performance for this website.</p>
             </div>
 
-            <div class="head-selector">
-                <div class="selector-row">
+            <div class="head-selector operations-website-select">
+                <div class="selector-row selector-row--website">
                     <label class="txt-sm txt-hint selector-label m-b-0" for="reports-website-selector">Website</label>
                     <select
                         id="reports-website-selector"
@@ -1247,7 +1243,7 @@
                     </select>
                 </div>
 
-                <div class="selector-row">
+                <div class="selector-row selector-row--period">
                     <label class="txt-sm txt-hint selector-label m-b-0" for="reports-period-selector">Period</label>
                     <select id="reports-period-selector" class="input input-sm" bind:value={selectedPeriod}>
                         {#each periodOptions as periodOption (periodOption.key)}
@@ -1846,9 +1842,16 @@
     }
 
     .reports-head.operations-head .selector-row {
-        min-width: min(100%, 260px);
         display: grid;
         gap: 6px;
+    }
+
+    .reports-head.operations-head .selector-row--website {
+        min-width: 100%;
+    }
+
+    .reports-head.operations-head .selector-row--period {
+        min-width: min(100%, 260px);
     }
 
     .reports-head.operations-head .summary-badges {

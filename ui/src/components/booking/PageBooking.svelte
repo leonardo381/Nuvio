@@ -1496,11 +1496,7 @@
     }
 
     function resolveWebsiteLabel(website) {
-        return (
-            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim()
-            || website?.id
-            || ""
-        );
+        return CommonHelper.websiteDisplayLabel(website, { missingValue: "" });
     }
 
     async function loadWebsites() {
@@ -4108,7 +4104,7 @@
                 </p>
             </div>
 
-            <div class="head-selector">
+            <div class="head-selector operations-website-select">
                 <div class="selector-row">
                     <label class="txt-sm txt-hint selector-label m-b-0" for="booking-website-selector">Website</label>
                     <select
@@ -6133,27 +6129,6 @@
         justify-content: space-between;
         gap: 20px;
         flex-wrap: wrap;
-    }
-
-    .booking-head.operations-head .head-selector {
-        min-width: 280px;
-        max-width: 420px;
-        width: 100%;
-    }
-
-    .booking-head.operations-head .selector-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
-    .booking-head.operations-head .selector-label {
-        flex: 0 0 auto;
-    }
-
-    .booking-head.operations-head .selector-row .input {
-        flex: 1;
-        min-width: 0;
     }
 
     .booking-head.operations-head .head-tools {

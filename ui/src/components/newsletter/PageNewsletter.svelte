@@ -329,7 +329,7 @@
         cancelEditSubscriber();
     }
     // Keep context in URL query so refresh/navigation preserves website and active tab.
-    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return (            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim() || website?.id || ""        );    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function resolveCollectionFieldName(collection, aliases = []) {        if (!collection || !Array.isArray(collection.fields)) {            return "";        }        const normalizedAliases = aliases.map((alias) => `${alias || ""}`.trim().toLowerCase()).filter(Boolean);        for (const field of collection.fields) {            const fieldName = `${field?.name || ""}`.trim();            if (!fieldName) {                continue;            }            if (normalizedAliases.includes(fieldName.toLowerCase())) {                return fieldName;            }        }        return "";    }    function normalizeIdList(value) {        if (Array.isArray(value)) {            return [...new Set(                value                    .map((item) => `${item || ""}`.trim())                    .filter(Boolean),            )];        }        if (typeof value === "string") {            const trimmed = value.trim();            if (!trimmed) {                return [];            }            if (trimmed.startsWith("[")) {                try {                    const parsed = JSON.parse(trimmed);                    return normalizeIdList(parsed);                } catch (err) {                    return [];                }            }            return [trimmed];        }        return [];    }    function getCampaignRecipientsType(campaign) {        const rawType = campaign?.recipientsType            ?? campaign?.[campaignRecipientsTypeFieldName]            ?? campaign?.recipientType            ?? campaign?.recipients_type            ?? "all";        return normalizeStatus(rawType || "all");    }    function getCampaignRecipientIds(campaign) {        const rawIds = campaign?.recipientsIds            ?? campaign?.[campaignRecipientsIdsFieldName]            ?? campaign?.recipientIds            ?? campaign?.recipients_ids;        return normalizeIdList(rawIds);    }    function normalizeSubscriberName(name) {
+    $: if (hasNewsletterCollections) {        const nextContextKey = `${selectedWebsiteId || ""}|${activeSection || "subscribers"}`;        if (nextContextKey !== lastPersistedContextKey) {            lastPersistedContextKey = nextContextKey;            CommonHelper.replaceHashQueryParams({                newsletterWebsite: selectedWebsiteId || null,                newsletterTab: activeSection !== "subscribers" ? activeSection : null,            });        }    };    function resolveWebsitesSort(collection) {        const preferredSortFields = ["title", "name", "slug"];        const availableFields = new Set(            CommonHelper.getAllCollectionIdentifiers(collection).map((field) => `${field || ""}`.trim().toLowerCase()),        );        const validSortFields = preferredSortFields.filter((field) => availableFields.has(field));        if (!validSortFields.length) {            return "+id";        }        return validSortFields.map((field) => `+${field}`).join(",");    }    function resolveWebsiteLabel(website) {        return CommonHelper.websiteDisplayLabel(website, { missingValue: "" });    }    function normalizeEmail(email) {        return `${email || ""}`.trim().toLowerCase();    }    function resolveCollectionFieldName(collection, aliases = []) {        if (!collection || !Array.isArray(collection.fields)) {            return "";        }        const normalizedAliases = aliases.map((alias) => `${alias || ""}`.trim().toLowerCase()).filter(Boolean);        for (const field of collection.fields) {            const fieldName = `${field?.name || ""}`.trim();            if (!fieldName) {                continue;            }            if (normalizedAliases.includes(fieldName.toLowerCase())) {                return fieldName;            }        }        return "";    }    function normalizeIdList(value) {        if (Array.isArray(value)) {            return [...new Set(                value                    .map((item) => `${item || ""}`.trim())                    .filter(Boolean),            )];        }        if (typeof value === "string") {            const trimmed = value.trim();            if (!trimmed) {                return [];            }            if (trimmed.startsWith("[")) {                try {                    const parsed = JSON.parse(trimmed);                    return normalizeIdList(parsed);                } catch (err) {                    return [];                }            }            return [trimmed];        }        return [];    }    function getCampaignRecipientsType(campaign) {        const rawType = campaign?.recipientsType            ?? campaign?.[campaignRecipientsTypeFieldName]            ?? campaign?.recipientType            ?? campaign?.recipients_type            ?? "all";        return normalizeStatus(rawType || "all");    }    function getCampaignRecipientIds(campaign) {        const rawIds = campaign?.recipientsIds            ?? campaign?.[campaignRecipientsIdsFieldName]            ?? campaign?.recipientIds            ?? campaign?.recipients_ids;        return normalizeIdList(rawIds);    }    function normalizeSubscriberName(name) {
         return `${name || ""}`.trim().replace(/\s+/g, " ");
     }    function resolveSubscriberDisplayName(subscriber) {
         return normalizeSubscriberName(subscriber?.name);
@@ -1698,7 +1698,7 @@
                     <p class="txt-sm txt-hint m-b-0 head-description">Manage subscribers and campaigns by website in one place.</p>
                 </div>
 
-                <div class="head-selector">
+                <div class="head-selector operations-website-select">
                     <div class="selector-row">
                         <label class="txt-sm txt-hint selector-label m-b-0" for="newsletter-website">Website</label>
                         <select
@@ -3024,10 +3024,6 @@
     {/if}
 </PageWrapper>
 <style>
-    .newsletter-head.operations-head .head-selector {
-        width: min(100%, 560px);
-    }
-
     .newsletter-head.operations-head .head-description {
         max-width: 460px;
     }
@@ -4610,6 +4606,8 @@
         }
     }
 </style>
+
+
 
 
 

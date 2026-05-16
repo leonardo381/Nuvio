@@ -37,6 +37,12 @@
         gap: 4px;
     }
 
+    .head-selector.operations-website-select {
+        min-width: min(280px, 100%);
+        max-width: 420px;
+        width: 100%;
+    }
+
     .selector-row {
         display: flex;
         align-items: center;

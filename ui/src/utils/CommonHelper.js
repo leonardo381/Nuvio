@@ -1696,6 +1696,111 @@ export default class CommonHelper {
     }
 
     /**
+     * Returns a clean website display label for UI selectors.
+     *
+     * It prefers human-readable fields and only falls back to slug/id when needed.
+     * If a human field contains technical comma-separated suffixes like
+     * "Demo Site, demo-site, test", it trims to the first segment for display only.
+     *
+     * @param  {Object} website
+     * @param  {Object} [options]
+     * @param  {Array<string>} [options.preferredFields]
+     * @param  {string} [options.slugField]
+     * @param  {string} [options.idField]
+     * @param  {string} [options.missingValue]
+     * @return {string}
+     */
+    static websiteDisplayLabel(website, options = {}) {
+        website = website || {};
+
+        const preferredFields = Array.isArray(options.preferredFields)
+            ? options.preferredFields
+            : [];
+        const slugField = CommonHelper.stringifyValue(options.slugField, "").trim() || "slug";
+        const idField = CommonHelper.stringifyValue(options.idField, "").trim() || "id";
+        const missingValue = CommonHelper.stringifyValue(options.missingValue, "") || "N/A";
+
+        const humanReadableFields = [
+            ...preferredFields,
+            "name",
+            "title",
+            "displayName",
+            "display_name",
+            "label",
+        ];
+
+        for (const fieldName of humanReadableFields) {
+            const normalizedFieldName = CommonHelper.stringifyValue(fieldName, "").trim();
+            if (!normalizedFieldName) {
+                continue;
+            }
+
+            const value = CommonHelper.stringifyValue(website[normalizedFieldName], "").trim();
+            const cleanedValue = CommonHelper.cleanWebsiteDisplaySegment(value, true);
+            if (cleanedValue) {
+                return cleanedValue;
+            }
+        }
+
+        const slugValue = CommonHelper.cleanWebsiteDisplaySegment(
+            CommonHelper.stringifyValue(website[slugField], "").trim(),
+            false,
+        );
+        if (slugValue) {
+            return slugValue;
+        }
+
+        const idValue = CommonHelper.cleanWebsiteDisplaySegment(
+            CommonHelper.stringifyValue(website[idField], "").trim(),
+            false,
+        );
+        if (idValue) {
+            return idValue;
+        }
+
+        return missingValue;
+    }
+
+    /**
+     * Cleans website display values for selector/UI presentation.
+     *
+     * @param  {string} value
+     * @param  {boolean} trimTechnicalSuffixes
+     * @return {string}
+     */
+    static cleanWebsiteDisplaySegment(value, trimTechnicalSuffixes = true) {
+        const normalized = CommonHelper.stringifyValue(value, "").replace(/\s+/g, " ").trim();
+        if (!normalized) {
+            return "";
+        }
+
+        if (!trimTechnicalSuffixes || !normalized.includes(",")) {
+            return normalized;
+        }
+
+        const parts = normalized
+            .split(",")
+            .map((part) => CommonHelper.stringifyValue(part, "").trim())
+            .filter(Boolean);
+
+        if (parts.length < 2) {
+            return normalized;
+        }
+
+        const secondPart = (parts[1] || "").toLowerCase();
+        const hasThreeOrMoreParts = parts.length >= 3;
+        const hasSlugLikeSecondPart = /^[a-z0-9]+(?:[-_][a-z0-9]+)+$/.test(secondPart);
+        const hasDomainLikeSecondPart = /^[a-z0-9.-]+\.[a-z]{2,}$/.test(secondPart);
+        const hasEnvLikeSecondPart = ["test", "qa", "dev", "staging", "prod"].includes(secondPart);
+
+        if (hasThreeOrMoreParts || hasSlugLikeSecondPart || hasDomainLikeSecondPart || hasEnvLikeSecondPart) {
+            return parts[0];
+        }
+
+        return normalized;
+    }
+
+    /**
      * Stringifies the provided value or fallback to missingValue in case it is empty.
      *
      * @param  {Mixed}  val

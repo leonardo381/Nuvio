@@ -57,7 +57,7 @@
     const desktopMasterDetailMinWidth = 1060;
 
     let websites = [];
-    let selectedWebsiteId = ALL_WEBSITES_KEY;
+    let selectedWebsiteId = "";
     let contactsRecords = [];
     let whatsappRecords = [];
 
@@ -103,7 +103,7 @@
 
     $: if (!websitesCollection?.id) {
         websites = [];
-        selectedWebsiteId = ALL_WEBSITES_KEY;
+        selectedWebsiteId = "";
         lastWebsitesCollectionId = "";
     } else if (websitesCollection.id !== lastWebsitesCollectionId) {
         lastWebsitesCollectionId = websitesCollection.id;
@@ -113,12 +113,10 @@
     $: websiteOptionMap = new Map(
         websites.map((website) => [website.id, resolveWebsiteLabel(website)]),
     );
-    $: if (websites.length === 1 && selectedWebsiteId === ALL_WEBSITES_KEY) {
+    $: if (!websites.length) {
+        selectedWebsiteId = "";
+    } else if (!websiteOptionMap.has(selectedWebsiteId)) {
         selectedWebsiteId = websites[0].id;
-    }
-
-    $: if (selectedWebsiteId !== ALL_WEBSITES_KEY && !websiteOptionMap.has(selectedWebsiteId)) {
-        selectedWebsiteId = ALL_WEBSITES_KEY;
     }
 
     $: leadsDataKey = [
@@ -328,11 +326,7 @@
     }
 
     function resolveWebsiteLabel(website) {
-        return (
-            `${CommonHelper.displayValue(website || {}, ["title", "name", "slug"]) || ""}`.trim()
-            || website?.id
-            || ""
-        );
+        return CommonHelper.websiteDisplayLabel(website, { missingValue: "" });
     }
 
     function resolveValueByCandidates(record, candidates = []) {
@@ -1848,7 +1842,7 @@
                 </p>
             </div>
 
-            <div class="head-selector">
+            <div class="head-selector operations-website-select">
                 <div class="selector-row">
                     <label class="txt-sm txt-hint selector-label m-b-0" for="leads-website-filter">Website</label>
                     <select
@@ -1860,7 +1854,6 @@
                         {#if !websites.length}
                             <option value="">No websites available</option>
                         {:else}
-                            <option value={ALL_WEBSITES_KEY}>All websites</option>
                             {#each websites as website (website.id)}
                                 <option value={website.id}>{resolveWebsiteLabel(website)}</option>
                             {/each}
@@ -2866,14 +2859,6 @@
 <style>
     .leads-head.operations-head .head-description {
         max-width: 460px;
-    }
-
-    .leads-head.operations-head .head-selector {
-        width: min(100%, 560px);
-    }
-
-    .leads-head.operations-head .head-selector .input {
-        min-width: 220px;
     }
 
     .leads-head.operations-head .leads-view-toggle {

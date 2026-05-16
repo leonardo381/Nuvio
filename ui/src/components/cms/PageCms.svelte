@@ -820,7 +820,11 @@
     }
 
     function getWebsiteLabel(record) {
-        return `${CommonHelper.displayValue(record || {}, [websiteNameField, websiteSlugField, websiteDomainField], "") || ""}`.trim() || record?.id || "-";
+        return CommonHelper.websiteDisplayLabel(record, {
+            preferredFields: [websiteNameField],
+            slugField: websiteSlugField || "slug",
+            missingValue: record?.id || "-",
+        });
     }
 
     function getWebsiteNameText(record) {
@@ -2940,7 +2944,7 @@
                     <p class="txt-sm txt-hint m-b-0 head-description">Edit your website pages and sections.</p>
                 </div>
 
-                <div class="head-selector">
+                <div class="head-selector operations-website-select">
                     <div class="selector-row">
                         <label class="txt-sm txt-hint selector-label m-b-0" for="cms-website">Website</label>
                         <select
@@ -2950,10 +2954,13 @@
                             disabled={isLoadingWebsites || !websites.length}
                             on:change={handleWebsiteChange}
                         >
-                            <option value="">Select website</option>
-                            {#each websites as website}
-                                <option value={website.id}>{getWebsiteLabel(website)}</option>
-                            {/each}
+                            {#if !websites.length}
+                                <option value="">No websites available</option>
+                            {:else}
+                                {#each websites as website}
+                                    <option value={website.id}>{getWebsiteLabel(website)}</option>
+                                {/each}
+                            {/if}
                         </select>
 
                         {#if websitePublicUrl}
