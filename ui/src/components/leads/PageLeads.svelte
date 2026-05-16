@@ -57,6 +57,7 @@
     const desktopMasterDetailMinWidth = 1060;
     const leadsInitialVisibleCount = 24;
     const leadsVisibleIncrement = 24;
+    const staleInboxLeadDaysThreshold = 3;
 
     let websites = [];
     let selectedWebsiteId = "";
@@ -251,23 +252,6 @@
         && selectedLeadStatusSupport?.supportsArchive
         && !isSelectedLeadArchived
         && selectedLeadCurrentStatusNormalized !== normalizeLower(selectedLeadStatusSupport?.archiveValue);
-    $: selectedLeadPrimaryMessage = normalizeString(selectedLead?.whatsappTargetMessage || selectedLead?.message);
-    $: selectedLeadMissingContact = !!selectedLead && !normalizeString(selectedLead?.email) && !normalizeString(selectedLead?.phone);
-    $: selectedLeadMissingMessage = !!selectedLead && !selectedLeadPrimaryMessage;
-    $: selectedLeadNeedsFollowUp = normalizeLower(selectedLead?.statusKey) === "new";
-    $: selectedLeadHealthWarnings = buildLeadHealthWarnings({
-        selectedLead,
-        selectedLeadMissingContact,
-        selectedLeadMissingMessage,
-        selectedLeadNeedsFollowUp,
-    });
-    $: selectedLeadHealthSuggestions = buildLeadHealthSuggestions({
-        selectedLead,
-        selectedLeadMissingContact,
-        selectedLeadMissingMessage,
-        selectedLeadNeedsFollowUp,
-    });
-    $: selectedLeadHealthState = resolveLeadHealthState(selectedLeadHealthWarnings, selectedLeadHealthSuggestions);
     $: selectedLeadFollowUpSupport = resolveLeadFollowUpSupport(selectedLead);
     $: selectedLeadLastContactedLabel = resolveLastContactedLabel(selectedLead?.lastContactedAt);
     $: selectedLeadLastContactedDisplay = selectedLeadLastContactedLabel || "Not contacted yet";
@@ -292,6 +276,37 @@
     }
 
     $: nonArchivedLeads = websiteScopedLeads.filter((lead) => !isArchivedLead(lead));
+    $: inboxUncontactedLeadsCount = nonArchivedLeads.filter((lead) => (lead?.lastContactedTs || 0) <= 0).length;
+    $: inboxOlderUncontactedLeadsCount = nonArchivedLeads.filter((lead) => {
+        if ((lead?.lastContactedTs || 0) > 0) {
+            return false;
+        }
+
+        return isTimestampOlderThanDays(lead?.createdTs, staleInboxLeadDaysThreshold);
+    }).length;
+    $: inboxMissingContactLeadsCount = nonArchivedLeads.filter((lead) => !normalizeString(lead?.email) && !normalizeString(lead?.phone)).length;
+    $: inboxLeadsWithNotesCount = nonArchivedLeads.filter((lead) => !!normalizeString(lead?.notes)).length;
+    $: inboxNewsletterInviteEligibleCount = nonArchivedLeads.filter((lead) => isValidEmailAddress(lead?.email)).length;
+    $: leadHealthWarnings = buildLeadHealthWarnings({
+        totalWebsiteLeads: websiteScopedLeads.length,
+        inboxLeadsCount: nonArchivedLeads.length,
+        newLeadsCount: nonArchivedLeads.filter((lead) => lead.statusKey === "new").length,
+        uncontactedLeadsCount: inboxUncontactedLeadsCount,
+        olderUncontactedLeadsCount: inboxOlderUncontactedLeadsCount,
+        missingContactLeadsCount: inboxMissingContactLeadsCount,
+    });
+    $: leadHealthSuggestions = buildLeadHealthSuggestions({
+        totalWebsiteLeads: websiteScopedLeads.length,
+        inboxLeadsCount: nonArchivedLeads.length,
+        archivedLeadsCount,
+        newLeadsCount: nonArchivedLeads.filter((lead) => lead.statusKey === "new").length,
+        uncontactedLeadsCount: inboxUncontactedLeadsCount,
+        olderUncontactedLeadsCount: inboxOlderUncontactedLeadsCount,
+        missingContactLeadsCount: inboxMissingContactLeadsCount,
+        leadsWithNotesCount: inboxLeadsWithNotesCount,
+        newsletterInviteEligibleCount: inboxNewsletterInviteEligibleCount,
+    });
+    $: leadHealthState = resolveLeadHealthState(leadHealthWarnings, leadHealthSuggestions);
     $: totalNewLeads = nonArchivedLeads.filter((lead) => lead.statusKey === "new").length;
     $: totalThisMonthLeads = nonArchivedLeads.filter((lead) => isCurrentMonth(lead.created)).length;
     $: totalContactFormLeads = nonArchivedLeads.filter((lead) => lead.sourceKey === "contact").length;
@@ -725,53 +740,96 @@
         return "No message preview available yet.";
     }
 
+    function isTimestampOlderThanDays(timestamp, days) {
+        const normalizedDays = Number(days) || 0;
+        if (normalizedDays <= 0) {
+            return false;
+        }
+
+        const safeTimestamp = Number(timestamp) || 0;
+        if (!safeTimestamp) {
+            return false;
+        }
+
+        return safeTimestamp <= (Date.now() - (normalizedDays * 24 * 60 * 60 * 1000));
+    }
+
+    function formatCountNoun(count, singular, plural) {
+        const safeCount = Number(count) || 0;
+        return `${safeCount} ${safeCount === 1 ? singular : plural}`;
+    }
+
     function buildLeadHealthWarnings({
-        selectedLead,
-        selectedLeadMissingContact,
-        selectedLeadMissingMessage,
-        selectedLeadNeedsFollowUp,
+        totalWebsiteLeads,
+        inboxLeadsCount,
+        newLeadsCount,
+        uncontactedLeadsCount,
+        olderUncontactedLeadsCount,
+        missingContactLeadsCount,
     }) {
-        if (!selectedLead) {
+        if (!totalWebsiteLeads && !inboxLeadsCount) {
             return [];
         }
 
         const warnings = [];
-        if (selectedLeadMissingContact) {
-            warnings.push("Contact details are incomplete for this lead.");
+        if (newLeadsCount > 0) {
+            warnings.push(`${formatCountNoun(newLeadsCount, "new lead", "new leads")} still need review.`);
         }
-        if (selectedLeadMissingMessage) {
-            warnings.push("No message was captured for this lead.");
+        if (uncontactedLeadsCount > 0) {
+            warnings.push(`${formatCountNoun(uncontactedLeadsCount, "inbox lead", "inbox leads")} have not been contacted yet.`);
         }
-        if (selectedLeadNeedsFollowUp) {
-            warnings.push("This lead is still marked as new.");
+        if (olderUncontactedLeadsCount > 0) {
+            warnings.push(
+                `${formatCountNoun(olderUncontactedLeadsCount, "inbox lead", "inbox leads")} are older than ${staleInboxLeadDaysThreshold} days and still waiting for follow-up.`,
+            );
+        }
+        if (missingContactLeadsCount > 0) {
+            warnings.push(`${formatCountNoun(missingContactLeadsCount, "inbox lead", "inbox leads")} are missing usable contact details.`);
         }
 
         return warnings;
     }
 
     function buildLeadHealthSuggestions({
-        selectedLead,
-        selectedLeadMissingContact,
-        selectedLeadMissingMessage,
-        selectedLeadNeedsFollowUp,
+        totalWebsiteLeads,
+        inboxLeadsCount,
+        archivedLeadsCount,
+        newLeadsCount,
+        uncontactedLeadsCount,
+        olderUncontactedLeadsCount,
+        missingContactLeadsCount,
+        leadsWithNotesCount,
+        newsletterInviteEligibleCount,
     }) {
-        if (!selectedLead) {
+        if (!totalWebsiteLeads && !inboxLeadsCount) {
             return [];
         }
 
         const suggestions = [];
-        if (!selectedLeadMissingContact) {
-            suggestions.push("Use copy actions to follow up quickly.");
+        if (newLeadsCount > 0) {
+            suggestions.push("Review new leads and mark them as read after handling.");
         }
-        if (!selectedLeadMissingMessage) {
-            suggestions.push("Review the message before responding.");
+        if (uncontactedLeadsCount > 0) {
+            suggestions.push("Follow up with inbox leads that have not been contacted yet.");
         }
-        if (selectedLeadNeedsFollowUp) {
-            suggestions.push("Mark this lead as read after handling it.");
+        if (olderUncontactedLeadsCount > 0) {
+            suggestions.push(`Prioritize inbox leads older than ${staleInboxLeadDaysThreshold} days without follow-up.`);
+        }
+        if (missingContactLeadsCount > 0) {
+            suggestions.push("Use internal notes to capture alternate contact details or next steps.");
+        }
+        if (inboxLeadsCount > 0 && leadsWithNotesCount < inboxLeadsCount) {
+            suggestions.push("Add internal notes to important leads so follow-ups stay consistent.");
+        }
+        if (inboxLeadsCount > 0 && archivedLeadsCount === 0) {
+            suggestions.push("Archive completed or resolved leads to keep Inbox focused.");
+        }
+        if (newsletterInviteEligibleCount > 0) {
+            suggestions.push("Use newsletter invites for qualified contacts when appropriate.");
         }
 
         if (!suggestions.length) {
-            suggestions.push("Lead details are complete and ready for follow-up.");
+            suggestions.push("Lead inbox is healthy for this website.");
         }
 
         return suggestions;
@@ -2507,24 +2565,24 @@
                                         <div class="lead-health-main">
                                             <h5 class="m-0">Lead health</h5>
                                             <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
-                                                Review what is missing before follow-up.
+                                                Review lead inbox readiness, follow-up gaps, and contact quality.
                                             </p>
                                         </div>
                                         <div class="lead-health-meta">
-                                            <span class={`label label-sm lead-health-status-pill ${selectedLeadHealthState.badgeClass}`}>
-                                                {selectedLeadHealthState.label}
+                                            <span class={`label label-sm lead-health-status-pill ${leadHealthState.badgeClass}`}>
+                                                {leadHealthState.label}
                                             </span>
-                                            <span class="summary-pill lead-health-summary-pill" class:warning={selectedLeadHealthWarnings.length > 0}>
-                                                {selectedLeadHealthWarnings.length} warnings | {selectedLeadHealthSuggestions.length} suggestions
+                                            <span class="summary-pill lead-health-summary-pill" class:warning={leadHealthWarnings.length > 0}>
+                                                {leadHealthWarnings.length} warnings | {leadHealthSuggestions.length} suggestions
                                             </span>
                                         </div>
                                     </div>
 
-                                    {#if selectedLeadHealthWarnings.length}
+                                    {#if leadHealthWarnings.length}
                                         <div class="lead-health-group">
                                             <div class="lead-health-group-title">Warnings</div>
                                             <div class="lead-health-check-list">
-                                                {#each selectedLeadHealthWarnings as warning}
+                                                {#each leadHealthWarnings as warning}
                                                     <div class="lead-health-check-item warning">
                                                         <span class="label label-sm lead-health-check-pill warning">Warning</span>
                                                         <span class="lead-health-check-message">{warning}</span>
@@ -2534,11 +2592,11 @@
                                         </div>
                                     {/if}
 
-                                    {#if selectedLeadHealthSuggestions.length}
+                                    {#if leadHealthSuggestions.length}
                                         <div class="lead-health-group">
                                             <div class="lead-health-group-title">Suggestions</div>
                                             <div class="lead-health-check-list">
-                                                {#each selectedLeadHealthSuggestions as suggestion}
+                                                {#each leadHealthSuggestions as suggestion}
                                                     <div class="lead-health-check-item">
                                                         <span class="label label-sm lead-health-check-pill">Info</span>
                                                         <span class="lead-health-check-message">{suggestion}</span>
@@ -2548,15 +2606,68 @@
                                         </div>
                                     {/if}
 
-                                    {#if !selectedLeadHealthWarnings.length && !selectedLeadHealthSuggestions.length}
-                                        <p class="txt-sm txt-hint m-b-0">No follow-up issues detected for this lead.</p>
+                                    {#if !leadHealthWarnings.length && !leadHealthSuggestions.length}
+                                        <p class="txt-sm txt-hint m-b-0">No lead data available for this website yet.</p>
                                     {/if}
                                 </section>
 
                             </div>
                         {:else}
-                            <div class="empty-state m-b-0 leads-detail-empty-state">
-                                Select a lead to view details.
+                            <div class="lead-detail-layout">
+                                <div class="empty-state m-b-0 leads-detail-empty-state">
+                                    Select a lead to view details.
+                                </div>
+
+                                <section class="lead-detail-section lead-rail-block lead-rail-block--health">
+                                    <div class="lead-health-head">
+                                        <div class="lead-health-main">
+                                            <h5 class="m-0">Lead health</h5>
+                                            <p class="txt-sm txt-hint m-b-0 lead-rail-helper">
+                                                Review lead inbox readiness, follow-up gaps, and contact quality.
+                                            </p>
+                                        </div>
+                                        <div class="lead-health-meta">
+                                            <span class={`label label-sm lead-health-status-pill ${leadHealthState.badgeClass}`}>
+                                                {leadHealthState.label}
+                                            </span>
+                                            <span class="summary-pill lead-health-summary-pill" class:warning={leadHealthWarnings.length > 0}>
+                                                {leadHealthWarnings.length} warnings | {leadHealthSuggestions.length} suggestions
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {#if leadHealthWarnings.length}
+                                        <div class="lead-health-group">
+                                            <div class="lead-health-group-title">Warnings</div>
+                                            <div class="lead-health-check-list">
+                                                {#each leadHealthWarnings as warning}
+                                                    <div class="lead-health-check-item warning">
+                                                        <span class="label label-sm lead-health-check-pill warning">Warning</span>
+                                                        <span class="lead-health-check-message">{warning}</span>
+                                                    </div>
+                                                {/each}
+                                            </div>
+                                        </div>
+                                    {/if}
+
+                                    {#if leadHealthSuggestions.length}
+                                        <div class="lead-health-group">
+                                            <div class="lead-health-group-title">Suggestions</div>
+                                            <div class="lead-health-check-list">
+                                                {#each leadHealthSuggestions as suggestion}
+                                                    <div class="lead-health-check-item">
+                                                        <span class="label label-sm lead-health-check-pill">Info</span>
+                                                        <span class="lead-health-check-message">{suggestion}</span>
+                                                    </div>
+                                                {/each}
+                                            </div>
+                                        </div>
+                                    {/if}
+
+                                    {#if !leadHealthWarnings.length && !leadHealthSuggestions.length}
+                                        <p class="txt-sm txt-hint m-b-0">No lead data available for this website yet.</p>
+                                    {/if}
+                                </section>
                             </div>
                         {/if}
                     </aside>
