@@ -221,16 +221,6 @@
               </div>
               <i class="ri-arrow-down-s-line array-item__chevron" class:is-open={openItemIndex === index} />
             </button>
-
-            <div class="array-item__actions">
-              <button
-                type="button"
-                class="btn btn-sm btn-outline array-item__remove-button"
-                on:click|stopPropagation={() => removeItem(index)}
-              >
-                Remove
-              </button>
-            </div>
           </div>
 
           {#if openItemIndex === index}
@@ -267,6 +257,17 @@
                   on:input={(e) => updatePrimitiveItem(index, e.currentTarget.value)}
                 />
               {/if}
+
+              <div class="array-item__body-actions">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline array-item__remove-button"
+                  on:click={() => removeItem(index)}
+                >
+                  <i class="ri-delete-bin-line" aria-hidden="true" />
+                  <span>Remove item</span>
+                </button>
+              </div>
             </div>
           {/if}
         </div>
@@ -277,21 +278,21 @@
 
 <style>
   .array-field {
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 66%, transparent);
     border-radius: var(--baseRadius);
     background: var(--baseColor);
     overflow: hidden;
-    margin: 10px 0;
+    margin: 8px 0 12px;
   }
 
   .array-field__header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 10px;
-    padding: 9px 11px;
-    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
-    background: color-mix(in srgb, var(--baseAlt1Color) 16%, var(--baseColor));
+    padding: 10px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 70%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
   }
 
   .array-field__header-left {
@@ -351,22 +352,22 @@
   }
 
   .array-field__items {
-    padding: 8px 10px 10px;
+    padding: 9px 10px 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 7px;
   }
 
   .array-item {
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 62%, transparent);
     border-radius: calc(var(--baseRadius) - 1px);
     overflow: hidden;
-    background: color-mix(in srgb, var(--baseAlt1Color) 10%, var(--baseColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 8%, var(--baseColor));
   }
 
   .array-item.is-open {
-    border-color: color-mix(in srgb, var(--primaryColor) 34%, var(--baseAlt2Color));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 14%, transparent);
+    border-color: color-mix(in srgb, var(--primaryColor) 28%, var(--baseAlt2Color));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 12%, transparent);
   }
 
   .array-item__header {
@@ -374,9 +375,12 @@
     align-items: stretch;
     justify-content: space-between;
     gap: 10px;
-    padding: 7px 9px 7px 8px;
-    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 68%, transparent);
-    background: color-mix(in srgb, var(--baseAlt1Color) 20%, var(--baseColor));
+    padding: 8px 10px 8px 9px;
+    background: color-mix(in srgb, var(--baseAlt1Color) 16%, var(--baseColor));
+  }
+
+  .array-item.is-open .array-item__header {
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 62%, transparent);
   }
 
   .array-item__toggle {
@@ -456,34 +460,56 @@
     color: var(--txtPrimaryColor);
   }
 
-  .array-item__actions {
-    display: inline-flex;
-    align-items: flex-start;
-    flex: 0 0 auto;
-  }
-
   .array-item__remove-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     white-space: nowrap;
     min-height: 28px;
-    color: color-mix(in srgb, var(--dangerColor) 62%, var(--txtHintColor));
-    border-color: color-mix(in srgb, var(--dangerColor) 20%, var(--baseAlt2Color));
-    background: color-mix(in srgb, var(--baseAlt1Color) 8%, var(--baseColor));
+    color: color-mix(in srgb, var(--dangerColor) 56%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 18%, var(--baseAlt2Color));
+    background: color-mix(in srgb, var(--baseAlt1Color) 6%, var(--baseColor));
   }
 
   .array-item__remove-button:hover,
   .array-item__remove-button:focus-visible {
-    color: color-mix(in srgb, var(--dangerColor) 78%, var(--txtHintColor));
-    border-color: color-mix(in srgb, var(--dangerColor) 32%, var(--baseAlt2Color));
+    color: color-mix(in srgb, var(--dangerColor) 72%, var(--txtHintColor));
+    border-color: color-mix(in srgb, var(--dangerColor) 28%, var(--baseAlt2Color));
     background: color-mix(in srgb, var(--dangerColor) 6%, var(--baseColor));
   }
 
   .array-item__body {
-    padding: 9px 10px 10px;
-    background: var(--baseColor);
+    padding: 10px 11px 11px;
+    background: color-mix(in srgb, var(--baseColor) 94%, var(--baseAlt1Color));
   }
 
-  .array-item__body :global(.pb-field:last-child) {
+  .array-item__body :global(.pb-field) {
+    margin-bottom: 11px;
+  }
+
+  .array-item__body :global(.pb-field:last-of-type) {
     margin-bottom: 0;
+  }
+
+  .array-item__body :global(.pb-label) {
+    margin-bottom: 5px;
+  }
+
+  .array-item__body :global(.tinymce-wrapper) {
+    margin-top: 2px;
+  }
+
+  .array-item__body :global(.tox.tox-tinymce) {
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 68%, transparent);
+    border-radius: calc(var(--baseRadius) - 1px);
+  }
+
+  .array-item__body-actions {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 62%, transparent);
+    display: flex;
+    justify-content: flex-end;
   }
 
   .array-item__primitive-label {
@@ -517,7 +543,15 @@
       width: 100%;
     }
 
-    .array-field__add-button,
+    .array-field__add-button {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .array-item__body-actions {
+      justify-content: stretch;
+    }
+
     .array-item__remove-button {
       width: 100%;
       justify-content: center;

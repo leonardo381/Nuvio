@@ -73,11 +73,11 @@
 
 <style>
   .object-field {
-    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 74%, transparent);
+    border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 66%, transparent);
     border-radius: var(--baseRadius);
-    background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
+    background: color-mix(in srgb, var(--baseAlt1Color) 10%, var(--baseColor));
     overflow: hidden;
-    margin: 10px 0;
+    margin: 8px 0 12px;
   }
 
   .object-field__header {
@@ -87,9 +87,9 @@
     color: inherit;
     cursor: pointer;
     text-align: left;
-    padding: 9px 11px;
-    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
-    background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
+    padding: 10px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--baseAlt2Color) 70%, transparent);
+    background: color-mix(in srgb, var(--baseAlt1Color) 12%, var(--baseColor));
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
@@ -131,8 +131,8 @@
   }
 
   .object-field__body {
-    padding: 9px 10px 10px;
-    background: var(--baseColor);
+    padding: 10px 11px 11px;
+    background: color-mix(in srgb, var(--baseColor) 95%, var(--baseAlt1Color));
   }
 
   .object-field__empty {
@@ -145,7 +145,24 @@
     line-height: var(--smLineHeight);
   }
 
-  .object-field__body :global(.pb-field:last-child) {
+  .object-field__body :global(.pb-field) {
+    margin-bottom: 11px;
+  }
+
+  .object-field__body :global(.pb-field:last-of-type) {
     margin-bottom: 0;
+  }
+
+  .object-field__body :global(.pb-label) {
+    margin-bottom: 5px;
+  }
+
+  .object-field__body :global(.tinymce-wrapper) {
+    margin-top: 2px;
+  }
+
+  .object-field__body :global(.tox.tox-tinymce) {
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 68%, transparent);
+    border-radius: calc(var(--baseRadius) - 1px);
   }
 </style>
