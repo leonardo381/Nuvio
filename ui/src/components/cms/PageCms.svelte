@@ -78,6 +78,8 @@
     let focusedBlockId = "";
     let editingSectionId = "";
     let sectionEditorPanel;
+    let isSectionDiscardConfirmOpen = false;
+    let bypassSectionCloseConfirm = false;
 
     let isLoadingWebsites = false;
     let isLoadingPages = false;
@@ -638,6 +640,18 @@
     $: selectedEditingSectionSummaryPills = selectedEditingSection
         ? getSectionSummaryPills(selectedEditingSection, selectedEditingSectionFields)
         : [];
+    $: selectedEditingSectionOriginalProps = selectedEditingSection
+        ? toPropsObject(blockPropsField ? selectedEditingSection?.[blockPropsField] : {})
+        : {};
+    $: selectedEditingSectionDraftProps = selectedEditingSection
+        ? toPropsObject(sectionPropsDraftById?.[selectedEditingSection.id])
+        : {};
+    $: isSectionEditorDirty = !!selectedEditingSection
+        && stableSerializeForDirtyCheck(selectedEditingSectionDraftProps) !== stableSerializeForDirtyCheck(selectedEditingSectionOriginalProps);
+    $: if (!selectedEditingSection && isSectionDiscardConfirmOpen) {
+        isSectionDiscardConfirmOpen = false;
+        bypassSectionCloseConfirm = false;
+    }
 
     $: {
         const nextWebsiteSettingsSeedKey = `${selectedWebsite?.id || ""}|${selectedWebsite?.updated || ""}|${websiteSettingsField || ""}`;
@@ -2166,6 +2180,69 @@
 
     function closeSectionEditor() {
         editingSectionId = "";
+        isSectionDiscardConfirmOpen = false;
+        bypassSectionCloseConfirm = false;
+    }
+
+    function closeSectionDiscardConfirm() {
+        isSectionDiscardConfirmOpen = false;
+    }
+
+    function discardSectionEditorChanges() {
+        const blockId = normalizeString(selectedEditingSection?.id);
+        if (blockId) {
+            sectionPropsDraftById = {
+                ...sectionPropsDraftById,
+                [blockId]: toPropsObject(blockPropsField ? selectedEditingSection?.[blockPropsField] : {}),
+            };
+        }
+
+        isSectionDiscardConfirmOpen = false;
+        bypassSectionCloseConfirm = true;
+        sectionEditorPanel?.hide();
+    }
+
+    function shouldCloseSectionEditor() {
+        if (bypassSectionCloseConfirm) {
+            bypassSectionCloseConfirm = false;
+            return true;
+        }
+
+        if (!isSectionEditorDirty) {
+            return true;
+        }
+
+        isSectionDiscardConfirmOpen = true;
+        return false;
+    }
+
+    function normalizeComparableForDirtyCheck(value) {
+        if (Array.isArray(value)) {
+            return value.map((item) => normalizeComparableForDirtyCheck(item));
+        }
+
+        if (isPlainObject(value)) {
+            const normalizedObject = {};
+            for (const key of Object.keys(value).sort()) {
+                const nextValue = value[key];
+                if (typeof nextValue === "undefined") {
+                    continue;
+                }
+
+                normalizedObject[key] = normalizeComparableForDirtyCheck(nextValue);
+            }
+            return normalizedObject;
+        }
+
+        return value;
+    }
+
+    function stableSerializeForDirtyCheck(value) {
+        try {
+            return JSON.stringify(normalizeComparableForDirtyCheck(value));
+        } catch (_) {
+            return JSON.stringify({});
+        }
     }
 
     function clearFocusedPreview() {
@@ -4361,15 +4438,15 @@
                 bind:this={sectionEditorPanel}
                 class="overlay-panel-lg cms-section-editor-panel"
                 active={true}
-                btnClose={false}
                 escClose={false}
                 overlayClose={true}
+                beforeHide={shouldCloseSectionEditor}
                 on:hide={closeSectionEditor}
             >
                 <svelte:fragment slot="header">
                     <div class="section-drawer-head">
-                        <strong class="section-drawer-name">{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
-                        <div class="section-drawer-support-row">
+                        <div class="section-drawer-copy">
+                            <strong class="section-drawer-name">{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
                             <span class="txt-sm txt-hint section-drawer-helper">{selectedEditingSectionSubtitle || "Edit section content."}</span>
                             <div class="section-drawer-meta">
                                 <span class="label label-sm section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
@@ -4382,13 +4459,6 @@
                             </div>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        class="btn btn-sm btn-outline section-drawer-close-btn"
-                        on:click={() => sectionEditorPanel?.hide()}
-                    >
-                        Close
-                    </button>
                 </svelte:fragment>
 
                 <div class="section-drawer-body">
@@ -4421,6 +4491,31 @@
                     </button>
                 </svelte:fragment>
             </OverlayPanel>
+
+            {#if isSectionDiscardConfirmOpen}
+                <OverlayPanel
+                    active={true}
+                    popup={true}
+                    class="overlay-panel-sm hide-content cms-drawer-discard-confirm"
+                    btnClose={false}
+                    overlayClose={true}
+                    escClose={true}
+                    on:hide={closeSectionDiscardConfirm}
+                >
+                    <div slot="header" class="drawer-discard-confirm-head">
+                        <h4 class="m-0">Discard changes?</h4>
+                        <p class="txt-sm txt-hint m-b-0">You have unsaved changes. If you close this panel, your changes will be lost.</p>
+                    </div>
+                    <svelte:fragment slot="footer">
+                        <button type="button" class="btn btn-sm btn-outline" on:click={closeSectionDiscardConfirm}>
+                            <span class="txt">Keep editing</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-danger btn-outline" on:click={discardSectionEditorChanges}>
+                            <span class="txt">Discard changes</span>
+                        </button>
+                    </svelte:fragment>
+                </OverlayPanel>
+            {/if}
         {/if}
     {/if}
 </PageWrapper>
@@ -4793,24 +4888,21 @@
     :global(.cms-section-editor-panel .panel-header) {
         flex-wrap: nowrap;
         align-items: flex-start;
-        justify-content: space-between;
         column-gap: 12px;
         row-gap: 4px;
         padding: 8px 14px;
     }
 
-    :global(.cms-section-editor-panel .panel-header > :first-child) {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    :global(.cms-section-editor-panel .panel-header > :last-child) {
-        flex: 0 0 auto;
-        margin-left: 8px;
-    }
-
     .section-drawer-head {
+        width: 100%;
         min-width: 0;
+        display: flex;
+        align-items: flex-start;
+    }
+
+    .section-drawer-copy {
+        min-width: 0;
+        flex: 1 1 auto;
         display: flex;
         flex-direction: column;
         gap: 4px;
@@ -4827,14 +4919,6 @@
         color: var(--txtPrimaryColor);
     }
 
-    .section-drawer-support-row {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-        min-width: 0;
-    }
-
     .section-drawer-helper {
         line-height: 1.3;
     }
@@ -4847,10 +4931,11 @@
         min-width: 0;
     }
 
-    .section-drawer-close-btn {
-        min-height: 30px;
-        padding: 0 10px;
-        align-self: flex-start;
+    .drawer-discard-confirm-head {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        text-align: left;
     }
 
     .section-drawer-body {

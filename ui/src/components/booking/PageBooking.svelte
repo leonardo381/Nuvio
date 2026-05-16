@@ -138,6 +138,7 @@
     let appointmentInternalNotesDraftId = "";
     let isSavingAppointmentInternalNotes = false;
     let isManualAppointmentPanelOpen = false;
+    let manualAppointmentPanel;
     let isCreatingManualAppointment = false;
     let isLoadingManualAppointmentSlots = false;
     let manualAppointmentSlotsError = "";
@@ -145,6 +146,10 @@
     let manualAppointmentAvailableSlots = [];
     let lastManualSlotsQueryKey = "";
     let manualAppointmentForm = createDefaultManualAppointmentForm();
+    let manualAppointmentInitialSnapshot = "";
+    let manualAppointmentFormIsDirty = false;
+    let isManualAppointmentDiscardConfirmOpen = false;
+    let bypassManualAppointmentCloseConfirm = false;
     let isReschedulePanelOpen = false;
     let isSavingRescheduleAppointment = false;
     let isLoadingRescheduleSlots = false;
@@ -410,6 +415,8 @@
     $: manualAppointmentSlotsQueryKey = isManualAppointmentPanelOpen
         ? `${selectedWebsiteId}:${manualAppointmentForm.serviceId}:${manualAppointmentForm.date}`
         : "";
+    $: manualAppointmentFormIsDirty = isManualAppointmentPanelOpen
+        && serializeManualAppointmentDraft(manualAppointmentForm) !== manualAppointmentInitialSnapshot;
     $: rescheduleSlotsQueryKey = isReschedulePanelOpen
         ? `${selectedWebsiteId}:${rescheduleForm.appointmentId}:${rescheduleForm.serviceId}:${rescheduleForm.date}`
         : "";
@@ -1274,6 +1281,35 @@
         return bookingEmailPattern.test(normalizeString(value).toLowerCase());
     }
 
+    function normalizeComparableForDirtyCheck(value) {
+        if (Array.isArray(value)) {
+            return value.map((item) => normalizeComparableForDirtyCheck(item));
+        }
+
+        if (isPlainObject(value)) {
+            const normalizedObject = {};
+            for (const key of Object.keys(value).sort()) {
+                const nextValue = value[key];
+                if (typeof nextValue === "undefined") {
+                    continue;
+                }
+
+                normalizedObject[key] = normalizeComparableForDirtyCheck(nextValue);
+            }
+            return normalizedObject;
+        }
+
+        return value;
+    }
+
+    function stableSerializeForDirtyCheck(value) {
+        try {
+            return JSON.stringify(normalizeComparableForDirtyCheck(value));
+        } catch (_) {
+            return JSON.stringify({});
+        }
+    }
+
     function createDefaultManualAppointmentForm() {
         return {
             serviceId: "",
@@ -1286,6 +1322,20 @@
             internalNotes: "",
             status: "confirmed",
         };
+    }
+
+    function serializeManualAppointmentDraft(formValue = {}) {
+        return stableSerializeForDirtyCheck({
+            serviceId: normalizeString(formValue?.serviceId),
+            date: normalizeString(formValue?.date),
+            time: normalizeString(formValue?.time),
+            name: normalizeString(formValue?.name),
+            email: normalizeString(formValue?.email),
+            phone: normalizeString(formValue?.phone),
+            notes: normalizeString(formValue?.notes),
+            internalNotes: normalizeString(formValue?.internalNotes),
+            status: normalizeLower(formValue?.status) || "confirmed",
+        });
     }
 
     function createDefaultRescheduleForm() {
@@ -1304,6 +1354,9 @@
         manualAppointmentSlotsError = "";
         manualAppointmentAvailableSlots = [];
         lastManualSlotsQueryKey = "";
+        manualAppointmentInitialSnapshot = serializeManualAppointmentDraft(manualAppointmentForm);
+        isManualAppointmentDiscardConfirmOpen = false;
+        bypassManualAppointmentCloseConfirm = false;
     }
 
     function openManualAppointmentPanel() {
@@ -1319,6 +1372,9 @@
                 serviceId: manualAppointmentServiceOptions[0].id,
             };
         }
+        manualAppointmentInitialSnapshot = serializeManualAppointmentDraft(manualAppointmentForm);
+        isManualAppointmentDiscardConfirmOpen = false;
+        bypassManualAppointmentCloseConfirm = false;
         isManualAppointmentPanelOpen = true;
     }
 
@@ -1326,7 +1382,33 @@
         isManualAppointmentPanelOpen = false;
         isLoadingManualAppointmentSlots = false;
         isCreatingManualAppointment = false;
+        isManualAppointmentDiscardConfirmOpen = false;
+        bypassManualAppointmentCloseConfirm = false;
         resetManualAppointmentForm();
+    }
+
+    function shouldCloseManualAppointmentPanel() {
+        if (bypassManualAppointmentCloseConfirm) {
+            bypassManualAppointmentCloseConfirm = false;
+            return true;
+        }
+
+        if (!manualAppointmentFormIsDirty) {
+            return true;
+        }
+
+        isManualAppointmentDiscardConfirmOpen = true;
+        return false;
+    }
+
+    function keepEditingManualAppointment() {
+        isManualAppointmentDiscardConfirmOpen = false;
+    }
+
+    function discardManualAppointmentChanges() {
+        isManualAppointmentDiscardConfirmOpen = false;
+        bypassManualAppointmentCloseConfirm = true;
+        manualAppointmentPanel?.hide();
     }
 
     function resetRescheduleForm() {
@@ -5858,21 +5940,26 @@
     </section>
 
     <OverlayPanel
+        bind:this={manualAppointmentPanel}
         bind:active={isManualAppointmentPanelOpen}
         class="overlay-panel-lg booking-manual-appointment-panel"
         overlayClose={true}
         escClose={true}
+        beforeHide={shouldCloseManualAppointmentPanel}
         on:hide={closeManualAppointmentPanel}
     >
         <svelte:fragment slot="header">
-            <h4>New appointment</h4>
+            <div class="booking-drawer-head">
+                <div class="booking-drawer-head-copy">
+                    <strong class="booking-drawer-title">New appointment</strong>
+                    <span class="txt-sm txt-hint booking-drawer-helper">
+                        Add appointments received by phone, WhatsApp, email, or in person. Manual appointments do not send confirmation emails by default.
+                    </span>
+                </div>
+            </div>
         </svelte:fragment>
 
         <div class="booking-manual-form">
-            <p class="txt-sm txt-hint m-b-0">
-                Add appointments received by phone, WhatsApp, email, or in person. Manual appointments do not send confirmation emails by default.
-            </p>
-
             {#if !manualAppointmentServiceOptions.length}
                 <div class="alert alert-warning m-b-0">
                     <div class="icon">
@@ -6020,7 +6107,7 @@
         </div>
 
         <svelte:fragment slot="footer">
-            <button type="button" class="btn btn-outline btn-sm" disabled={isCreatingManualAppointment} on:click={closeManualAppointmentPanel}>
+            <button type="button" class="btn btn-outline btn-sm" disabled={isCreatingManualAppointment} on:click={() => manualAppointmentPanel?.hide()}>
                 <span class="txt">Cancel</span>
             </button>
             <button
@@ -6034,6 +6121,31 @@
             </button>
         </svelte:fragment>
     </OverlayPanel>
+
+    {#if isManualAppointmentDiscardConfirmOpen}
+        <OverlayPanel
+            active={true}
+            popup={true}
+            class="overlay-panel-sm hide-content booking-drawer-discard-confirm"
+            btnClose={false}
+            overlayClose={true}
+            escClose={true}
+            on:hide={keepEditingManualAppointment}
+        >
+            <div slot="header" class="booking-drawer-discard-head">
+                <h4 class="m-0">Discard changes?</h4>
+                <p class="txt-sm txt-hint m-b-0">You have unsaved changes. If you close this panel, your changes will be lost.</p>
+            </div>
+            <svelte:fragment slot="footer">
+                <button type="button" class="btn btn-sm btn-outline" on:click={keepEditingManualAppointment}>
+                    <span class="txt">Keep editing</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-danger btn-outline" on:click={discardManualAppointmentChanges}>
+                    <span class="txt">Discard changes</span>
+                </button>
+            </svelte:fragment>
+        </OverlayPanel>
+    {/if}
 
     <OverlayPanel
         bind:active={isReschedulePanelOpen}
@@ -7492,6 +7604,45 @@
 
     .booking-side-actions-title {
         letter-spacing: 0.02em;
+    }
+
+    :global(.booking-manual-appointment-panel .panel-header) {
+        align-items: flex-start;
+        row-gap: 6px;
+        padding: 8px 14px;
+    }
+
+    .booking-drawer-head {
+        width: 100%;
+        min-width: 0;
+        display: flex;
+        align-items: flex-start;
+    }
+
+    .booking-drawer-head-copy {
+        min-width: 0;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .booking-drawer-title {
+        display: block;
+        font-size: 18px;
+        line-height: 1.2;
+        color: var(--txtPrimaryColor);
+    }
+
+    .booking-drawer-helper {
+        line-height: 1.35;
+    }
+
+    .booking-drawer-discard-head {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        text-align: left;
     }
 
     .booking-manual-form {
