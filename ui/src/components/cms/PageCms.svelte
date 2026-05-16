@@ -324,12 +324,14 @@
         ? buildWebsiteSettingsFeatureFormValue(activeWebsiteSettingsFeatureField.key)
         : {};
     $: if (!activeWebsiteSettingsFeatureKey && availableWebsiteSettingsFeatures.length) {
-        activeWebsiteSettingsFeatureKey = availableWebsiteSettingsFeatures[0].key;
+        activeWebsiteSettingsFeatureKey = getDefaultWebsiteSettingsFeatureKey();
     } else if (
         activeWebsiteSettingsFeatureKey &&
         !availableWebsiteSettingsFeatures.some((feature) => feature.key === activeWebsiteSettingsFeatureKey)
     ) {
-        activeWebsiteSettingsFeatureKey = availableWebsiteSettingsFeatures[0]?.key || "";
+        activeWebsiteSettingsFeatureKey = getDefaultWebsiteSettingsFeatureKey();
+    } else if (!availableWebsiteSettingsFeatures.length && activeWebsiteSettingsFeatureKey) {
+        activeWebsiteSettingsFeatureKey = "";
     }
 
     $: websitePublicUrl = getWebsitePublicUrl(selectedWebsite);
@@ -2680,9 +2682,31 @@
     }
 
     function setActiveWebsiteSettingsArea(nextArea) {
-        if (nextArea === websiteSettingsAreaIdentitySeoKey || nextArea === websiteSettingsAreaFeaturesKey) {
+        if (nextArea === websiteSettingsAreaIdentitySeoKey) {
+            activeWebsiteSettingsArea = nextArea;
+            return;
+        }
+
+        if (nextArea === websiteSettingsAreaFeaturesKey) {
+            activeWebsiteSettingsFeatureKey = getDefaultWebsiteSettingsFeatureKey();
             activeWebsiteSettingsArea = nextArea;
         }
+    }
+
+    function getDefaultWebsiteSettingsFeatureKey() {
+        if (!availableWebsiteSettingsFeatures.length) {
+            return "";
+        }
+
+        const leadsFeature = availableWebsiteSettingsFeatures.find(
+            (feature) => feature.key === websiteSettingsLeadsFeatureKey,
+        );
+
+        if (leadsFeature?.key) {
+            return leadsFeature.key;
+        }
+
+        return availableWebsiteSettingsFeatures[0]?.key || "";
     }
 
     function setActiveWebsiteIdentitySeoTab(nextTab) {
@@ -4345,7 +4369,7 @@
                                     {#if !hasWebsiteSettingsField}
                                         <p class="txt-danger m-b-0 m-t-sm">Settings field was not found in websites collection.</p>
                                     {:else if !availableWebsiteSettingsFeatures.length}
-                                        <p class="txt-hint m-b-0 m-t-sm">No features are currently available for this website.</p>
+                                        <p class="txt-hint m-b-0 m-t-sm">No feature settings available for this website.</p>
                                     {:else}
                                         <div class="tabs-header compact combined left operations-tabs settings-feature-tabs m-t-sm">
                                             {#each availableWebsiteSettingsFeatures as featureTab}
