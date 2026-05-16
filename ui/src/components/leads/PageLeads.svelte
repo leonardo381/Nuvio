@@ -2968,7 +2968,7 @@
     .leads-inbox-item:hover,
     .leads-inbox-item:focus-visible {
         border-color: color-mix(in srgb, var(--txtPrimaryColor) 45%, var(--baseAlt2Color));
-        background: var(--baseColor);
+        background: color-mix(in srgb, var(--baseAlt1) 18%, transparent);
         outline: none;
     }
 
@@ -2978,17 +2978,17 @@
 
     .leads-inbox-item.selected {
         border-color: var(--txtPrimaryColor);
-        background: var(--baseColor);
+        background: color-mix(in srgb, var(--baseAlt1) 28%, transparent);
     }
 
     .leads-inbox-item.bulk-selected {
         border-color: color-mix(in srgb, var(--txtPrimaryColor) 55%, var(--baseAlt2Color));
-        background: var(--baseColor);
+        background: color-mix(in srgb, var(--baseAlt1) 22%, transparent);
     }
 
     .leads-inbox-item.selected.bulk-selected {
         border-color: var(--txtPrimaryColor);
-        background: var(--baseColor);
+        background: color-mix(in srgb, var(--baseAlt1) 34%, transparent);
     }
 
     .leads-inbox-item-main {

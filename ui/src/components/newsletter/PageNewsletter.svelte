@@ -1982,7 +1982,7 @@
                                         <div class="subscriber-col-groups">Groups</div>
                                         <div class="subscriber-col-actions">Actions</div>
                                     </div>
-                                    <div class="list-content">                                        {#each pagedSubscribers as subscriber (subscriber.id)}                                            <div class="list-item newsletter-list-item subscriber-row-item" class:is-editing={editingSubscriberId === subscriber.id}>
+                                    <div class="list-content">                                        {#each pagedSubscribers as subscriber (subscriber.id)}                                            <div class="list-item newsletter-list-item subscriber-row-item" class:is-editing={editingSubscriberId === subscriber.id} class:bulk-selected={isSubscriberSelected(subscriber.id)}>
                                                 <div class="subscriber-row-grid">
                                                     <div class="selection-cell subscriber-col-select">
                                                         <input
@@ -3369,14 +3369,14 @@
         grid-template-columns: auto minmax(0, 1fr);
         align-items: flex-start;
         gap: 7px;
-        border: 1px solid var(--baseAlt2Color);
+        border: 2px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
         border-radius: var(--baseRadius);
         padding: 8px 10px;
-        background: color-mix(in srgb, var(--baseColor) 96%, var(--baseAlt1Color));
+        background: var(--baseColor);
         cursor: pointer;
         min-width: 0;
         position: relative;
-        transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+        transition: border-color var(--baseAnimationSpeed), background-color var(--baseAnimationSpeed);
     }
 
     .manual-recipient-tile::before {
@@ -3387,21 +3387,19 @@
         bottom: 0;
         width: 3px;
         border-radius: var(--baseRadius) 0 0 var(--baseRadius);
-        background: color-mix(in srgb, var(--primaryColor) 44%, transparent);
+        background: color-mix(in srgb, var(--txtPrimaryColor) 38%, transparent);
         opacity: 0;
         transition: opacity 140ms ease;
     }
 
     .manual-recipient-tile:hover {
-        border-color: color-mix(in srgb, var(--primaryColor) 42%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--baseColor) 90%, var(--baseAlt1Color));
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 10%, transparent);
+        border-color: color-mix(in srgb, var(--txtPrimaryColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 18%, transparent);
     }
 
     .manual-recipient-tile.is-selected {
-        border-color: color-mix(in srgb, var(--primaryColor) 58%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--primaryColor) 13%, var(--baseColor));
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--primaryColor) 20%, transparent);
+        border-color: var(--txtPrimaryColor);
+        background: color-mix(in srgb, var(--baseAlt1) 28%, transparent);
     }
 
     .manual-recipient-tile.is-selected::before {
@@ -3484,6 +3482,8 @@
         border: 0;
         border-radius: 0;
         background: transparent;
+        box-shadow: inset 0 0 0 2px transparent;
+        transition: box-shadow var(--baseAnimationSpeed), background-color var(--baseAnimationSpeed);
     }
 
     .subscriber-row-item:nth-child(odd) {
@@ -3494,8 +3494,25 @@
         background: color-mix(in srgb, var(--baseAlt1Color) 78%, var(--baseAlt2Color));
     }
 
+    .subscriber-row-item:hover {
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--txtPrimaryColor) 45%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 18%, transparent);
+    }
+
+    .subscriber-row-item.bulk-selected {
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--txtPrimaryColor) 55%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--baseAlt1) 22%, transparent);
+    }
+
     .subscriber-row-item.is-editing {
         background: var(--bodyColor);
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--txtPrimaryColor) 30%, var(--baseAlt2Color));
+    }
+
+    .subscriber-row-item.is-editing:hover,
+    .subscriber-row-item.is-editing.bulk-selected {
+        background: var(--bodyColor);
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--txtPrimaryColor) 30%, var(--baseAlt2Color));
     }
 
     .subscriber-table-list {
