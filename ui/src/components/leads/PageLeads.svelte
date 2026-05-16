@@ -55,6 +55,8 @@
         "whatsapp_clicks",
     ];
     const desktopMasterDetailMinWidth = 1060;
+    const leadsInitialVisibleCount = 24;
+    const leadsVisibleIncrement = 24;
 
     let websites = [];
     let selectedWebsiteId = "";
@@ -71,6 +73,8 @@
     let selectedLeadKeys = [];
     let selectedLeadKeysSet = new Set();
     let selectedLeadsCount = 0;
+    let visibleLeadLimit = leadsInitialVisibleCount;
+    let lastLeadVisibleResetKey = "";
     let isLeadDetailsActive = false;
     let isDesktopMasterDetail = false;
     let isUpdatingLeadStatus = false;
@@ -155,6 +159,22 @@
     $: leadsByPeriod = filterLeadsByPeriod(leadsByStatus, periodFilter);
     $: leadsBySearch = filterLeadsBySearch(leadsByPeriod, normalizedSearchTerm);
     $: filteredLeads = sortLeads(leadsBySearch, sortOrder);
+    $: leadsVisibleResetKey = [
+        selectedWebsiteId,
+        normalizedLeadsView,
+        normalizedSearchTerm,
+        sourceFilter,
+        statusFilter,
+        periodFilter,
+        sortOrder,
+    ].join(":");
+    $: if (leadsVisibleResetKey !== lastLeadVisibleResetKey) {
+        lastLeadVisibleResetKey = leadsVisibleResetKey;
+        visibleLeadLimit = leadsInitialVisibleCount;
+    }
+    $: visibleLeads = filteredLeads.slice(0, visibleLeadLimit);
+    $: visibleLeadsCount = visibleLeads.length;
+    $: canLoadMoreLeads = visibleLeadsCount < filteredLeads.length;
     $: selectedLeadKeysSet = new Set(
         selectedLeadKeys
             .map((key) => normalizeString(key))
@@ -1734,6 +1754,10 @@
         }
     }
 
+    function loadMoreLeads() {
+        visibleLeadLimit += leadsVisibleIncrement;
+    }
+
     function escapeCsvValue(value) {
         const raw = `${value ?? ""}`;
         if (!raw) {
@@ -2041,7 +2065,7 @@
                     </div>
                 {:else}
                     <div class="leads-inbox-list" role="list">
-                        {#each filteredLeads as lead (lead.key)}
+                        {#each visibleLeads as lead (lead.key)}
                             <!-- svelte-ignore a11y-click-events-have-key-events -->
                             <!-- svelte-ignore a11y-no-static-element-interactions -->
                             <article
@@ -2122,6 +2146,20 @@
                                 </div>
                             </article>
                         {/each}
+                    </div>
+                    <div class="leads-results-footer">
+                        {#if canLoadMoreLeads}
+                            <span class="txt-sm txt-hint">Showing {visibleLeadsCount} of {filteredLeads.length} leads</span>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline"
+                                on:click={loadMoreLeads}
+                            >
+                                <span class="txt">Load more</span>
+                            </button>
+                        {:else}
+                            <span class="txt-sm txt-hint">Showing all {visibleLeadsCount} leads</span>
+                        {/if}
                     </div>
                 {/if}
 
@@ -2961,6 +2999,15 @@
         grid-template-columns: 1fr;
         gap: 8px;
         min-width: 0;
+    }
+
+    .leads-results-footer {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
 
     .leads-inbox-item {

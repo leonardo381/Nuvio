@@ -92,6 +92,8 @@
     const bookingEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const bookingConfirmationModes = new Set(["request", "autoConfirm"]);
     const bookingCalendarBlockingModes = new Set(["service", "website", "none"]);
+    const appointmentsInitialVisibleCount = 24;
+    const appointmentsVisibleIncrement = 24;
 
     let activeTab = "appointments";
     let activeAvailabilityTab = "weekly";
@@ -120,6 +122,8 @@
     let selectedAppointmentIds = [];
     let selectedAppointmentIdsSet = new Set();
     let selectedAppointmentsCount = 0;
+    let visibleAppointmentLimit = appointmentsInitialVisibleCount;
+    let lastAppointmentVisibleResetKey = "";
     let appointmentsView = "inbox";
     let selectedAppointmentId = "";
     let isUpdatingAppointmentStatus = false;
@@ -583,6 +587,22 @@
         }),
         appointmentSort,
     );
+    $: appointmentsVisibleResetKey = [
+        selectedWebsiteId,
+        normalizedAppointmentsView,
+        normalizedAppointmentSearch,
+        appointmentStatusFilter,
+        appointmentDateFilter,
+        appointmentServiceFilter,
+        appointmentSort,
+    ].join(":");
+    $: if (appointmentsVisibleResetKey !== lastAppointmentVisibleResetKey) {
+        lastAppointmentVisibleResetKey = appointmentsVisibleResetKey;
+        visibleAppointmentLimit = appointmentsInitialVisibleCount;
+    }
+    $: visibleAppointments = filteredAppointments.slice(0, visibleAppointmentLimit);
+    $: visibleAppointmentsCount = visibleAppointments.length;
+    $: canLoadMoreAppointments = visibleAppointmentsCount < filteredAppointments.length;
     $: selectedAppointmentIdsSet = new Set(
         selectedAppointmentIds
             .map((id) => normalizeString(id))
@@ -4097,6 +4117,10 @@
         appointmentSort = "newest";
     }
 
+    function loadMoreAppointments() {
+        visibleAppointmentLimit += appointmentsVisibleIncrement;
+    }
+
     export function reload() {
         return Promise.all([loadWebsites(), loadBookingData()]);
     }
@@ -4229,7 +4253,7 @@
                             </span>
                         </div>
                         <div class="booking-section-head-meta">
-                            <span class="summary-pill">{filteredAppointments.length} visible</span>
+                            <span class="summary-pill">{filteredAppointments.length} matching</span>
                             <button type="button" class="btn btn-outline btn-sm" on:click={openManualAppointmentPanel}>
                                 <span class="txt">New appointment</span>
                             </button>
@@ -4350,7 +4374,7 @@
                         </div>
                     {:else}
                         <div class="booking-appointments-list" role="list">
-                            {#each filteredAppointments as appointment (appointment.id)}
+                            {#each visibleAppointments as appointment (appointment.id)}
                                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                 <article
@@ -4412,6 +4436,20 @@
                                     </div>
                                 </article>
                             {/each}
+                        </div>
+                        <div class="booking-results-footer">
+                            {#if canLoadMoreAppointments}
+                                <span class="txt-sm txt-hint">Showing {visibleAppointmentsCount} of {filteredAppointments.length} appointments</span>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline"
+                                    on:click={loadMoreAppointments}
+                                >
+                                    <span class="txt">Load more</span>
+                                </button>
+                            {:else}
+                                <span class="txt-sm txt-hint">Showing all {visibleAppointmentsCount} appointments</span>
+                            {/if}
                         </div>
                     {/if}
 
@@ -6304,6 +6342,15 @@
         display: grid;
         gap: 8px;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .booking-results-footer {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
 
     @media (min-width: 1600px) {

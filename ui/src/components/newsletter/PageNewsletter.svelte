@@ -1,5 +1,5 @@
 <script>    import { querystring } from "svelte-spa-router";    import ApiClient from "@/utils/ApiClient";    import CommonHelper from "@/utils/CommonHelper";    import PageWrapper from "@/components/base/PageWrapper.svelte";    import RefreshButton from "@/components/base/RefreshButton.svelte";    import OverlayPanel from "@/components/base/OverlayPanel.svelte";    import TinyMCE from "@/components/base/TinyMCE.svelte";    import { pageTitle } from "@/stores/app";    import { collections, collectionsLoadError, findCollectionByRequiredNames, hasCollectionsLoaded, isCollectionsLoading } from "@/stores/collections";    import { addErrorToast, addSuccessToast, addWarningToast } from "@/stores/toasts";    // NUVIO CUSTOM START: Newsletter V1 dedicated section/page (collection-backed).
-    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["active", "pending", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const newsletterSections = new Set(["subscribers", "campaigns"]);    const subscriberGroupsFieldAliases = ["groups", "groupIds", "subscriberGroups", "subscriber_groups"];    const campaignRecipientsTypeFieldAliases = ["recipientsType", "recipientType", "recipients_type"];    const campaignRecipientsIdsFieldAliases = ["recipientsIds", "recipientIds", "recipients_ids"];    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
+    $pageTitle = "Newsletter";    const initialQueryParams = new URLSearchParams($querystring);    const subscriberStatuses = ["active", "pending", "unsubscribed"];    const subscriberLeadSource = "manual_dashboard";    const subscriberSortOptions = [        { value: "newest", label: "Newest" },        { value: "oldest", label: "Oldest" },        { value: "emailAsc", label: "Email A-Z" },        { value: "emailDesc", label: "Email Z-A" },        { value: "status", label: "Status" },    ];    const subscribersPageSize = 20;    const audienceInitialVisibleCount = 30;    const audienceVisibleIncrement = 30;    const newsletterSections = new Set(["subscribers", "campaigns"]);    const subscriberGroupsFieldAliases = ["groups", "groupIds", "subscriberGroups", "subscriber_groups"];    const campaignRecipientsTypeFieldAliases = ["recipientsType", "recipientType", "recipients_type"];    const campaignRecipientsIdsFieldAliases = ["recipientsIds", "recipientIds", "recipients_ids"];    let activeSection = newsletterSections.has(initialQueryParams.get("newsletterTab"))        ? initialQueryParams.get("newsletterTab")        : "subscribers";    let websites = [];    let selectedWebsiteId = initialQueryParams.get("newsletterWebsite") || "";    let subscribers = [];
     let campaigns = [];
     let subscriberGroups = [];
     let isLoadingWebsites = false;    let isLoadingSubscribers = false;
@@ -48,6 +48,7 @@
     let isDuplicatingCampaign = {};
     let audienceRecipientSearch = "";
     let audienceRecipientVisibilityFilter = "all";
+    let visibleAudienceLimit = audienceInitialVisibleCount;
     let subscriberSearch = "";
     let subscriberStatusFilter = "all";
     let subscriberGroupFilter = "all";
@@ -76,7 +77,7 @@
     let normalizedCampaignManualRecipientsCount = 0;
     let activeSubscriberIdsByGroupId = new Map();
     let groupSelectionMetaById = new Map();
-    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastPersistedContextKey = "";    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
+    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastAudienceRecipientsResetKey = "";    let lastPersistedContextKey = "";    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
     $: campaignsCollection = findCollectionByRequiredNames($collections, ["Campaigns", "campaigns"]);
     $: subscriberGroupsCollection = findCollectionByRequiredNames($collections, ["SubscriberGroups", "subscribergroups"]);
     $: missingCollectionNames = [];
@@ -248,6 +249,26 @@
         const searchable = `${resolveSubscriberDisplayName(subscriber)} ${subscriber?.email || ""} ${groupsLabel}`.toLowerCase();
         return searchable.includes(normalizedAudienceRecipientSearch);
     });
+    $: audienceRecipientsVisibilityContext = audienceRecipientVisibilityFilter === "all"
+        ? "all"
+        : `${normalizedCampaignManualRecipientsCount}`;
+    $: audienceRecipientsResetKey = [
+        selectedWebsiteId,
+        activeSection,
+        campaignWorkspace,
+        editingCampaignId,
+        viewingSentCampaignId,
+        normalizedAudienceRecipientSearch,
+        audienceRecipientVisibilityFilter,
+        audienceRecipientsVisibilityContext,
+    ].join("|");
+    $: if (audienceRecipientsResetKey !== lastAudienceRecipientsResetKey) {
+        lastAudienceRecipientsResetKey = audienceRecipientsResetKey;
+        visibleAudienceLimit = audienceInitialVisibleCount;
+    }
+    $: visibleAudienceRecipients = filteredAudienceRecipients.slice(0, visibleAudienceLimit);
+    $: visibleAudienceRecipientsCount = visibleAudienceRecipients.length;
+    $: canLoadMoreAudienceRecipients = visibleAudienceRecipientsCount < filteredAudienceRecipients.length;
     $: audienceRecipientsSummary = `${resolveManualAudienceRecipientCountForMode(campaignForm.recipientsType, campaignForm.recipientsIds)} selected / ${activeSubscribers.length} active`;
     $: audienceSummaryStatus = isViewingSentCampaign
         ? "Sent campaign (read-only)"
@@ -482,6 +503,10 @@
             setCampaignRecipientsType("manual");
         }
         setManualRecipientIds([]);
+    }
+
+    function loadMoreAudienceRecipients() {
+        visibleAudienceLimit += audienceVisibleIncrement;
     }
 
     function normalizeManualAudienceRecipientIds(ids) {
@@ -2492,7 +2517,7 @@
                                                     <div class="empty-state">No recipients match the current audience filters.</div>
                                                 {:else}
                                                     <div class="manual-recipients-tiles">
-                                                        {#each filteredAudienceRecipients as subscriber (subscriber.id)}
+                                                        {#each visibleAudienceRecipients as subscriber (subscriber.id)}
                                                             {@const subscriberGroupNames = hasSubscriberGroupsFeature
                                                                 ? getSubscriberGroupIds(subscriber)
                                                                     .map((groupId) => subscriberGroupsById.get(groupId)?.name)
@@ -2530,6 +2555,20 @@
                                                                 </span>
                                                             </label>
                                                         {/each}
+                                                    </div>
+                                                    <div class="manual-recipients-footer">
+                                                        {#if canLoadMoreAudienceRecipients}
+                                                            <span class="txt-sm txt-hint">Showing {visibleAudienceRecipientsCount} of {filteredAudienceRecipients.length} recipients</span>
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm btn-outline"
+                                                                on:click={loadMoreAudienceRecipients}
+                                                            >
+                                                                <span class="txt">Load more</span>
+                                                            </button>
+                                                        {:else}
+                                                            <span class="txt-sm txt-hint">Showing all {visibleAudienceRecipientsCount} recipients</span>
+                                                        {/if}
                                                     </div>
                                                 {/if}
                                             </section>
@@ -3362,6 +3401,14 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 7px;
+    }
+
+    .manual-recipients-footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
     }
 
     .manual-recipient-tile {
