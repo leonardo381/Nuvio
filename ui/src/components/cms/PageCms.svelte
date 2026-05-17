@@ -189,7 +189,9 @@
     $: websiteSlugField = resolveFieldName(websitesCollection, ["slug"]);
     $: websiteDomainField = resolveFieldName(websitesCollection, ["domain", "url", "host"]);
     $: websiteSettingsField = resolveFieldName(websitesCollection, ["settings"]);
-    $: hasWebsiteSettingsField = !!websiteSettingsField;
+    $: websitesIncludeSettingsKey = websites.some((website) => hasOwnObjectKey(website, "settings"));
+    $: resolvedWebsiteSettingsField = websiteSettingsField || (websitesIncludeSettingsKey ? "settings" : "");
+    $: hasWebsiteSettingsField = !!resolvedWebsiteSettingsField;
 
     $: pageTitleField = resolveFieldName(pagesCollection, ["title", "name", "label"]);
     $: pageSlugField = resolveFieldName(pagesCollection, ["slug"]);
@@ -253,6 +255,12 @@
     $: blockTitleField = resolveFieldName(blocksCollection, ["title", "name", "label"]);
     $: blockPropsField = resolveFieldName(blocksCollection, ["props"]);
     $: blockTranslationsField = resolveFieldName(blocksCollection, ["translations"]);
+    $: blocksIncludeTranslationsKey = blocks.some((block) => hasOwnObjectKey(block, "translations"));
+    $: hasBlockTranslationsFieldEvidence = !!blockTranslationsField
+        || blocksIncludeTranslationsKey;
+    $: resolvedBlockTranslationsField = hasBlockTranslationsFieldEvidence
+        ? (blockTranslationsField || "translations")
+        : "";
     $: blockComponentKeyField = resolveFieldName(blocksCollection, ["component_key", "componentKey"]);
     $: blockVariantField = resolveFieldName(blocksCollection, ["variant"]);
     $: blockComponentRelationField = resolveRelationFieldName(blocksCollection, componentsCollection?.id, ["component"]);
@@ -266,10 +274,24 @@
 
     $: selectedWebsite = websites.find((record) => record.id === selectedWebsiteId) || null;
     $: selectedPage = pages.find((record) => record.id === selectedPageId) || null;
-    $: sectionEditorConfiguredLanguages = getSectionEditorConfiguredLanguages(websiteSettingsFullDraft);
-    $: sectionEditorDefaultLanguageCode = sectionEditorConfiguredLanguages[0]?.code || "";
+    $: sectionEditorSettingsSource = (() => {
+        if (isPlainObject(websiteSettingsFullDraft) && Object.keys(websiteSettingsFullDraft).length > 0) {
+            return websiteSettingsFullDraft;
+        }
+
+        const fallbackSettingsValue = resolvedWebsiteSettingsField
+            ? selectedWebsite?.[resolvedWebsiteSettingsField]
+            : (hasOwnObjectKey(selectedWebsite, "settings") ? selectedWebsite?.settings : {});
+
+        return normalizeWebsiteSettingsValue(fallbackSettingsValue);
+    })();
+    $: sectionEditorConfiguredLanguages = getSectionEditorConfiguredLanguages(sectionEditorSettingsSource);
+    $: sectionEditorDefaultLanguage = sectionEditorConfiguredLanguages[0] || null;
+    $: sectionEditorDefaultLanguageLabel = sectionEditorDefaultLanguage?.label
+        || (sectionEditorDefaultLanguage?.code ? sectionEditorDefaultLanguage.code.toUpperCase() : "Primary");
     $: sectionEditorTranslationLanguages = sectionEditorConfiguredLanguages.slice(1);
-    $: sectionEditorSupportsTranslations = !!blockTranslationsField && sectionEditorTranslationLanguages.length > 0;
+    $: effectiveBlockTranslationsField = resolvedBlockTranslationsField;
+    $: sectionEditorSupportsTranslations = !!effectiveBlockTranslationsField && sectionEditorTranslationLanguages.length > 0;
     $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
     $: clientWebsiteSettingsFields = filterClientWebsiteSettingsFields(roleScopedSettingsFields);
     $: websiteSettingsFieldsByKey = new Map(
@@ -619,7 +641,7 @@
     }
 
     $: {
-        const nextSeedKey = `${blockPropsField || ""}|${blockTranslationsField || ""}|${blocks.map((block) => `${block.id}:${block?.updated || ""}`).join("|")}`;
+        const nextSeedKey = `${blockPropsField || ""}|${effectiveBlockTranslationsField || ""}|${blocks.map((block) => `${block.id}:${block?.updated || ""}`).join("|")}`;
         if (nextSeedKey !== lastSectionsSeedKey) {
             lastSectionsSeedKey = nextSeedKey;
 
@@ -631,7 +653,7 @@
             for (const block of blocks) {
                 nextDraft[block.id] = toPropsObject(blockPropsField ? block?.[blockPropsField] : {});
                 nextTranslationDraft[block.id] = toTranslationsDraftByLanguage(
-                    blockTranslationsField ? block?.[blockTranslationsField] : {},
+                    effectiveBlockTranslationsField ? block?.[effectiveBlockTranslationsField] : {},
                 );
                 nextErrors[block.id] = "";
                 nextSaving[block.id] = false;
@@ -654,6 +676,11 @@
 
     $: selectedEditingSection = blocks.find((block) => `${block?.id || ""}` === `${editingSectionId || ""}`) || null;
     $: selectedEditingSectionFields = selectedEditingSection ? getSectionSchemaFields(selectedEditingSection) : [];
+    $: selectedEditingSectionSchemaFieldKeys = new Set(
+        selectedEditingSectionFields
+            .map((field) => normalizeString(field?.key).toLowerCase())
+            .filter(Boolean),
+    );
     $: selectedEditingSectionIndex = selectedEditingSection
         ? blocks.findIndex((block) => `${block?.id || ""}` === `${selectedEditingSection?.id || ""}`)
         : -1;
@@ -678,7 +705,9 @@
         selectedEditingSection && activeSectionTranslationLanguageCode
     )
         ? getTranslationPropsByLanguage(
-            toTranslationsRecordObject(blockTranslationsField ? selectedEditingSection?.[blockTranslationsField] : {}),
+            toTranslationsRecordObject(
+                effectiveBlockTranslationsField ? selectedEditingSection?.[effectiveBlockTranslationsField] : {},
+            ),
             activeSectionTranslationLanguageCode,
         )
         : {};
@@ -693,6 +722,10 @@
     $: selectedEditingSectionDraftActiveProps = activeSectionTranslationLanguageCode
         ? selectedEditingSectionDraftTranslationProps
         : selectedEditingSectionDraftProps;
+    $: selectedEditingSectionDraftFormProps = sanitizeSectionDraftPropsForForm(
+        selectedEditingSectionDraftActiveProps,
+        selectedEditingSectionSchemaFieldKeys,
+    );
     $: isSectionEditorDirty = !!selectedEditingSection
         && stableSerializeForDirtyCheck(selectedEditingSectionDraftActiveProps)
             !== stableSerializeForDirtyCheck(selectedEditingSectionOriginalActiveProps);
@@ -714,7 +747,7 @@
     }
 
     $: {
-        const nextWebsiteSettingsSeedKey = `${selectedWebsite?.id || ""}|${selectedWebsite?.updated || ""}|${websiteSettingsField || ""}`;
+        const nextWebsiteSettingsSeedKey = `${selectedWebsite?.id || ""}|${selectedWebsite?.updated || ""}|${resolvedWebsiteSettingsField || ""}`;
         if (nextWebsiteSettingsSeedKey !== lastWebsiteSettingsSeedKey) {
             lastWebsiteSettingsSeedKey = nextWebsiteSettingsSeedKey;
             initializeWebsiteSettingsDraft();
@@ -970,7 +1003,7 @@
         }
 
         const persistedTranslations = toTranslationsRecordObject(
-            blockTranslationsField ? block?.[blockTranslationsField] : {},
+            effectiveBlockTranslationsField ? block?.[effectiveBlockTranslationsField] : {},
         );
         const nextLanguageValue = getTranslationPropsByLanguage(persistedTranslations, normalizedLanguage);
         const nextBlockDraft = {
@@ -1026,23 +1059,13 @@
         }
     }
 
-    function isSectionLanguageMissing(block, languageCode) {
-        const normalizedLanguage = normalizeLanguageCode(languageCode);
-        if (!block?.id || !normalizedLanguage) {
-            return false;
-        }
-
-        const persistedTranslations = toTranslationsRecordObject(
-            blockTranslationsField ? block?.[blockTranslationsField] : {},
-        );
-        const persistedValue = getTranslationPropsByLanguage(persistedTranslations, normalizedLanguage);
-        const draftValue = getSectionTranslationDraftProps(block.id, normalizedLanguage);
-
-        return isPropsObjectEmpty(persistedValue) && isPropsObjectEmpty(draftValue);
-    }
-
     function isPlainObject(value) {
         return !!value && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function hasOwnObjectKey(value, key) {
+        const normalizedKey = normalizeString(key);
+        return !!normalizedKey && !!value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, normalizedKey);
     }
 
     function mergeSettingsObjects(baseValue, patchValue) {
@@ -2132,6 +2155,26 @@
         return parseSchemaFields(component?.[componentSchemaField]);
     }
 
+    function sanitizeSectionDraftPropsForForm(draftValue, schemaFieldKeys = new Set()) {
+        const sanitized = toPropsObject(draftValue);
+        const normalizedTranslationsField = normalizeString(effectiveBlockTranslationsField).toLowerCase();
+
+        if (!normalizedTranslationsField) {
+            return sanitized;
+        }
+
+        // Keep legitimate component fields, but strip leaked block-level translations metadata.
+        if (schemaFieldKeys?.has?.(normalizedTranslationsField)) {
+            return sanitized;
+        }
+
+        if (hasOwnObjectKey(sanitized, normalizedTranslationsField)) {
+            delete sanitized[normalizedTranslationsField];
+        }
+
+        return sanitized;
+    }
+
     function getSectionTitle(block, index) {
         const title = normalizeString(blockTitleField ? block?.[blockTitleField] : "");
         if (title) {
@@ -2726,7 +2769,7 @@
             return;
         }
 
-        const normalizedFullSettings = normalizeWebsiteSettingsValue(selectedWebsite?.[websiteSettingsField]);
+        const normalizedFullSettings = normalizeWebsiteSettingsValue(selectedWebsite?.[resolvedWebsiteSettingsField]);
         const roleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, normalizedFullSettings).fields;
         const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
 
@@ -3278,7 +3321,7 @@
 
         try {
             const payload = {};
-            setPayloadField(payload, websiteSettingsField, structuredClone(websiteSettingsFullDraft));
+            setPayloadField(payload, resolvedWebsiteSettingsField, structuredClone(websiteSettingsFullDraft));
             await ApiClient.collection(websitesCollection.id).update(selectedWebsite.id, payload);
             addSuccessToast("Website settings updated.");
             await loadWebsites();
@@ -3308,7 +3351,7 @@
 
         const payload = {};
         if (activeSectionTranslationLanguageCode) {
-            if (!blockTranslationsField) {
+            if (!effectiveBlockTranslationsField) {
                 sectionErrorById = {
                     ...sectionErrorById,
                     [blockId]: "Section translations cannot be saved because translations field is missing.",
@@ -3317,7 +3360,7 @@
             }
 
             const currentTranslations = toTranslationsRecordObject(
-                blockTranslationsField ? block?.[blockTranslationsField] : {},
+                effectiveBlockTranslationsField ? block?.[effectiveBlockTranslationsField] : {},
             );
             const draftTranslationValue = getSectionTranslationDraftProps(blockId, activeSectionTranslationLanguageCode);
 
@@ -3326,7 +3369,7 @@
                 currentTranslations[activeSectionTranslationLanguageCode] = toPropsObject(draftTranslationValue);
             }
 
-            setPayloadField(payload, blockTranslationsField, currentTranslations);
+            setPayloadField(payload, effectiveBlockTranslationsField, currentTranslations);
         } else {
             if (!blockPropsField) {
                 sectionErrorById = {
@@ -4832,32 +4875,6 @@
                         <div class="section-drawer-copy">
                             <strong class="section-drawer-name">{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
                             <span class="txt-sm txt-hint section-drawer-helper">{selectedEditingSectionSubtitle || "Edit section content."}</span>
-                            {#if sectionEditorSupportsTranslations}
-                                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested section-language-tabs">
-                                    <button
-                                        type="button"
-                                        class:active={activeSectionLanguageKey === sectionDefaultLanguageKey}
-                                        on:click={() => setActiveSectionLanguage(sectionDefaultLanguageKey)}
-                                    >
-                                        <span>Default</span>
-                                        {#if sectionEditorDefaultLanguageCode}
-                                            <span class="label label-sm section-language-code">{sectionEditorDefaultLanguageCode.toUpperCase()}</span>
-                                        {/if}
-                                    </button>
-                                    {#each sectionEditorTranslationLanguages as language}
-                                        <button
-                                            type="button"
-                                            class:active={activeSectionLanguageKey === language.code}
-                                            on:click={() => setActiveSectionLanguage(language.code)}
-                                        >
-                                            <span>{language.label}</span>
-                                            {#if isSectionLanguageMissing(selectedEditingSection, language.code)}
-                                                <span class="label label-sm section-language-missing">Missing</span>
-                                            {/if}
-                                        </button>
-                                    {/each}
-                                </div>
-                            {/if}
                             <div class="section-drawer-meta">
                                 <span class="label label-sm section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
                                 {#each selectedEditingSectionSummaryPills as summaryPill}
@@ -4872,14 +4889,41 @@
                 </svelte:fragment>
 
                 <div class="section-drawer-body">
+                    {#if sectionEditorSupportsTranslations}
+                        <div class="section-language-switcher">
+                            <div class="tabs-header compact combined left operations-tabs operations-tabs--nested section-language-tabs">
+                                <button
+                                    type="button"
+                                    class="tab-item"
+                                    class:active={activeSectionLanguageKey === sectionDefaultLanguageKey}
+                                    on:click={() => setActiveSectionLanguage(sectionDefaultLanguageKey)}
+                                >
+                                    <span>{sectionEditorDefaultLanguageLabel}</span>
+                                </button>
+                                {#each sectionEditorTranslationLanguages as language}
+                                    <button
+                                        type="button"
+                                        class="tab-item"
+                                        class:active={activeSectionLanguageKey === language.code}
+                                        on:click={() => setActiveSectionLanguage(language.code)}
+                                    >
+                                        <span>{language.label}</span>
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+                    {/if}
+
                     {#if selectedEditingSectionFields.length}
-                        <SchemaForm
-                            fields={selectedEditingSectionFields}
-                            value={selectedEditingSectionDraftActiveProps}
-                            showImport={false}
-                            path={`sections.${selectedEditingSection.id}`}
-                            on:propsChange={(event) => updateSectionDraft(selectedEditingSection.id, event.detail)}
-                        />
+                        {#key `${selectedEditingSection.id}:${activeSectionLanguageKey}`}
+                            <SchemaForm
+                                fields={selectedEditingSectionFields}
+                                value={selectedEditingSectionDraftFormProps}
+                                showImport={false}
+                                path={`sections.${selectedEditingSection.id}`}
+                                on:propsChange={(event) => updateSectionDraft(selectedEditingSection.id, event.detail)}
+                            />
+                        {/key}
                     {:else}
                         <p class="txt-sm txt-hint m-b-0">This section has no editable fields.</p>
                     {/if}
@@ -4897,7 +4941,7 @@
                         disabled={
                             !!isSavingSectionById[selectedEditingSection.id]
                             || (!activeSectionTranslationLanguageCode && !blockPropsField)
-                            || (!!activeSectionTranslationLanguageCode && !blockTranslationsField)
+                            || (!!activeSectionTranslationLanguageCode && !effectiveBlockTranslationsField)
                         }
                         on:click={() => saveSection(selectedEditingSection)}
                     >
@@ -5345,29 +5389,27 @@
         min-width: 0;
     }
 
-    .section-language-tabs {
-        width: fit-content;
-        margin-top: 2px;
+    .section-language-switcher {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0 0 10px;
     }
 
-    .section-language-tabs button {
+    .section-language-tabs {
+        width: 100%;
+        max-width: 100%;
+        margin-top: 0;
+        display: flex;
+        flex-wrap: wrap;
+        row-gap: 4px;
+        overflow: visible;
+    }
+
+    .section-language-tabs .tab-item {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-    }
-
-    .section-language-code {
-        min-height: 16px;
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
-        color: var(--txtHintColor);
-        background: var(--baseColor);
-    }
-
-    .section-language-missing {
-        min-height: 16px;
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
-        color: var(--txtHintColor);
-        background: color-mix(in srgb, var(--baseAlt1Color) 88%, transparent);
     }
 
     .drawer-discard-confirm-head {
