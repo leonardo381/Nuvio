@@ -77,6 +77,7 @@
     let activePageEditorTab = pageEditorTabContentKey;
     let pageSeoFilter = pageSeoFilterAllKey;
     let activePageSeoTab = pageSeoTabBasicKey;
+    let activePageSeoLanguageKey = sectionDefaultLanguageKey;
     let pageSearch = "";
     let focusedBlockId = "";
     let editingSectionId = "";
@@ -142,6 +143,7 @@
 
     let sectionPropsDraftById = {};
     let sectionTranslationsDraftById = {};
+    let pageSeoTranslationsDraftByLanguage = {};
     let sectionErrorById = {};
     let isSavingSectionById = {};
     let pagePreviewReloadToken = 0;
@@ -198,6 +200,7 @@
     $: pageEnabledField = resolveFieldName(pagesCollection, ["enabled", "published", "active"]);
     $: pageSeoTitleField = resolveFieldName(pagesCollection, ["seo_title", "seoTitle"]);
     $: pageSeoDescriptionField = resolveFieldName(pagesCollection, ["seo_description", "seoDescription"]);
+    $: pageSeoTranslationsField = resolveFieldName(pagesCollection, ["seo_translations", "seoTranslations"]);
     $: pageSeoSocialImageField = resolveFieldName(pagesCollection, ["seo_social_image", "seoSocialImage"]);
     $: pageSeoCanonicalUrlField = resolveFieldName(pagesCollection, ["seo_canonical_url", "seoCanonicalUrl"]);
     $: pageSeoNoindexField = resolveFieldName(pagesCollection, ["seo_noindex", "seoNoindex"]);
@@ -206,6 +209,12 @@
         ["seo_exclude_from_sitemap", "seoExcludeFromSitemap"],
     );
     $: pageSeoFocusKeywordField = resolveFieldName(pagesCollection, ["seo_focus_keyword", "seoFocusKeyword"]);
+    $: selectedPageIncludesSeoTranslationsKey = hasOwnObjectKey(selectedPage, "seo_translations");
+    $: hasPageSeoTranslationsFieldEvidence = !!pageSeoTranslationsField
+        || selectedPageIncludesSeoTranslationsKey;
+    $: effectivePageSeoTranslationsField = hasPageSeoTranslationsFieldEvidence
+        ? (pageSeoTranslationsField || "seo_translations")
+        : "";
 
     $: websiteLogoField = resolveFieldName(websitesCollection, ["logo"]);
     $: websiteSeoTitleField = resolveFieldName(websitesCollection, ["seoTitle", "seo_title"]);
@@ -290,6 +299,12 @@
     $: sectionEditorDefaultLanguageLabel = sectionEditorDefaultLanguage?.label
         || (sectionEditorDefaultLanguage?.code ? sectionEditorDefaultLanguage.code.toUpperCase() : "Primary");
     $: sectionEditorTranslationLanguages = sectionEditorConfiguredLanguages.slice(1);
+    $: pageSeoConfiguredLanguages = sectionEditorConfiguredLanguages;
+    $: pageSeoDefaultLanguage = pageSeoConfiguredLanguages[0] || null;
+    $: pageSeoDefaultLanguageLabel = pageSeoDefaultLanguage?.label
+        || (pageSeoDefaultLanguage?.code ? pageSeoDefaultLanguage.code.toUpperCase() : "Primary");
+    $: pageSeoTranslationLanguages = pageSeoConfiguredLanguages.slice(1);
+    $: pageSeoSupportsTranslations = !!effectivePageSeoTranslationsField && pageSeoTranslationLanguages.length > 0;
     $: effectiveBlockTranslationsField = resolvedBlockTranslationsField;
     $: sectionEditorSupportsTranslations = !!effectiveBlockTranslationsField && sectionEditorTranslationLanguages.length > 0;
     $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
@@ -378,8 +393,22 @@
     );
     $: pagePreviewFocusedUrl = buildPagePreviewFocusedUrl(pagePreviewUrl, focusedBlockId);
     $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewFocusedUrl, pagePreviewReloadToken);
-    $: pageSeoTitleText = normalizeString(pageEditForm?.seoTitle);
-    $: pageSeoDescriptionText = toSeoPlainText(pageEditForm?.seoDescription);
+    $: activePageSeoTranslationLanguageCode = (
+        activePageSeoLanguageKey !== sectionDefaultLanguageKey && pageSeoSupportsTranslations
+    )
+        ? activePageSeoLanguageKey
+        : "";
+    $: activePageSeoTranslationDraft = activePageSeoTranslationLanguageCode
+        ? getPageSeoTranslationDraft(activePageSeoTranslationLanguageCode)
+        : { title: "", description: "" };
+    $: pageSeoTitleInputValue = activePageSeoTranslationLanguageCode
+        ? `${activePageSeoTranslationDraft?.title || ""}`
+        : `${pageEditForm?.seoTitle || ""}`;
+    $: pageSeoDescriptionInputValue = activePageSeoTranslationLanguageCode
+        ? `${activePageSeoTranslationDraft?.description || ""}`
+        : `${pageEditForm?.seoDescription || ""}`;
+    $: pageSeoTitleText = normalizeString(pageSeoTitleInputValue);
+    $: pageSeoDescriptionText = toSeoPlainText(pageSeoDescriptionInputValue);
     $: pageSeoTitleLength = pageSeoTitleText.length;
     $: pageSeoDescriptionLength = pageSeoDescriptionText.length;
     $: pageSeoFocusKeywordText = normalizeString(pageEditForm?.seoFocusKeyword);
@@ -585,6 +614,7 @@
         focusedBlockId = "";
         editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
+        activePageSeoLanguageKey = sectionDefaultLanguageKey;
         pageEditForm = {
             seoTitle: pageSeoTitleField ? `${selectedPage?.[pageSeoTitleField] || ""}` : "",
             seoDescription: pageSeoDescriptionField ? `${selectedPage?.[pageSeoDescriptionField] || ""}` : "",
@@ -597,6 +627,11 @@
                 : false,
             seoFocusKeyword: pageSeoFocusKeywordField ? `${selectedPage?.[pageSeoFocusKeywordField] || ""}` : "",
         };
+        pageSeoTranslationsDraftByLanguage = toPageSeoTranslationsDraftByLanguage(
+            effectivePageSeoTranslationsField
+                ? selectedPage?.[effectivePageSeoTranslationsField]
+                : (hasOwnObjectKey(selectedPage, "seo_translations") ? selectedPage?.seo_translations : {}),
+        );
         pageError = "";
     }
 
@@ -605,10 +640,24 @@
         focusedBlockId = "";
         editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
+        activePageSeoLanguageKey = sectionDefaultLanguageKey;
+        pageSeoTranslationsDraftByLanguage = {};
     }
 
     $: if (activePageEditorTab !== pageEditorTabContentKey && activePageEditorTab !== pageEditorTabSeoKey) {
         activePageEditorTab = pageEditorTabContentKey;
+    }
+    $: if (!pageSeoSupportsTranslations && activePageSeoLanguageKey !== sectionDefaultLanguageKey) {
+        activePageSeoLanguageKey = sectionDefaultLanguageKey;
+    }
+    $: if (
+        activePageSeoLanguageKey !== sectionDefaultLanguageKey
+        && !pageSeoTranslationLanguages.some((language) => language.code === activePageSeoLanguageKey)
+    ) {
+        activePageSeoLanguageKey = sectionDefaultLanguageKey;
+    }
+    $: if (activePageSeoTranslationLanguageCode && activePageSeoTab === pageSeoTabAdvancedKey) {
+        activePageSeoTab = pageSeoTabBasicKey;
     }
 
     $: if (!hasCmsCollections) {
@@ -979,6 +1028,67 @@
         }
 
         return nextValue;
+    }
+
+    function toPageSeoTranslationDraft(value) {
+        const source = toPropsObject(value);
+        return {
+            title: normalizeString(source?.title),
+            description: `${source?.description || ""}`,
+        };
+    }
+
+    function toPageSeoTranslationsDraftByLanguage(value) {
+        const source = toTranslationsRecordObject(value);
+        const nextValue = {};
+
+        for (const [rawLanguageCode, rawTranslationValue] of Object.entries(source)) {
+            const languageCode = normalizeLanguageCode(rawLanguageCode);
+            if (!languageCode || !isPlainObject(rawTranslationValue)) {
+                continue;
+            }
+
+            const nextDraft = toPageSeoTranslationDraft(rawTranslationValue);
+            if (!isPageSeoTranslationDraftEmpty(nextDraft)) {
+                nextValue[languageCode] = nextDraft;
+            }
+        }
+
+        return nextValue;
+    }
+
+    function isPageSeoTranslationDraftEmpty(value) {
+        const draft = toPageSeoTranslationDraft(value);
+        return !normalizeString(draft?.title) && !normalizeString(draft?.description);
+    }
+
+    function getPageSeoTranslationDraft(languageCode) {
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!normalizedLanguage) {
+            return { title: "", description: "" };
+        }
+
+        return toPageSeoTranslationDraft(pageSeoTranslationsDraftByLanguage?.[normalizedLanguage]);
+    }
+
+    function updatePageSeoTranslationDraft(languageCode, nextValue) {
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!normalizedLanguage) {
+            return;
+        }
+
+        const nextDraft = toPageSeoTranslationDraft(nextValue);
+        const nextTranslationsDraftByLanguage = {
+            ...(pageSeoTranslationsDraftByLanguage || {}),
+        };
+
+        if (isPageSeoTranslationDraftEmpty(nextDraft)) {
+            delete nextTranslationsDraftByLanguage[normalizedLanguage];
+        } else {
+            nextTranslationsDraftByLanguage[normalizedLanguage] = nextDraft;
+        }
+
+        pageSeoTranslationsDraftByLanguage = nextTranslationsDraftByLanguage;
     }
 
     function isPropsObjectEmpty(value) {
@@ -2888,6 +2998,40 @@
         }
     }
 
+    function handlePageSeoTitleInput(event) {
+        const nextValue = `${event.currentTarget?.value || ""}`;
+
+        if (activePageSeoTranslationLanguageCode) {
+            updatePageSeoTranslationDraft(activePageSeoTranslationLanguageCode, {
+                ...getPageSeoTranslationDraft(activePageSeoTranslationLanguageCode),
+                title: nextValue,
+            });
+            return;
+        }
+
+        pageEditForm = {
+            ...pageEditForm,
+            seoTitle: nextValue,
+        };
+    }
+
+    function handlePageSeoDescriptionInput(event) {
+        const nextValue = `${event.currentTarget?.value || ""}`;
+
+        if (activePageSeoTranslationLanguageCode) {
+            updatePageSeoTranslationDraft(activePageSeoTranslationLanguageCode, {
+                ...getPageSeoTranslationDraft(activePageSeoTranslationLanguageCode),
+                description: nextValue,
+            });
+            return;
+        }
+
+        pageEditForm = {
+            ...pageEditForm,
+            seoDescription: nextValue,
+        };
+    }
+
     async function reload() {
         if (!hasCmsCollections) {
             return;
@@ -3054,6 +3198,30 @@
         }
     }
 
+    function setActivePageSeoLanguage(nextLanguageKey) {
+        const normalizedLanguageKey = normalizeString(nextLanguageKey) || sectionDefaultLanguageKey;
+        const normalizedTarget = normalizedLanguageKey === sectionDefaultLanguageKey
+            ? sectionDefaultLanguageKey
+            : normalizeLanguageCode(normalizedLanguageKey);
+
+        if (!normalizedTarget || normalizedTarget === activePageSeoLanguageKey) {
+            return;
+        }
+
+        if (normalizedTarget !== sectionDefaultLanguageKey) {
+            const isVisibleLanguage = pageSeoSupportsTranslations
+                && pageSeoTranslationLanguages.some((language) => language.code === normalizedTarget);
+            if (!isVisibleLanguage) {
+                return;
+            }
+        }
+
+        activePageSeoLanguageKey = normalizedTarget;
+        if (normalizedTarget !== sectionDefaultLanguageKey && activePageSeoTab === pageSeoTabAdvancedKey) {
+            activePageSeoTab = pageSeoTabBasicKey;
+        }
+    }
+
     function setActiveWebsiteSettingsArea(nextArea) {
         if (nextArea === websiteSettingsAreaIdentitySeoKey) {
             activeWebsiteSettingsArea = nextArea;
@@ -3144,30 +3312,54 @@
         }
 
         const payload = {};
-        if (pageSeoTitleField) {
-            setPayloadField(payload, pageSeoTitleField, normalizeString(pageEditForm.seoTitle));
-        }
-        if (pageSeoDescriptionField) {
-            setPayloadField(payload, pageSeoDescriptionField, `${pageEditForm.seoDescription || ""}`);
-        }
-        if (pageSeoCanonicalUrlField) {
-            setPayloadField(payload, pageSeoCanonicalUrlField, normalizeString(pageEditForm.seoCanonicalUrl));
-        }
-        if (pageSeoNoindexField) {
-            setPayloadField(payload, pageSeoNoindexField, toBooleanValue(pageEditForm.seoNoindex));
-        }
-        if (pageSeoExcludeFromSitemapField) {
-            setPayloadField(
-                payload,
-                pageSeoExcludeFromSitemapField,
-                toBooleanValue(pageEditForm.seoExcludeFromSitemap),
+        if (activePageSeoTranslationLanguageCode) {
+            if (!effectivePageSeoTranslationsField) {
+                pageError = "SEO translations field is not available for this page collection.";
+                return;
+            }
+
+            const currentTranslations = toTranslationsRecordObject(
+                effectivePageSeoTranslationsField
+                    ? selectedPage?.[effectivePageSeoTranslationsField]
+                    : (hasOwnObjectKey(selectedPage, "seo_translations") ? selectedPage?.seo_translations : {}),
             );
-        }
-        if (pageSeoFocusKeywordField) {
-            setPayloadField(payload, pageSeoFocusKeywordField, normalizeString(pageEditForm.seoFocusKeyword));
-        }
-        if (pageSeoSocialImageField && pageEditForm.seoSocialImageFile) {
-            setPayloadField(payload, pageSeoSocialImageField, pageEditForm.seoSocialImageFile);
+            const draftTranslation = getPageSeoTranslationDraft(activePageSeoTranslationLanguageCode);
+
+            removeLanguageTranslationKey(currentTranslations, activePageSeoTranslationLanguageCode);
+            if (!isPageSeoTranslationDraftEmpty(draftTranslation)) {
+                currentTranslations[activePageSeoTranslationLanguageCode] = {
+                    title: normalizeString(draftTranslation?.title),
+                    description: `${draftTranslation?.description || ""}`,
+                };
+            }
+
+            setPayloadField(payload, effectivePageSeoTranslationsField, currentTranslations);
+        } else {
+            if (pageSeoTitleField) {
+                setPayloadField(payload, pageSeoTitleField, normalizeString(pageEditForm.seoTitle));
+            }
+            if (pageSeoDescriptionField) {
+                setPayloadField(payload, pageSeoDescriptionField, `${pageEditForm.seoDescription || ""}`);
+            }
+            if (pageSeoCanonicalUrlField) {
+                setPayloadField(payload, pageSeoCanonicalUrlField, normalizeString(pageEditForm.seoCanonicalUrl));
+            }
+            if (pageSeoNoindexField) {
+                setPayloadField(payload, pageSeoNoindexField, toBooleanValue(pageEditForm.seoNoindex));
+            }
+            if (pageSeoExcludeFromSitemapField) {
+                setPayloadField(
+                    payload,
+                    pageSeoExcludeFromSitemapField,
+                    toBooleanValue(pageEditForm.seoExcludeFromSitemap),
+                );
+            }
+            if (pageSeoFocusKeywordField) {
+                setPayloadField(payload, pageSeoFocusKeywordField, normalizeString(pageEditForm.seoFocusKeyword));
+            }
+            if (pageSeoSocialImageField && pageEditForm.seoSocialImageFile) {
+                setPayloadField(payload, pageSeoSocialImageField, pageEditForm.seoSocialImageFile);
+            }
         }
 
         if (!Object.keys(payload).length) {
@@ -3782,17 +3974,44 @@
                                                     <i class="ri-layout-left-line tab-icon" aria-hidden="true" />
                                                     <span class="tab-label">Basic</span>
                                                 </button>
-                                                <button
-                                                    type="button"
-                                                    class="tab-item"
-                                                    class:active={activePageSeoTab === pageSeoTabAdvancedKey}
-                                                    on:click={() => (activePageSeoTab = pageSeoTabAdvancedKey)}
-                                                >
-                                                    <i class="ri-tools-line tab-icon" aria-hidden="true" />
-                                                    <span class="tab-label">Advanced</span>
-                                                </button>
+                                                {#if !activePageSeoTranslationLanguageCode}
+                                                    <button
+                                                        type="button"
+                                                        class="tab-item"
+                                                        class:active={activePageSeoTab === pageSeoTabAdvancedKey}
+                                                        on:click={() => (activePageSeoTab = pageSeoTabAdvancedKey)}
+                                                    >
+                                                        <i class="ri-tools-line tab-icon" aria-hidden="true" />
+                                                        <span class="tab-label">Advanced</span>
+                                                    </button>
+                                                {/if}
                                             </div>
                                         </div>
+
+                                        {#if pageSeoSupportsTranslations}
+                                            <div class="page-seo-tabs-row page-seo-tabs-row--compact">
+                                                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested section-language-tabs page-seo-language-tabs">
+                                                    <button
+                                                        type="button"
+                                                        class="tab-item"
+                                                        class:active={activePageSeoLanguageKey === sectionDefaultLanguageKey}
+                                                        on:click={() => setActivePageSeoLanguage(sectionDefaultLanguageKey)}
+                                                    >
+                                                        <span>{pageSeoDefaultLanguageLabel}</span>
+                                                    </button>
+                                                    {#each pageSeoTranslationLanguages as language}
+                                                        <button
+                                                            type="button"
+                                                            class="tab-item"
+                                                            class:active={activePageSeoLanguageKey === language.code}
+                                                            on:click={() => setActivePageSeoLanguage(language.code)}
+                                                        >
+                                                            <span>{language.label}</span>
+                                                        </button>
+                                                    {/each}
+                                                </div>
+                                            </div>
+                                        {/if}
 
                                         {#if activePageSeoTab === pageSeoTabBasicKey}
                                             <div class="seo-editor-grid m-t-sm">
@@ -3806,11 +4025,16 @@
                                                                 <input
                                                                     id="cms-page-seo-title-content"
                                                                     class="input form-input"
-                                                                    bind:value={pageEditForm.seoTitle}
+                                                                    value={pageSeoTitleInputValue}
+                                                                    on:input={handlePageSeoTitleInput}
                                                                 />
                                                                 <div class="help-block m-t-6 seo-field-helper">
                                                                     <span class="label label-sm seo-count-pill">{pageSeoTitleLength} characters</span>
-                                                                    <span>Shown in search results. If empty, the page title is used.</span>
+                                                                    {#if activePageSeoTranslationLanguageCode}
+                                                                        <span>Shown in search results for this language. If empty, default SEO title is used.</span>
+                                                                    {:else}
+                                                                        <span>Shown in search results. If empty, the page title is used.</span>
+                                                                    {/if}
                                                                 </div>
                                                             </div>
                                                         {/if}
@@ -3824,16 +4048,21 @@
                                                                     id="cms-page-seo-description-content"
                                                                     class="input form-textarea textarea-input"
                                                                     rows="4"
-                                                                    bind:value={pageEditForm.seoDescription}
+                                                                    value={pageSeoDescriptionInputValue}
+                                                                    on:input={handlePageSeoDescriptionInput}
                                                                 />
                                                                 <div class="help-block m-t-6 seo-field-helper">
                                                                     <span class="label label-sm seo-count-pill">{pageSeoDescriptionLength} characters</span>
-                                                                    <span>Short summary shown in search results.</span>
+                                                                    {#if activePageSeoTranslationLanguageCode}
+                                                                        <span>Short summary shown in search results for this language.</span>
+                                                                    {:else}
+                                                                        <span>Short summary shown in search results.</span>
+                                                                    {/if}
                                                                 </div>
                                                             </div>
                                                         {/if}
 
-                                                        {#if pageSeoFocusKeywordField}
+                                                        {#if !activePageSeoTranslationLanguageCode && pageSeoFocusKeywordField}
                                                             <div class="form-field seo-field">
                                                                 <label for="cms-page-seo-focus-keyword">SEO focus keyword</label>
                                                                 <input
@@ -3848,7 +4077,7 @@
                                                         {/if}
                                                     </div>
 
-                                                    {#if pageSeoSocialImageField}
+                                                    {#if !activePageSeoTranslationLanguageCode && pageSeoSocialImageField}
                                                         <div class="form-field seo-field m-t-sm">
                                                             <label for="cms-page-seo-social-image-file">Image used when sharing</label>
                                                             <div class="page-seo-file-control">
@@ -3886,7 +4115,7 @@
                                                                 Used when this page is shared. If empty, the global SEO image is used.
                                                             </div>
                                                         </div>
-                                                    {:else}
+                                                    {:else if !activePageSeoTranslationLanguageCode}
                                                         <p class="txt-sm txt-hint m-b-0">Page social image field is not available for this page collection.</p>
                                                     {/if}
                                                 </div>
