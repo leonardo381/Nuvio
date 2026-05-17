@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from "svelte";
   import SchemaForm from "./SchemaForm.svelte";
+  import CommonHelper from "@/utils/CommonHelper";
 
   export let field;
   export let value = [];
@@ -83,7 +84,13 @@
   }
 
   function normalizeText(value) {
-    return String(value ?? "").replace(/\s+/g, " ").trim();
+    const raw = String(value ?? "");
+    if (!raw) {
+      return "";
+    }
+
+    const plain = raw.includes("<") ? CommonHelper.plainText(raw) : raw;
+    return plain.replace(/\s+/g, " ").trim();
   }
 
   function getNamedObjectValue(item, keys = []) {

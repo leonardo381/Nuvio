@@ -16,6 +16,7 @@
   let mounted = false;
   let mountTimer = null;
   let editorValue = normalizeValue(value);
+  let lastIncomingValue = editorValue;
   let lastDispatchedValue = editorValue;
 
   $: editorConfig = {
@@ -27,10 +28,15 @@
   };
 
   $: {
-    const next = normalizeValue(value);
-    if (next !== editorValue) {
-      editorValue = next;
-      lastDispatchedValue = next;
+    const nextIncomingValue = normalizeValue(value);
+    if (nextIncomingValue !== lastIncomingValue) {
+      lastIncomingValue = nextIncomingValue;
+      if (nextIncomingValue !== editorValue) {
+        editorValue = nextIncomingValue;
+      }
+      if (nextIncomingValue !== lastDispatchedValue) {
+        lastDispatchedValue = nextIncomingValue;
+      }
     }
   }
 

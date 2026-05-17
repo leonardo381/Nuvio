@@ -144,6 +144,8 @@
     let sectionPropsDraftById = {};
     let sectionTranslationsDraftById = {};
     let pageSeoTranslationsDraftByLanguage = {};
+    let selectedEditingSectionDraftFormProps = {};
+    let selectedEditingSectionDraftFormPropsSeed = "";
     let sectionErrorById = {};
     let isSavingSectionById = {};
     let pagePreviewReloadToken = 0;
@@ -656,10 +658,6 @@
     ) {
         activePageSeoLanguageKey = sectionDefaultLanguageKey;
     }
-    $: if (activePageSeoTranslationLanguageCode && activePageSeoTab === pageSeoTabAdvancedKey) {
-        activePageSeoTab = pageSeoTabBasicKey;
-    }
-
     $: if (!hasCmsCollections) {
         websites = [];
         pages = [];
@@ -730,6 +728,9 @@
             .map((field) => normalizeString(field?.key).toLowerCase())
             .filter(Boolean),
     );
+    $: selectedEditingSectionSchemaFieldKeysFingerprint = Array.from(selectedEditingSectionSchemaFieldKeys)
+        .sort()
+        .join("|");
     $: selectedEditingSectionIndex = selectedEditingSection
         ? blocks.findIndex((block) => `${block?.id || ""}` === `${selectedEditingSection?.id || ""}`)
         : -1;
@@ -771,10 +772,21 @@
     $: selectedEditingSectionDraftActiveProps = activeSectionTranslationLanguageCode
         ? selectedEditingSectionDraftTranslationProps
         : selectedEditingSectionDraftProps;
-    $: selectedEditingSectionDraftFormProps = sanitizeSectionDraftPropsForForm(
-        selectedEditingSectionDraftActiveProps,
-        selectedEditingSectionSchemaFieldKeys,
-    );
+    $: {
+        if (!selectedEditingSection) {
+            selectedEditingSectionDraftFormPropsSeed = "";
+            selectedEditingSectionDraftFormProps = {};
+        } else {
+            const draftSeed = `${selectedEditingSection?.id || ""}|${activeSectionTranslationLanguageCode || sectionDefaultLanguageKey}|${selectedEditingSectionSchemaFieldKeysFingerprint}|${stableSerializeForDirtyCheck(selectedEditingSectionDraftActiveProps)}`;
+            if (draftSeed !== selectedEditingSectionDraftFormPropsSeed) {
+                selectedEditingSectionDraftFormPropsSeed = draftSeed;
+                selectedEditingSectionDraftFormProps = sanitizeSectionDraftPropsForForm(
+                    selectedEditingSectionDraftActiveProps,
+                    selectedEditingSectionSchemaFieldKeys,
+                );
+            }
+        }
+    }
     $: isSectionEditorDirty = !!selectedEditingSection
         && stableSerializeForDirtyCheck(selectedEditingSectionDraftActiveProps)
             !== stableSerializeForDirtyCheck(selectedEditingSectionOriginalActiveProps);
@@ -3217,9 +3229,6 @@
         }
 
         activePageSeoLanguageKey = normalizedTarget;
-        if (normalizedTarget !== sectionDefaultLanguageKey && activePageSeoTab === pageSeoTabAdvancedKey) {
-            activePageSeoTab = pageSeoTabBasicKey;
-        }
     }
 
     function setActiveWebsiteSettingsArea(nextArea) {
@@ -3312,7 +3321,7 @@
         }
 
         const payload = {};
-        if (activePageSeoTranslationLanguageCode) {
+        if (activePageSeoTranslationLanguageCode && activePageSeoTab !== pageSeoTabAdvancedKey) {
             if (!effectivePageSeoTranslationsField) {
                 pageError = "SEO translations field is not available for this page collection.";
                 return;
@@ -3335,10 +3344,10 @@
 
             setPayloadField(payload, effectivePageSeoTranslationsField, currentTranslations);
         } else {
-            if (pageSeoTitleField) {
+            if (!activePageSeoTranslationLanguageCode && pageSeoTitleField) {
                 setPayloadField(payload, pageSeoTitleField, normalizeString(pageEditForm.seoTitle));
             }
-            if (pageSeoDescriptionField) {
+            if (!activePageSeoTranslationLanguageCode && pageSeoDescriptionField) {
                 setPayloadField(payload, pageSeoDescriptionField, `${pageEditForm.seoDescription || ""}`);
             }
             if (pageSeoCanonicalUrlField) {
@@ -3974,17 +3983,15 @@
                                                     <i class="ri-layout-left-line tab-icon" aria-hidden="true" />
                                                     <span class="tab-label">Basic</span>
                                                 </button>
-                                                {#if !activePageSeoTranslationLanguageCode}
-                                                    <button
-                                                        type="button"
-                                                        class="tab-item"
-                                                        class:active={activePageSeoTab === pageSeoTabAdvancedKey}
-                                                        on:click={() => (activePageSeoTab = pageSeoTabAdvancedKey)}
-                                                    >
-                                                        <i class="ri-tools-line tab-icon" aria-hidden="true" />
-                                                        <span class="tab-label">Advanced</span>
-                                                    </button>
-                                                {/if}
+                                                <button
+                                                    type="button"
+                                                    class="tab-item"
+                                                    class:active={activePageSeoTab === pageSeoTabAdvancedKey}
+                                                    on:click={() => (activePageSeoTab = pageSeoTabAdvancedKey)}
+                                                >
+                                                    <i class="ri-tools-line tab-icon" aria-hidden="true" />
+                                                    <span class="tab-label">Advanced</span>
+                                                </button>
                                             </div>
                                         </div>
 
@@ -5620,16 +5627,18 @@
 
     .section-language-switcher {
         display: flex;
+        align-items: flex-start;
         flex-direction: column;
         gap: 6px;
         margin: 0 0 10px;
     }
 
     .section-language-tabs {
-        width: 100%;
+        width: auto;
         max-width: 100%;
+        flex: 0 0 auto;
         margin-top: 0;
-        display: flex;
+        display: inline-flex;
         flex-wrap: wrap;
         row-gap: 4px;
         overflow: visible;
@@ -5637,8 +5646,11 @@
 
     .section-language-tabs .tab-item {
         display: inline-flex;
+        flex: 0 0 auto;
+        width: auto;
         align-items: center;
         gap: 6px;
+        white-space: nowrap;
     }
 
     .drawer-discard-confirm-head {
