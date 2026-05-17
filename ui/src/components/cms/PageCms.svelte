@@ -34,6 +34,9 @@
     const websiteIdentitySeoTabBasicKey = "basic";
     const websiteIdentitySeoTabLocalBusinessKey = "local-business";
     const websiteIdentitySeoTabAdvancedKey = "advanced";
+    const sectionDefaultLanguageKey = "default";
+    const sectionDiscardIntentCloseKey = "close";
+    const sectionDiscardIntentSwitchLanguageKey = "switch-language";
     const clientSettingsRole = "client";
     const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "newsletter", "booking", "reports", "i18n"]);
     const websiteSettingsAreaIdentitySeoKey = "identity-seo";
@@ -80,6 +83,9 @@
     let sectionEditorPanel;
     let isSectionDiscardConfirmOpen = false;
     let bypassSectionCloseConfirm = false;
+    let sectionDiscardIntent = sectionDiscardIntentCloseKey;
+    let pendingSectionLanguageKey = "";
+    let activeSectionLanguageKey = sectionDefaultLanguageKey;
 
     let isLoadingWebsites = false;
     let isLoadingPages = false;
@@ -135,6 +141,7 @@
     let activeWebsiteSettingsFeatureKey = "";
 
     let sectionPropsDraftById = {};
+    let sectionTranslationsDraftById = {};
     let sectionErrorById = {};
     let isSavingSectionById = {};
     let pagePreviewReloadToken = 0;
@@ -245,6 +252,7 @@
 
     $: blockTitleField = resolveFieldName(blocksCollection, ["title", "name", "label"]);
     $: blockPropsField = resolveFieldName(blocksCollection, ["props"]);
+    $: blockTranslationsField = resolveFieldName(blocksCollection, ["translations"]);
     $: blockComponentKeyField = resolveFieldName(blocksCollection, ["component_key", "componentKey"]);
     $: blockVariantField = resolveFieldName(blocksCollection, ["variant"]);
     $: blockComponentRelationField = resolveRelationFieldName(blocksCollection, componentsCollection?.id, ["component"]);
@@ -258,6 +266,10 @@
 
     $: selectedWebsite = websites.find((record) => record.id === selectedWebsiteId) || null;
     $: selectedPage = pages.find((record) => record.id === selectedPageId) || null;
+    $: sectionEditorConfiguredLanguages = getSectionEditorConfiguredLanguages(websiteSettingsFullDraft);
+    $: sectionEditorDefaultLanguageCode = sectionEditorConfiguredLanguages[0]?.code || "";
+    $: sectionEditorTranslationLanguages = sectionEditorConfiguredLanguages.slice(1);
+    $: sectionEditorSupportsTranslations = !!blockTranslationsField && sectionEditorTranslationLanguages.length > 0;
     $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
     $: clientWebsiteSettingsFields = filterClientWebsiteSettingsFields(roleScopedSettingsFields);
     $: websiteSettingsFieldsByKey = new Map(
@@ -337,7 +349,11 @@
     $: websitePublicUrl = getWebsitePublicUrl(selectedWebsite);
     $: selectedWebsiteSlug = normalizeString(websiteSlugField ? selectedWebsite?.[websiteSlugField] : "");
     $: selectedPageSlug = normalizeString(pageSlugField ? selectedPage?.[pageSlugField] : "");
-    $: pagePreviewUrl = buildPagePreviewUrl(selectedWebsiteSlug, selectedPageSlug);
+    $: pagePreviewUrl = buildPagePreviewUrl(
+        selectedWebsiteSlug,
+        selectedPageSlug,
+        activeSectionTranslationLanguageCode,
+    );
     $: pagePreviewFocusedUrl = buildPagePreviewFocusedUrl(pagePreviewUrl, focusedBlockId);
     $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewFocusedUrl, pagePreviewReloadToken);
     $: pageSeoTitleText = normalizeString(pageEditForm?.seoTitle);
@@ -603,21 +619,26 @@
     }
 
     $: {
-        const nextSeedKey = `${blockPropsField || ""}|${blocks.map((block) => `${block.id}:${block?.updated || ""}`).join("|")}`;
+        const nextSeedKey = `${blockPropsField || ""}|${blockTranslationsField || ""}|${blocks.map((block) => `${block.id}:${block?.updated || ""}`).join("|")}`;
         if (nextSeedKey !== lastSectionsSeedKey) {
             lastSectionsSeedKey = nextSeedKey;
 
             const nextDraft = {};
+            const nextTranslationDraft = {};
             const nextErrors = {};
             const nextSaving = {};
 
             for (const block of blocks) {
                 nextDraft[block.id] = toPropsObject(blockPropsField ? block?.[blockPropsField] : {});
+                nextTranslationDraft[block.id] = toTranslationsDraftByLanguage(
+                    blockTranslationsField ? block?.[blockTranslationsField] : {},
+                );
                 nextErrors[block.id] = "";
                 nextSaving[block.id] = false;
             }
 
             sectionPropsDraftById = nextDraft;
+            sectionTranslationsDraftById = nextTranslationDraft;
             sectionErrorById = nextErrors;
             isSavingSectionById = nextSaving;
 
@@ -642,17 +663,54 @@
     $: selectedEditingSectionSummaryPills = selectedEditingSection
         ? getSectionSummaryPills(selectedEditingSection, selectedEditingSectionFields)
         : [];
+    $: activeSectionTranslationLanguageCode = (
+        activeSectionLanguageKey !== sectionDefaultLanguageKey && sectionEditorSupportsTranslations
+    )
+        ? activeSectionLanguageKey
+        : "";
     $: selectedEditingSectionOriginalProps = selectedEditingSection
         ? toPropsObject(blockPropsField ? selectedEditingSection?.[blockPropsField] : {})
         : {};
     $: selectedEditingSectionDraftProps = selectedEditingSection
         ? toPropsObject(sectionPropsDraftById?.[selectedEditingSection.id])
         : {};
+    $: selectedEditingSectionOriginalTranslationProps = (
+        selectedEditingSection && activeSectionTranslationLanguageCode
+    )
+        ? getTranslationPropsByLanguage(
+            toTranslationsRecordObject(blockTranslationsField ? selectedEditingSection?.[blockTranslationsField] : {}),
+            activeSectionTranslationLanguageCode,
+        )
+        : {};
+    $: selectedEditingSectionDraftTranslationProps = (
+        selectedEditingSection && activeSectionTranslationLanguageCode
+    )
+        ? getSectionTranslationDraftProps(selectedEditingSection.id, activeSectionTranslationLanguageCode)
+        : {};
+    $: selectedEditingSectionOriginalActiveProps = activeSectionTranslationLanguageCode
+        ? selectedEditingSectionOriginalTranslationProps
+        : selectedEditingSectionOriginalProps;
+    $: selectedEditingSectionDraftActiveProps = activeSectionTranslationLanguageCode
+        ? selectedEditingSectionDraftTranslationProps
+        : selectedEditingSectionDraftProps;
     $: isSectionEditorDirty = !!selectedEditingSection
-        && stableSerializeForDirtyCheck(selectedEditingSectionDraftProps) !== stableSerializeForDirtyCheck(selectedEditingSectionOriginalProps);
+        && stableSerializeForDirtyCheck(selectedEditingSectionDraftActiveProps)
+            !== stableSerializeForDirtyCheck(selectedEditingSectionOriginalActiveProps);
+    $: if (!sectionEditorSupportsTranslations && activeSectionLanguageKey !== sectionDefaultLanguageKey) {
+        activeSectionLanguageKey = sectionDefaultLanguageKey;
+    }
+    $: if (
+        activeSectionLanguageKey !== sectionDefaultLanguageKey
+        && !sectionEditorTranslationLanguages.some((language) => language.code === activeSectionLanguageKey)
+    ) {
+        activeSectionLanguageKey = sectionDefaultLanguageKey;
+    }
     $: if (!selectedEditingSection && isSectionDiscardConfirmOpen) {
         isSectionDiscardConfirmOpen = false;
         bypassSectionCloseConfirm = false;
+        sectionDiscardIntent = sectionDiscardIntentCloseKey;
+        pendingSectionLanguageKey = "";
+        activeSectionLanguageKey = sectionDefaultLanguageKey;
     }
 
     $: {
@@ -787,6 +845,200 @@
         }
 
         return {};
+    }
+
+    function normalizeLanguageCode(value) {
+        const normalized = normalizeString(value).toLowerCase();
+        if (!normalized) {
+            return "";
+        }
+
+        if (!/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i.test(normalized)) {
+            return "";
+        }
+
+        return normalized;
+    }
+
+    function toTranslationsRecordObject(value) {
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+            return structuredClone(value);
+        }
+
+        if (typeof value === "string" && value.trim()) {
+            try {
+                const parsed = JSON.parse(value);
+                if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    return parsed;
+                }
+            } catch (_) {
+                return {};
+            }
+        }
+
+        return {};
+    }
+
+    function getSectionEditorConfiguredLanguages(settingsValue) {
+        const i18nSettings = isPlainObject(settingsValue?.i18n) ? settingsValue.i18n : {};
+        if (i18nSettings?.enabled !== true) {
+            return [];
+        }
+
+        const sourceLanguages = Array.isArray(i18nSettings?.languages) ? i18nSettings.languages : [];
+        const seen = new Set();
+        const languages = [];
+
+        for (const entry of sourceLanguages) {
+            const code = normalizeLanguageCode(
+                isPlainObject(entry)
+                    ? entry?.code
+                    : entry,
+            );
+            if (!code || seen.has(code)) {
+                continue;
+            }
+
+            seen.add(code);
+            const labelSource = isPlainObject(entry) ? entry?.label : "";
+            const label = normalizeString(labelSource) || code.toUpperCase();
+            languages.push({ code, label });
+        }
+
+        return languages;
+    }
+
+    function findTranslationLanguageKey(translationsValue, languageCode) {
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!normalizedLanguage || !isPlainObject(translationsValue)) {
+            return "";
+        }
+
+        for (const key of Object.keys(translationsValue)) {
+            if (normalizeLanguageCode(key) === normalizedLanguage) {
+                return key;
+            }
+        }
+
+        return "";
+    }
+
+    function getTranslationPropsByLanguage(translationsValue, languageCode) {
+        const key = findTranslationLanguageKey(translationsValue, languageCode);
+        if (!key) {
+            return {};
+        }
+
+        return toPropsObject(translationsValue?.[key]);
+    }
+
+    function toTranslationsDraftByLanguage(translationsValue) {
+        const source = toTranslationsRecordObject(translationsValue);
+        const nextValue = {};
+
+        for (const [rawLanguageCode, rawProps] of Object.entries(source)) {
+            const languageCode = normalizeLanguageCode(rawLanguageCode);
+            if (!languageCode || !isPlainObject(rawProps)) {
+                continue;
+            }
+
+            nextValue[languageCode] = toPropsObject(rawProps);
+        }
+
+        return nextValue;
+    }
+
+    function isPropsObjectEmpty(value) {
+        return stableSerializeForDirtyCheck(toPropsObject(value)) === "{}";
+    }
+
+    function getSectionTranslationDraftProps(blockId, languageCode) {
+        const normalizedBlockId = normalizeString(blockId);
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!normalizedBlockId || !normalizedLanguage) {
+            return {};
+        }
+
+        return toPropsObject(sectionTranslationsDraftById?.[normalizedBlockId]?.[normalizedLanguage]);
+    }
+
+    function resetSectionTranslationDraft(block, languageCode) {
+        const blockId = normalizeString(block?.id);
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!blockId || !normalizedLanguage) {
+            return;
+        }
+
+        const persistedTranslations = toTranslationsRecordObject(
+            blockTranslationsField ? block?.[blockTranslationsField] : {},
+        );
+        const nextLanguageValue = getTranslationPropsByLanguage(persistedTranslations, normalizedLanguage);
+        const nextBlockDraft = {
+            ...(sectionTranslationsDraftById?.[blockId] || {}),
+        };
+
+        if (isPropsObjectEmpty(nextLanguageValue)) {
+            delete nextBlockDraft[normalizedLanguage];
+        } else {
+            nextBlockDraft[normalizedLanguage] = nextLanguageValue;
+        }
+
+        sectionTranslationsDraftById = {
+            ...sectionTranslationsDraftById,
+            [blockId]: nextBlockDraft,
+        };
+    }
+
+    function updateSectionTranslationDraft(blockId, languageCode, nextValue) {
+        const normalizedBlockId = normalizeString(blockId);
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!normalizedBlockId || !normalizedLanguage) {
+            return;
+        }
+
+        const nextBlockDraft = {
+            ...(sectionTranslationsDraftById?.[normalizedBlockId] || {}),
+        };
+        const nextProps = toPropsObject(nextValue);
+
+        if (isPropsObjectEmpty(nextProps)) {
+            delete nextBlockDraft[normalizedLanguage];
+        } else {
+            nextBlockDraft[normalizedLanguage] = nextProps;
+        }
+
+        sectionTranslationsDraftById = {
+            ...sectionTranslationsDraftById,
+            [normalizedBlockId]: nextBlockDraft,
+        };
+    }
+
+    function removeLanguageTranslationKey(translationsObject, languageCode) {
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!normalizedLanguage || !isPlainObject(translationsObject)) {
+            return;
+        }
+
+        for (const key of Object.keys(translationsObject)) {
+            if (normalizeLanguageCode(key) === normalizedLanguage) {
+                delete translationsObject[key];
+            }
+        }
+    }
+
+    function isSectionLanguageMissing(block, languageCode) {
+        const normalizedLanguage = normalizeLanguageCode(languageCode);
+        if (!block?.id || !normalizedLanguage) {
+            return false;
+        }
+
+        const persistedTranslations = toTranslationsRecordObject(
+            blockTranslationsField ? block?.[blockTranslationsField] : {},
+        );
+        const persistedValue = getTranslationPropsByLanguage(persistedTranslations, normalizedLanguage);
+        const draftValue = getSectionTranslationDraftProps(block.id, normalizedLanguage);
+
+        return isPropsObjectEmpty(persistedValue) && isPropsObjectEmpty(draftValue);
     }
 
     function isPlainObject(value) {
@@ -1052,9 +1304,10 @@
         }
     }
 
-    function buildPagePreviewUrl(websiteSlug, pageSlug) {
+    function buildPagePreviewUrl(websiteSlug, pageSlug, languageCode = "") {
         const normalizedWebsiteSlug = normalizeString(websiteSlug);
         const normalizedPageSlug = normalizeString(pageSlug);
+        const normalizedLanguageCode = normalizeLanguageCode(languageCode);
 
         if (!normalizedWebsiteSlug || !normalizedPageSlug) {
             return "";
@@ -1068,7 +1321,21 @@
             return "";
         }
 
-        return `${baseUrl}/site/${encodeURIComponent(normalizedWebsiteSlug)}/${encodeURIComponent(normalizedPageSlug)}`;
+        try {
+            const previewUrl = new URL(
+                `${baseUrl}/site/${encodeURIComponent(normalizedWebsiteSlug)}/${encodeURIComponent(normalizedPageSlug)}`,
+            );
+
+            if (normalizedLanguageCode) {
+                previewUrl.searchParams.set("lang", normalizedLanguageCode);
+            } else {
+                previewUrl.searchParams.delete("lang");
+            }
+
+            return previewUrl.toString();
+        } catch (_) {
+            return "";
+        }
     }
 
     function getPageSeoPreviewPath(previewUrl, websiteSlug, pageSlug) {
@@ -2178,28 +2445,52 @@
         }
 
         editingSectionId = normalizedBlockId;
+        activeSectionLanguageKey = sectionDefaultLanguageKey;
+        pendingSectionLanguageKey = "";
+        sectionDiscardIntent = sectionDiscardIntentCloseKey;
     }
 
     function closeSectionEditor() {
         editingSectionId = "";
         isSectionDiscardConfirmOpen = false;
         bypassSectionCloseConfirm = false;
+        sectionDiscardIntent = sectionDiscardIntentCloseKey;
+        pendingSectionLanguageKey = "";
+        activeSectionLanguageKey = sectionDefaultLanguageKey;
     }
 
     function closeSectionDiscardConfirm() {
         isSectionDiscardConfirmOpen = false;
+        sectionDiscardIntent = sectionDiscardIntentCloseKey;
+        pendingSectionLanguageKey = "";
     }
 
     function discardSectionEditorChanges() {
         const blockId = normalizeString(selectedEditingSection?.id);
-        if (blockId) {
+        if (blockId && activeSectionTranslationLanguageCode) {
+            resetSectionTranslationDraft(selectedEditingSection, activeSectionTranslationLanguageCode);
+        } else if (blockId) {
             sectionPropsDraftById = {
                 ...sectionPropsDraftById,
                 [blockId]: toPropsObject(blockPropsField ? selectedEditingSection?.[blockPropsField] : {}),
             };
         }
 
+        if (
+            sectionDiscardIntent === sectionDiscardIntentSwitchLanguageKey
+            && pendingSectionLanguageKey
+        ) {
+            const nextLanguage = pendingSectionLanguageKey;
+            isSectionDiscardConfirmOpen = false;
+            sectionDiscardIntent = sectionDiscardIntentCloseKey;
+            pendingSectionLanguageKey = "";
+            activeSectionLanguageKey = nextLanguage;
+            return;
+        }
+
         isSectionDiscardConfirmOpen = false;
+        sectionDiscardIntent = sectionDiscardIntentCloseKey;
+        pendingSectionLanguageKey = "";
         bypassSectionCloseConfirm = true;
         sectionEditorPanel?.hide();
     }
@@ -2214,8 +2505,42 @@
             return true;
         }
 
+        sectionDiscardIntent = sectionDiscardIntentCloseKey;
+        pendingSectionLanguageKey = "";
         isSectionDiscardConfirmOpen = true;
         return false;
+    }
+
+    function setActiveSectionLanguage(nextLanguageKey) {
+        const normalizedLanguageKey = normalizeString(nextLanguageKey) || sectionDefaultLanguageKey;
+        const normalizedTarget = normalizedLanguageKey === sectionDefaultLanguageKey
+            ? sectionDefaultLanguageKey
+            : normalizeLanguageCode(normalizedLanguageKey);
+
+        if (!normalizedTarget) {
+            return;
+        }
+
+        if (normalizedTarget === activeSectionLanguageKey) {
+            return;
+        }
+
+        if (normalizedTarget !== sectionDefaultLanguageKey) {
+            const isVisibleLanguage = sectionEditorSupportsTranslations
+                && sectionEditorTranslationLanguages.some((language) => language.code === normalizedTarget);
+            if (!isVisibleLanguage) {
+                return;
+            }
+        }
+
+        if (isSectionEditorDirty) {
+            pendingSectionLanguageKey = normalizedTarget;
+            sectionDiscardIntent = sectionDiscardIntentSwitchLanguageKey;
+            isSectionDiscardConfirmOpen = true;
+            return;
+        }
+
+        activeSectionLanguageKey = normalizedTarget;
     }
 
     function normalizeComparableForDirtyCheck(value) {
@@ -2357,6 +2682,11 @@
     });
 
     function updateSectionDraft(blockId, nextValue) {
+        if (activeSectionTranslationLanguageCode) {
+            updateSectionTranslationDraft(blockId, activeSectionTranslationLanguageCode, nextValue);
+            return;
+        }
+
         sectionPropsDraftById = {
             ...sectionPropsDraftById,
             [blockId]: toPropsObject(nextValue),
@@ -2968,16 +3298,46 @@
 
         sectionErrorById = { ...sectionErrorById, [blockId]: "" };
 
-        if (!blocksCollection?.id || !blockPropsField) {
+        if (!blocksCollection?.id) {
             sectionErrorById = {
                 ...sectionErrorById,
-                [blockId]: "Section cannot be saved because props field is missing.",
+                [blockId]: "Section cannot be saved because blocks collection is missing.",
             };
             return;
         }
 
         const payload = {};
-        setPayloadField(payload, blockPropsField, toPropsObject(sectionPropsDraftById?.[blockId]));
+        if (activeSectionTranslationLanguageCode) {
+            if (!blockTranslationsField) {
+                sectionErrorById = {
+                    ...sectionErrorById,
+                    [blockId]: "Section translations cannot be saved because translations field is missing.",
+                };
+                return;
+            }
+
+            const currentTranslations = toTranslationsRecordObject(
+                blockTranslationsField ? block?.[blockTranslationsField] : {},
+            );
+            const draftTranslationValue = getSectionTranslationDraftProps(blockId, activeSectionTranslationLanguageCode);
+
+            removeLanguageTranslationKey(currentTranslations, activeSectionTranslationLanguageCode);
+            if (!isPropsObjectEmpty(draftTranslationValue)) {
+                currentTranslations[activeSectionTranslationLanguageCode] = toPropsObject(draftTranslationValue);
+            }
+
+            setPayloadField(payload, blockTranslationsField, currentTranslations);
+        } else {
+            if (!blockPropsField) {
+                sectionErrorById = {
+                    ...sectionErrorById,
+                    [blockId]: "Section cannot be saved because props field is missing.",
+                };
+                return;
+            }
+
+            setPayloadField(payload, blockPropsField, toPropsObject(sectionPropsDraftById?.[blockId]));
+        }
 
         isSavingSectionById = {
             ...isSavingSectionById,
@@ -4472,6 +4832,32 @@
                         <div class="section-drawer-copy">
                             <strong class="section-drawer-name">{getSectionTitle(selectedEditingSection, Math.max(selectedEditingSectionIndex, 0))}</strong>
                             <span class="txt-sm txt-hint section-drawer-helper">{selectedEditingSectionSubtitle || "Edit section content."}</span>
+                            {#if sectionEditorSupportsTranslations}
+                                <div class="tabs-header compact combined left operations-tabs operations-tabs--nested section-language-tabs">
+                                    <button
+                                        type="button"
+                                        class:active={activeSectionLanguageKey === sectionDefaultLanguageKey}
+                                        on:click={() => setActiveSectionLanguage(sectionDefaultLanguageKey)}
+                                    >
+                                        <span>Default</span>
+                                        {#if sectionEditorDefaultLanguageCode}
+                                            <span class="label label-sm section-language-code">{sectionEditorDefaultLanguageCode.toUpperCase()}</span>
+                                        {/if}
+                                    </button>
+                                    {#each sectionEditorTranslationLanguages as language}
+                                        <button
+                                            type="button"
+                                            class:active={activeSectionLanguageKey === language.code}
+                                            on:click={() => setActiveSectionLanguage(language.code)}
+                                        >
+                                            <span>{language.label}</span>
+                                            {#if isSectionLanguageMissing(selectedEditingSection, language.code)}
+                                                <span class="label label-sm section-language-missing">Missing</span>
+                                            {/if}
+                                        </button>
+                                    {/each}
+                                </div>
+                            {/if}
                             <div class="section-drawer-meta">
                                 <span class="label label-sm section-summary-pill">{Math.max(selectedEditingSectionIndex, 0) + 1} of {blocks.length}</span>
                                 {#each selectedEditingSectionSummaryPills as summaryPill}
@@ -4489,7 +4875,7 @@
                     {#if selectedEditingSectionFields.length}
                         <SchemaForm
                             fields={selectedEditingSectionFields}
-                            value={sectionPropsDraftById[selectedEditingSection.id] || {}}
+                            value={selectedEditingSectionDraftActiveProps}
                             showImport={false}
                             path={`sections.${selectedEditingSection.id}`}
                             on:propsChange={(event) => updateSectionDraft(selectedEditingSection.id, event.detail)}
@@ -4508,7 +4894,11 @@
                     <button
                         type="button"
                         class="btn btn-sm"
-                        disabled={!!isSavingSectionById[selectedEditingSection.id] || !blockPropsField}
+                        disabled={
+                            !!isSavingSectionById[selectedEditingSection.id]
+                            || (!activeSectionTranslationLanguageCode && !blockPropsField)
+                            || (!!activeSectionTranslationLanguageCode && !blockTranslationsField)
+                        }
                         on:click={() => saveSection(selectedEditingSection)}
                     >
                         {isSavingSectionById[selectedEditingSection.id] ? "Saving..." : "Save changes"}
@@ -4953,6 +5343,31 @@
         gap: 4px;
         flex-wrap: wrap;
         min-width: 0;
+    }
+
+    .section-language-tabs {
+        width: fit-content;
+        margin-top: 2px;
+    }
+
+    .section-language-tabs button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .section-language-code {
+        min-height: 16px;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        color: var(--txtHintColor);
+        background: var(--baseColor);
+    }
+
+    .section-language-missing {
+        min-height: 16px;
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 80%, transparent);
+        color: var(--txtHintColor);
+        background: color-mix(in srgb, var(--baseAlt1Color) 88%, transparent);
     }
 
     .drawer-discard-confirm-head {
