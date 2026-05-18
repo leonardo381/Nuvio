@@ -8,10 +8,10 @@
     let isCreatingSubscriber = false;
     let isCreatingSubscriberGroup = false;
     let isCreatingCampaign = false;
-    let isBulkUpdating = false;
     let isSavingSubscriber = false;
     let isSendingCampaign = {};
     let deletingSubscriberId = "";
+    let resendingSubscriberId = "";
     let isSubscriberCreateOpen = false;
     let subscriberForm = {
         name: "",
@@ -1349,24 +1349,11 @@
             return;
         }
 
-        const email = normalizeEmail(editingSubscriberForm.email);
-        if (!isValidEmail(email)) {
-            editingSubscriberError = "Please provide a valid subscriber email.";
-            return;
-        }
-
-        const duplicateEmail = subscribers.some((item) => item.id !== subscriber.id && normalizeEmail(item?.email) === email);
-        if (duplicateEmail) {
-            editingSubscriberError = "This email is already subscribed for this website.";
-            return;
-        }
-
         editingSubscriberError = "";
         isSavingSubscriber = true;
 
         try {
             const payload = {
-                email,
                 status: normalizeStatus(subscriber?.status) || "pending",
             };
             if (subscribersSupportsNameField) {
@@ -1390,6 +1377,54 @@
         }
 
         isSavingSubscriber = false;
+    }
+
+    async function resendSubscriberConfirmation(subscriber) {
+        if (
+            !subscriber?.id
+            || !selectedWebsiteId
+            || !hasNewsletterCollections
+            || !!resendingSubscriberId
+            || normalizeStatus(subscriber?.status) !== "pending"
+        ) {
+            return;
+        }
+
+        const email = normalizeEmail(subscriber?.email);
+        if (!isValidEmail(email)) {
+            addErrorToast("This subscriber email is invalid.");
+            return;
+        }
+
+        resendingSubscriberId = subscriber.id;
+
+        try {
+            const response = await ApiClient.send("/api/nuvio/newsletter/invite", {
+                method: "POST",
+                body: {
+                    websiteId: selectedWebsiteId,
+                    email,
+                    name: normalizeSubscriberName(subscriber?.name || ""),
+                    source: subscriberLeadSource,
+                },
+                requestKey: "nuvio_newsletter_invite_" + subscriber.id,
+            });
+
+            const inviteResult = `${response?.result || ""}`.trim().toLowerCase();
+            if (inviteResult === "already_active") {
+                addSuccessToast("This contact is already subscribed.");
+            } else if (inviteResult === "unsubscribed") {
+                addWarningToast("This contact has unsubscribed and was not invited.");
+            } else {
+                addSuccessToast("Confirmation email sent.");
+                await loadSubscribers();
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+            addErrorToast("Unable to send confirmation right now. Please try again.");
+        }
+
+        resendingSubscriberId = "";
     }
 
     async function deleteSubscriber(subscriber) {
@@ -1455,12 +1490,7 @@
         isCreatingSubscriberGroup = false;
     }
 
-    async function setSubscriberStatus(subscriber, status) {        if (!subscriber?.id || !hasNewsletterCollections) {            return;        }        try {            const payload = { status };            if (status === "active" && !subscriber.confirmedAt) {                payload.confirmedAt = new Date().toISOString();            }            await ApiClient.collection(subscribersCollection.id).update(subscriber.id, payload);            await loadSubscribers();            addSuccessToast(`Subscriber marked as ${status}.`);        } catch (err) {            ApiClient.error(err);        }    }    async function applyBulkStatus(status) {        if (!selectedSubscriberIds.length || isBulkUpdating || !hasNewsletterCollections) {            return;        }        isBulkUpdating = true;        try {            const updates = selectedSubscriberIds                .map((subscriberId) => {                    const subscriber = subscribers.find((item) => item.id === subscriberId);                    if (!subscriber || normalizeStatus(subscriber.status) === normalizeStatus(status)) {                        return null;                    }                    const payload = { status };                    if (status === "active" && !subscriber.confirmedAt) {                        payload.confirmedAt = new Date().toISOString();                    }                    return ApiClient.collection(subscribersCollection.id).update(subscriber.id, payload);                })                .filter(Boolean);            if (!updates.length) {
-                addSuccessToast("Selected subscribers are already up to date.");
-                isBulkUpdating = false;
-                return;
-            }
-            await Promise.all(updates);            resetSubscriberSelection();            await loadSubscribers();            addSuccessToast(`Updated ${updates.length} subscriber(s).`);        } catch (err) {            ApiClient.error(err);        }        isBulkUpdating = false;    }    async function sendCampaign(campaign) {        if (!campaign?.id || isSendingCampaign[campaign.id]) {            return false;        }        isSendingCampaign[campaign.id] = true;        isSendingCampaign = { ...isSendingCampaign };        let sent = false;        try {            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {                method: "POST",                body: {                    campaignId: campaign.id,                },                requestKey: "nuvio_newsletter_send_" + campaign.id,            });            const sentCountValue = Number(response?.sentCount);            const failedCountValue = Number(response?.failedCount);            const recipientsCountValue = Number(response?.recipientsCount);            const hasSentCount = Number.isFinite(sentCountValue) && sentCountValue >= 0;            const hasFailedCount = Number.isFinite(failedCountValue) && failedCountValue >= 0;            const hasRecipientsCount = Number.isFinite(recipientsCountValue) && recipientsCountValue >= 0;            if (hasSentCount && hasFailedCount) {                if (sentCountValue > 0 && failedCountValue > 0) {                    addWarningToast(`Campaign sent to ${sentCountValue} subscriber(s). ${failedCountValue} recipient(s) failed.`);                    sent = true;                } else if (sentCountValue > 0) {                    addSuccessToast(`Campaign sent to ${sentCountValue} subscriber(s).`);                    sent = true;                } else if (failedCountValue > 0) {                    addErrorToast("Campaign could not be sent. Please try again or check email configuration.");                } else {                    addSuccessToast("Campaign sent.");                    sent = true;                }            } else if (hasRecipientsCount) {                addSuccessToast(`Campaign sent to ${recipientsCountValue} subscriber(s).`);                sent = true;            } else {                addSuccessToast("Campaign sent.");                sent = true;            }            await loadCampaigns();        } catch (err) {            ApiClient.error(err, false);            addErrorToast("Campaign could not be sent. Please try again or check email configuration.");        }        delete isSendingCampaign[campaign.id];        isSendingCampaign = { ...isSendingCampaign };        return sent;    }    function resetCampaignComposer() {
+    async function sendCampaign(campaign) {        if (!campaign?.id || isSendingCampaign[campaign.id]) {            return false;        }        isSendingCampaign[campaign.id] = true;        isSendingCampaign = { ...isSendingCampaign };        let sent = false;        try {            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {                method: "POST",                body: {                    campaignId: campaign.id,                },                requestKey: "nuvio_newsletter_send_" + campaign.id,            });            const sentCountValue = Number(response?.sentCount);            const failedCountValue = Number(response?.failedCount);            const recipientsCountValue = Number(response?.recipientsCount);            const hasSentCount = Number.isFinite(sentCountValue) && sentCountValue >= 0;            const hasFailedCount = Number.isFinite(failedCountValue) && failedCountValue >= 0;            const hasRecipientsCount = Number.isFinite(recipientsCountValue) && recipientsCountValue >= 0;            if (hasSentCount && hasFailedCount) {                if (sentCountValue > 0 && failedCountValue > 0) {                    addWarningToast(`Campaign sent to ${sentCountValue} subscriber(s). ${failedCountValue} recipient(s) failed.`);                    sent = true;                } else if (sentCountValue > 0) {                    addSuccessToast(`Campaign sent to ${sentCountValue} subscriber(s).`);                    sent = true;                } else if (failedCountValue > 0) {                    addErrorToast("Campaign could not be sent. Please try again or check email configuration.");                } else {                    addSuccessToast("Campaign sent.");                    sent = true;                }            } else if (hasRecipientsCount) {                addSuccessToast(`Campaign sent to ${recipientsCountValue} subscriber(s).`);                sent = true;            } else {                addSuccessToast("Campaign sent.");                sent = true;            }            await loadCampaigns();        } catch (err) {            ApiClient.error(err, false);            addErrorToast("Campaign could not be sent. Please try again or check email configuration.");        }        delete isSendingCampaign[campaign.id];        isSendingCampaign = { ...isSendingCampaign };        return sent;    }    function resetCampaignComposer() {
         campaignForm = {
             subject: "",
             body: "",
@@ -2038,7 +2068,8 @@
                                                                         type="email"
                                                                         class="input input-sm"
                                                                         bind:value={editingSubscriberForm.email}
-                                                                        on:input={clearEditingSubscriberError}
+                                                                        disabled
+                                                                        readonly
                                                                     />
                                                                 </div>
                                                                 {#if hasSubscriberGroupsFeature}
@@ -2148,24 +2179,15 @@
                                                             >
                                                                 <span class="txt">Edit</span>
                                                             </button>
-                                                            {#if normalizeStatus(subscriber.status) !== "active"}
+                                                            {#if normalizeStatus(subscriber.status) === "pending"}
                                                                 <button
                                                                     type="button"
                                                                     class="btn btn-sm btn-outline action-btn"
-                                                                    disabled={!!editingSubscriberId}
-                                                                    on:click={() => setSubscriberStatus(subscriber, "active")}
+                                                                    class:btn-loading={resendingSubscriberId === subscriber.id}
+                                                                    disabled={!!editingSubscriberId || !!resendingSubscriberId}
+                                                                    on:click={() => resendSubscriberConfirmation(subscriber)}
                                                                 >
-                                                                    <span class="txt">Activate</span>
-                                                                </button>
-                                                            {/if}
-                                                            {#if normalizeStatus(subscriber.status) !== "unsubscribed"}
-                                                                <button
-                                                                    type="button"
-                                                                    class="btn btn-sm action-btn"
-                                                                    disabled={!!editingSubscriberId}
-                                                                    on:click={() => setSubscriberStatus(subscriber, "unsubscribed")}
-                                                                >
-                                                                    <span class="txt">Unsubscribe</span>
+                                                                    <span class="txt">Resend confirmation</span>
                                                                 </button>
                                                             {/if}
                                                             <button
@@ -2193,26 +2215,9 @@
                                     <button
                                         type="button"
                                         class="btn btn-sm btn-outline"
-                                        disabled={isBulkUpdating}
                                         on:click={resetSubscriberSelection}
                                     >
                                         <span class="txt">Reset</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-sm btn-outline bulk-action-btn"
-                                        disabled={!selectedSubscribersCount || isBulkUpdating}
-                                        on:click={() => applyBulkStatus("active")}
-                                    >
-                                        <span class="txt">Mark selected active</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="btn btn-sm btn-danger btn-outline bulk-action-btn"
-                                        disabled={!selectedSubscribersCount || isBulkUpdating}
-                                        on:click={() => applyBulkStatus("unsubscribed")}
-                                    >
-                                        <span class="txt">Unsubscribe selected</span>
                                     </button>
                                 </div>
                             {/if}
@@ -4670,6 +4675,7 @@
         }
     }
 </style>
+
 
 
 

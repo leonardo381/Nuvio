@@ -658,6 +658,9 @@
     ) {
         activePageSeoLanguageKey = sectionDefaultLanguageKey;
     }
+    $: if (activePageSeoTranslationLanguageCode && activePageSeoTab === pageSeoTabAdvancedKey) {
+        activePageSeoTab = pageSeoTabBasicKey;
+    }
     $: if (!hasCmsCollections) {
         websites = [];
         pages = [];
@@ -3229,6 +3232,9 @@
         }
 
         activePageSeoLanguageKey = normalizedTarget;
+        if (normalizedTarget !== sectionDefaultLanguageKey && activePageSeoTab === pageSeoTabAdvancedKey) {
+            activePageSeoTab = pageSeoTabBasicKey;
+        }
     }
 
     function setActiveWebsiteSettingsArea(nextArea) {
@@ -3983,19 +3989,21 @@
                                                     <i class="ri-layout-left-line tab-icon" aria-hidden="true" />
                                                     <span class="tab-label">Basic</span>
                                                 </button>
-                                                <button
-                                                    type="button"
-                                                    class="tab-item"
-                                                    class:active={activePageSeoTab === pageSeoTabAdvancedKey}
-                                                    on:click={() => (activePageSeoTab = pageSeoTabAdvancedKey)}
-                                                >
-                                                    <i class="ri-tools-line tab-icon" aria-hidden="true" />
-                                                    <span class="tab-label">Advanced</span>
-                                                </button>
+                                                {#if !activePageSeoTranslationLanguageCode}
+                                                    <button
+                                                        type="button"
+                                                        class="tab-item"
+                                                        class:active={activePageSeoTab === pageSeoTabAdvancedKey}
+                                                        on:click={() => (activePageSeoTab = pageSeoTabAdvancedKey)}
+                                                    >
+                                                        <i class="ri-tools-line tab-icon" aria-hidden="true" />
+                                                        <span class="tab-label">Advanced</span>
+                                                    </button>
+                                                {/if}
                                             </div>
                                         </div>
 
-                                        {#if pageSeoSupportsTranslations}
+                                        {#if pageSeoSupportsTranslations && activePageSeoTab === pageSeoTabBasicKey}
                                             <div class="page-seo-tabs-row page-seo-tabs-row--compact">
                                                 <div class="tabs-header compact combined left operations-tabs operations-tabs--nested section-language-tabs page-seo-language-tabs">
                                                     <button
@@ -4197,7 +4205,7 @@
                                                     </div>
                                                 </aside>
                                             </div>
-                                        {:else if activePageSeoTab === pageSeoTabAdvancedKey}
+                                        {:else if activePageSeoTab === pageSeoTabAdvancedKey && !activePageSeoTranslationLanguageCode}
                                             {#if pageSeoCanonicalUrlField || pageSeoNoindexField || pageSeoExcludeFromSitemapField}
                                                 <div class="seo-editor-grid m-t-sm">
                                                     <div class="seo-advanced-main">
