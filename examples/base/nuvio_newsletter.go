@@ -200,6 +200,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 		}
 
 		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
+		logNuvioNewsletterPublicBaseURLMissing(e.App, website, "confirm")
 		confirmPath := buildNuvioNewsletterConfirmPath(website)
 		confirmURL, err := buildNuvioNewsletterLifecycleURL(
 			baseURL,
@@ -464,6 +465,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 		}
 
 		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
+		logNuvioNewsletterPublicBaseURLMissing(e.App, website, "confirm")
 		confirmPath := buildNuvioNewsletterConfirmPath(website)
 		confirmURL, err := buildNuvioNewsletterLifecycleURL(baseURL, confirmPath, rawToken)
 		if err != nil {
@@ -592,6 +594,7 @@ func sendNuvioNewsletterCampaign(
 	}
 
 	baseURL := resolveNuvioNewsletterPublicBaseURL(request)
+	logNuvioNewsletterPublicBaseURLMissing(app, website, "unsubscribe")
 	unsubscribePath := buildNuvioNewsletterUnsubscribePath(website)
 	websiteName := strings.TrimSpace(resolveWebsiteDisplayName(website))
 	if websiteName == "" {
@@ -992,6 +995,42 @@ func resolveNuvioNewsletterPublicBaseURL(request *http.Request) string {
 	return resolveNuvioRequestBaseURL(request)
 }
 
+func hasNuvioNewsletterPublicBaseURLConfigured() bool {
+	return resolveNuvioNewsletterPublicBaseURLFromEnv() != ""
+}
+
+func logNuvioNewsletterPublicBaseURLMissing(
+	app core.App,
+	website *core.Record,
+	lifecycleType string,
+) {
+	if app == nil || hasNuvioNewsletterPublicBaseURLConfigured() || website == nil {
+		return
+	}
+
+	slug := strings.TrimSpace(website.GetString("slug"))
+	if slug == "" {
+		return
+	}
+
+	normalizedLifecycleType := strings.TrimSpace(lifecycleType)
+	if normalizedLifecycleType == "" {
+		normalizedLifecycleType = "lifecycle"
+	}
+
+	app.Logger().Warn(
+		"NUVIO newsletter public base URL is missing; falling back to backend lifecycle endpoint.",
+		"env",
+		nuvioNewsletterPublicBaseURLEnv,
+		"lifecycle",
+		normalizedLifecycleType,
+		"websiteId",
+		website.Id,
+		"websiteSlug",
+		slug,
+	)
+}
+
 func resolveNuvioNewsletterPublicBaseURLFromEnv() string {
 	rawValue := strings.TrimSpace(os.Getenv(nuvioNewsletterPublicBaseURLEnv))
 	if rawValue == "" {
@@ -1106,6 +1145,10 @@ func normalizeNuvioNewsletterBaseURL(raw string) string {
 }
 
 func buildNuvioNewsletterConfirmPath(website *core.Record) string {
+	if !hasNuvioNewsletterPublicBaseURLConfigured() {
+		return "/api/nuvio/newsletter/confirm"
+	}
+
 	if website == nil {
 		return "/api/nuvio/newsletter/confirm"
 	}
@@ -1583,6 +1626,10 @@ func normalizeNuvioEmail(raw string) (string, bool) {
 }
 
 func buildNuvioNewsletterUnsubscribePath(website *core.Record) string {
+	if !hasNuvioNewsletterPublicBaseURLConfigured() {
+		return "/api/nuvio/newsletter/unsubscribe"
+	}
+
 	if website == nil {
 		return "/api/nuvio/newsletter/unsubscribe"
 	}

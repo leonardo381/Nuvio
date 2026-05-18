@@ -210,6 +210,9 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 		interactionRecord.Set("website", websiteID)
 		interactionRecord.Set("source", source)
 		interactionRecord.Set("page", page)
+		if statusFieldName := resolveNuvioCollectionFieldNameByAliases(whatsappCollection, []string{"status"}); statusFieldName != "" {
+			interactionRecord.Set(statusFieldName, "new")
+		}
 
 		if err := e.App.Save(interactionRecord); err != nil {
 			return e.BadRequestError("Failed to save WhatsApp interaction.", err)
