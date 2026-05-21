@@ -7,6 +7,7 @@ const bookingConfirmationModes = new Set(["request", "autoConfirm"]);
 const websiteFeatureFlagKeys = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
 const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
 const hiddenWebsiteSettingsFeatureKeys = new Set(["reviews"]);
+const analyticsProviderPattern = /^[a-z0-9_-]{2,40}$/i;
 
 export const websiteSettingsSchema = {
     fields: [
@@ -769,7 +770,7 @@ export const websiteSettingsSchema = {
             fields: [
                 {
                     key: "analytics",
-                    label: "Traffic analytics",
+                    label: "Analytics",
                     type: "object",
                     editableBy: [ROLE_ADMIN],
                     fields: [
@@ -782,29 +783,30 @@ export const websiteSettingsSchema = {
                             options: [
                                 { label: "Plausible", value: "plausible" },
                             ],
+                            hint: "Plausible is currently the supported provider. Additional providers are planned in later phases.",
                         },
                         {
                             key: "enabled",
-                            label: "Enable traffic analytics",
+                            label: "Enable analytics tracking",
                             type: "bool",
                             default: false,
                             editableBy: [ROLE_ADMIN],
                         },
                         {
                             key: "siteId",
-                            label: "Plausible site ID / domain",
+                            label: "Analytics site ID / domain",
                             type: "text",
                             default: "",
                             editableBy: [ROLE_ADMIN],
-                            hint: "Usually the website domain configured in Plausible.",
+                            hint: "Provider site identifier. For Plausible, this is usually the website domain.",
                         },
                         {
                             key: "scriptEnabled",
-                            label: "Inject Plausible tracking script",
+                            label: "Inject analytics tracking script",
                             type: "bool",
                             default: false,
                             editableBy: [ROLE_ADMIN],
-                            hint: "Used later by the public website runtime. No script is injected in this phase.",
+                            hint: "Injects the provider script in public pages when enabled. CMS preview does not inject it.",
                         },
                     ],
                 },
@@ -1308,6 +1310,134 @@ function normalizeNewsletterSettings(newsletterSettings) {
     };
 }
 
+function normalizeAnalyticsProvider(value) {
+    if (typeof value !== "string") {
+        return "plausible";
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+        return "plausible";
+    }
+
+    if (!analyticsProviderPattern.test(normalized)) {
+        return "plausible";
+    }
+
+    return normalized;
+}
+
+function normalizeAnalyticsUrl(value) {
+    if (typeof value !== "string") {
+        return "";
+    }
+
+    const normalized = value.trim();
+    if (!normalized || normalized.length > 2048) {
+        return "";
+    }
+
+    if (/[<>"'`\s]/.test(normalized)) {
+        return "";
+    }
+
+    if (!/^https?:\/\/.+/i.test(normalized)) {
+        return "";
+    }
+
+    return normalized.replace(/\/+$/, "");
+}
+
+function normalizePlausibleSiteId(value) {
+    if (typeof value !== "string") {
+        return "";
+    }
+
+    const siteId = value.trim();
+    if (!siteId || siteId.length > 255) {
+        return "";
+    }
+
+    if (/[<>"'`\s]/.test(siteId)) {
+        return "";
+    }
+
+    if (
+        !/^(localhost|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)(?::\d{1,5})?$/i.test(
+            siteId,
+        )
+    ) {
+        return "";
+    }
+
+    return siteId;
+}
+
+function normalizeGenericAnalyticsSiteId(value) {
+    if (typeof value !== "string") {
+        return "";
+    }
+
+    const siteId = value.trim();
+    if (!siteId || siteId.length > 255) {
+        return "";
+    }
+
+    if (/[<>"'`\s]/.test(siteId)) {
+        return "";
+    }
+
+    return siteId;
+}
+
+function normalizeAnalyticsEvents(value) {
+    const source = isPlainObject(value) ? value : {};
+
+    return {
+        ...source,
+        contactForm: !!source.contactForm,
+        whatsapp: !!source.whatsapp,
+        booking: !!source.booking,
+        newsletter: !!source.newsletter,
+        scrollDepth: !!source.scrollDepth,
+    };
+}
+
+function normalizeReportsAnalyticsSettings(analyticsSettings) {
+    const source = isPlainObject(analyticsSettings) ? analyticsSettings : {};
+    const provider = normalizeAnalyticsProvider(source.provider);
+    const rawSiteId = typeof source.siteId === "string" ? source.siteId : "";
+    const providerOptions = isPlainObject(source.providerOptions) ? cloneValue(source.providerOptions) : {};
+
+    return {
+        ...source,
+        provider,
+        enabled: !!source.enabled,
+        siteId:
+            provider === "plausible"
+                ? normalizePlausibleSiteId(rawSiteId)
+                : normalizeGenericAnalyticsSiteId(rawSiteId),
+        scriptEnabled: !!source.scriptEnabled,
+        scriptUrl: normalizeAnalyticsUrl(source.scriptUrl),
+        apiUrl: normalizeAnalyticsUrl(source.apiUrl),
+        events: normalizeAnalyticsEvents(source.events),
+        providerOptions: {
+            ...providerOptions,
+            plausible: isPlainObject(providerOptions.plausible) ? providerOptions.plausible : {},
+            umami: isPlainObject(providerOptions.umami) ? providerOptions.umami : {},
+        },
+    };
+}
+
+function normalizeReportsSettings(reportsSettings) {
+    const source = isPlainObject(reportsSettings) ? reportsSettings : {};
+
+    return {
+        ...source,
+        analytics: normalizeReportsAnalyticsSettings(source.analytics),
+    };
+}
+
 function normalizeContactFormSettings(contactFormSettings) {
     const source = isPlainObject(contactFormSettings) ? contactFormSettings : {};
     const normalizedEmailNotifications = normalizeEmailNotifications(source.emailNotifications, {
@@ -1433,6 +1563,10 @@ export function normalizeWebsiteSettingsValue(rawSettings, schemaFields = websit
 
     if (isPlainObject(normalized.booking)) {
         normalized.booking = normalizeBookingSettings(normalized.booking);
+    }
+
+    if (isPlainObject(normalized.reports)) {
+        normalized.reports = normalizeReportsSettings(normalized.reports);
     }
 
     return normalized;

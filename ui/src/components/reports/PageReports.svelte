@@ -375,11 +375,11 @@
         }
 
         if (stateKey === "analytics_not_configured") {
-            return "Plausible analytics are not configured yet.";
+            return "Analytics are not configured yet.";
         }
 
         if (stateKey === "provider_unconfigured") {
-            return "Plausible is not configured on the server yet.";
+            return "Analytics provider is not configured on the server yet.";
         }
 
         if (stateKey === "provider_error") {
@@ -1132,7 +1132,7 @@
         const suggestions = [];
 
         if (!payload?.isLoadingTraffic && payload?.trafficState !== "ok") {
-            suggestions.push("Configure Plausible analytics in Website Settings > Reports.");
+            suggestions.push("Configure Analytics in Website Settings > Reports.");
         }
 
         if (Number(payload?.leadsSummary?.total || 0) < 1) {
@@ -1811,7 +1811,7 @@
                     <section class="panel reports-placeholder-panel">
                         <div class="section-head m-b-sm">
                             <h5 class="m-0">Traffic</h5>
-                            <p class="txt-sm txt-hint m-b-0">Plausible analytics status for this website.</p>
+                            <p class="txt-sm txt-hint m-b-0">Analytics status for this website.</p>
                         </div>
                         <div class="empty-state m-b-0">{resolveTrafficStateMessage(trafficDisplayState)}</div>
                     </section>
