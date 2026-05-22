@@ -7,7 +7,6 @@ const bookingConfirmationModes = new Set(["request", "autoConfirm"]);
 const websiteFeatureFlagKeys = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
 const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
 const hiddenWebsiteSettingsFeatureKeys = new Set(["reviews"]);
-const analyticsProviderPattern = /^[a-z0-9_-]{2,40}$/i;
 
 export const websiteSettingsSchema = {
     fields: [
@@ -778,12 +777,13 @@ export const websiteSettingsSchema = {
                             key: "provider",
                             label: "Analytics provider",
                             type: "select",
-                            default: "plausible",
+                            default: "",
                             editableBy: [ROLE_ADMIN],
                             options: [
-                                { label: "Plausible", value: "plausible" },
+                                { label: "Not configured", value: "" },
+                                { label: "Umami", value: "umami" },
                             ],
-                            hint: "Plausible is currently the supported provider. Additional providers are planned in later phases.",
+                            hint: "Controls which analytics provider script is injected on public pages.",
                         },
                         {
                             key: "enabled",
@@ -794,11 +794,19 @@ export const websiteSettingsSchema = {
                         },
                         {
                             key: "siteId",
-                            label: "Analytics site ID / domain",
+                            label: "Analytics site ID",
                             type: "text",
                             default: "",
                             editableBy: [ROLE_ADMIN],
-                            hint: "Provider site identifier. For Plausible, this is usually the website domain.",
+                            hint: "Use your analytics provider website ID.",
+                        },
+                        {
+                            key: "scriptUrl",
+                            label: "Analytics script URL",
+                            type: "text",
+                            default: "",
+                            editableBy: [ROLE_ADMIN],
+                            hint: "For Umami, use the tracking script URL from your Umami instance.",
                         },
                         {
                             key: "scriptEnabled",
@@ -1312,19 +1320,11 @@ function normalizeNewsletterSettings(newsletterSettings) {
 
 function normalizeAnalyticsProvider(value) {
     if (typeof value !== "string") {
-        return "plausible";
+        return "";
     }
 
     const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-        return "plausible";
-    }
-
-    if (!analyticsProviderPattern.test(normalized)) {
-        return "plausible";
-    }
-
-    return normalized;
+    return normalized === "umami" ? "umami" : "";
 }
 
 function normalizeAnalyticsUrl(value) {
@@ -1346,31 +1346,6 @@ function normalizeAnalyticsUrl(value) {
     }
 
     return normalized.replace(/\/+$/, "");
-}
-
-function normalizePlausibleSiteId(value) {
-    if (typeof value !== "string") {
-        return "";
-    }
-
-    const siteId = value.trim();
-    if (!siteId || siteId.length > 255) {
-        return "";
-    }
-
-    if (/[<>"'`\s]/.test(siteId)) {
-        return "";
-    }
-
-    if (
-        !/^(localhost|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)(?::\d{1,5})?$/i.test(
-            siteId,
-        )
-    ) {
-        return "";
-    }
-
-    return siteId;
 }
 
 function normalizeGenericAnalyticsSiteId(value) {
@@ -1413,17 +1388,13 @@ function normalizeReportsAnalyticsSettings(analyticsSettings) {
         ...source,
         provider,
         enabled: !!source.enabled,
-        siteId:
-            provider === "plausible"
-                ? normalizePlausibleSiteId(rawSiteId)
-                : normalizeGenericAnalyticsSiteId(rawSiteId),
+        siteId: normalizeGenericAnalyticsSiteId(rawSiteId),
         scriptEnabled: !!source.scriptEnabled,
         scriptUrl: normalizeAnalyticsUrl(source.scriptUrl),
         apiUrl: normalizeAnalyticsUrl(source.apiUrl),
         events: normalizeAnalyticsEvents(source.events),
         providerOptions: {
             ...providerOptions,
-            plausible: isPlainObject(providerOptions.plausible) ? providerOptions.plausible : {},
             umami: isPlainObject(providerOptions.umami) ? providerOptions.umami : {},
         },
     };

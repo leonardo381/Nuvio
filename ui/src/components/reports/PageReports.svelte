@@ -84,6 +84,36 @@
     $: trafficDevices = trafficState === "ok" && Array.isArray(trafficResponse?.devices)
         ? trafficResponse.devices
         : [];
+    $: trafficEntryPages = trafficState === "ok"
+        ? normalizeTrafficEntryRows(trafficResponse?.entryPages)
+        : [];
+    $: trafficExitPages = trafficState === "ok"
+        ? normalizeTrafficEntryRows(trafficResponse?.exitPages)
+        : [];
+    $: trafficCountries = trafficState === "ok"
+        ? normalizeTrafficDimensionRows(trafficResponse?.countries, ["country", "name", "label", "dimension"], "Unknown")
+        : [];
+    $: trafficRegions = trafficState === "ok"
+        ? normalizeTrafficDimensionRows(trafficResponse?.regions, ["region", "name", "label", "dimension"], "Unknown")
+        : [];
+    $: trafficCities = trafficState === "ok"
+        ? normalizeTrafficDimensionRows(trafficResponse?.cities, ["city", "name", "label", "dimension"], "Unknown")
+        : [];
+    $: trafficBrowsers = trafficState === "ok"
+        ? normalizeTrafficDimensionRows(trafficResponse?.browsers, ["browser", "name", "label", "dimension"], "Unknown")
+        : [];
+    $: trafficOperatingSystems = trafficState === "ok"
+        ? normalizeTrafficDimensionRows(trafficResponse?.operatingSystems, ["operatingSystem", "os", "name", "label", "dimension"], "Unknown")
+        : [];
+    $: hasExpandedTrafficMetrics = [
+        trafficEntryPages,
+        trafficExitPages,
+        trafficCountries,
+        trafficRegions,
+        trafficCities,
+        trafficBrowsers,
+        trafficOperatingSystems,
+    ].some((rows) => Array.isArray(rows) && rows.length > 0);
     $: trafficDisplayState = trafficState || "analytics_not_configured";
     $: topTrafficPage = trafficTopPages[0] || null;
     $: topTrafficSource = trafficSources[0] || null;
@@ -382,6 +412,22 @@
             return "Analytics provider is not configured on the server yet.";
         }
 
+        if (stateKey === "provider_auth_missing") {
+            return "Analytics provider authentication is not configured on the server yet.";
+        }
+
+        if (stateKey === "provider_auth_error") {
+            return "Unable to authenticate with the analytics provider.";
+        }
+
+        if (stateKey === "provider_not_found") {
+            return "Analytics website was not found for this configuration.";
+        }
+
+        if (stateKey === "provider_not_implemented" || stateKey === "provider_unsupported") {
+            return "Analytics provider is not connected yet.";
+        }
+
         if (stateKey === "provider_error") {
             return "Unable to load traffic analytics right now.";
         }
@@ -427,6 +473,64 @@
         }
 
         return `${seconds}s`;
+    }
+
+    function toObject(value) {
+        return value && typeof value === "object" && !Array.isArray(value)
+            ? value
+            : {};
+    }
+
+    function resolveFirstStringValue(source, keys = [], fallback = "") {
+        const row = toObject(source);
+
+        for (const key of keys) {
+            const value = row[key];
+            if (typeof value === "string") {
+                const normalized = value.trim();
+                if (normalized) {
+                    return normalized;
+                }
+            }
+        }
+
+        return fallback;
+    }
+
+    function resolveFirstNumberValue(source, keys = [], fallback = 0) {
+        const row = toObject(source);
+
+        for (const key of keys) {
+            const numeric = Number(row[key]);
+            if (Number.isFinite(numeric)) {
+                return Math.max(0, Math.round(numeric));
+            }
+        }
+
+        return fallback;
+    }
+
+    function normalizeTrafficEntryRows(rawRows) {
+        if (!Array.isArray(rawRows)) {
+            return [];
+        }
+
+        return rawRows.map((row) => ({
+            page: resolveFirstStringValue(row, ["page", "path", "name", "label", "dimension"], "/"),
+            visitors: resolveFirstNumberValue(row, ["visitors", "count", "value"], 0),
+            pageviews: resolveFirstNumberValue(row, ["pageviews", "views"], 0),
+        }));
+    }
+
+    function normalizeTrafficDimensionRows(rawRows, keyCandidates = [], fallbackLabel = "Unknown") {
+        if (!Array.isArray(rawRows)) {
+            return [];
+        }
+
+        return rawRows.map((row) => ({
+            label: resolveFirstStringValue(row, keyCandidates, fallbackLabel),
+            visitors: resolveFirstNumberValue(row, ["visitors", "count", "value"], 0),
+        }));
     }
 
     function stripHtml(value) {
@@ -1807,6 +1911,136 @@
                             {/if}
                         </article>
                     </div>
+
+                    {#if hasExpandedTrafficMetrics}
+                        {#if trafficEntryPages.length || trafficExitPages.length}
+                            <div class="reports-grid-two m-t-sm">
+                                {#if trafficEntryPages.length}
+                                    <article class="panel">
+                                        <div class="section-head m-b-sm">
+                                            <h5 class="m-0">Entry pages</h5>
+                                            <p class="txt-sm txt-hint m-b-0">Where visitors started their sessions.</p>
+                                        </div>
+                                        <div class="reports-mini-stack">
+                                            {#each trafficEntryPages.slice(0, 8) as entryPage}
+                                                <div class="reports-mini-row reports-mini-row--wrap">
+                                                    <span>{entryPage.page || "/"}</span>
+                                                    <span class="txt-sm txt-hint">
+                                                        {formatMetricNumber(entryPage.visitors)} visitors - {formatMetricNumber(entryPage.pageviews)} pageviews
+                                                    </span>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    </article>
+                                {/if}
+
+                                {#if trafficExitPages.length}
+                                    <article class="panel">
+                                        <div class="section-head m-b-sm">
+                                            <h5 class="m-0">Exit pages</h5>
+                                            <p class="txt-sm txt-hint m-b-0">Where visitors left the site.</p>
+                                        </div>
+                                        <div class="reports-mini-stack">
+                                            {#each trafficExitPages.slice(0, 8) as exitPage}
+                                                <div class="reports-mini-row reports-mini-row--wrap">
+                                                    <span>{exitPage.page || "/"}</span>
+                                                    <span class="txt-sm txt-hint">
+                                                        {formatMetricNumber(exitPage.visitors)} visitors - {formatMetricNumber(exitPage.pageviews)} pageviews
+                                                    </span>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    </article>
+                                {/if}
+                            </div>
+                        {/if}
+
+                        {#if trafficCountries.length || trafficRegions.length}
+                            <div class="reports-grid-two m-t-sm">
+                                {#if trafficCountries.length}
+                                    <article class="panel">
+                                        <div class="section-head m-b-sm">
+                                            <h5 class="m-0">Countries</h5>
+                                            <p class="txt-sm txt-hint m-b-0">Visitor location breakdown.</p>
+                                        </div>
+                                        <div class="reports-mini-stack">
+                                            {#each trafficCountries.slice(0, 8) as countryRow}
+                                                <div class="reports-mini-row"><span>{countryRow.label || "Unknown"}</span><strong>{formatMetricNumber(countryRow.visitors)}</strong></div>
+                                            {/each}
+                                        </div>
+                                    </article>
+                                {/if}
+
+                                {#if trafficRegions.length}
+                                    <article class="panel">
+                                        <div class="section-head m-b-sm">
+                                            <h5 class="m-0">Regions</h5>
+                                            <p class="txt-sm txt-hint m-b-0">Visitor location breakdown.</p>
+                                        </div>
+                                        <div class="reports-mini-stack">
+                                            {#each trafficRegions.slice(0, 8) as regionRow}
+                                                <div class="reports-mini-row"><span>{regionRow.label || "Unknown"}</span><strong>{formatMetricNumber(regionRow.visitors)}</strong></div>
+                                            {/each}
+                                        </div>
+                                    </article>
+                                {/if}
+                            </div>
+                        {/if}
+
+                        {#if trafficCities.length || trafficBrowsers.length}
+                            <div class="reports-grid-two m-t-sm">
+                                {#if trafficCities.length}
+                                    <article class="panel">
+                                        <div class="section-head m-b-sm">
+                                            <h5 class="m-0">Cities</h5>
+                                            <p class="txt-sm txt-hint m-b-0">Visitor location breakdown.</p>
+                                        </div>
+                                        <div class="reports-mini-stack">
+                                            {#each trafficCities.slice(0, 8) as cityRow}
+                                                <div class="reports-mini-row"><span>{cityRow.label || "Unknown"}</span><strong>{formatMetricNumber(cityRow.visitors)}</strong></div>
+                                            {/each}
+                                        </div>
+                                    </article>
+                                {/if}
+
+                                {#if trafficBrowsers.length}
+                                    <article class="panel">
+                                        <div class="section-head m-b-sm">
+                                            <h5 class="m-0">Browsers</h5>
+                                            <p class="txt-sm txt-hint m-b-0">Visitor technology breakdown.</p>
+                                        </div>
+                                        <div class="reports-mini-stack">
+                                            {#each trafficBrowsers.slice(0, 8) as browserRow}
+                                                <div class="reports-mini-row"><span>{browserRow.label || "Unknown"}</span><strong>{formatMetricNumber(browserRow.visitors)}</strong></div>
+                                            {/each}
+                                        </div>
+                                    </article>
+                                {/if}
+                            </div>
+                        {/if}
+
+                        {#if trafficOperatingSystems.length}
+                            <section class="panel m-t-sm">
+                                <div class="section-head m-b-sm">
+                                    <h5 class="m-0">Operating systems</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Visitor technology breakdown.</p>
+                                </div>
+                                <div class="reports-mini-stack">
+                                    {#each trafficOperatingSystems.slice(0, 8) as osRow}
+                                        <div class="reports-mini-row"><span>{osRow.label || "Unknown"}</span><strong>{formatMetricNumber(osRow.visitors)}</strong></div>
+                                    {/each}
+                                </div>
+                            </section>
+                        {/if}
+                    {:else}
+                        <section class="panel m-t-sm">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Expanded analytics breakdown</h5>
+                                <p class="txt-sm txt-hint m-b-0">Additional native analytics dimensions are currently unavailable for this period.</p>
+                            </div>
+                            <div class="empty-state m-b-0">No expanded analytics data available for this period.</div>
+                        </section>
+                    {/if}
                 {:else}
                     <section class="panel reports-placeholder-panel">
                         <div class="section-head m-b-sm">

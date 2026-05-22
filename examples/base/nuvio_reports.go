@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -23,8 +24,6 @@ const (
 	nuvioReportsTrafficPeriodLastMonth = "lastMonth"
 	nuvioReportsTrafficPeriodLast30d   = "last30Days"
 	nuvioReportsTrafficPeriodAllTime   = "allTime"
-
-	nuvioPlausibleDefaultBaseURL = "https://plausible.io"
 )
 
 var nuvioReportsHTTPClient = &http.Client{
@@ -37,11 +36,17 @@ type nuvioWebsiteReportsAnalyticsConfig struct {
 	Enabled          bool
 	SiteID           string
 	ScriptEnabled    bool
+	ScriptURL        string
+	APIURL           string
 }
 
-type nuvioPlausibleConfig struct {
-	APIKey  string
-	BaseURL string
+type nuvioUmamiConfig struct {
+	APIBaseURL     string
+	RequestBaseURL string
+	LoginURL       string
+	APIKey         string
+	Username       string
+	Password       string
 }
 
 type nuvioReportsTrafficPeriod struct {
@@ -74,42 +79,140 @@ type nuvioReportsTrafficDevice struct {
 	Visitors int    `json:"visitors"`
 }
 
+type nuvioReportsTrafficEntryPage struct {
+	Page      string `json:"page"`
+	Visitors  int    `json:"visitors"`
+	Pageviews int    `json:"pageviews"`
+}
+
+type nuvioReportsTrafficExitPage struct {
+	Page      string `json:"page"`
+	Visitors  int    `json:"visitors"`
+	Pageviews int    `json:"pageviews"`
+}
+
+type nuvioReportsTrafficCountry struct {
+	Country  string `json:"country"`
+	Visitors int    `json:"visitors"`
+}
+
+type nuvioReportsTrafficRegion struct {
+	Region   string `json:"region"`
+	Visitors int    `json:"visitors"`
+}
+
+type nuvioReportsTrafficCity struct {
+	City     string `json:"city"`
+	Visitors int    `json:"visitors"`
+}
+
+type nuvioReportsTrafficBrowser struct {
+	Browser  string `json:"browser"`
+	Visitors int    `json:"visitors"`
+}
+
+type nuvioReportsTrafficOperatingSystem struct {
+	OperatingSystem string `json:"operatingSystem"`
+	Visitors        int    `json:"visitors"`
+}
+
 type nuvioReportsTrafficResponse struct {
-	State     string                       `json:"state"`
-	Message   string                       `json:"message,omitempty"`
-	Provider  string                       `json:"provider,omitempty"`
-	SiteID    string                       `json:"siteId,omitempty"`
-	Period    nuvioReportsTrafficPeriod    `json:"period"`
-	Summary   *nuvioReportsTrafficSummary  `json:"summary,omitempty"`
-	TopPages  []nuvioReportsTrafficTopPage `json:"topPages,omitempty"`
-	Sources   []nuvioReportsTrafficSource  `json:"sources,omitempty"`
-	Devices   []nuvioReportsTrafficDevice  `json:"devices,omitempty"`
-	FetchedAt string                       `json:"fetchedAt,omitempty"`
+	State            string                               `json:"state"`
+	Message          string                               `json:"message,omitempty"`
+	Provider         string                               `json:"provider,omitempty"`
+	SiteID           string                               `json:"siteId,omitempty"`
+	Period           nuvioReportsTrafficPeriod            `json:"period"`
+	Summary          *nuvioReportsTrafficSummary          `json:"summary,omitempty"`
+	TopPages         []nuvioReportsTrafficTopPage         `json:"topPages,omitempty"`
+	Sources          []nuvioReportsTrafficSource          `json:"sources,omitempty"`
+	Devices          []nuvioReportsTrafficDevice          `json:"devices,omitempty"`
+	EntryPages       []nuvioReportsTrafficEntryPage       `json:"entryPages"`
+	ExitPages        []nuvioReportsTrafficExitPage        `json:"exitPages"`
+	Countries        []nuvioReportsTrafficCountry         `json:"countries"`
+	Regions          []nuvioReportsTrafficRegion          `json:"regions"`
+	Cities           []nuvioReportsTrafficCity            `json:"cities"`
+	Browsers         []nuvioReportsTrafficBrowser         `json:"browsers"`
+	OperatingSystems []nuvioReportsTrafficOperatingSystem `json:"operatingSystems"`
+	FetchedAt        string                               `json:"fetchedAt,omitempty"`
 }
 
 type nuvioReportsTrafficPeriodQuery struct {
-	Period           nuvioReportsTrafficPeriod
-	PlausibleRange   any
-	FallbackAllRange any
+	Period    nuvioReportsTrafficPeriod
+	StartAtMs int64
+	EndAtMs   int64
+	Unit      string
+	Timezone  string
 }
 
 type nuvioReportsTrafficData struct {
-	Summary  nuvioReportsTrafficSummary
-	TopPages []nuvioReportsTrafficTopPage
-	Sources  []nuvioReportsTrafficSource
-	Devices  []nuvioReportsTrafficDevice
+	Summary          nuvioReportsTrafficSummary
+	TopPages         []nuvioReportsTrafficTopPage
+	Sources          []nuvioReportsTrafficSource
+	Devices          []nuvioReportsTrafficDevice
+	EntryPages       []nuvioReportsTrafficEntryPage
+	ExitPages        []nuvioReportsTrafficExitPage
+	Countries        []nuvioReportsTrafficCountry
+	Regions          []nuvioReportsTrafficRegion
+	Cities           []nuvioReportsTrafficCity
+	Browsers         []nuvioReportsTrafficBrowser
+	OperatingSystems []nuvioReportsTrafficOperatingSystem
 }
 
-type nuvioPlausibleQueryResponse struct {
-	Results []nuvioPlausibleQueryResult `json:"results"`
+type nuvioUmamiStatsResponse struct {
+	Pageviews any `json:"pageviews"`
+	Visitors  any `json:"visitors"`
+	Visits    any `json:"visits"`
+	Bounces   any `json:"bounces"`
+	Totaltime any `json:"totaltime"`
 }
 
-type nuvioPlausibleQueryResult struct {
-	Dimensions []any `json:"dimensions"`
-	Metrics    []any `json:"metrics"`
+type nuvioUmamiMetricRow struct {
+	Name      any `json:"name"`
+	Pageviews any `json:"pageviews"`
+	Visitors  any `json:"visitors"`
 }
 
-// NUVIO CUSTOM START: Reports Phase 2B Plausible traffic endpoint.
+type nuvioUmamiPageviewsPoint struct {
+	X string `json:"x"`
+	Y any    `json:"y"`
+}
+
+type nuvioUmamiPageviewsResponse struct {
+	Pageviews []nuvioUmamiPageviewsPoint `json:"pageviews"`
+	Sessions  []nuvioUmamiPageviewsPoint `json:"sessions"`
+}
+
+type nuvioReportsTrafficStateError struct {
+	State   string
+	Message string
+	Cause   error
+}
+
+func (err *nuvioReportsTrafficStateError) Error() string {
+	if err == nil {
+		return ""
+	}
+
+	if err.Cause != nil {
+		return err.Cause.Error()
+	}
+
+	if strings.TrimSpace(err.Message) != "" {
+		return err.Message
+	}
+
+	return err.State
+}
+
+func (err *nuvioReportsTrafficStateError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+
+	return err.Cause
+}
+
+// NUVIO CUSTOM START: Reports traffic endpoint.
 func registerNuvioReportsRoutes(e *core.ServeEvent) {
 	reportsGroup := e.Router.Group("/api/nuvio/reports").Bind(apis.RequireSuperuserAuth())
 
@@ -137,6 +240,8 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 				"feature_unavailable",
 				"Reports feature is unavailable for this website.",
 				periodQuery.Period,
+				"",
+				"",
 			))
 		}
 
@@ -145,18 +250,29 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 				"analytics_disabled",
 				"Traffic analytics are disabled for this website.",
 				periodQuery.Period,
+				"",
+				"",
 			))
 		}
 
 		provider := strings.ToLower(strings.TrimSpace(analyticsConfig.Provider))
 		if provider == "" {
-			provider = "plausible"
-		}
-		if provider != "plausible" {
 			return e.JSON(http.StatusOK, buildNuvioReportsTrafficStateResponse(
 				"provider_unconfigured",
 				"Traffic analytics provider is not configured right now.",
 				periodQuery.Period,
+				"",
+				"",
+			))
+		}
+
+		if provider != "umami" {
+			return e.JSON(http.StatusOK, buildNuvioReportsTrafficStateResponse(
+				"provider_unsupported",
+				"Traffic analytics provider is not configured right now.",
+				periodQuery.Period,
+				provider,
+				"",
 			))
 		}
 
@@ -166,34 +282,61 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 				"analytics_not_configured",
 				"Traffic analytics are not configured yet for this website.",
 				periodQuery.Period,
+				provider,
+				"",
 			))
 		}
 
-		plausibleConfig, err := loadNuvioPlausibleConfig()
+		umamiConfig, err := loadNuvioUmamiConfig(analyticsConfig)
 		if err != nil {
+			if stateErr, ok := unwrapNuvioReportsTrafficStateError(err); ok {
+				return e.JSON(http.StatusOK, buildNuvioReportsTrafficStateResponse(
+					stateErr.State,
+					stateErr.Message,
+					periodQuery.Period,
+					provider,
+					siteID,
+				))
+			}
+
 			e.App.Logger().Error(
-				"NUVIO reports plausible config missing",
+				"NUVIO reports analytics config error",
 				"websiteId",
 				websiteID,
+				"provider",
+				provider,
 				"error",
 				err.Error(),
 			)
+
 			return e.JSON(http.StatusOK, buildNuvioReportsTrafficStateResponse(
-				"provider_unconfigured",
-				"Traffic analytics provider is not configured right now.",
+				"provider_error",
+				"Traffic analytics are temporarily unavailable.",
 				periodQuery.Period,
+				provider,
+				siteID,
 			))
 		}
 
-		trafficData, err := fetchNuvioPlausibleTrafficData(
+		trafficData, partialIssueCount, err := fetchNuvioUmamiTrafficData(
 			e.Request.Context(),
-			plausibleConfig,
+			umamiConfig,
 			siteID,
 			periodQuery,
 		)
 		if err != nil {
+			if stateErr, ok := unwrapNuvioReportsTrafficStateError(err); ok {
+				return e.JSON(http.StatusOK, buildNuvioReportsTrafficStateResponse(
+					stateErr.State,
+					stateErr.Message,
+					periodQuery.Period,
+					provider,
+					siteID,
+				))
+			}
+
 			e.App.Logger().Error(
-				"NUVIO reports plausible query failed",
+				"NUVIO reports umami query failed",
 				"websiteId",
 				websiteID,
 				"period",
@@ -203,23 +346,39 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 				"error",
 				err.Error(),
 			)
+
 			return e.JSON(http.StatusOK, buildNuvioReportsTrafficStateResponse(
 				"provider_error",
 				"Traffic analytics are temporarily unavailable.",
 				periodQuery.Period,
+				provider,
+				siteID,
 			))
 		}
 
+		responseMessage := ""
+		if partialIssueCount > 0 {
+			responseMessage = "Some traffic metrics are temporarily unavailable."
+		}
+
 		return e.JSON(http.StatusOK, nuvioReportsTrafficResponse{
-			State:     "ok",
-			Provider:  "plausible",
-			SiteID:    siteID,
-			Period:    periodQuery.Period,
-			Summary:   &trafficData.Summary,
-			TopPages:  trafficData.TopPages,
-			Sources:   trafficData.Sources,
-			Devices:   trafficData.Devices,
-			FetchedAt: time.Now().UTC().Format(time.RFC3339),
+			State:            "ok",
+			Message:          responseMessage,
+			Provider:         "umami",
+			SiteID:           siteID,
+			Period:           periodQuery.Period,
+			Summary:          &trafficData.Summary,
+			TopPages:         trafficData.TopPages,
+			Sources:          trafficData.Sources,
+			Devices:          trafficData.Devices,
+			EntryPages:       trafficData.EntryPages,
+			ExitPages:        trafficData.ExitPages,
+			Countries:        trafficData.Countries,
+			Regions:          trafficData.Regions,
+			Cities:           trafficData.Cities,
+			Browsers:         trafficData.Browsers,
+			OperatingSystems: trafficData.OperatingSystems,
+			FetchedAt:        time.Now().UTC().Format(time.RFC3339),
 		})
 	})
 }
@@ -236,10 +395,12 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 	settings := parseNuvioSettingsObject(website.Get("settings"))
 	config := nuvioWebsiteReportsAnalyticsConfig{
 		FeatureAvailable: true,
-		Provider:         "plausible",
+		Provider:         "",
 		Enabled:          false,
 		SiteID:           "",
 		ScriptEnabled:    false,
+		ScriptURL:        "",
+		APIURL:           "",
 	}
 
 	if featureFlags, ok := toStringAnyMap(settings["featureFlags"]); ok {
@@ -250,8 +411,9 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 
 	if reportsSettings, ok := toStringAnyMap(settings["reports"]); ok {
 		if analyticsSettings, ok := toStringAnyMap(reportsSettings["analytics"]); ok {
-			if provider := strings.TrimSpace(parseStringValue(analyticsSettings["provider"])); provider != "" {
-				config.Provider = provider
+			provider := strings.ToLower(strings.TrimSpace(parseStringValue(analyticsSettings["provider"])))
+			if provider == "umami" {
+				config.Provider = "umami"
 			}
 			if value, ok := parseBoolValue(analyticsSettings["enabled"]); ok {
 				config.Enabled = value
@@ -260,37 +422,73 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 			if value, ok := parseBoolValue(analyticsSettings["scriptEnabled"]); ok {
 				config.ScriptEnabled = value
 			}
+			config.ScriptURL = strings.TrimSpace(parseStringValue(analyticsSettings["scriptUrl"]))
+			config.APIURL = strings.TrimSpace(parseStringValue(analyticsSettings["apiUrl"]))
 		}
 	}
 
 	return website, config, nil
 }
 
-func loadNuvioPlausibleConfig() (nuvioPlausibleConfig, error) {
-	apiKey := strings.TrimSpace(os.Getenv("NUVIO_PLAUSIBLE_API_KEY"))
-	if apiKey == "" {
-		apiKey = strings.TrimSpace(os.Getenv("PLAUSIBLE_API_KEY"))
-	}
-	if apiKey == "" {
-		return nuvioPlausibleConfig{}, fmt.Errorf("missing Plausible API key")
+func loadNuvioUmamiConfig(analyticsConfig nuvioWebsiteReportsAnalyticsConfig) (nuvioUmamiConfig, error) {
+	rawAPIURL := strings.TrimSpace(analyticsConfig.APIURL)
+	if rawAPIURL == "" {
+		rawAPIURL = strings.TrimSpace(os.Getenv("NUVIO_UMAMI_API_URL"))
 	}
 
-	baseURL := strings.TrimSpace(os.Getenv("NUVIO_PLAUSIBLE_BASE_URL"))
-	if baseURL == "" {
-		baseURL = strings.TrimSpace(os.Getenv("PLAUSIBLE_BASE_URL"))
-	}
-	if baseURL == "" {
-		baseURL = nuvioPlausibleDefaultBaseURL
-	}
-
-	baseURL = strings.TrimRight(baseURL, "/")
-	if !strings.HasPrefix(strings.ToLower(baseURL), "http://") && !strings.HasPrefix(strings.ToLower(baseURL), "https://") {
-		baseURL = "https://" + baseURL
+	if rawAPIURL == "" {
+		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
+			"provider_unconfigured",
+			"Traffic analytics provider is not configured right now.",
+			nil,
+		)
 	}
 
-	return nuvioPlausibleConfig{
-		APIKey:  apiKey,
-		BaseURL: baseURL,
+	normalizedAPIURL, err := normalizeNuvioAnalyticsURL(rawAPIURL)
+	if err != nil {
+		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
+			"provider_unconfigured",
+			"Traffic analytics provider is not configured right now.",
+			err,
+		)
+	}
+
+	requestBaseURL, loginURL := resolveNuvioUmamiURLs(normalizedAPIURL)
+	if requestBaseURL == "" {
+		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
+			"provider_unconfigured",
+			"Traffic analytics provider is not configured right now.",
+			nil,
+		)
+	}
+
+	apiKey := strings.TrimSpace(os.Getenv("NUVIO_UMAMI_API_KEY"))
+	username := strings.TrimSpace(os.Getenv("NUVIO_UMAMI_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("NUVIO_UMAMI_PASSWORD"))
+
+	if apiKey == "" && (username == "" || password == "") {
+		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
+			"provider_auth_missing",
+			"Traffic analytics provider authentication is not configured yet.",
+			nil,
+		)
+	}
+
+	if apiKey == "" && loginURL == "" {
+		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
+			"provider_unconfigured",
+			"Traffic analytics provider is not configured right now.",
+			nil,
+		)
+	}
+
+	return nuvioUmamiConfig{
+		APIBaseURL:     normalizedAPIURL,
+		RequestBaseURL: requestBaseURL,
+		LoginURL:       loginURL,
+		APIKey:         apiKey,
+		Username:       username,
+		Password:       password,
 	}, nil
 }
 
@@ -302,6 +500,7 @@ func resolveNuvioReportsTrafficPeriod(rawPeriod string, now time.Time) (nuvioRep
 
 	nowUTC := now.UTC()
 	endDate := nowUTC.Format("2006-01-02")
+	endAtMs := nowUTC.UnixMilli()
 
 	switch periodKey {
 	case nuvioReportsTrafficPeriodThisMonth:
@@ -313,12 +512,16 @@ func resolveNuvioReportsTrafficPeriod(rawPeriod string, now time.Time) (nuvioRep
 				StartDate: start.Format("2006-01-02"),
 				EndDate:   endDate,
 			},
-			PlausibleRange: []string{start.Format("2006-01-02"), endDate},
+			StartAtMs: start.UnixMilli(),
+			EndAtMs:   endAtMs,
+			Unit:      "day",
+			Timezone:  "UTC",
 		}, nil
 	case nuvioReportsTrafficPeriodLastMonth:
 		currentMonthStart := time.Date(nowUTC.Year(), nowUTC.Month(), 1, 0, 0, 0, 0, time.UTC)
 		lastMonthStart := currentMonthStart.AddDate(0, -1, 0)
 		lastMonthEnd := currentMonthStart.AddDate(0, 0, -1)
+		lastMonthEndAt := time.Date(lastMonthEnd.Year(), lastMonthEnd.Month(), lastMonthEnd.Day(), 23, 59, 59, int(time.Second-time.Millisecond), time.UTC)
 		return nuvioReportsTrafficPeriodQuery{
 			Period: nuvioReportsTrafficPeriod{
 				Key:       nuvioReportsTrafficPeriodLastMonth,
@@ -326,34 +529,37 @@ func resolveNuvioReportsTrafficPeriod(rawPeriod string, now time.Time) (nuvioRep
 				StartDate: lastMonthStart.Format("2006-01-02"),
 				EndDate:   lastMonthEnd.Format("2006-01-02"),
 			},
-			PlausibleRange: []string{
-				lastMonthStart.Format("2006-01-02"),
-				lastMonthEnd.Format("2006-01-02"),
-			},
+			StartAtMs: lastMonthStart.UnixMilli(),
+			EndAtMs:   lastMonthEndAt.UnixMilli(),
+			Unit:      "day",
+			Timezone:  "UTC",
 		}, nil
 	case nuvioReportsTrafficPeriodLast30d:
 		start := nowUTC.AddDate(0, 0, -29)
+		startAt := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
 		return nuvioReportsTrafficPeriodQuery{
 			Period: nuvioReportsTrafficPeriod{
 				Key:       nuvioReportsTrafficPeriodLast30d,
 				Label:     "Last 30 days",
-				StartDate: start.Format("2006-01-02"),
+				StartDate: startAt.Format("2006-01-02"),
 				EndDate:   endDate,
 			},
-			PlausibleRange: []string{
-				start.Format("2006-01-02"),
-				endDate,
-			},
+			StartAtMs: startAt.UnixMilli(),
+			EndAtMs:   endAtMs,
+			Unit:      "day",
+			Timezone:  "UTC",
 		}, nil
 	case nuvioReportsTrafficPeriodAllTime:
-		fallbackStart := "1970-01-01"
+		start := time.Unix(0, 0).UTC()
 		return nuvioReportsTrafficPeriodQuery{
 			Period: nuvioReportsTrafficPeriod{
 				Key:   nuvioReportsTrafficPeriodAllTime,
 				Label: "All time",
 			},
-			PlausibleRange:   "all",
-			FallbackAllRange: []string{fallbackStart, endDate},
+			StartAtMs: start.UnixMilli(),
+			EndAtMs:   endAtMs,
+			Unit:      "month",
+			Timezone:  "UTC",
 		}, nil
 	default:
 		return nuvioReportsTrafficPeriodQuery{}, fmt.Errorf("invalid period")
@@ -364,260 +570,620 @@ func buildNuvioReportsTrafficStateResponse(
 	state string,
 	message string,
 	period nuvioReportsTrafficPeriod,
+	provider string,
+	siteID string,
 ) nuvioReportsTrafficResponse {
 	return nuvioReportsTrafficResponse{
-		State:   state,
-		Message: message,
-		Period:  period,
+		State:            state,
+		Message:          message,
+		Provider:         strings.TrimSpace(provider),
+		SiteID:           strings.TrimSpace(siteID),
+		Period:           period,
+		EntryPages:       []nuvioReportsTrafficEntryPage{},
+		ExitPages:        []nuvioReportsTrafficExitPage{},
+		Countries:        []nuvioReportsTrafficCountry{},
+		Regions:          []nuvioReportsTrafficRegion{},
+		Cities:           []nuvioReportsTrafficCity{},
+		Browsers:         []nuvioReportsTrafficBrowser{},
+		OperatingSystems: []nuvioReportsTrafficOperatingSystem{},
 	}
 }
 
-func fetchNuvioPlausibleTrafficData(
+func fetchNuvioUmamiTrafficData(
 	ctx context.Context,
-	config nuvioPlausibleConfig,
+	config nuvioUmamiConfig,
 	siteID string,
 	periodQuery nuvioReportsTrafficPeriodQuery,
-) (*nuvioReportsTrafficData, error) {
-	summary, err := fetchNuvioPlausibleSummary(ctx, config, siteID, periodQuery)
+) (*nuvioReportsTrafficData, int, error) {
+	authHeaders, err := resolveNuvioUmamiAuthHeaders(ctx, config)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	topPages, err := fetchNuvioPlausibleTopPages(ctx, config, siteID, periodQuery)
+	summary, err := fetchNuvioUmamiSummary(ctx, config, authHeaders, siteID, periodQuery)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	sources, err := fetchNuvioPlausibleSources(ctx, config, siteID, periodQuery)
+	partialIssueCount := 0
+
+	topPages, err := fetchNuvioUmamiTopPages(ctx, config, authHeaders, siteID, periodQuery)
 	if err != nil {
-		return nil, err
+		partialIssueCount++
+		topPages = []nuvioReportsTrafficTopPage{}
 	}
 
-	devices, err := fetchNuvioPlausibleDevices(ctx, config, siteID, periodQuery)
+	sources, err := fetchNuvioUmamiSources(ctx, config, authHeaders, siteID, periodQuery)
 	if err != nil {
-		return nil, err
+		partialIssueCount++
+		sources = []nuvioReportsTrafficSource{}
+	}
+
+	devices, err := fetchNuvioUmamiDevices(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		devices = []nuvioReportsTrafficDevice{}
+	}
+
+	entryPages, err := fetchNuvioUmamiEntryPages(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		entryPages = []nuvioReportsTrafficEntryPage{}
+	}
+
+	exitPages, err := fetchNuvioUmamiExitPages(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		exitPages = []nuvioReportsTrafficExitPage{}
+	}
+
+	countries, err := fetchNuvioUmamiCountries(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		countries = []nuvioReportsTrafficCountry{}
+	}
+
+	regions, err := fetchNuvioUmamiRegions(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		regions = []nuvioReportsTrafficRegion{}
+	}
+
+	cities, err := fetchNuvioUmamiCities(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		cities = []nuvioReportsTrafficCity{}
+	}
+
+	browsers, err := fetchNuvioUmamiBrowsers(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		browsers = []nuvioReportsTrafficBrowser{}
+	}
+
+	operatingSystems, err := fetchNuvioUmamiOperatingSystems(ctx, config, authHeaders, siteID, periodQuery)
+	if err != nil {
+		partialIssueCount++
+		operatingSystems = []nuvioReportsTrafficOperatingSystem{}
+	}
+
+	if err := fetchNuvioUmamiPageviewsSeries(ctx, config, authHeaders, siteID, periodQuery); err != nil {
+		partialIssueCount++
 	}
 
 	return &nuvioReportsTrafficData{
-		Summary:  summary,
-		TopPages: topPages,
-		Sources:  sources,
-		Devices:  devices,
-	}, nil
+		Summary:          summary,
+		TopPages:         topPages,
+		Sources:          sources,
+		Devices:          devices,
+		EntryPages:       entryPages,
+		ExitPages:        exitPages,
+		Countries:        countries,
+		Regions:          regions,
+		Cities:           cities,
+		Browsers:         browsers,
+		OperatingSystems: operatingSystems,
+	}, partialIssueCount, nil
 }
 
-func fetchNuvioPlausibleSummary(
+func fetchNuvioUmamiSummary(
 	ctx context.Context,
-	config nuvioPlausibleConfig,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
 	siteID string,
 	periodQuery nuvioReportsTrafficPeriodQuery,
 ) (nuvioReportsTrafficSummary, error) {
-	trafficResult, err := queryNuvioPlausibleWithPeriodFallback(ctx, config, map[string]any{
-		"site_id":    siteID,
-		"metrics":    []string{"visitors", "pageviews"},
-		"date_range": periodQuery.PlausibleRange,
-	}, periodQuery)
-	if err != nil {
+	query := buildNuvioUmamiBaseQuery(periodQuery)
+	endpointPath := buildNuvioUmamiWebsiteEndpointPath(siteID, "stats")
+	requestURL := buildNuvioUmamiRequestURL(config.RequestBaseURL, endpointPath, query)
+
+	stats := nuvioUmamiStatsResponse{}
+	if err := executeNuvioUmamiJSONRequest(ctx, http.MethodGet, requestURL, authHeaders, nil, &stats); err != nil {
 		return nuvioReportsTrafficSummary{}, err
 	}
 
-	engagementResult, err := queryNuvioPlausibleWithPeriodFallback(ctx, config, map[string]any{
-		"site_id":    siteID,
-		"metrics":    []string{"bounce_rate", "visit_duration"},
-		"date_range": periodQuery.PlausibleRange,
-	}, periodQuery)
-	if err != nil {
-		return nuvioReportsTrafficSummary{}, err
-	}
+	visitors := parseNuvioUmamiAnyInt(stats.Visitors)
+	pageviews := parseNuvioUmamiAnyInt(stats.Pageviews)
+	visits := parseNuvioUmamiAnyInt(stats.Visits)
+	bounces, hasBounces := parseNuvioUmamiAnyFloat(stats.Bounces)
+	totalTime, hasTotalTime := parseNuvioUmamiAnyFloat(stats.Totaltime)
 
 	summary := nuvioReportsTrafficSummary{
-		Visitors:  0,
-		Pageviews: 0,
+		Visitors:  visitors,
+		Pageviews: pageviews,
 	}
 
-	if len(trafficResult.Results) > 0 {
-		row := trafficResult.Results[0]
-		summary.Visitors = parseNuvioPlausibleMetricAsInt(row.Metrics, 0)
-		summary.Pageviews = parseNuvioPlausibleMetricAsInt(row.Metrics, 1)
-	}
-
-	if len(engagementResult.Results) > 0 {
-		row := engagementResult.Results[0]
-		if bounceRate, ok := parseNuvioPlausibleMetricAsFloat(row.Metrics, 0); ok {
-			bounce := roundNuvioFloat(bounceRate, 2)
-			summary.BounceRate = &bounce
+	if visits > 0 && hasBounces {
+		bounceRate := bounces / float64(visits)
+		if bounceRate >= 0 {
+			cleaned := roundNuvioFloat(bounceRate, 4)
+			summary.BounceRate = &cleaned
 		}
-		if duration, ok := parseNuvioPlausibleMetricAsFloat(row.Metrics, 1); ok {
-			seconds := int(duration)
-			summary.VisitDurationSeconds = &seconds
+	}
+
+	if visits > 0 && hasTotalTime {
+		avgDuration := int(totalTime / float64(visits))
+		if avgDuration >= 0 {
+			summary.VisitDurationSeconds = &avgDuration
 		}
 	}
 
 	return summary, nil
 }
 
-func fetchNuvioPlausibleTopPages(
+func fetchNuvioUmamiTopPages(
 	ctx context.Context,
-	config nuvioPlausibleConfig,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
 	siteID string,
 	periodQuery nuvioReportsTrafficPeriodQuery,
 ) ([]nuvioReportsTrafficTopPage, error) {
-	result, err := queryNuvioPlausibleWithPeriodFallback(ctx, config, map[string]any{
-		"site_id":    siteID,
-		"metrics":    []string{"visitors", "pageviews"},
-		"dimensions": []string{"event:page"},
-		"date_range": periodQuery.PlausibleRange,
-		"order_by":   [][]string{{"visitors", "desc"}},
-		"pagination": map[string]int{"limit": 10, "offset": 0},
-	}, periodQuery)
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "path", 10)
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]nuvioReportsTrafficTopPage, 0, len(result.Results))
-	for _, row := range result.Results {
-		page := normalizeNuvioPlausibleDimension(row.Dimensions, 0, "/")
+	items := make([]nuvioReportsTrafficTopPage, 0, len(rows))
+	for _, row := range rows {
 		items = append(items, nuvioReportsTrafficTopPage{
-			Page:      page,
-			Visitors:  parseNuvioPlausibleMetricAsInt(row.Metrics, 0),
-			Pageviews: parseNuvioPlausibleMetricAsInt(row.Metrics, 1),
+			Page:      parseNuvioUmamiAnyString(row.Name, "/"),
+			Visitors:  parseNuvioUmamiAnyInt(row.Visitors),
+			Pageviews: parseNuvioUmamiAnyInt(row.Pageviews),
 		})
 	}
 
 	return items, nil
 }
 
-func fetchNuvioPlausibleSources(
+func fetchNuvioUmamiSources(
 	ctx context.Context,
-	config nuvioPlausibleConfig,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
 	siteID string,
 	periodQuery nuvioReportsTrafficPeriodQuery,
 ) ([]nuvioReportsTrafficSource, error) {
-	result, err := queryNuvioPlausibleWithPeriodFallback(ctx, config, map[string]any{
-		"site_id":    siteID,
-		"metrics":    []string{"visitors"},
-		"dimensions": []string{"visit:source"},
-		"date_range": periodQuery.PlausibleRange,
-		"order_by":   [][]string{{"visitors", "desc"}},
-		"pagination": map[string]int{"limit": 10, "offset": 0},
-	}, periodQuery)
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "referrer", 10)
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]nuvioReportsTrafficSource, 0, len(result.Results))
-	for _, row := range result.Results {
-		source := normalizeNuvioPlausibleDimension(row.Dimensions, 0, "Direct")
+	items := make([]nuvioReportsTrafficSource, 0, len(rows))
+	for _, row := range rows {
 		items = append(items, nuvioReportsTrafficSource{
-			Source:   source,
-			Visitors: parseNuvioPlausibleMetricAsInt(row.Metrics, 0),
+			Source:   parseNuvioUmamiAnyString(row.Name, "Direct"),
+			Visitors: parseNuvioUmamiAnyInt(row.Visitors),
 		})
 	}
 
 	return items, nil
 }
 
-func fetchNuvioPlausibleDevices(
+func fetchNuvioUmamiDevices(
 	ctx context.Context,
-	config nuvioPlausibleConfig,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
 	siteID string,
 	periodQuery nuvioReportsTrafficPeriodQuery,
 ) ([]nuvioReportsTrafficDevice, error) {
-	result, err := queryNuvioPlausibleWithPeriodFallback(ctx, config, map[string]any{
-		"site_id":    siteID,
-		"metrics":    []string{"visitors"},
-		"dimensions": []string{"visit:device"},
-		"date_range": periodQuery.PlausibleRange,
-		"order_by":   [][]string{{"visitors", "desc"}},
-		"pagination": map[string]int{"limit": 10, "offset": 0},
-	}, periodQuery)
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "device", 10)
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]nuvioReportsTrafficDevice, 0, len(result.Results))
-	for _, row := range result.Results {
-		device := normalizeNuvioPlausibleDimension(row.Dimensions, 0, "Unknown")
+	items := make([]nuvioReportsTrafficDevice, 0, len(rows))
+	for _, row := range rows {
 		items = append(items, nuvioReportsTrafficDevice{
-			Device:   device,
-			Visitors: parseNuvioPlausibleMetricAsInt(row.Metrics, 0),
+			Device:   parseNuvioUmamiAnyString(row.Name, "Unknown"),
+			Visitors: parseNuvioUmamiAnyInt(row.Visitors),
 		})
 	}
 
 	return items, nil
 }
 
-func queryNuvioPlausibleWithPeriodFallback(
+func fetchNuvioUmamiEntryPages(
 	ctx context.Context,
-	config nuvioPlausibleConfig,
-	query map[string]any,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
 	periodQuery nuvioReportsTrafficPeriodQuery,
-) (*nuvioPlausibleQueryResponse, error) {
-	response, err := queryNuvioPlausible(ctx, config, query)
-	if err == nil {
-		return response, nil
-	}
-
-	if periodQuery.Period.Key != nuvioReportsTrafficPeriodAllTime || periodQuery.FallbackAllRange == nil {
+) ([]nuvioReportsTrafficEntryPage, error) {
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "entry", 10)
+	if err != nil {
 		return nil, err
 	}
 
-	fallbackQuery := cloneNuvioPlausibleQueryMap(query)
-	fallbackQuery["date_range"] = periodQuery.FallbackAllRange
-	return queryNuvioPlausible(ctx, config, fallbackQuery)
+	items := make([]nuvioReportsTrafficEntryPage, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, nuvioReportsTrafficEntryPage{
+			Page:      parseNuvioUmamiAnyString(row.Name, "/"),
+			Visitors:  parseNuvioUmamiAnyInt(row.Visitors),
+			Pageviews: parseNuvioUmamiAnyInt(row.Pageviews),
+		})
+	}
+
+	return items, nil
 }
 
-func queryNuvioPlausible(
+func fetchNuvioUmamiExitPages(
 	ctx context.Context,
-	config nuvioPlausibleConfig,
-	query map[string]any,
-) (*nuvioPlausibleQueryResponse, error) {
-	rawPayload, err := json.Marshal(query)
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) ([]nuvioReportsTrafficExitPage, error) {
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "exit", 10)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode Plausible query: %w", err)
+		return nil, err
 	}
 
-	request, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		strings.TrimRight(config.BaseURL, "/")+"/api/v2/query",
-		bytes.NewBuffer(rawPayload),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build Plausible request: %w", err)
+	items := make([]nuvioReportsTrafficExitPage, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, nuvioReportsTrafficExitPage{
+			Page:      parseNuvioUmamiAnyString(row.Name, "/"),
+			Visitors:  parseNuvioUmamiAnyInt(row.Visitors),
+			Pageviews: parseNuvioUmamiAnyInt(row.Pageviews),
+		})
 	}
 
-	request.Header.Set("Authorization", "Bearer "+strings.TrimSpace(config.APIKey))
-	request.Header.Set("Content-Type", "application/json")
+	return items, nil
+}
+
+func fetchNuvioUmamiCountries(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) ([]nuvioReportsTrafficCountry, error) {
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "country", 10)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]nuvioReportsTrafficCountry, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, nuvioReportsTrafficCountry{
+			Country:  parseNuvioUmamiAnyString(row.Name, "Unknown"),
+			Visitors: parseNuvioUmamiAnyInt(row.Visitors),
+		})
+	}
+
+	return items, nil
+}
+
+func fetchNuvioUmamiRegions(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) ([]nuvioReportsTrafficRegion, error) {
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "region", 10)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]nuvioReportsTrafficRegion, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, nuvioReportsTrafficRegion{
+			Region:   parseNuvioUmamiAnyString(row.Name, "Unknown"),
+			Visitors: parseNuvioUmamiAnyInt(row.Visitors),
+		})
+	}
+
+	return items, nil
+}
+
+func fetchNuvioUmamiCities(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) ([]nuvioReportsTrafficCity, error) {
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "city", 10)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]nuvioReportsTrafficCity, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, nuvioReportsTrafficCity{
+			City:     parseNuvioUmamiAnyString(row.Name, "Unknown"),
+			Visitors: parseNuvioUmamiAnyInt(row.Visitors),
+		})
+	}
+
+	return items, nil
+}
+
+func fetchNuvioUmamiBrowsers(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) ([]nuvioReportsTrafficBrowser, error) {
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "browser", 10)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]nuvioReportsTrafficBrowser, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, nuvioReportsTrafficBrowser{
+			Browser:  parseNuvioUmamiAnyString(row.Name, "Unknown"),
+			Visitors: parseNuvioUmamiAnyInt(row.Visitors),
+		})
+	}
+
+	return items, nil
+}
+
+func fetchNuvioUmamiOperatingSystems(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) ([]nuvioReportsTrafficOperatingSystem, error) {
+	rows, err := fetchNuvioUmamiMetricsExpanded(ctx, config, authHeaders, siteID, periodQuery, "os", 10)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]nuvioReportsTrafficOperatingSystem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, nuvioReportsTrafficOperatingSystem{
+			OperatingSystem: parseNuvioUmamiAnyString(row.Name, "Unknown"),
+			Visitors:        parseNuvioUmamiAnyInt(row.Visitors),
+		})
+	}
+
+	return items, nil
+}
+
+func fetchNuvioUmamiMetricsExpanded(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+	metricType string,
+	limit int,
+) ([]nuvioUmamiMetricRow, error) {
+	query := buildNuvioUmamiBaseQuery(periodQuery)
+	query.Set("type", strings.TrimSpace(metricType))
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+
+	endpointPath := buildNuvioUmamiWebsiteEndpointPath(siteID, "metrics/expanded")
+	requestURL := buildNuvioUmamiRequestURL(config.RequestBaseURL, endpointPath, query)
+
+	rows := []nuvioUmamiMetricRow{}
+	if err := executeNuvioUmamiJSONRequest(ctx, http.MethodGet, requestURL, authHeaders, nil, &rows); err != nil {
+		return nil, err
+	}
+
+	if rows == nil {
+		return []nuvioUmamiMetricRow{}, nil
+	}
+
+	return rows, nil
+}
+
+func fetchNuvioUmamiPageviewsSeries(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) error {
+	query := buildNuvioUmamiBaseQuery(periodQuery)
+	if periodQuery.Unit != "" {
+		query.Set("unit", periodQuery.Unit)
+	}
+	if periodQuery.Timezone != "" {
+		query.Set("timezone", periodQuery.Timezone)
+	}
+
+	endpointPath := buildNuvioUmamiWebsiteEndpointPath(siteID, "pageviews")
+	requestURL := buildNuvioUmamiRequestURL(config.RequestBaseURL, endpointPath, query)
+
+	payload := nuvioUmamiPageviewsResponse{}
+	if err := executeNuvioUmamiJSONRequest(ctx, http.MethodGet, requestURL, authHeaders, nil, &payload); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func resolveNuvioUmamiAuthHeaders(ctx context.Context, config nuvioUmamiConfig) (map[string]string, error) {
+	if strings.TrimSpace(config.APIKey) != "" {
+		return map[string]string{
+			"x-umami-api-key": strings.TrimSpace(config.APIKey),
+		}, nil
+	}
+
+	username := strings.TrimSpace(config.Username)
+	password := strings.TrimSpace(config.Password)
+	if username == "" || password == "" {
+		return nil, newNuvioReportsTrafficStateError(
+			"provider_auth_missing",
+			"Traffic analytics provider authentication is not configured yet.",
+			nil,
+		)
+	}
+
+	loginURL := strings.TrimSpace(config.LoginURL)
+	if loginURL == "" {
+		return nil, newNuvioReportsTrafficStateError(
+			"provider_unconfigured",
+			"Traffic analytics provider is not configured right now.",
+			nil,
+		)
+	}
+
+	requestBody := map[string]string{
+		"username": username,
+		"password": password,
+	}
+
+	responseBody := struct {
+		Token string `json:"token"`
+	}{}
+
+	if err := executeNuvioUmamiJSONRequest(ctx, http.MethodPost, loginURL, map[string]string{}, requestBody, &responseBody); err != nil {
+		return nil, err
+	}
+
+	token := strings.TrimSpace(responseBody.Token)
+	if token == "" {
+		return nil, newNuvioReportsTrafficStateError(
+			"provider_auth_error",
+			"Unable to authenticate with the analytics provider.",
+			nil,
+		)
+	}
+
+	return map[string]string{
+		"Authorization": "Bearer " + token,
+	}, nil
+}
+
+func executeNuvioUmamiJSONRequest(
+	ctx context.Context,
+	method string,
+	requestURL string,
+	headers map[string]string,
+	requestBody any,
+	target any,
+) error {
+	var bodyReader io.Reader
+	if requestBody != nil {
+		rawBody, err := json.Marshal(requestBody)
+		if err != nil {
+			return newNuvioReportsTrafficStateError(
+				"provider_error",
+				"Traffic analytics are temporarily unavailable.",
+				fmt.Errorf("failed to encode Umami request payload: %w", err),
+			)
+		}
+		bodyReader = bytes.NewBuffer(rawBody)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, method, requestURL, bodyReader)
+	if err != nil {
+		return newNuvioReportsTrafficStateError(
+			"provider_error",
+			"Traffic analytics are temporarily unavailable.",
+			fmt.Errorf("failed to build Umami request: %w", err),
+		)
+	}
+
+	request.Header.Set("Accept", "application/json")
+	if requestBody != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+
+	for key, value := range headers {
+		headerKey := strings.TrimSpace(key)
+		headerValue := strings.TrimSpace(value)
+		if headerKey == "" || headerValue == "" {
+			continue
+		}
+		request.Header.Set(headerKey, headerValue)
+	}
 
 	response, err := nuvioReportsHTTPClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to reach Plausible: %w", err)
+		return newNuvioReportsTrafficStateError(
+			"provider_error",
+			"Traffic analytics are temporarily unavailable.",
+			fmt.Errorf("failed to reach Umami provider: %w", err),
+		)
 	}
 	defer response.Body.Close()
 
-	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	responseRaw, err := io.ReadAll(io.LimitReader(response.Body, 2<<20))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read Plausible response: %w", err)
+		return newNuvioReportsTrafficStateError(
+			"provider_error",
+			"Traffic analytics are temporarily unavailable.",
+			fmt.Errorf("failed reading Umami response: %w", err),
+		)
 	}
 
-	if response.StatusCode >= 400 {
-		return nil, fmt.Errorf("plausible rejected query (%d): %s", response.StatusCode, parseNuvioPlausibleProviderMessage(body))
+	if response.StatusCode >= http.StatusBadRequest {
+		switch response.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return newNuvioReportsTrafficStateError(
+				"provider_auth_error",
+				"Unable to authenticate with the analytics provider.",
+				nil,
+			)
+		case http.StatusNotFound:
+			return newNuvioReportsTrafficStateError(
+				"provider_not_found",
+				"Analytics website was not found for this configuration.",
+				nil,
+			)
+		default:
+			providerMessage := parseNuvioUmamiProviderMessage(responseRaw)
+			return newNuvioReportsTrafficStateError(
+				"provider_error",
+				"Traffic analytics are temporarily unavailable.",
+				fmt.Errorf("umami request failed (%d): %s", response.StatusCode, providerMessage),
+			)
+		}
 	}
 
-	decoded := &nuvioPlausibleQueryResponse{}
-	if err := json.Unmarshal(body, decoded); err != nil {
-		return nil, fmt.Errorf("failed to decode Plausible response: %w", err)
+	if target == nil {
+		return nil
 	}
 
-	if decoded.Results == nil {
-		decoded.Results = []nuvioPlausibleQueryResult{}
+	if len(strings.TrimSpace(string(responseRaw))) == 0 {
+		return newNuvioReportsTrafficStateError(
+			"provider_error",
+			"Traffic analytics are temporarily unavailable.",
+			fmt.Errorf("umami response is empty"),
+		)
 	}
 
-	return decoded, nil
+	if err := json.Unmarshal(responseRaw, target); err != nil {
+		return newNuvioReportsTrafficStateError(
+			"provider_error",
+			"Traffic analytics are temporarily unavailable.",
+			fmt.Errorf("failed decoding Umami response: %w", err),
+		)
+	}
+
+	return nil
 }
 
-func parseNuvioPlausibleProviderMessage(raw []byte) string {
+func parseNuvioUmamiProviderMessage(raw []byte) string {
 	trimmed := strings.TrimSpace(string(raw))
 	if trimmed == "" {
 		return "unknown provider error"
@@ -635,41 +1201,106 @@ func parseNuvioPlausibleProviderMessage(raw []byte) string {
 	return trimmed
 }
 
-func cloneNuvioPlausibleQueryMap(source map[string]any) map[string]any {
-	cloned := make(map[string]any, len(source))
-	for key, value := range source {
-		cloned[key] = value
-	}
-	return cloned
+func buildNuvioUmamiBaseQuery(periodQuery nuvioReportsTrafficPeriodQuery) url.Values {
+	query := url.Values{}
+	query.Set("startAt", strconv.FormatInt(periodQuery.StartAtMs, 10))
+	query.Set("endAt", strconv.FormatInt(periodQuery.EndAtMs, 10))
+	return query
 }
 
-func normalizeNuvioPlausibleDimension(dimensions []any, index int, fallback string) string {
-	if index < 0 || index >= len(dimensions) {
-		return fallback
+func buildNuvioUmamiWebsiteEndpointPath(siteID string, suffix string) string {
+	safeSiteID := strings.TrimSpace(siteID)
+	safeSuffix := strings.Trim(strings.TrimSpace(suffix), "/")
+	if safeSuffix == "" {
+		return "websites/" + url.PathEscape(safeSiteID)
 	}
-
-	value := strings.TrimSpace(parseStringValue(dimensions[index]))
-	if value == "" {
-		return fallback
-	}
-
-	return value
+	return "websites/" + url.PathEscape(safeSiteID) + "/" + safeSuffix
 }
 
-func parseNuvioPlausibleMetricAsInt(metrics []any, index int) int {
-	value, ok := parseNuvioPlausibleMetricAsFloat(metrics, index)
+func buildNuvioUmamiRequestURL(baseURL string, path string, query url.Values) string {
+	normalizedBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	normalizedPath := "/" + strings.Trim(strings.TrimSpace(path), "/")
+	requestURL := normalizedBase + normalizedPath
+	if query != nil {
+		encoded := query.Encode()
+		if encoded != "" {
+			requestURL += "?" + encoded
+		}
+	}
+	return requestURL
+}
+
+func resolveNuvioUmamiURLs(apiURL string) (requestBaseURL string, loginURL string) {
+	normalized := strings.TrimRight(strings.TrimSpace(apiURL), "/")
+	if normalized == "" {
+		return "", ""
+	}
+
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return "", ""
+	}
+
+	path := strings.TrimRight(strings.TrimSpace(parsed.Path), "/")
+	lowerPath := strings.ToLower(path)
+
+	switch {
+	case strings.HasSuffix(lowerPath, "/api") || strings.Contains(lowerPath, "/api/"):
+		requestBaseURL = normalized
+		loginURL = requestBaseURL + "/auth/login"
+	case strings.HasPrefix(lowerPath, "/v1") || strings.Contains(lowerPath, "/v1/"):
+		requestBaseURL = normalized
+		loginURL = ""
+	case lowerPath == "":
+		requestBaseURL = normalized + "/api"
+		loginURL = requestBaseURL + "/auth/login"
+	default:
+		requestBaseURL = normalized + "/api"
+		loginURL = requestBaseURL + "/auth/login"
+	}
+
+	return requestBaseURL, loginURL
+}
+
+func normalizeNuvioAnalyticsURL(rawValue string) (string, error) {
+	normalized := strings.TrimSpace(rawValue)
+	if normalized == "" {
+		return "", fmt.Errorf("missing url")
+	}
+
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return "", fmt.Errorf("invalid url: %w", err)
+	}
+
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("invalid url scheme")
+	}
+
+	if strings.TrimSpace(parsed.Host) == "" {
+		return "", fmt.Errorf("missing url host")
+	}
+
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func parseNuvioUmamiAnyInt(value any) int {
+	floatValue, ok := parseNuvioUmamiAnyFloat(value)
 	if !ok {
 		return 0
 	}
-	return int(value)
-}
 
-func parseNuvioPlausibleMetricAsFloat(metrics []any, index int) (float64, bool) {
-	if index < 0 || index >= len(metrics) {
-		return 0, false
+	if floatValue < 0 {
+		return 0
 	}
 
-	switch typed := metrics[index].(type) {
+	return int(floatValue)
+}
+
+func parseNuvioUmamiAnyFloat(value any) (float64, bool) {
+	switch typed := value.(type) {
 	case float64:
 		return typed, true
 	case float32:
@@ -678,17 +1309,34 @@ func parseNuvioPlausibleMetricAsFloat(metrics []any, index int) (float64, bool) 
 		return float64(typed), true
 	case int64:
 		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	case uint:
+		return float64(typed), true
+	case uint64:
+		return float64(typed), true
+	case uint32:
+		return float64(typed), true
 	case json.Number:
-		if value, err := typed.Float64(); err == nil {
-			return value, true
+		if parsed, err := typed.Float64(); err == nil {
+			return parsed, true
 		}
 	case string:
-		if value, err := strconv.ParseFloat(strings.TrimSpace(typed), 64); err == nil {
-			return value, true
+		if parsed, err := strconv.ParseFloat(strings.TrimSpace(typed), 64); err == nil {
+			return parsed, true
 		}
 	}
 
 	return 0, false
+}
+
+func parseNuvioUmamiAnyString(value any, fallback string) string {
+	normalized := strings.TrimSpace(parseStringValue(value))
+	if normalized == "" {
+		return fallback
+	}
+
+	return normalized
 }
 
 func roundNuvioFloat(value float64, precision int) float64 {
@@ -704,4 +1352,31 @@ func roundNuvioFloat(value float64, precision int) float64 {
 	return float64(int(value*pow+0.5)) / pow
 }
 
-// NUVIO CUSTOM END: Reports Phase 2B Plausible traffic endpoint.
+func newNuvioReportsTrafficStateError(state string, message string, cause error) error {
+	return &nuvioReportsTrafficStateError{
+		State:   strings.TrimSpace(state),
+		Message: strings.TrimSpace(message),
+		Cause:   cause,
+	}
+}
+
+func unwrapNuvioReportsTrafficStateError(err error) (*nuvioReportsTrafficStateError, bool) {
+	if err == nil {
+		return nil, false
+	}
+
+	stateErr := &nuvioReportsTrafficStateError{}
+	if errors.As(err, &stateErr) {
+		if strings.TrimSpace(stateErr.State) == "" {
+			stateErr.State = "provider_error"
+		}
+		if strings.TrimSpace(stateErr.Message) == "" {
+			stateErr.Message = "Traffic analytics are temporarily unavailable."
+		}
+		return stateErr, true
+	}
+
+	return nil, false
+}
+
+// NUVIO CUSTOM END: Reports traffic endpoint.
