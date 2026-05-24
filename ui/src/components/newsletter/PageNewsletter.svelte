@@ -666,7 +666,7 @@
     }
 
     function resolveCampaignDeliveredSummary(campaign) {
-        return `${campaign?.recipientsCount || 0} sent`;
+        return `${campaign?.recipientsCount || 0} submitted`;
     }
 
     function resolveCampaignAudienceSummary(campaign) {
@@ -988,7 +988,7 @@
     }
 
     function resolveSendConfirmationHint() {
-        return "This action sends the campaign immediately.";
+        return "This action submits the campaign to your email provider immediately.";
     }
 
     function resolveCampaignFilterEmptyHint() {
@@ -1490,7 +1490,66 @@
         isCreatingSubscriberGroup = false;
     }
 
-    async function sendCampaign(campaign) {        if (!campaign?.id || isSendingCampaign[campaign.id]) {            return false;        }        isSendingCampaign[campaign.id] = true;        isSendingCampaign = { ...isSendingCampaign };        let sent = false;        try {            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {                method: "POST",                body: {                    campaignId: campaign.id,                },                requestKey: "nuvio_newsletter_send_" + campaign.id,            });            const sentCountValue = Number(response?.sentCount);            const failedCountValue = Number(response?.failedCount);            const recipientsCountValue = Number(response?.recipientsCount);            const hasSentCount = Number.isFinite(sentCountValue) && sentCountValue >= 0;            const hasFailedCount = Number.isFinite(failedCountValue) && failedCountValue >= 0;            const hasRecipientsCount = Number.isFinite(recipientsCountValue) && recipientsCountValue >= 0;            if (hasSentCount && hasFailedCount) {                if (sentCountValue > 0 && failedCountValue > 0) {                    addWarningToast(`Campaign sent to ${sentCountValue} subscriber(s). ${failedCountValue} recipient(s) failed.`);                    sent = true;                } else if (sentCountValue > 0) {                    addSuccessToast(`Campaign sent to ${sentCountValue} subscriber(s).`);                    sent = true;                } else if (failedCountValue > 0) {                    addErrorToast("Campaign could not be sent. Please try again or check email configuration.");                } else {                    addSuccessToast("Campaign sent.");                    sent = true;                }            } else if (hasRecipientsCount) {                addSuccessToast(`Campaign sent to ${recipientsCountValue} subscriber(s).`);                sent = true;            } else {                addSuccessToast("Campaign sent.");                sent = true;            }            await loadCampaigns();        } catch (err) {            ApiClient.error(err, false);            addErrorToast("Campaign could not be sent. Please try again or check email configuration.");        }        delete isSendingCampaign[campaign.id];        isSendingCampaign = { ...isSendingCampaign };        return sent;    }    function resetCampaignComposer() {
+    async function sendCampaign(campaign) {
+        if (!campaign?.id || isSendingCampaign[campaign.id]) {
+            return false;
+        }
+
+        isSendingCampaign[campaign.id] = true;
+        isSendingCampaign = { ...isSendingCampaign };
+
+        let sent = false;
+
+        try {
+            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {
+                method: "POST",
+                body: {
+                    campaignId: campaign.id,
+                },
+                requestKey: "nuvio_newsletter_send_" + campaign.id,
+            });
+
+            const sentCountValue = Number(response?.sentCount);
+            const failedCountValue = Number(response?.failedCount);
+            const recipientsCountValue = Number(response?.recipientsCount);
+            const hasSentCount = Number.isFinite(sentCountValue) && sentCountValue >= 0;
+            const hasFailedCount = Number.isFinite(failedCountValue) && failedCountValue >= 0;
+            const hasRecipientsCount = Number.isFinite(recipientsCountValue) && recipientsCountValue >= 0;
+
+            if (hasSentCount && hasFailedCount) {
+                if (sentCountValue > 0 && failedCountValue > 0) {
+                    addWarningToast(`Campaign submitted to email provider. Submitted: ${sentCountValue}. Failed: ${failedCountValue}. Some emails may still bounce or be rejected later.`);
+                    sent = true;
+                } else if (sentCountValue > 0) {
+                    addSuccessToast(`Campaign submitted to email provider. Submitted: ${sentCountValue}. Some emails may still bounce or be rejected later.`);
+                    sent = true;
+                } else if (failedCountValue > 0) {
+                    addErrorToast("Campaign could not be sent. Please try again or check email configuration.");
+                } else {
+                    addSuccessToast("Campaign submitted to email provider. Some emails may still bounce or be rejected later.");
+                    sent = true;
+                }
+            } else if (hasRecipientsCount) {
+                addSuccessToast(`Campaign submitted to email provider. Submitted: ${recipientsCountValue}. Some emails may still bounce or be rejected later.`);
+                sent = true;
+            } else {
+                addSuccessToast("Campaign submitted to email provider. Some emails may still bounce or be rejected later.");
+                sent = true;
+            }
+
+            await loadCampaigns();
+        } catch (err) {
+            ApiClient.error(err, false);
+            addErrorToast("Campaign could not be sent. Please try again or check email configuration.");
+        }
+
+        delete isSendingCampaign[campaign.id];
+        isSendingCampaign = { ...isSendingCampaign };
+
+        return sent;
+    }
+
+    function resetCampaignComposer() {
         campaignForm = {
             subject: "",
             body: "",
@@ -2600,8 +2659,8 @@
                                                         <span class="audience-stat-value">{audienceRecipientsSummary}</span>
                                                     </div>
                                                     <div class="campaign-audience-summary-row">
-                                                        <span class="audience-stat-label">Delivery</span>
-                                                        <span class="audience-stat-value">Campaigns are sent only to active subscribers.</span>
+                                                        <span class="audience-stat-label">Submission</span>
+                                                        <span class="audience-stat-value">Campaigns are submitted only to active subscribers.</span>
                                                     </div>
                                                     <div class="campaign-audience-summary-row">
                                                         <span class="audience-stat-label">Groups available</span>
@@ -2615,7 +2674,7 @@
                                                             <span class="audience-stat-value">{resolveCampaignSentDate(editingCampaign)}</span>
                                                         </div>
                                                         <div class="campaign-audience-summary-row">
-                                                            <span class="audience-stat-label">Delivered</span>
+                                                            <span class="audience-stat-label">Submitted</span>
                                                             <span class="audience-stat-value">{resolveCampaignDeliveredSummary(editingCampaign)}</span>
                                                         </div>
                                                         <div class="campaign-audience-summary-row">
@@ -2822,7 +2881,7 @@
                                                             <span class="meta-sep">|</span>
                                                             <span><strong>Est. recipients:</strong> {resolveCampaignRecipientsSummary(campaign)}</span>
                                                             <span class="meta-sep">|</span>
-                                                            <span><strong>Delivered:</strong> {resolveCampaignDeliveredSummary(campaign)}</span>
+                                                            <span><strong>Submitted:</strong> {resolveCampaignDeliveredSummary(campaign)}</span>
                                                             <span class="meta-sep">|</span>
                                                             <span><strong>{normalizeStatus(campaign.status) === "sent" ? "Sent" : "Updated"}:</strong> {normalizeStatus(campaign.status) === "sent" ? resolveCampaignSentDate(campaign) : resolveCampaignUpdatedDate(campaign)}</span>
                                                         </div>
@@ -2967,7 +3026,7 @@
                 </div>
 
                 <p class="txt-sm txt-hint m-0">
-                    <strong>{pendingSendCampaign.subject}</strong> will be sent to approximately
+                    <strong>{pendingSendCampaign.subject}</strong> will be submitted to your email provider for approximately
                     <strong> {pendingSendRecipientsCount}</strong> recipient(s).
                 </p>
                 <p class="txt-xs txt-hint m-t-xs m-b-0">{resolveSendConfirmationHint()}</p>
@@ -4223,8 +4282,10 @@
     }
 
     .campaign-row-item {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: flex-start;
-        gap: 10px;
+        gap: 8px 10px;
         border: 0;
         border-radius: 0;
         background: transparent;
@@ -4244,7 +4305,8 @@
     }
 
     .campaign-row-content {
-        width: 100%;
+        width: auto;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -4272,12 +4334,22 @@
     .campaign-row-actions {
         display: inline-flex;
         align-items: center;
+        justify-content: flex-end;
         gap: 8px;
         flex-wrap: wrap;
+        min-width: 0;
     }
 
     .campaign-row-btn {
-        min-width: 96px;
+        min-width: 0;
+        min-height: var(--smBtnHeight);
+        padding-inline: 10px;
+        white-space: nowrap;
+        flex: 0 1 auto;
+    }
+
+    .campaign-row-actions .action-btn {
+        min-width: 0;
     }
 
     .section-head-inline {
@@ -4459,6 +4531,14 @@
 
         .campaign-layout-grid {
             grid-template-columns: 1fr;
+        }
+
+        .campaign-row-item {
+            grid-template-columns: 1fr;
+        }
+
+        .campaign-row-actions {
+            justify-content: flex-start;
         }
 
         .campaign-builder-layout {

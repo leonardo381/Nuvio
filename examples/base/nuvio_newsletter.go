@@ -865,7 +865,7 @@ func findNuvioSubscriberByWebsiteEmail(
 	records, err := app.FindRecordsByFilter(
 		subscribersCollection,
 		"website={:website}",
-		"-updated,-created",
+		"-created",
 		nuvioNewsletterMaxSubscriberScan,
 		0,
 		dbx.Params{
@@ -1019,7 +1019,7 @@ func logNuvioNewsletterPublicBaseURLMissing(
 	}
 
 	app.Logger().Warn(
-		"NUVIO newsletter public base URL is missing; falling back to backend lifecycle endpoint.",
+		"NUVIO newsletter public base URL is missing; friendly public newsletter URLs require this env and will otherwise fall back to backend lifecycle endpoint.",
 		"env",
 		nuvioNewsletterPublicBaseURLEnv,
 		"lifecycle",
