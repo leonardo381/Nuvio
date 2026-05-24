@@ -56,6 +56,9 @@
 
   {#if isExpanded}
     <div class="object-field__body" id={getBodyId()}>
+      {#if field?.hint}
+        <div class="object-field__hint">{field.hint}</div>
+      {/if}
       {#if objectFields.length}
         <SchemaForm
           fields={objectFields}
@@ -133,6 +136,15 @@
   .object-field__body {
     padding: 10px 11px 11px;
     background: color-mix(in srgb, var(--baseColor) 95%, var(--baseAlt1Color));
+  }
+
+  .object-field__hint {
+    margin-bottom: 9px;
+    font-size: var(--smFontSize);
+    line-height: var(--smLineHeight);
+    color: var(--txtHintColor);
+    white-space: normal;
+    word-break: break-word;
   }
 
   .object-field__empty {
