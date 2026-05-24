@@ -24,19 +24,19 @@ import (
 )
 
 const (
-	nuvioSubscribersCollectionID      = "pbc_1661203400"
-	nuvioCampaignsCollectionID        = "pbc_1661203500"
-	nuvioNewsletterStatusPending      = "pending"
-	nuvioNewsletterStatusActive       = "active"
-	nuvioNewsletterStatusUnsubscribed = "unsubscribed"
-	nuvioNewsletterTokenBytes         = 32
-	nuvioNewsletterConfirmationTTL    = 72 * time.Hour
-	nuvioNewsletterMaxSubscriberScan  = 5000
-	nuvioNewsletterMaxNameLen         = 200
-	nuvioNewsletterTemplateSubjectMax = 160
-	nuvioNewsletterTemplateTextMax    = 4000
-	nuvioNewsletterPublicBaseURLEnv   = "NUVIO_PUBLIC_BASE_URL"
-	nuvioNewsletterCampaignBatchSize  = 100
+	nuvioSubscribersCollectionID                = "pbc_1661203400"
+	nuvioCampaignsCollectionID                  = "pbc_1661203500"
+	nuvioNewsletterStatusPending                = "pending"
+	nuvioNewsletterStatusActive                 = "active"
+	nuvioNewsletterStatusUnsubscribed           = "unsubscribed"
+	nuvioNewsletterTokenBytes                   = 32
+	nuvioNewsletterConfirmationTTL              = 72 * time.Hour
+	nuvioNewsletterMaxSubscriberScan            = 5000
+	nuvioNewsletterMaxNameLen                   = 200
+	nuvioNewsletterTemplateSubjectMax           = 160
+	nuvioNewsletterTemplateTextMax              = 4000
+	nuvioNewsletterPublicBaseURLEnv             = "NUVIO_PUBLIC_BASE_URL"
+	nuvioNewsletterCampaignBatchSize            = 100
 )
 
 type nuvioNewsletterConfirmationTemplateConfig struct {
@@ -199,9 +199,12 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 			return e.InternalServerError("Failed to save newsletter subscriber.", nil)
 		}
 
-		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
 		logNuvioNewsletterPublicBaseURLMissing(e.App, website, "confirm")
-		confirmPath := buildNuvioNewsletterConfirmPath(website)
+		confirmPath, err := buildNuvioNewsletterConfirmPath(website)
+		if err != nil {
+			return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
+		}
+		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
 		confirmURL, err := buildNuvioNewsletterLifecycleURL(
 			baseURL,
 			confirmPath,
@@ -238,12 +241,44 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	newsletterPublicGroup.GET("/confirm", func(e *core.RequestEvent) error {
 		rawToken := strings.TrimSpace(e.Request.URL.Query().Get("token"))
 		if rawToken == "" {
+			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+				return renderNuvioNewsletterLifecycleHTML(
+					e,
+					http.StatusBadRequest,
+					"Confirmation link expired",
+					"This confirmation link is invalid, expired, or was already used. You can subscribe again from the website.",
+				)
+			}
 			return e.BadRequestError("Missing confirmation token.", nil)
 		}
 
 		tokenHash := hashNuvioNewsletterToken(rawToken)
 		if tokenHash == "" {
+			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+				return renderNuvioNewsletterLifecycleHTML(
+					e,
+					http.StatusBadRequest,
+					"Confirmation link expired",
+					"This confirmation link is invalid, expired, or was already used. You can subscribe again from the website.",
+				)
+			}
 			return e.BadRequestError("Invalid or expired confirmation link.", nil)
+		}
+
+		if shouldRedirectNuvioNewsletterLifecycleToPublicPage(e.Request) {
+			redirectURL, ok := tryBuildNuvioNewsletterLifecycleRedirectURL(
+				e.App,
+				e.Request,
+				rawToken,
+				tokenHash,
+				func(app core.App, subscribersCollection *core.Collection, hash string) (*core.Record, error) {
+					return findNuvioSubscriberByConfirmationTokenHash(app, subscribersCollection, hash)
+				},
+				buildNuvioNewsletterConfirmPath,
+			)
+			if ok {
+				return e.Redirect(http.StatusTemporaryRedirect, redirectURL)
+			}
 		}
 
 		subscribersCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioSubscribersCollectionID)
@@ -258,6 +293,14 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 		)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
+				if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+					return renderNuvioNewsletterLifecycleHTML(
+						e,
+						http.StatusBadRequest,
+						"Confirmation link expired",
+						"This confirmation link is invalid, expired, or was already used. You can subscribe again from the website.",
+					)
+				}
 				return e.BadRequestError("Invalid or expired confirmation link.", nil)
 			}
 
@@ -278,6 +321,14 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 					saveErr.Error(),
 				)
 			}
+			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+				return renderNuvioNewsletterLifecycleHTML(
+					e,
+					http.StatusBadRequest,
+					"Confirmation link expired",
+					"This confirmation link is invalid, expired, or was already used. You can subscribe again from the website.",
+				)
+			}
 			return e.BadRequestError("Invalid or expired confirmation link.", nil)
 		}
 
@@ -296,6 +347,15 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 			return e.InternalServerError("Failed to confirm newsletter subscription.", nil)
 		}
 
+		if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+			return renderNuvioNewsletterLifecycleHTML(
+				e,
+				http.StatusOK,
+				"Newsletter subscription confirmed",
+				"Thank you - your subscription has been confirmed.",
+			)
+		}
+
 		return e.JSON(http.StatusOK, map[string]any{
 			"ok":      true,
 			"status":  nuvioNewsletterStatusActive,
@@ -306,12 +366,44 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	newsletterPublicGroup.GET("/unsubscribe", func(e *core.RequestEvent) error {
 		rawToken := strings.TrimSpace(e.Request.URL.Query().Get("token"))
 		if rawToken == "" {
+			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+				return renderNuvioNewsletterLifecycleHTML(
+					e,
+					http.StatusBadRequest,
+					"Invalid unsubscribe link",
+					"This unsubscribe link is invalid.",
+				)
+			}
 			return e.BadRequestError("Missing unsubscribe token.", nil)
 		}
 
 		tokenHash := hashNuvioNewsletterToken(rawToken)
 		if tokenHash == "" {
+			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+				return renderNuvioNewsletterLifecycleHTML(
+					e,
+					http.StatusBadRequest,
+					"Invalid unsubscribe link",
+					"This unsubscribe link is invalid.",
+				)
+			}
 			return e.BadRequestError("Invalid unsubscribe link.", nil)
+		}
+
+		if shouldRedirectNuvioNewsletterLifecycleToPublicPage(e.Request) {
+			redirectURL, ok := tryBuildNuvioNewsletterLifecycleRedirectURL(
+				e.App,
+				e.Request,
+				rawToken,
+				tokenHash,
+				func(app core.App, subscribersCollection *core.Collection, hash string) (*core.Record, error) {
+					return findNuvioSubscriberByUnsubscribeTokenHash(app, subscribersCollection, hash)
+				},
+				buildNuvioNewsletterUnsubscribePath,
+			)
+			if ok {
+				return e.Redirect(http.StatusTemporaryRedirect, redirectURL)
+			}
 		}
 
 		subscribersCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioSubscribersCollectionID)
@@ -326,6 +418,14 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 		)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
+				if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+					return renderNuvioNewsletterLifecycleHTML(
+						e,
+						http.StatusBadRequest,
+						"Invalid unsubscribe link",
+						"This unsubscribe link is invalid.",
+					)
+				}
 				return e.BadRequestError("Invalid unsubscribe link.", nil)
 			}
 
@@ -339,6 +439,15 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 				if err := e.App.Save(subscriber); err != nil {
 					return e.InternalServerError("Failed to update newsletter subscriber.", nil)
 				}
+			}
+
+			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+				return renderNuvioNewsletterLifecycleHTML(
+					e,
+					http.StatusOK,
+					"Already unsubscribed",
+					"You are already unsubscribed from these newsletter updates.",
+				)
 			}
 
 			return e.JSON(http.StatusOK, map[string]any{
@@ -356,6 +465,15 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 
 		if err := e.App.Save(subscriber); err != nil {
 			return e.InternalServerError("Failed to unsubscribe newsletter subscriber.", nil)
+		}
+
+		if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
+			return renderNuvioNewsletterLifecycleHTML(
+				e,
+				http.StatusOK,
+				"You are unsubscribed",
+				"You will no longer receive these newsletter emails.",
+			)
 		}
 
 		return e.JSON(http.StatusOK, map[string]any{
@@ -464,9 +582,12 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 			return e.InternalServerError("Failed to save newsletter subscriber.", nil)
 		}
 
-		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
 		logNuvioNewsletterPublicBaseURLMissing(e.App, website, "confirm")
-		confirmPath := buildNuvioNewsletterConfirmPath(website)
+		confirmPath, err := buildNuvioNewsletterConfirmPath(website)
+		if err != nil {
+			return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
+		}
+		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
 		confirmURL, err := buildNuvioNewsletterLifecycleURL(baseURL, confirmPath, rawToken)
 		if err != nil {
 			return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
@@ -593,9 +714,12 @@ func sendNuvioNewsletterCampaign(
 		return nil, err
 	}
 
-	baseURL := resolveNuvioNewsletterPublicBaseURL(request)
 	logNuvioNewsletterPublicBaseURLMissing(app, website, "unsubscribe")
-	unsubscribePath := buildNuvioNewsletterUnsubscribePath(website)
+	unsubscribePath, err := buildNuvioNewsletterUnsubscribePath(website)
+	if err != nil {
+		return nil, err
+	}
+	baseURL := resolveNuvioNewsletterPublicBaseURL(request)
 	websiteName := strings.TrimSpace(resolveWebsiteDisplayName(website))
 	if websiteName == "" {
 		websiteName = "Website"
@@ -999,6 +1123,155 @@ func hasNuvioNewsletterPublicBaseURLConfigured() bool {
 	return resolveNuvioNewsletterPublicBaseURLFromEnv() != ""
 }
 
+func shouldRedirectNuvioNewsletterLifecycleToPublicPage(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+
+	if strings.EqualFold(strings.TrimSpace(request.URL.Query().Get("format")), "json") {
+		return false
+	}
+
+	accept := strings.ToLower(strings.TrimSpace(request.Header.Get("Accept")))
+	if accept == "" {
+		return true
+	}
+
+	if strings.Contains(accept, "text/html") || strings.Contains(accept, "*/*") {
+		return true
+	}
+
+	if strings.Contains(accept, "application/json") {
+		return false
+	}
+
+	return false
+}
+
+func shouldRenderNuvioNewsletterLifecycleHTML(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+
+	if strings.EqualFold(strings.TrimSpace(request.URL.Query().Get("format")), "json") {
+		return false
+	}
+
+	accept := strings.ToLower(strings.TrimSpace(request.Header.Get("Accept")))
+	if accept == "" {
+		return true
+	}
+
+	if strings.Contains(accept, "text/html") || strings.Contains(accept, "*/*") {
+		return true
+	}
+
+	return false
+}
+
+func tryBuildNuvioNewsletterLifecycleRedirectURL(
+	app core.App,
+	request *http.Request,
+	rawToken string,
+	tokenHash string,
+	findSubscriberByTokenHash func(core.App, *core.Collection, string) (*core.Record, error),
+	buildPath func(*core.Record) (string, error),
+) (string, bool) {
+	if app == nil || request == nil || findSubscriberByTokenHash == nil || buildPath == nil {
+		return "", false
+	}
+
+	if !hasNuvioNewsletterPublicBaseURLConfigured() {
+		return "", false
+	}
+
+	trimmedToken := strings.TrimSpace(rawToken)
+	trimmedHash := strings.TrimSpace(tokenHash)
+	if trimmedToken == "" || trimmedHash == "" {
+		return "", false
+	}
+
+	subscribersCollection, err := app.FindCachedCollectionByNameOrId(nuvioSubscribersCollectionID)
+	if err != nil {
+		return "", false
+	}
+
+	subscriber, err := findSubscriberByTokenHash(app, subscribersCollection, trimmedHash)
+	if err != nil || subscriber == nil {
+		return "", false
+	}
+
+	websiteID := strings.TrimSpace(subscriber.GetString("website"))
+	if websiteID == "" {
+		return "", false
+	}
+
+	website, err := app.FindRecordById(nuvioWebsitesCollectionID, websiteID)
+	if err != nil || website == nil {
+		return "", false
+	}
+
+	path, err := buildPath(website)
+	if err != nil || !strings.HasPrefix(path, "/site/") {
+		return "", false
+	}
+
+	baseURL := resolveNuvioNewsletterPublicBaseURLFromEnv()
+	redirectURL, err := buildNuvioNewsletterLifecycleURL(baseURL, path, trimmedToken)
+	if err != nil {
+		return "", false
+	}
+
+	return redirectURL, true
+}
+
+func renderNuvioNewsletterLifecycleHTML(
+	e *core.RequestEvent,
+	status int,
+	title string,
+	message string,
+) error {
+	if e == nil {
+		return nil
+	}
+
+	safeTitle := html.EscapeString(strings.TrimSpace(title))
+	if safeTitle == "" {
+		safeTitle = "Newsletter update"
+	}
+
+	safeMessage := html.EscapeString(strings.TrimSpace(message))
+	if safeMessage == "" {
+		safeMessage = "Your newsletter request has been processed."
+	}
+
+	page := strings.Join([]string{
+		"<!doctype html>",
+		`<html lang="en">`,
+		"<head>",
+		`<meta charset="utf-8">`,
+		`<meta name="viewport" content="width=device-width,initial-scale=1">`,
+		`<title>` + safeTitle + `</title>`,
+		`<style>`,
+		`body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#111827}`,
+		`.wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}`,
+		`.card{max-width:560px;width:100%;background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:28px;box-shadow:0 10px 20px rgba(17,24,39,.06)}`,
+		`h1{margin:0 0 10px;font-size:1.35rem;line-height:1.3}`,
+		`p{margin:0;font-size:1rem;line-height:1.55;color:#374151}`,
+		`</style>`,
+		"</head>",
+		"<body>",
+		`<main class="wrap"><section class="card">`,
+		`<h1>` + safeTitle + `</h1>`,
+		`<p>` + safeMessage + `</p>`,
+		`</section></main>`,
+		"</body>",
+		"</html>",
+	}, "")
+
+	return e.HTML(status, page)
+}
+
 func logNuvioNewsletterPublicBaseURLMissing(
 	app core.App,
 	website *core.Record,
@@ -1019,7 +1292,7 @@ func logNuvioNewsletterPublicBaseURLMissing(
 	}
 
 	app.Logger().Warn(
-		"NUVIO newsletter public base URL is missing; friendly public newsletter URLs require this env and will otherwise fall back to backend lifecycle endpoint.",
+		"NUVIO_PUBLIC_BASE_URL is required for visitor-facing newsletter lifecycle links.",
 		"env",
 		nuvioNewsletterPublicBaseURLEnv,
 		"lifecycle",
@@ -1144,21 +1417,21 @@ func normalizeNuvioNewsletterBaseURL(raw string) string {
 	return parsed.String()
 }
 
-func buildNuvioNewsletterConfirmPath(website *core.Record) string {
-	if !hasNuvioNewsletterPublicBaseURLConfigured() {
-		return "/api/nuvio/newsletter/confirm"
-	}
-
+func buildNuvioNewsletterConfirmPath(website *core.Record) (string, error) {
 	if website == nil {
-		return "/api/nuvio/newsletter/confirm"
+		return "/api/nuvio/newsletter/confirm", nil
 	}
 
 	slug := strings.TrimSpace(website.GetString("slug"))
 	if slug == "" {
-		return "/api/nuvio/newsletter/confirm"
+		return "/api/nuvio/newsletter/confirm", nil
 	}
 
-	return "/site/" + url.PathEscape(slug) + "/newsletter/confirm"
+	if !hasNuvioNewsletterPublicBaseURLConfigured() {
+		return "/api/nuvio/newsletter/confirm", nil
+	}
+
+	return "/site/" + url.PathEscape(slug) + "/newsletter/confirm", nil
 }
 
 func buildNuvioNewsletterLifecycleURL(baseURL string, path string, rawToken string) (string, error) {
@@ -1625,21 +1898,21 @@ func normalizeNuvioEmail(raw string) (string, bool) {
 	return email, true
 }
 
-func buildNuvioNewsletterUnsubscribePath(website *core.Record) string {
-	if !hasNuvioNewsletterPublicBaseURLConfigured() {
-		return "/api/nuvio/newsletter/unsubscribe"
-	}
-
+func buildNuvioNewsletterUnsubscribePath(website *core.Record) (string, error) {
 	if website == nil {
-		return "/api/nuvio/newsletter/unsubscribe"
+		return "/api/nuvio/newsletter/unsubscribe", nil
 	}
 
 	slug := strings.TrimSpace(website.GetString("slug"))
 	if slug == "" {
-		return "/api/nuvio/newsletter/unsubscribe"
+		return "/api/nuvio/newsletter/unsubscribe", nil
 	}
 
-	return "/site/" + url.PathEscape(slug) + "/newsletter/unsubscribe"
+	if !hasNuvioNewsletterPublicBaseURLConfigured() {
+		return "/api/nuvio/newsletter/unsubscribe", nil
+	}
+
+	return "/site/" + url.PathEscape(slug) + "/newsletter/unsubscribe", nil
 }
 
 func buildNuvioCampaignRecipientMessage(
