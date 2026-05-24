@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,18 +27,33 @@ const (
 	nuvioReportsTrafficPeriodAllTime   = "allTime"
 )
 
+var (
+	nuvioReportsConversionEventNames = []string{
+		"contact_form_submitted",
+		"whatsapp_click",
+		"booking_submitted",
+		"newsletter_signup",
+		"phone_click",
+		"email_click",
+		"directions_click",
+	}
+	nuvioReportsScrollDepthEventName  = "scroll_depth_reached"
+	nuvioReportsScrollDepthThresholds = []int{25, 50, 75, 90}
+)
+
 var nuvioReportsHTTPClient = &http.Client{
 	Timeout: 15 * time.Second,
 }
 
 type nuvioWebsiteReportsAnalyticsConfig struct {
-	FeatureAvailable bool
-	Provider         string
-	Enabled          bool
-	SiteID           string
-	ScriptEnabled    bool
-	ScriptURL        string
-	APIURL           string
+	FeatureAvailable  bool
+	Provider          string
+	Enabled           bool
+	SiteID            string
+	ScriptEnabled     bool
+	ScriptURL         string
+	APIURL            string
+	EventsScrollDepth bool
 }
 
 type nuvioUmamiConfig struct {
@@ -116,6 +132,73 @@ type nuvioReportsTrafficOperatingSystem struct {
 	Visitors        int    `json:"visitors"`
 }
 
+type nuvioReportsTrafficConversionTotals struct {
+	AllEvents        int `json:"allEvents"`
+	UniqueEventTypes int `json:"uniqueEventTypes"`
+}
+
+type nuvioReportsTrafficConversionByType struct {
+	Event string `json:"event"`
+	Count int    `json:"count"`
+}
+
+type nuvioReportsTrafficConversionByPage struct {
+	PageSlug string `json:"pageSlug"`
+	Count    int    `json:"count"`
+}
+
+type nuvioReportsTrafficConversionBySourceBlock struct {
+	SourceBlock string `json:"sourceBlock"`
+	Count       int    `json:"count"`
+}
+
+type nuvioReportsTrafficConversionByCtaType struct {
+	CtaType string `json:"ctaType"`
+	Count   int    `json:"count"`
+}
+
+type nuvioReportsTrafficConversions struct {
+	State         string                                       `json:"state"`
+	Message       string                                       `json:"message,omitempty"`
+	Totals        nuvioReportsTrafficConversionTotals          `json:"totals"`
+	ByType        []nuvioReportsTrafficConversionByType        `json:"byType"`
+	ByPage        []nuvioReportsTrafficConversionByPage        `json:"byPage"`
+	BySourceBlock []nuvioReportsTrafficConversionBySourceBlock `json:"bySourceBlock"`
+	ByCtaType     []nuvioReportsTrafficConversionByCtaType     `json:"byCtaType"`
+}
+
+type nuvioReportsTrafficScrollDepthThreshold struct {
+	Depth int `json:"depth"`
+	Count int `json:"count"`
+}
+
+type nuvioReportsTrafficScrollDepthByPage struct {
+	PageSlug string `json:"pageSlug"`
+	Count    int    `json:"count"`
+}
+
+type nuvioReportsTrafficScrollDepth struct {
+	State      string                                    `json:"state"`
+	Message    string                                    `json:"message,omitempty"`
+	Thresholds []nuvioReportsTrafficScrollDepthThreshold `json:"thresholds"`
+	ByPage     []nuvioReportsTrafficScrollDepthByPage    `json:"byPage"`
+}
+
+type nuvioReportsTrafficEngagement struct {
+	ScrollDepth nuvioReportsTrafficScrollDepth `json:"scrollDepth"`
+}
+
+type nuvioReportsTrafficInsight struct {
+	ID             string   `json:"id"`
+	Severity       string   `json:"severity"`
+	Area           string   `json:"area"`
+	Title          string   `json:"title"`
+	Evidence       []string `json:"evidence"`
+	Recommendation string   `json:"recommendation"`
+	Confidence     string   `json:"confidence"`
+	TargetRoute    string   `json:"targetRoute,omitempty"`
+}
+
 type nuvioReportsTrafficResponse struct {
 	State            string                               `json:"state"`
 	Message          string                               `json:"message,omitempty"`
@@ -133,6 +216,9 @@ type nuvioReportsTrafficResponse struct {
 	Cities           []nuvioReportsTrafficCity            `json:"cities"`
 	Browsers         []nuvioReportsTrafficBrowser         `json:"browsers"`
 	OperatingSystems []nuvioReportsTrafficOperatingSystem `json:"operatingSystems"`
+	Conversions      nuvioReportsTrafficConversions       `json:"conversions"`
+	Engagement       nuvioReportsTrafficEngagement        `json:"engagement"`
+	Insights         []nuvioReportsTrafficInsight         `json:"insights"`
 	FetchedAt        string                               `json:"fetchedAt,omitempty"`
 }
 
@@ -156,6 +242,8 @@ type nuvioReportsTrafficData struct {
 	Cities           []nuvioReportsTrafficCity
 	Browsers         []nuvioReportsTrafficBrowser
 	OperatingSystems []nuvioReportsTrafficOperatingSystem
+	Conversions      nuvioReportsTrafficConversions
+	Engagement       nuvioReportsTrafficEngagement
 }
 
 type nuvioUmamiStatsResponse struct {
@@ -180,6 +268,25 @@ type nuvioUmamiPageviewsPoint struct {
 type nuvioUmamiPageviewsResponse struct {
 	Pageviews []nuvioUmamiPageviewsPoint `json:"pageviews"`
 	Sessions  []nuvioUmamiPageviewsPoint `json:"sessions"`
+}
+
+type nuvioUmamiEventsStatsData struct {
+	Events       any `json:"events"`
+	UniqueEvents any `json:"uniqueEvents"`
+}
+
+type nuvioUmamiEventsStatsResponse struct {
+	Data nuvioUmamiEventsStatsData `json:"data"`
+}
+
+type nuvioUmamiEventsSeriesRow struct {
+	X any `json:"x"`
+	Y any `json:"y"`
+}
+
+type nuvioUmamiEventDataValueRow struct {
+	Value any `json:"value"`
+	Total any `json:"total"`
 }
 
 type nuvioReportsTrafficStateError struct {
@@ -323,6 +430,7 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 			umamiConfig,
 			siteID,
 			periodQuery,
+			analyticsConfig.EventsScrollDepth,
 		)
 		if err != nil {
 			if stateErr, ok := unwrapNuvioReportsTrafficStateError(err); ok {
@@ -361,7 +469,7 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 			responseMessage = "Some traffic metrics are temporarily unavailable."
 		}
 
-		return e.JSON(http.StatusOK, nuvioReportsTrafficResponse{
+		response := nuvioReportsTrafficResponse{
 			State:            "ok",
 			Message:          responseMessage,
 			Provider:         "umami",
@@ -378,8 +486,23 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 			Cities:           trafficData.Cities,
 			Browsers:         trafficData.Browsers,
 			OperatingSystems: trafficData.OperatingSystems,
+			Conversions:      trafficData.Conversions,
+			Engagement:       trafficData.Engagement,
+			Insights:         []nuvioReportsTrafficInsight{},
 			FetchedAt:        time.Now().UTC().Format(time.RFC3339),
-		})
+		}
+		response.Insights = buildNuvioReportsTrafficInsights(
+			response.State,
+			response.Message,
+			response.Summary,
+			response.TopPages,
+			response.Sources,
+			response.Conversions,
+			response.Engagement,
+			true,
+		)
+
+		return e.JSON(http.StatusOK, response)
 	})
 }
 
@@ -394,13 +517,14 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 
 	settings := parseNuvioSettingsObject(website.Get("settings"))
 	config := nuvioWebsiteReportsAnalyticsConfig{
-		FeatureAvailable: true,
-		Provider:         "",
-		Enabled:          false,
-		SiteID:           "",
-		ScriptEnabled:    false,
-		ScriptURL:        "",
-		APIURL:           "",
+		FeatureAvailable:  true,
+		Provider:          "",
+		Enabled:           false,
+		SiteID:            "",
+		ScriptEnabled:     false,
+		ScriptURL:         "",
+		APIURL:            "",
+		EventsScrollDepth: false,
 	}
 
 	if featureFlags, ok := toStringAnyMap(settings["featureFlags"]); ok {
@@ -424,6 +548,11 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 			}
 			config.ScriptURL = strings.TrimSpace(parseStringValue(analyticsSettings["scriptUrl"]))
 			config.APIURL = strings.TrimSpace(parseStringValue(analyticsSettings["apiUrl"]))
+			if eventsSettings, ok := toStringAnyMap(analyticsSettings["events"]); ok {
+				if value, ok := parseBoolValue(eventsSettings["scrollDepth"]); ok {
+					config.EventsScrollDepth = value
+				}
+			}
 		}
 	}
 
@@ -573,7 +702,7 @@ func buildNuvioReportsTrafficStateResponse(
 	provider string,
 	siteID string,
 ) nuvioReportsTrafficResponse {
-	return nuvioReportsTrafficResponse{
+	response := nuvioReportsTrafficResponse{
 		State:            state,
 		Message:          message,
 		Provider:         strings.TrimSpace(provider),
@@ -586,7 +715,24 @@ func buildNuvioReportsTrafficStateResponse(
 		Cities:           []nuvioReportsTrafficCity{},
 		Browsers:         []nuvioReportsTrafficBrowser{},
 		OperatingSystems: []nuvioReportsTrafficOperatingSystem{},
+		Conversions:      buildNuvioReportsDefaultConversions("unavailable", "Conversion event metrics are unavailable."),
+		Engagement: nuvioReportsTrafficEngagement{
+			ScrollDepth: buildNuvioReportsDefaultScrollDepth("unavailable", "Scroll depth metrics are unavailable."),
+		},
+		Insights: []nuvioReportsTrafficInsight{},
 	}
+	response.Insights = buildNuvioReportsTrafficInsights(
+		response.State,
+		response.Message,
+		nil,
+		nil,
+		nil,
+		response.Conversions,
+		response.Engagement,
+		false,
+	)
+
+	return response
 }
 
 func fetchNuvioUmamiTrafficData(
@@ -594,6 +740,7 @@ func fetchNuvioUmamiTrafficData(
 	config nuvioUmamiConfig,
 	siteID string,
 	periodQuery nuvioReportsTrafficPeriodQuery,
+	scrollDepthEnabled bool,
 ) (*nuvioReportsTrafficData, int, error) {
 	authHeaders, err := resolveNuvioUmamiAuthHeaders(ctx, config)
 	if err != nil {
@@ -671,6 +818,16 @@ func fetchNuvioUmamiTrafficData(
 		partialIssueCount++
 	}
 
+	conversions, engagement, conversionIssueCount := fetchNuvioUmamiConversionAndEngagementData(
+		ctx,
+		config,
+		authHeaders,
+		siteID,
+		periodQuery,
+		scrollDepthEnabled,
+	)
+	partialIssueCount += conversionIssueCount
+
 	return &nuvioReportsTrafficData{
 		Summary:          summary,
 		TopPages:         topPages,
@@ -683,6 +840,8 @@ func fetchNuvioUmamiTrafficData(
 		Cities:           cities,
 		Browsers:         browsers,
 		OperatingSystems: operatingSystems,
+		Conversions:      conversions,
+		Engagement:       engagement,
 	}, partialIssueCount, nil
 }
 
@@ -1018,6 +1177,902 @@ func fetchNuvioUmamiPageviewsSeries(
 	}
 
 	return nil
+}
+
+func buildNuvioReportsDefaultConversions(state string, message string) nuvioReportsTrafficConversions {
+	byType := make([]nuvioReportsTrafficConversionByType, 0, len(nuvioReportsConversionEventNames))
+	for _, eventName := range nuvioReportsConversionEventNames {
+		byType = append(byType, nuvioReportsTrafficConversionByType{
+			Event: eventName,
+			Count: 0,
+		})
+	}
+
+	return nuvioReportsTrafficConversions{
+		State:   strings.TrimSpace(state),
+		Message: strings.TrimSpace(message),
+		Totals: nuvioReportsTrafficConversionTotals{
+			AllEvents:        0,
+			UniqueEventTypes: 0,
+		},
+		ByType:        byType,
+		ByPage:        []nuvioReportsTrafficConversionByPage{},
+		BySourceBlock: []nuvioReportsTrafficConversionBySourceBlock{},
+		ByCtaType:     []nuvioReportsTrafficConversionByCtaType{},
+	}
+}
+
+func buildNuvioReportsDefaultScrollDepth(state string, message string) nuvioReportsTrafficScrollDepth {
+	thresholds := make([]nuvioReportsTrafficScrollDepthThreshold, 0, len(nuvioReportsScrollDepthThresholds))
+	for _, depth := range nuvioReportsScrollDepthThresholds {
+		thresholds = append(thresholds, nuvioReportsTrafficScrollDepthThreshold{
+			Depth: depth,
+			Count: 0,
+		})
+	}
+
+	return nuvioReportsTrafficScrollDepth{
+		State:      strings.TrimSpace(state),
+		Message:    strings.TrimSpace(message),
+		Thresholds: thresholds,
+		ByPage:     []nuvioReportsTrafficScrollDepthByPage{},
+	}
+}
+
+func fetchNuvioUmamiConversionAndEngagementData(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+	scrollDepthEnabled bool,
+) (nuvioReportsTrafficConversions, nuvioReportsTrafficEngagement, int) {
+	conversions := buildNuvioReportsDefaultConversions(
+		"unavailable",
+		"Conversion event metrics are unavailable.",
+	)
+	scrollDepthState := "disabled"
+	scrollDepthMessage := "Scroll depth tracking is disabled."
+	if scrollDepthEnabled {
+		scrollDepthState = "unavailable"
+		scrollDepthMessage = "Scroll depth metrics are unavailable."
+	}
+	engagement := nuvioReportsTrafficEngagement{
+		ScrollDepth: buildNuvioReportsDefaultScrollDepth(scrollDepthState, scrollDepthMessage),
+	}
+
+	issueCount := 0
+
+	_, statsErr := fetchNuvioUmamiEventsStats(ctx, config, authHeaders, siteID, periodQuery)
+	if statsErr != nil {
+		issueCount++
+	}
+
+	seriesRows, seriesErr := fetchNuvioUmamiEventsSeries(ctx, config, authHeaders, siteID, periodQuery)
+	if seriesErr != nil {
+		issueCount++
+	}
+
+	if statsErr == nil || seriesErr == nil {
+		eventCountByName := map[string]int{}
+		for _, row := range seriesRows {
+			eventName := parseNuvioUmamiAnyString(row.X, "")
+			if eventName == "" {
+				continue
+			}
+			eventCountByName[eventName] += parseNuvioUmamiAnyInt(row.Y)
+		}
+
+		for index := range conversions.ByType {
+			eventName := conversions.ByType[index].Event
+			conversions.ByType[index].Count = eventCountByName[eventName]
+		}
+		totalEvents := 0
+		uniqueEventTypes := 0
+		for _, item := range conversions.ByType {
+			if item.Count < 1 {
+				continue
+			}
+			totalEvents += item.Count
+			uniqueEventTypes++
+		}
+		conversions.Totals.AllEvents = totalEvents
+		conversions.Totals.UniqueEventTypes = uniqueEventTypes
+
+		conversions.State = "ok"
+		conversions.Message = "Conversion event metrics are available."
+		if statsErr != nil || seriesErr != nil {
+			conversions.State = "partial"
+			conversions.Message = "Some analytics event breakdowns are unavailable."
+		}
+	}
+
+	conversionPropertiesIssueCount := 0
+	conversionByPageMap := map[string]int{}
+	conversionBySourceBlockMap := map[string]int{}
+	conversionByCtaTypeMap := map[string]int{}
+
+	for _, eventName := range nuvioReportsConversionEventNames {
+		pageRows, err := fetchNuvioUmamiEventDataValues(
+			ctx,
+			config,
+			authHeaders,
+			siteID,
+			periodQuery,
+			eventName,
+			"pageSlug",
+		)
+		if err != nil {
+			conversionPropertiesIssueCount++
+		} else {
+			accumulateNuvioReportsValueRows(conversionByPageMap, pageRows)
+		}
+
+		sourceRows, err := fetchNuvioUmamiEventDataValues(
+			ctx,
+			config,
+			authHeaders,
+			siteID,
+			periodQuery,
+			eventName,
+			"sourceBlock",
+		)
+		if err != nil {
+			conversionPropertiesIssueCount++
+		} else {
+			accumulateNuvioReportsValueRows(conversionBySourceBlockMap, sourceRows)
+		}
+
+		ctaRows, err := fetchNuvioUmamiEventDataValues(
+			ctx,
+			config,
+			authHeaders,
+			siteID,
+			periodQuery,
+			eventName,
+			"ctaType",
+		)
+		if err != nil {
+			conversionPropertiesIssueCount++
+		} else {
+			accumulateNuvioReportsValueRows(conversionByCtaTypeMap, ctaRows)
+		}
+	}
+
+	if conversionPropertiesIssueCount > 0 {
+		issueCount += conversionPropertiesIssueCount
+		if conversions.State == "ok" {
+			conversions.State = "partial"
+			conversions.Message = "Some analytics event breakdowns are unavailable."
+		}
+	}
+
+	conversions.ByPage = convertNuvioReportsCountMapToByPageRows(conversionByPageMap)
+	conversions.BySourceBlock = convertNuvioReportsCountMapToBySourceBlockRows(conversionBySourceBlockMap)
+	conversions.ByCtaType = convertNuvioReportsCountMapToByCtaTypeRows(conversionByCtaTypeMap)
+	if conversions.State == "unavailable" && (len(conversions.ByPage) > 0 ||
+		len(conversions.BySourceBlock) > 0 ||
+		len(conversions.ByCtaType) > 0) {
+		conversions.State = "partial"
+		conversions.Message = "Some analytics event breakdowns are unavailable."
+	}
+
+	if !scrollDepthEnabled {
+		return conversions, engagement, issueCount
+	}
+
+	scrollDepthPropertyIssues := 0
+	scrollDepthRows, err := fetchNuvioUmamiEventDataValues(
+		ctx,
+		config,
+		authHeaders,
+		siteID,
+		periodQuery,
+		nuvioReportsScrollDepthEventName,
+		"depth",
+	)
+	if err != nil {
+		scrollDepthPropertyIssues++
+	} else {
+		thresholdCounts := map[int]int{}
+		for _, row := range scrollDepthRows {
+			depthValue := parseNuvioReportsPropertyDepth(row.Value)
+			if depthValue < 1 {
+				continue
+			}
+			thresholdCounts[depthValue] += parseNuvioUmamiAnyInt(row.Total)
+		}
+		for index := range engagement.ScrollDepth.Thresholds {
+			depth := engagement.ScrollDepth.Thresholds[index].Depth
+			engagement.ScrollDepth.Thresholds[index].Count = thresholdCounts[depth]
+		}
+	}
+
+	scrollDepthPageRows, err := fetchNuvioUmamiEventDataValues(
+		ctx,
+		config,
+		authHeaders,
+		siteID,
+		periodQuery,
+		nuvioReportsScrollDepthEventName,
+		"pageSlug",
+	)
+	if err != nil {
+		scrollDepthPropertyIssues++
+	} else {
+		byPageCounts := map[string]int{}
+		accumulateNuvioReportsValueRows(byPageCounts, scrollDepthPageRows)
+		engagement.ScrollDepth.ByPage = convertNuvioReportsCountMapToScrollDepthByPageRows(byPageCounts)
+	}
+
+	if scrollDepthPropertyIssues > 0 {
+		issueCount += scrollDepthPropertyIssues
+		engagement.ScrollDepth.State = "unavailable"
+		engagement.ScrollDepth.Message = "Scroll depth metrics are unavailable."
+		return conversions, engagement, issueCount
+	}
+
+	engagement.ScrollDepth.State = "ok"
+	engagement.ScrollDepth.Message = "Scroll depth events are available."
+	return conversions, engagement, issueCount
+}
+
+func fetchNuvioUmamiEventsStats(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) (nuvioUmamiEventsStatsResponse, error) {
+	query := buildNuvioUmamiBaseQuery(periodQuery)
+	endpointPath := buildNuvioUmamiWebsiteEndpointPath(siteID, "events/stats")
+	requestURL := buildNuvioUmamiRequestURL(config.RequestBaseURL, endpointPath, query)
+
+	payload := nuvioUmamiEventsStatsResponse{}
+	if err := executeNuvioUmamiJSONRequest(ctx, http.MethodGet, requestURL, authHeaders, nil, &payload); err != nil {
+		return nuvioUmamiEventsStatsResponse{}, err
+	}
+
+	return payload, nil
+}
+
+func fetchNuvioUmamiEventsSeries(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+) ([]nuvioUmamiEventsSeriesRow, error) {
+	query := buildNuvioUmamiBaseQuery(periodQuery)
+	if periodQuery.Unit != "" {
+		query.Set("unit", periodQuery.Unit)
+	}
+	if periodQuery.Timezone != "" {
+		query.Set("timezone", periodQuery.Timezone)
+	}
+
+	endpointPath := buildNuvioUmamiWebsiteEndpointPath(siteID, "events/series")
+	requestURL := buildNuvioUmamiRequestURL(config.RequestBaseURL, endpointPath, query)
+
+	rawPayload := any(nil)
+	if err := executeNuvioUmamiJSONRequest(ctx, http.MethodGet, requestURL, authHeaders, nil, &rawPayload); err != nil {
+		return nil, err
+	}
+
+	return parseNuvioUmamiEventsSeriesPayload(rawPayload)
+}
+
+func fetchNuvioUmamiEventDataValues(
+	ctx context.Context,
+	config nuvioUmamiConfig,
+	authHeaders map[string]string,
+	siteID string,
+	periodQuery nuvioReportsTrafficPeriodQuery,
+	eventName string,
+	propertyName string,
+) ([]nuvioUmamiEventDataValueRow, error) {
+	query := buildNuvioUmamiBaseQuery(periodQuery)
+	normalizedEventName := strings.TrimSpace(eventName)
+	normalizedPropertyName := strings.TrimSpace(propertyName)
+	if normalizedEventName != "" {
+		query.Set("event", normalizedEventName)
+		// Legacy compatibility for older Umami versions.
+		query.Set("eventName", normalizedEventName)
+	}
+	if normalizedPropertyName != "" {
+		query.Set("propertyName", normalizedPropertyName)
+	}
+
+	endpointPath := buildNuvioUmamiWebsiteEndpointPath(siteID, "event-data/values")
+	requestURL := buildNuvioUmamiRequestURL(config.RequestBaseURL, endpointPath, query)
+
+	rawPayload := any(nil)
+	if err := executeNuvioUmamiJSONRequest(ctx, http.MethodGet, requestURL, authHeaders, nil, &rawPayload); err != nil {
+		return nil, err
+	}
+
+	return parseNuvioUmamiEventDataValuesPayload(rawPayload)
+}
+
+func parseNuvioReportsPropertyDepth(value any) int {
+	parsed := parseNuvioUmamiAnyInt(value)
+	if parsed >= 1 && parsed <= 100 {
+		return parsed
+	}
+	return 0
+}
+
+func parseNuvioUmamiEventsSeriesPayload(raw any) ([]nuvioUmamiEventsSeriesRow, error) {
+	switch typed := raw.(type) {
+	case []any:
+		rows := make([]nuvioUmamiEventsSeriesRow, 0, len(typed))
+		for _, item := range typed {
+			rowMap, ok := toStringAnyMap(item)
+			if !ok {
+				return nil, newNuvioUmamiUnexpectedEventShapeError("events/series")
+			}
+			rows = append(rows, nuvioUmamiEventsSeriesRow{
+				X: rowMap["x"],
+				Y: rowMap["y"],
+			})
+		}
+		return rows, nil
+	case map[string]any:
+		nested, exists := typed["data"]
+		if !exists {
+			return nil, newNuvioUmamiUnexpectedEventShapeError("events/series")
+		}
+		return parseNuvioUmamiEventsSeriesPayload(nested)
+	default:
+		return nil, newNuvioUmamiUnexpectedEventShapeError("events/series")
+	}
+}
+
+func parseNuvioUmamiEventDataValuesPayload(raw any) ([]nuvioUmamiEventDataValueRow, error) {
+	switch typed := raw.(type) {
+	case []any:
+		rows := make([]nuvioUmamiEventDataValueRow, 0, len(typed))
+		for _, item := range typed {
+			rowMap, ok := toStringAnyMap(item)
+			if !ok {
+				return nil, newNuvioUmamiUnexpectedEventShapeError("event-data/values")
+			}
+			rows = append(rows, nuvioUmamiEventDataValueRow{
+				Value: rowMap["value"],
+				Total: rowMap["total"],
+			})
+		}
+		return rows, nil
+	case map[string]any:
+		nested, exists := typed["data"]
+		if !exists {
+			return nil, newNuvioUmamiUnexpectedEventShapeError("event-data/values")
+		}
+		return parseNuvioUmamiEventDataValuesPayload(nested)
+	default:
+		return nil, newNuvioUmamiUnexpectedEventShapeError("event-data/values")
+	}
+}
+
+func newNuvioUmamiUnexpectedEventShapeError(endpoint string) error {
+	normalizedEndpoint := strings.Trim(strings.TrimSpace(endpoint), "/")
+	if normalizedEndpoint == "" {
+		normalizedEndpoint = "events"
+	}
+	return fmt.Errorf("unexpected_umami_event_response_shape: %s", normalizedEndpoint)
+}
+
+func accumulateNuvioReportsValueRows(target map[string]int, rows []nuvioUmamiEventDataValueRow) {
+	if len(rows) == 0 {
+		return
+	}
+
+	for _, row := range rows {
+		key := strings.TrimSpace(parseStringValue(row.Value))
+		if key == "" {
+			continue
+		}
+		target[key] += parseNuvioUmamiAnyInt(row.Total)
+	}
+}
+
+func sortedNuvioReportsCountEntries(values map[string]int) []struct {
+	Key   string
+	Count int
+} {
+	rows := make([]struct {
+		Key   string
+		Count int
+	}, 0, len(values))
+
+	for key, count := range values {
+		normalizedKey := strings.TrimSpace(key)
+		if normalizedKey == "" || count < 1 {
+			continue
+		}
+		rows = append(rows, struct {
+			Key   string
+			Count int
+		}{
+			Key:   normalizedKey,
+			Count: count,
+		})
+	}
+
+	sort.Slice(rows, func(i int, j int) bool {
+		if rows[i].Count != rows[j].Count {
+			return rows[i].Count > rows[j].Count
+		}
+		return rows[i].Key < rows[j].Key
+	})
+
+	return rows
+}
+
+func convertNuvioReportsCountMapToByPageRows(values map[string]int) []nuvioReportsTrafficConversionByPage {
+	entries := sortedNuvioReportsCountEntries(values)
+	rows := make([]nuvioReportsTrafficConversionByPage, 0, len(entries))
+	for _, entry := range entries {
+		rows = append(rows, nuvioReportsTrafficConversionByPage{
+			PageSlug: entry.Key,
+			Count:    entry.Count,
+		})
+	}
+	return rows
+}
+
+func convertNuvioReportsCountMapToBySourceBlockRows(values map[string]int) []nuvioReportsTrafficConversionBySourceBlock {
+	entries := sortedNuvioReportsCountEntries(values)
+	rows := make([]nuvioReportsTrafficConversionBySourceBlock, 0, len(entries))
+	for _, entry := range entries {
+		rows = append(rows, nuvioReportsTrafficConversionBySourceBlock{
+			SourceBlock: entry.Key,
+			Count:       entry.Count,
+		})
+	}
+	return rows
+}
+
+func convertNuvioReportsCountMapToByCtaTypeRows(values map[string]int) []nuvioReportsTrafficConversionByCtaType {
+	entries := sortedNuvioReportsCountEntries(values)
+	rows := make([]nuvioReportsTrafficConversionByCtaType, 0, len(entries))
+	for _, entry := range entries {
+		rows = append(rows, nuvioReportsTrafficConversionByCtaType{
+			CtaType: entry.Key,
+			Count:   entry.Count,
+		})
+	}
+	return rows
+}
+
+func convertNuvioReportsCountMapToScrollDepthByPageRows(values map[string]int) []nuvioReportsTrafficScrollDepthByPage {
+	entries := sortedNuvioReportsCountEntries(values)
+	rows := make([]nuvioReportsTrafficScrollDepthByPage, 0, len(entries))
+	for _, entry := range entries {
+		rows = append(rows, nuvioReportsTrafficScrollDepthByPage{
+			PageSlug: entry.Key,
+			Count:    entry.Count,
+		})
+	}
+	return rows
+}
+
+func buildNuvioReportsTrafficInsights(
+	trafficState string,
+	trafficMessage string,
+	summary *nuvioReportsTrafficSummary,
+	topPages []nuvioReportsTrafficTopPage,
+	sources []nuvioReportsTrafficSource,
+	conversions nuvioReportsTrafficConversions,
+	engagement nuvioReportsTrafficEngagement,
+	includeMetricInsights bool,
+) []nuvioReportsTrafficInsight {
+	insights := make([]nuvioReportsTrafficInsight, 0, 12)
+	seen := map[string]struct{}{}
+
+	addInsight := func(insight nuvioReportsTrafficInsight) {
+		insight.ID = strings.TrimSpace(insight.ID)
+		if insight.ID == "" {
+			return
+		}
+		if _, exists := seen[insight.ID]; exists {
+			return
+		}
+		insight.Severity = normalizeNuvioReportsInsightSeverity(insight.Severity)
+		insight.Area = normalizeNuvioReportsInsightArea(insight.Area)
+		insight.Confidence = normalizeNuvioReportsInsightConfidence(insight.Confidence)
+		insight.Title = strings.TrimSpace(insight.Title)
+		insight.Recommendation = strings.TrimSpace(insight.Recommendation)
+		if insight.Title == "" || insight.Recommendation == "" {
+			return
+		}
+		cleanEvidence := make([]string, 0, len(insight.Evidence))
+		for _, line := range insight.Evidence {
+			normalized := strings.TrimSpace(line)
+			if normalized == "" {
+				continue
+			}
+			cleanEvidence = append(cleanEvidence, normalized)
+		}
+		if len(cleanEvidence) == 0 {
+			return
+		}
+		insight.Evidence = cleanEvidence
+		insight.TargetRoute = strings.TrimSpace(insight.TargetRoute)
+
+		seen[insight.ID] = struct{}{}
+		insights = append(insights, insight)
+	}
+
+	normalizedTrafficState := strings.TrimSpace(strings.ToLower(trafficState))
+	normalizedTrafficMessage := strings.TrimSpace(trafficMessage)
+
+	switch normalizedTrafficState {
+	case "analytics_disabled":
+		addInsight(nuvioReportsTrafficInsight{
+			ID:             "analytics_not_configured",
+			Severity:       "medium",
+			Area:           "data",
+			Title:          "Traffic analytics are currently disabled.",
+			Evidence:       []string{"Analytics is disabled for this website."},
+			Recommendation: "Configure and enable Analytics in Website Settings to unlock traffic reporting.",
+			Confidence:     "high",
+		})
+	case "provider_unconfigured", "analytics_not_configured":
+		addInsight(nuvioReportsTrafficInsight{
+			ID:             "analytics_not_configured",
+			Severity:       "high",
+			Area:           "data",
+			Title:          "Traffic analytics are not configured yet.",
+			Evidence:       []string{"Analytics provider settings are missing or incomplete."},
+			Recommendation: "Configure Analytics in Website Settings to start collecting traffic data.",
+			Confidence:     "high",
+		})
+	case "provider_auth_missing", "provider_auth_error", "provider_error", "provider_not_found":
+		addInsight(nuvioReportsTrafficInsight{
+			ID:             "analytics_not_configured",
+			Severity:       "high",
+			Area:           "data",
+			Title:          "Traffic analytics connection needs attention.",
+			Evidence:       []string{"Analytics provider credentials or connection are currently unavailable."},
+			Recommendation: "Review Analytics credentials and provider settings in Website Settings.",
+			Confidence:     "medium",
+		})
+	case "provider_unsupported":
+		addInsight(nuvioReportsTrafficInsight{
+			ID:             "analytics_not_configured",
+			Severity:       "high",
+			Area:           "data",
+			Title:          "The selected analytics provider is unsupported.",
+			Evidence:       []string{"Reports traffic currently supports Umami."},
+			Recommendation: "Switch Analytics provider to Umami in Website Settings.",
+			Confidence:     "high",
+		})
+	}
+
+	if normalizedTrafficState == "ok" && normalizedTrafficMessage != "" {
+		addInsight(nuvioReportsTrafficInsight{
+			ID:             "traffic_partial",
+			Severity:       "low",
+			Area:           "data",
+			Title:          "Some traffic metrics are temporarily unavailable.",
+			Evidence:       []string{normalizedTrafficMessage},
+			Recommendation: "If this persists, review your analytics configuration and provider connectivity.",
+			Confidence:     "medium",
+		})
+	}
+
+	if !includeMetricInsights {
+		return sortAndLimitNuvioReportsInsights(insights, 10)
+	}
+
+	normalizedConversionState := strings.TrimSpace(strings.ToLower(conversions.State))
+	conversionStateIsReliable := normalizedConversionState == "ok"
+	conversionStateIsPartial := normalizedConversionState == "partial"
+	if normalizedConversionState == "partial" || normalizedConversionState == "unavailable" {
+		insightTitle := "Conversion event metrics are unavailable."
+		if normalizedConversionState == "partial" {
+			insightTitle = "Some conversion event breakdowns are unavailable."
+		}
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "events_unavailable",
+			Severity: "medium",
+			Area:     "data",
+			Title:    insightTitle,
+			Evidence: []string{
+				firstNonEmptyString(conversions.Message, "Conversion event metrics are unavailable."),
+			},
+			Recommendation: "Check Umami events configuration and API availability.",
+			Confidence:     "medium",
+		})
+	}
+
+	normalizedScrollDepthState := strings.TrimSpace(strings.ToLower(engagement.ScrollDepth.State))
+	switch normalizedScrollDepthState {
+	case "disabled":
+		addInsight(nuvioReportsTrafficInsight{
+			ID:             "scroll_depth_disabled",
+			Severity:       "info",
+			Area:           "engagement",
+			Title:          "Scroll depth tracking is disabled.",
+			Evidence:       []string{"Scroll depth events are currently turned off."},
+			Recommendation: "Enable scroll depth events if you want engagement depth visibility.",
+			Confidence:     "high",
+		})
+	case "partial", "unavailable":
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "scroll_depth_unavailable",
+			Severity: "low",
+			Area:     "engagement",
+			Title:    "Scroll depth metrics are unavailable.",
+			Evidence: []string{
+				firstNonEmptyString(engagement.ScrollDepth.Message, "Scroll depth event data is not currently available."),
+			},
+			Recommendation: "Verify scroll depth tracking and Umami event-data availability.",
+			Confidence:     "medium",
+		})
+	}
+
+	visitors := 0
+	pageviews := 0
+	if summary != nil {
+		visitors = summary.Visitors
+		pageviews = summary.Pageviews
+	}
+
+	if conversionStateIsReliable && (visitors > 0 || pageviews > 0) && conversions.Totals.AllEvents == 0 {
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "no_conversion_events",
+			Severity: "medium",
+			Area:     "conversions",
+			Title:    "No tracked conversion actions were recorded during this period.",
+			Evidence: []string{
+				fmt.Sprintf("Visitors: %d", visitors),
+				fmt.Sprintf("Pageviews: %d", pageviews),
+				"Tracked conversion events: 0",
+			},
+			Recommendation: "Review CTA placement and confirm conversion event tracking is enabled on key pages.",
+			Confidence:     "medium",
+		})
+	}
+
+	topConversionEvent, topConversionCount := findNuvioReportsTopConversionEvent(conversions.ByType)
+	if topConversionEvent != "" && topConversionCount > 0 {
+		if conversionStateIsReliable {
+			addInsight(nuvioReportsTrafficInsight{
+				ID:       "most_used_conversion_event",
+				Severity: "info",
+				Area:     "conversions",
+				Title:    "The strongest tracked conversion action this period is clear.",
+				Evidence: []string{
+					fmt.Sprintf("Top conversion event: %s (%d)", topConversionEvent, topConversionCount),
+				},
+				Recommendation: recommendationForNuvioConversionEvent(topConversionEvent),
+				Confidence:     "high",
+			})
+		} else if conversionStateIsPartial {
+			addInsight(nuvioReportsTrafficInsight{
+				ID:       "most_used_conversion_event",
+				Severity: "info",
+				Area:     "conversions",
+				Title:    "Tracked actions were recorded.",
+				Evidence: []string{
+					fmt.Sprintf("Top tracked action: %s (%d).", topConversionEvent, topConversionCount),
+					"Some conversion event breakdowns may be incomplete.",
+				},
+				Recommendation: "Use this as a directional signal and review detailed conversion tracking if numbers look incomplete.",
+				Confidence:     "medium",
+			})
+		}
+	}
+
+	deepScrollCount := 0
+	for _, item := range engagement.ScrollDepth.Thresholds {
+		if item.Depth == 75 || item.Depth == 90 {
+			deepScrollCount += item.Count
+		}
+	}
+
+	if deepScrollCount > 0 {
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "scroll_depth_active",
+			Severity: "info",
+			Area:     "engagement",
+			Title:    "Some visitors reached deeper parts of the page.",
+			Evidence: []string{
+				fmt.Sprintf("75%% and 90%% scroll events: %d", deepScrollCount),
+			},
+			Recommendation: "Continue testing content structure and CTA placement in deeper sections.",
+			Confidence:     "medium",
+		})
+	}
+
+	if deepScrollCount >= 5 && conversions.Totals.AllEvents == 0 {
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "high_scroll_low_conversion",
+			Severity: "medium",
+			Area:     "engagement",
+			Title:    "Visitors may be engaging with content, but tracked actions are low.",
+			Evidence: []string{
+				fmt.Sprintf("75%% and 90%% scroll events: %d", deepScrollCount),
+				"Tracked conversion events: 0",
+			},
+			Recommendation: "Consider reviewing CTA placement on high-engagement pages.",
+			Confidence:     "low",
+		})
+	}
+
+	if visitors > 0 || pageviews > 0 {
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "traffic_available",
+			Severity: "info",
+			Area:     "traffic",
+			Title:    "Traffic activity was recorded this period.",
+			Evidence: []string{
+				fmt.Sprintf("Visitors: %d", visitors),
+				fmt.Sprintf("Pageviews: %d", pageviews),
+			},
+			Recommendation: "Use this baseline to compare conversion and engagement performance.",
+			Confidence:     "high",
+		})
+	}
+
+	if len(topPages) > 0 {
+		top := topPages[0]
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "top_page_available",
+			Severity: "info",
+			Area:     "traffic",
+			Title:    "A top-performing page was identified.",
+			Evidence: []string{
+				fmt.Sprintf("Top page: %s", strings.TrimSpace(top.Page)),
+				fmt.Sprintf("Pageviews: %d", top.Pageviews),
+			},
+			Recommendation: "Review this page's layout and CTA strategy to replicate winning patterns elsewhere.",
+			Confidence:     "high",
+		})
+	}
+
+	if len(sources) > 0 {
+		topSource := sources[0]
+		addInsight(nuvioReportsTrafficInsight{
+			ID:       "sources_available",
+			Severity: "info",
+			Area:     "traffic",
+			Title:    "A leading traffic source was identified.",
+			Evidence: []string{
+				fmt.Sprintf("Top source: %s", strings.TrimSpace(topSource.Source)),
+				fmt.Sprintf("Visitors: %d", topSource.Visitors),
+			},
+			Recommendation: "Consider strengthening your presence on top-performing traffic sources.",
+			Confidence:     "medium",
+		})
+	}
+
+	return sortAndLimitNuvioReportsInsights(insights, 10)
+}
+
+func normalizeNuvioReportsInsightSeverity(raw string) string {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "high":
+		return "high"
+	case "medium":
+		return "medium"
+	case "low":
+		return "low"
+	default:
+		return "info"
+	}
+}
+
+func normalizeNuvioReportsInsightArea(raw string) string {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "data":
+		return "data"
+	case "conversions":
+		return "conversions"
+	case "engagement":
+		return "engagement"
+	default:
+		return "traffic"
+	}
+}
+
+func normalizeNuvioReportsInsightConfidence(raw string) string {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "high":
+		return "high"
+	case "medium":
+		return "medium"
+	default:
+		return "low"
+	}
+}
+
+func sortAndLimitNuvioReportsInsights(items []nuvioReportsTrafficInsight, limit int) []nuvioReportsTrafficInsight {
+	if len(items) == 0 {
+		return []nuvioReportsTrafficInsight{}
+	}
+
+	severityRank := map[string]int{
+		"high":   0,
+		"medium": 1,
+		"low":    2,
+		"info":   3,
+	}
+	areaRank := map[string]int{
+		"data":        0,
+		"conversions": 1,
+		"engagement":  2,
+		"traffic":     3,
+	}
+
+	sort.Slice(items, func(i int, j int) bool {
+		leftSeverity := severityRank[items[i].Severity]
+		rightSeverity := severityRank[items[j].Severity]
+		if leftSeverity != rightSeverity {
+			return leftSeverity < rightSeverity
+		}
+		leftArea := areaRank[items[i].Area]
+		rightArea := areaRank[items[j].Area]
+		if leftArea != rightArea {
+			return leftArea < rightArea
+		}
+		return items[i].ID < items[j].ID
+	})
+
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+
+	return items
+}
+
+func findNuvioReportsTopConversionEvent(items []nuvioReportsTrafficConversionByType) (string, int) {
+	bestEvent := ""
+	bestCount := 0
+	for _, item := range items {
+		eventName := strings.TrimSpace(item.Event)
+		if eventName == "" || item.Count < 1 {
+			continue
+		}
+		if item.Count > bestCount || (item.Count == bestCount && (bestEvent == "" || eventName < bestEvent)) {
+			bestEvent = eventName
+			bestCount = item.Count
+		}
+	}
+	return bestEvent, bestCount
+}
+
+func recommendationForNuvioConversionEvent(eventName string) string {
+	switch strings.TrimSpace(strings.ToLower(eventName)) {
+	case "whatsapp_click":
+		return "Keep your WhatsApp CTA visible on high-intent pages."
+	case "contact_form_submitted":
+		return "Review and follow up with new leads promptly."
+	case "booking_submitted":
+		return "Review booking requests and confirm availability quickly."
+	case "newsletter_signup":
+		return "Continue growing your audience with clear newsletter signup prompts."
+	case "phone_click":
+		return "Ensure phone inquiries are handled quickly during business hours."
+	case "email_click":
+		return "Ensure email inquiries receive timely responses."
+	case "directions_click":
+		return "Keep address and location details clear and up to date."
+	default:
+		return "Review which calls-to-action are driving the strongest response."
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		normalized := strings.TrimSpace(value)
+		if normalized != "" {
+			return normalized
+		}
+	}
+	return ""
 }
 
 func resolveNuvioUmamiAuthHeaders(ctx context.Context, config nuvioUmamiConfig) (map[string]string, error) {

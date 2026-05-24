@@ -105,19 +105,155 @@
     $: trafficOperatingSystems = trafficState === "ok"
         ? normalizeTrafficDimensionRows(trafficResponse?.operatingSystems, ["operatingSystem", "os", "name", "label", "dimension"], "Unknown")
         : [];
-    $: hasExpandedTrafficMetrics = [
-        trafficEntryPages,
-        trafficExitPages,
-        trafficCountries,
-        trafficRegions,
-        trafficCities,
-        trafficBrowsers,
-        trafficOperatingSystems,
-    ].some((rows) => Array.isArray(rows) && rows.length > 0);
+    $: trafficInsights = normalizeTrafficInsights(trafficResponse?.insights);
+    $: trafficConversions = trafficState === "ok" && trafficResponse?.conversions && typeof trafficResponse.conversions === "object"
+        ? trafficResponse.conversions
+        : null;
+    $: trafficEngagement = trafficState === "ok" && trafficResponse?.engagement && typeof trafficResponse.engagement === "object"
+        ? trafficResponse.engagement
+        : null;
+    $: trafficConversionsState = normalizeLower(trafficConversions?.state) || "unavailable";
+    $: trafficConversionsMessage = normalizeString(trafficConversions?.message)
+        || (trafficConversionsState === "ok"
+            ? "Conversion event metrics are available."
+            : "Conversion event metrics are unavailable.");
+    $: trafficConversionTotals = trafficConversions?.totals && typeof trafficConversions.totals === "object"
+        ? trafficConversions.totals
+        : { allEvents: 0, uniqueEventTypes: 0 };
+    $: trafficConversionByType = trafficState === "ok"
+        ? normalizeTrafficCountRows(trafficConversions?.byType, ["event", "name", "label"], "Unknown action", ["count", "value", "visitors"])
+        : [];
+    $: trafficConversionByPage = trafficState === "ok"
+        ? normalizeTrafficCountRows(trafficConversions?.byPage, ["pageSlug", "page", "path", "label"], "Unknown page", ["count", "value", "visitors"])
+        : [];
+    $: trafficConversionBySourceBlock = trafficState === "ok"
+        ? normalizeTrafficCountRows(trafficConversions?.bySourceBlock, ["sourceBlock", "source", "label"], "Unknown source", ["count", "value", "visitors"])
+        : [];
+    $: trafficConversionByCtaType = trafficState === "ok"
+        ? normalizeTrafficCountRows(trafficConversions?.byCtaType, ["ctaType", "type", "label"], "Unknown CTA", ["count", "value", "visitors"])
+        : [];
+    $: trafficScrollDepth = trafficEngagement?.scrollDepth && typeof trafficEngagement.scrollDepth === "object"
+        ? trafficEngagement.scrollDepth
+        : null;
+    $: trafficScrollDepthState = normalizeLower(trafficScrollDepth?.state) || "unavailable";
+    $: trafficScrollDepthMessage = normalizeString(trafficScrollDepth?.message)
+        || (trafficScrollDepthState === "ok"
+            ? "Scroll depth events are available."
+            : "Scroll depth metrics are unavailable.");
+    $: trafficScrollDepthThresholds = trafficState === "ok"
+        ? normalizeTrafficDepthRows(trafficScrollDepth?.thresholds)
+        : [];
+    $: trafficScrollDepthByPage = trafficState === "ok"
+        ? normalizeTrafficCountRows(trafficScrollDepth?.byPage, ["pageSlug", "page", "path", "label"], "Unknown page", ["count", "value", "visitors"])
+        : [];
     $: trafficDisplayState = trafficState || "analytics_not_configured";
     $: topTrafficPage = trafficTopPages[0] || null;
     $: topTrafficSource = trafficSources[0] || null;
     $: topTrafficDevice = trafficDevices[0] || null;
+    $: trafficTopPageRows = buildTrafficPageBreakdownRows(trafficTopPages);
+    $: trafficEntryPageRows = buildTrafficPageBreakdownRows(trafficEntryPages);
+    $: trafficExitPageRows = buildTrafficPageBreakdownRows(trafficExitPages);
+    $: trafficSourceRows = buildTrafficSimpleBreakdownRows(trafficSources, ["source", "label"], "Direct", ["visitors", "count", "value"]);
+    $: trafficDeviceRows = buildTrafficSimpleBreakdownRows(trafficDevices, ["device", "label"], "Unknown", ["visitors", "count", "value"]);
+    $: trafficCountryRows = buildTrafficSimpleBreakdownRows(trafficCountries, ["label", "country"], "Unknown", ["visitors", "count", "value"]);
+    $: trafficRegionRows = buildTrafficSimpleBreakdownRows(trafficRegions, ["label", "region"], "Unknown", ["visitors", "count", "value"]);
+    $: trafficCityRows = buildTrafficSimpleBreakdownRows(trafficCities, ["label", "city"], "Unknown", ["visitors", "count", "value"]);
+    $: trafficBrowserRows = buildTrafficSimpleBreakdownRows(trafficBrowsers, ["label", "browser"], "Unknown", ["visitors", "count", "value"]);
+    $: trafficOperatingSystemRows = buildTrafficSimpleBreakdownRows(trafficOperatingSystems, ["label", "operatingSystem", "os"], "Unknown", ["visitors", "count", "value"]);
+    $: trafficConversionByTypeRows = trafficConversionByType
+        .map((row) => ({
+            label: resolveConversionEventLabel(row.label),
+            count: Number(row.count) || 0,
+            meta: "",
+        }))
+        .slice(0, 8);
+    $: trafficConversionByPageRows = trafficConversionByPage
+        .map((row) => ({
+            label: row.label || "Unknown page",
+            count: Number(row.count) || 0,
+            meta: "",
+        }))
+        .slice(0, 8);
+    $: trafficConversionBySourceRows = trafficConversionBySourceBlock
+        .map((row) => ({
+            label: row.label || "Unknown source",
+            count: Number(row.count) || 0,
+            meta: "",
+        }))
+        .slice(0, 8);
+    $: trafficConversionByCtaRows = trafficConversionByCtaType
+        .map((row) => ({
+            label: row.label || "Unknown CTA",
+            count: Number(row.count) || 0,
+            meta: "",
+        }))
+        .slice(0, 8);
+    $: trafficScrollDepthThresholdRows = trafficScrollDepthThresholds
+        .map((row) => ({
+            label: `${row.depth}% reached`,
+            count: Number(row.count) || 0,
+            meta: "",
+        }))
+        .slice(0, 8);
+    $: trafficScrollDepthByPageRows = trafficScrollDepthByPage
+        .map((row) => ({
+            label: row.label || "Unknown page",
+            count: Number(row.count) || 0,
+            meta: "",
+        }))
+        .slice(0, 8);
+    $: trafficOverviewStatus = resolveTrafficOverviewStatus({
+        trafficState,
+        trafficInsights,
+        trafficMessage: trafficResponse?.message,
+    });
+    $: trafficOverviewStatusLabel = resolveMetricStateLabel(trafficOverviewStatus, trafficState === "ok" ? "Ready" : "Check");
+    $: trafficOverviewMessage = resolveTrafficOverviewMessage({
+        trafficState,
+        trafficStatus: trafficOverviewStatus,
+        trafficMessage: trafficResponse?.message,
+    });
+    $: trafficConversionTotalsAllEvents = Number(trafficConversionTotals?.allEvents) || 0;
+    $: trafficConversionTotalsUniqueEventTypes = Number(trafficConversionTotals?.uniqueEventTypes) || 0;
+    $: trafficConversionIsOk = trafficConversionsState === "ok";
+    $: trafficConversionIsPartial = trafficConversionsState === "partial";
+    $: trafficConversionHasKnownTotals = trafficConversionTotalsAllEvents > 0 || trafficConversionTotalsUniqueEventTypes > 0;
+    $: trafficConversionShowMeasuredSummary = trafficConversionIsOk;
+    $: trafficConversionShowKnownSummary = trafficConversionIsPartial && trafficConversionHasKnownTotals;
+    $: trafficConversionHasDirectionalData = hasPositiveTrafficRows(trafficConversionByTypeRows)
+        || hasPositiveTrafficRows(trafficConversionByPageRows)
+        || hasPositiveTrafficRows(trafficConversionBySourceRows)
+        || hasPositiveTrafficRows(trafficConversionByCtaRows);
+    $: trafficConversionShouldRenderBreakdowns = trafficConversionIsOk
+        ? trafficConversionTotalsAllEvents > 0
+        : trafficConversionIsPartial && trafficConversionHasDirectionalData;
+    $: trafficConversionUnavailableMessage = resolveConversionUnavailableMessage(trafficConversionsState, trafficConversionsMessage);
+    $: trafficConversionByTypeRenderableRows = trafficConversionIsPartial
+        ? trafficConversionByTypeRows.filter((row) => Number(row?.count) > 0)
+        : trafficConversionByTypeRows;
+    $: trafficConversionByPageRenderableRows = trafficConversionIsPartial
+        ? trafficConversionByPageRows.filter((row) => Number(row?.count) > 0)
+        : trafficConversionByPageRows;
+    $: trafficConversionBySourceRenderableRows = trafficConversionIsPartial
+        ? trafficConversionBySourceRows.filter((row) => Number(row?.count) > 0)
+        : trafficConversionBySourceRows;
+    $: trafficConversionByCtaRenderableRows = trafficConversionIsPartial
+        ? trafficConversionByCtaRows.filter((row) => Number(row?.count) > 0)
+        : trafficConversionByCtaRows;
+    $: trafficScrollDepthIsOk = trafficScrollDepthState === "ok";
+    $: trafficScrollDepthIsPartial = trafficScrollDepthState === "partial";
+    $: trafficScrollDepthHasDirectionalData = hasPositiveTrafficRows(trafficScrollDepthThresholdRows)
+        || hasPositiveTrafficRows(trafficScrollDepthByPageRows);
+    $: trafficScrollDepthShouldRenderBreakdowns = trafficScrollDepthIsOk
+        ? trafficScrollDepthHasDirectionalData
+        : trafficScrollDepthIsPartial && trafficScrollDepthHasDirectionalData;
+    $: trafficScrollDepthUnavailableMessage = resolveScrollDepthUnavailableMessage(trafficScrollDepthState, trafficScrollDepthMessage);
+    $: trafficScrollDepthThresholdRenderableRows = trafficScrollDepthIsPartial
+        ? trafficScrollDepthThresholdRows.filter((row) => Number(row?.count) > 0)
+        : trafficScrollDepthThresholdRows;
+    $: trafficScrollDepthByPageRenderableRows = trafficScrollDepthIsPartial
+        ? trafficScrollDepthByPageRows.filter((row) => Number(row?.count) > 0)
+        : trafficScrollDepthByPageRows;
 
     $: dataKey = [
         selectedWebsiteId,
@@ -225,6 +361,65 @@
         })
         .sort((a, b) => (a.scheduledTs || 0) - (b.scheduledTs || 0))
         .slice(0, 8);
+    $: leadsSummaryMetricRows = [
+        { label: "Total leads", count: leadsSummary.total },
+        { label: "New leads", count: leadsSummary.newCount },
+        { label: "Read leads", count: leadsSummary.readCount },
+        { label: "Archived leads", count: leadsSummary.archivedCount },
+    ];
+    $: leadSourceBreakdownRows = [
+        {
+            label: "Contact form",
+            count: leadsSummary.contactCount,
+            meta: formatShareOfTotal(leadsSummary.contactCount, leadsSummary.total, "leads"),
+        },
+        {
+            label: "WhatsApp",
+            count: leadsSummary.whatsappCount,
+            meta: formatShareOfTotal(leadsSummary.whatsappCount, leadsSummary.total, "leads"),
+        },
+        {
+            label: "Booking",
+            count: leadsSummary.bookingCount,
+            meta: formatShareOfTotal(leadsSummary.bookingCount, leadsSummary.total, "leads"),
+        },
+    ];
+    $: leadsHasRecords = leadsSummary.total > 0;
+    $: leadSourcesHasData = hasPositiveTrafficRows(leadSourceBreakdownRows);
+    $: bookingSummaryMetricRows = [
+        { label: "Total requests", count: bookingSummary.total },
+        { label: "Pending bookings", count: bookingSummary.pendingCount },
+        { label: "Confirmed bookings", count: bookingSummary.confirmedCount },
+        { label: "Cancelled bookings", count: bookingSummary.cancelledCount },
+        { label: "Upcoming appointments", count: bookingSummary.upcomingCount },
+    ];
+    $: bookingStatusBreakdownRows = [
+        {
+            label: "Pending",
+            count: bookingSummary.pendingCount,
+            meta: formatShareOfTotal(bookingSummary.pendingCount, bookingSummary.total, "requests"),
+        },
+        {
+            label: "Confirmed",
+            count: bookingSummary.confirmedCount,
+            meta: formatShareOfTotal(bookingSummary.confirmedCount, bookingSummary.total, "requests"),
+        },
+        {
+            label: "Cancelled",
+            count: bookingSummary.cancelledCount,
+            meta: formatShareOfTotal(bookingSummary.cancelledCount, bookingSummary.total, "requests"),
+        },
+    ];
+    $: bookingServiceBreakdownRows = topBookingServices
+        .map((serviceRow) => ({
+            label: serviceRow?.label || "Untitled service",
+            count: Number(serviceRow?.count) || 0,
+            meta: formatShareOfTotal(serviceRow?.count, bookingSummary.total, "requests"),
+        }))
+        .slice(0, 8);
+    $: bookingHasRequests = bookingSummary.total > 0;
+    $: bookingStatusHasData = hasPositiveTrafficRows(bookingStatusBreakdownRows);
+    $: bookingServicesHasData = hasPositiveTrafficRows(bookingServiceBreakdownRows);
 
     $: normalizedSubscribers = normalizeSubscribers(subscribersRecords);
     $: normalizedCampaigns = normalizeCampaigns(campaignsRecords);
@@ -248,6 +443,47 @@
             .reduce((sum, campaign) => sum + Number(campaign.recipientsCount || 0), 0),
         draftCampaigns: normalizedCampaigns.filter((campaign) => campaign.statusKey === "draft").length,
     };
+    $: pendingSubscribersCount = normalizedSubscribers.filter((subscriber) => subscriber.statusKey === "pending").length;
+    $: unsubscribedSubscribersCount = normalizedSubscribers.filter((subscriber) => subscriber.statusKey === "unsubscribed").length;
+    $: failedCampaignSubmissionsPeriod = normalizedCampaigns.filter((campaign) => {
+        const status = normalizeLower(campaign?.statusKey);
+        if (!["failed", "error", "rejected"].includes(status)) {
+            return false;
+        }
+        return isTimestampInPeriod(campaign.sentTs || campaign.updatedTs || campaign.createdTs, selectedPeriod);
+    }).length;
+    $: newsletterAudienceMetricRows = [
+        { label: "Active subscribers", count: newsletterSummary.activeSubscribers },
+        { label: "Pending confirmations", count: pendingSubscribersCount },
+        { label: "Unsubscribed", count: unsubscribedSubscribersCount },
+        { label: `New subscribers (${selectedPeriodLabel})`, count: newsletterSummary.newSubscribersPeriod },
+    ];
+    $: newsletterCampaignMetricRows = [
+        { label: "Campaigns submitted", count: newsletterSummary.sentCampaignsPeriod },
+        { label: "Recipients submitted", count: newsletterSummary.recipientsReachedPeriod },
+        { label: "Draft campaigns", count: newsletterSummary.draftCampaigns },
+        { label: "Failed submissions", count: failedCampaignSubmissionsPeriod },
+    ];
+    $: newsletterCampaignStatusRows = [
+        {
+            label: "Campaigns submitted",
+            count: newsletterSummary.sentCampaignsPeriod,
+            meta: formatShareOfTotal(newsletterSummary.sentCampaignsPeriod, newsletterSummary.sentCampaignsPeriod + newsletterSummary.draftCampaigns, "tracked campaigns"),
+        },
+        {
+            label: "Draft campaigns",
+            count: newsletterSummary.draftCampaigns,
+            meta: formatShareOfTotal(newsletterSummary.draftCampaigns, newsletterSummary.sentCampaignsPeriod + newsletterSummary.draftCampaigns, "tracked campaigns"),
+        },
+        {
+            label: "Failed submissions",
+            count: failedCampaignSubmissionsPeriod,
+            meta: "",
+        },
+    ];
+    $: newsletterHasSubscribers = normalizedSubscribers.length > 0;
+    $: newsletterHasCampaignOutput = newsletterSummary.sentCampaignsPeriod > 0 || newsletterSummary.draftCampaigns > 0 || failedCampaignSubmissionsPeriod > 0;
+    $: newsletterCampaignStatusHasData = hasPositiveTrafficRows(newsletterCampaignStatusRows);
 
     $: recentSentCampaigns = [...normalizedCampaigns]
         .filter((campaign) => campaign.statusKey === "sent")
@@ -257,6 +493,44 @@
     $: normalizedPages = normalizePages(pagesRecords, websiteLabelById);
     $: selectedWebsiteSeo = normalizeWebsiteSeo(selectedWebsite);
     $: seoSummary = buildSeoSummary(normalizedPages, selectedWebsiteSeo);
+    $: seoSummaryMetricRows = [
+        { label: "Total pages", count: seoSummary.totalPages },
+        { label: "Good pages", count: seoSummary.good },
+        { label: "Pages needing attention", count: seoSummary.needsAttention },
+        { label: "Missing basics", count: seoSummary.missingBasics },
+        { label: "Noindex pages", count: seoSummary.noindexPages },
+    ];
+    $: seoIssueBreakdownRows = [
+        {
+            label: "Missing SEO title",
+            count: seoSummary.missingTitle,
+            meta: formatShareOfTotal(seoSummary.missingTitle, seoSummary.totalPages, "pages"),
+        },
+        {
+            label: "Missing SEO description",
+            count: seoSummary.missingDescription,
+            meta: formatShareOfTotal(seoSummary.missingDescription, seoSummary.totalPages, "pages"),
+        },
+        {
+            label: "Missing sharing image",
+            count: seoSummary.missingSocialImage,
+            meta: formatShareOfTotal(seoSummary.missingSocialImage, seoSummary.totalPages, "pages"),
+        },
+        {
+            label: "Noindex enabled",
+            count: seoSummary.noindexPages,
+            meta: formatShareOfTotal(seoSummary.noindexPages, seoSummary.totalPages, "pages"),
+        },
+    ];
+    $: seoIssueBreakdownHasData = hasPositiveTrafficRows(seoIssueBreakdownRows);
+    $: prioritizedSeoRows = [...seoSummary.pageRows].sort((a, b) => {
+        const aPriority = a?.healthKey === "missing-basics" ? 0 : 1;
+        const bPriority = b?.healthKey === "missing-basics" ? 0 : 1;
+        if (aPriority !== bPriority) {
+            return aPriority - bPriority;
+        }
+        return normalizeString(a?.title).localeCompare(normalizeString(b?.title));
+    });
 
     $: sourceReadinessRows = [
         {
@@ -307,8 +581,6 @@
         isLoadingTraffic,
     });
 
-    $: reportHealthState = resolveReportHealthState(reportWarnings.length);
-
     $: overviewMetricCards = [
         {
             key: "leads",
@@ -335,7 +607,7 @@
             key: "campaigns",
             label: "Campaigns sent",
             value: newsletterSummary.sentCampaignsPeriod,
-            hint: `${newsletterSummary.recipientsReachedPeriod} recipients reached`,
+            hint: `${newsletterSummary.recipientsReachedPeriod} recipients submitted`,
             icon: "ri-send-plane-2-line",
         },
         {
@@ -355,6 +627,38 @@
             }]
             : []),
     ];
+    $: overviewAttentionItems = buildOverviewAttentionItems({
+        reportWarnings,
+        sourceReadinessRows,
+        trafficState,
+        isLoadingTraffic,
+        trafficInsights,
+    });
+    $: overviewNextActions = buildOverviewNextActions({
+        reportSuggestions,
+        bookingSummary,
+        leadsSummary,
+        seoSummary,
+        trafficState,
+        isLoadingTraffic,
+        newsletterSummary,
+        trafficInsights,
+    });
+    $: overviewHasBackendInsights = Array.isArray(trafficInsights) && trafficInsights.length > 0;
+    $: reportHealthState = resolveReportHealthState(
+        overviewHasBackendInsights
+            ? overviewAttentionItems.length
+            : reportWarnings.length,
+    );
+    $: overviewDataConfidenceRows = buildOverviewDataConfidenceRows({
+        sourceReadinessRows,
+        trafficDisplayState,
+        isLoadingTraffic,
+        trafficPeriod,
+        selectedPeriodLabel,
+        trafficResponse,
+        trafficInsights,
+    });
 
     $: historyPlaceholderMessage = "Monthly report history will appear here once automatic snapshots are enabled.";
 
@@ -435,12 +739,134 @@
         return "Unable to load traffic analytics right now.";
     }
 
+    function resolveMetricStatePillClass(stateKey) {
+        const normalized = normalizeLower(stateKey);
+        if (normalized === "ok" || normalized === "ready") {
+            return "label-success";
+        }
+        if (normalized === "partial" || normalized === "loading" || normalized === "check") {
+            return "label-warning";
+        }
+        return "";
+    }
+
+    function resolveMetricStateLabel(stateKey, fallback = "Check") {
+        const normalized = normalizeLower(stateKey);
+        if (normalized === "ok" || normalized === "ready") {
+            return "Ready";
+        }
+        if (normalized === "partial") {
+            return "Partial";
+        }
+        if (normalized === "loading") {
+            return "Checking";
+        }
+        if (normalized === "disabled") {
+            return "Disabled";
+        }
+        if (normalized === "unconfigured") {
+            return "Unconfigured";
+        }
+        if (normalized === "unavailable") {
+            return "Unavailable";
+        }
+        return fallback;
+    }
+
+    function hasPositiveTrafficRows(rows = []) {
+        if (!Array.isArray(rows)) {
+            return false;
+        }
+        return rows.some((row) => Number(row?.count) > 0);
+    }
+
+    function resolveTrafficOverviewStatus(payload = {}) {
+        const normalizedState = normalizeLower(payload?.trafficState);
+        if (normalizedState === "partial") {
+            return "partial";
+        }
+        if (normalizedState !== "ok") {
+            return "check";
+        }
+
+        const insights = Array.isArray(payload?.trafficInsights) ? payload.trafficInsights : [];
+        const hasPartialInsight = insights.some((insight) => normalizeLower(insight?.id) === "traffic-partial");
+        if (hasPartialInsight) {
+            return "partial";
+        }
+
+        // Legacy fallback: older responses may only signal partial coverage in message text.
+        const message = normalizeLower(payload?.trafficMessage);
+        if (message.includes("partial")) {
+            return "partial";
+        }
+
+        return "ready";
+    }
+
+    function resolveTrafficOverviewMessage(payload = {}) {
+        const state = normalizeLower(payload?.trafficState);
+        const status = normalizeLower(payload?.trafficStatus);
+        const message = normalizeString(payload?.trafficMessage);
+
+        if (state !== "ok") {
+            return "";
+        }
+
+        if (status === "partial") {
+            return message || "Traffic analytics connected, but some breakdowns are unavailable.";
+        }
+
+        return message || "";
+    }
+
+    function resolveConversionUnavailableMessage(stateKey, fallbackMessage = "") {
+        const normalized = normalizeLower(stateKey);
+        if (normalized === "partial") {
+            return "Some conversion event breakdowns are unavailable.";
+        }
+        if (normalized === "disabled") {
+            return "Conversion event tracking is disabled.";
+        }
+        if (normalized === "unconfigured") {
+            return "Conversion event tracking is not configured.";
+        }
+        if (normalized === "ok") {
+            return "";
+        }
+        return normalizeString(fallbackMessage) || "Conversion event data is unavailable.";
+    }
+
+    function resolveScrollDepthUnavailableMessage(stateKey, fallbackMessage = "") {
+        const normalized = normalizeLower(stateKey);
+        if (normalized === "disabled") {
+            return "Scroll depth tracking is disabled.";
+        }
+        if (normalized === "partial") {
+            return "Some scroll depth metrics are unavailable.";
+        }
+        if (normalized === "ok") {
+            return "";
+        }
+        return normalizeString(fallbackMessage) || "Scroll depth data is unavailable.";
+    }
+
     function formatMetricNumber(value) {
         const numeric = Number(value);
         if (!Number.isFinite(numeric)) {
             return "—";
         }
         return Math.round(numeric).toLocaleString();
+    }
+
+    function formatShareOfTotal(value, total, noun = "items") {
+        const numericValue = Number(value);
+        const numericTotal = Number(total);
+        if (!Number.isFinite(numericValue) || !Number.isFinite(numericTotal) || numericTotal <= 0) {
+            return "";
+        }
+        const percentage = Math.round((numericValue / numericTotal) * 100);
+        return `${percentage}% of ${noun}`;
     }
 
     function formatBounceRate(value) {
@@ -531,6 +957,112 @@
             label: resolveFirstStringValue(row, keyCandidates, fallbackLabel),
             visitors: resolveFirstNumberValue(row, ["visitors", "count", "value"], 0),
         }));
+    }
+
+    function normalizeTrafficCountRows(rawRows, labelKeys = [], fallbackLabel = "Unknown", countKeys = ["count", "value", "visitors"]) {
+        if (!Array.isArray(rawRows)) {
+            return [];
+        }
+
+        return rawRows
+            .map((row) => ({
+                label: resolveFirstStringValue(row, labelKeys, fallbackLabel),
+                count: resolveFirstNumberValue(row, countKeys, 0),
+            }))
+            .filter((row) => row.label || row.count > 0);
+    }
+
+    function normalizeTrafficDepthRows(rawRows) {
+        if (!Array.isArray(rawRows)) {
+            return [];
+        }
+
+        return rawRows
+            .map((row) => ({
+                depth: resolveFirstNumberValue(row, ["depth", "threshold", "value"], 0),
+                count: resolveFirstNumberValue(row, ["count", "value", "visitors"], 0),
+            }))
+            .filter((row) => row.depth > 0)
+            .sort((a, b) => a.depth - b.depth);
+    }
+
+    function buildTrafficPageBreakdownRows(rows = []) {
+        if (!Array.isArray(rows)) {
+            return [];
+        }
+
+        return rows.slice(0, 8).map((row) => {
+            const page = resolveFirstStringValue(row, ["page", "path", "pageSlug", "label"], "/");
+            const visitors = resolveFirstNumberValue(row, ["visitors", "count", "value"], 0);
+            const pageviews = resolveFirstNumberValue(row, ["pageviews", "views"], 0);
+            const meta = pageviews > 0
+                ? `${formatMetricNumber(pageviews)} pageviews`
+                : "";
+            return {
+                label: page || "/",
+                count: visitors,
+                meta,
+            };
+        });
+    }
+
+    function buildTrafficSimpleBreakdownRows(rows = [], labelKeys = ["label"], fallbackLabel = "Unknown", countKeys = ["count"]) {
+        if (!Array.isArray(rows)) {
+            return [];
+        }
+
+        return rows.slice(0, 8).map((row) => ({
+            label: resolveFirstStringValue(row, labelKeys, fallbackLabel),
+            count: resolveFirstNumberValue(row, countKeys, 0),
+            meta: "",
+        }));
+    }
+
+    function resolveTrafficMaxCount(rows = []) {
+        let max = 0;
+        for (const row of rows || []) {
+            const numeric = Number(row?.count);
+            if (Number.isFinite(numeric) && numeric > max) {
+                max = numeric;
+            }
+        }
+        return max;
+    }
+
+    function resolveTrafficBarWidth(value, maxValue) {
+        const numeric = Number(value);
+        const max = Number(maxValue);
+        if (!Number.isFinite(numeric) || numeric <= 0 || !Number.isFinite(max) || max <= 0) {
+            return 0;
+        }
+        const ratio = (numeric / max) * 100;
+        return Math.max(4, Math.min(100, Math.round(ratio)));
+    }
+
+    function resolveConversionEventLabel(eventName) {
+        const normalized = normalizeLower(eventName);
+        if (normalized === "contact_form_submitted") {
+            return "Contact form submitted";
+        }
+        if (normalized === "whatsapp_click") {
+            return "WhatsApp click";
+        }
+        if (normalized === "booking_submitted") {
+            return "Booking submitted";
+        }
+        if (normalized === "newsletter_signup") {
+            return "Newsletter signup";
+        }
+        if (normalized === "phone_click") {
+            return "Phone click";
+        }
+        if (normalized === "email_click") {
+            return "Email click";
+        }
+        if (normalized === "directions_click") {
+            return "Directions click";
+        }
+        return normalizeString(eventName) || "Unknown action";
     }
 
     function stripHtml(value) {
@@ -1276,6 +1808,413 @@
         return { label: "Missing basics", pillClass: "label-danger" };
     }
 
+    function scoreOverviewAttentionMessage(message = "") {
+        const normalized = normalizeLower(message);
+        if (!normalized) {
+            return 0;
+        }
+        if (normalized.includes("pending booking")) {
+            return 100;
+        }
+        if (normalized.includes("no leads")) {
+            return 90;
+        }
+        if (normalized.includes("seo")) {
+            return 80;
+        }
+        if (normalized.includes("analytics")) {
+            return 70;
+        }
+        if (normalized.includes("newsletter")) {
+            return 60;
+        }
+        return 40;
+    }
+
+    function dedupeStrings(values = []) {
+        const seen = new Set();
+        const result = [];
+        for (const value of values || []) {
+            const text = normalizeString(value);
+            if (!text) {
+                continue;
+            }
+            const key = normalizeLower(text);
+            if (seen.has(key)) {
+                continue;
+            }
+            seen.add(key);
+            result.push(text);
+        }
+        return result;
+    }
+
+    function normalizeInsightSeverity(value) {
+        const normalized = normalizeLower(value);
+        if (normalized === "high" || normalized === "medium" || normalized === "low" || normalized === "info") {
+            return normalized;
+        }
+        return "info";
+    }
+
+    function normalizeInsightArea(value) {
+        const normalized = normalizeLower(value);
+        if (normalized === "data" || normalized === "conversions" || normalized === "engagement" || normalized === "traffic") {
+            return normalized;
+        }
+        return "traffic";
+    }
+
+    function normalizeInsightConfidence(value) {
+        const normalized = normalizeLower(value);
+        if (normalized === "high" || normalized === "medium" || normalized === "low") {
+            return normalized;
+        }
+        return "low";
+    }
+
+    function normalizeInsightId(rawId, fallbackTitle, area, severity) {
+        const candidate = normalizeString(rawId) || `${normalizeString(area)}-${normalizeString(severity)}-${normalizeString(fallbackTitle)}`;
+        const slug = normalizeLower(candidate)
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 80);
+        return slug || "";
+    }
+
+    function normalizeInsightEvidence(value) {
+        const evidenceRows = Array.isArray(value) ? value : [value];
+        const cleaned = [];
+        for (const row of evidenceRows) {
+            const text = normalizeString(row);
+            if (!text) {
+                continue;
+            }
+            cleaned.push(text);
+        }
+        return dedupeStrings(cleaned);
+    }
+
+    function normalizeInsightTargetRoute(value) {
+        const route = normalizeString(value);
+        if (!route || !route.startsWith("/")) {
+            return "";
+        }
+        if (route.includes("token=")) {
+            return "";
+        }
+        return route;
+    }
+
+    function scoreInsightSeverity(severity) {
+        if (severity === "high") {
+            return 4;
+        }
+        if (severity === "medium") {
+            return 3;
+        }
+        if (severity === "low") {
+            return 2;
+        }
+        return 1;
+    }
+
+    function scoreInsightArea(area) {
+        if (area === "data") {
+            return 4;
+        }
+        if (area === "conversions") {
+            return 3;
+        }
+        if (area === "engagement") {
+            return 2;
+        }
+        return 1;
+    }
+
+    function normalizeTrafficInsights(value) {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+
+        const seen = new Set();
+        const rows = [];
+
+        for (const rawInsight of value) {
+            if (!rawInsight || typeof rawInsight !== "object") {
+                continue;
+            }
+
+            const severity = normalizeInsightSeverity(rawInsight.severity);
+            const area = normalizeInsightArea(rawInsight.area);
+            const confidence = normalizeInsightConfidence(rawInsight.confidence);
+            const title = normalizeString(rawInsight.title);
+            const recommendation = normalizeString(rawInsight.recommendation);
+            if (!title) {
+                continue;
+            }
+
+            const evidence = normalizeInsightEvidence(rawInsight.evidence);
+            const targetRoute = normalizeInsightTargetRoute(rawInsight.targetRoute);
+            const id = normalizeInsightId(rawInsight.id, title, area, severity);
+            if (!id || seen.has(id)) {
+                continue;
+            }
+            seen.add(id);
+
+            rows.push({
+                id,
+                severity,
+                area,
+                title,
+                evidence,
+                recommendation,
+                confidence,
+                targetRoute,
+            });
+        }
+
+        return rows.sort((a, b) => {
+            const severityDiff = scoreInsightSeverity(b.severity) - scoreInsightSeverity(a.severity);
+            if (severityDiff !== 0) {
+                return severityDiff;
+            }
+            const areaDiff = scoreInsightArea(b.area) - scoreInsightArea(a.area);
+            if (areaDiff !== 0) {
+                return areaDiff;
+            }
+            return a.id.localeCompare(b.id);
+        });
+    }
+
+    function resolveInsightSeverityLabel(severity) {
+        if (severity === "high") {
+            return "High";
+        }
+        if (severity === "medium") {
+            return "Medium";
+        }
+        if (severity === "low") {
+            return "Low";
+        }
+        return "Info";
+    }
+
+    function resolveInsightAreaLabel(area) {
+        if (area === "data") {
+            return "Data";
+        }
+        if (area === "conversions") {
+            return "Conversions";
+        }
+        if (area === "engagement") {
+            return "Engagement";
+        }
+        return "Traffic";
+    }
+
+    function resolveInsightConfidenceLabel(confidence) {
+        if (confidence === "high") {
+            return "High confidence";
+        }
+        if (confidence === "medium") {
+            return "Medium confidence";
+        }
+        return "Low confidence";
+    }
+
+    function resolveInsightSeverityPillClass(severity) {
+        if (severity === "high") {
+            return "label-danger";
+        }
+        if (severity === "medium") {
+            return "label-warning";
+        }
+        if (severity === "low") {
+            return "";
+        }
+        return "label-success";
+    }
+
+    function buildOverviewAttentionItems(payload = {}) {
+        if (Array.isArray(payload?.trafficInsights) && payload.trafficInsights.length) {
+            const prioritized = payload.trafficInsights
+                .filter((item) => item.severity === "high" || item.severity === "medium")
+                .slice(0, 6);
+
+            return prioritized.map((item) => ({
+                ...item,
+                source: "insight",
+            }));
+        }
+
+        const messages = [];
+
+        for (const warning of payload?.reportWarnings || []) {
+            messages.push(warning);
+        }
+
+        if (!payload?.isLoadingTraffic && payload?.trafficState !== "ok") {
+            messages.push("Traffic analytics are not connected yet.");
+        }
+
+        for (const sourceRow of payload?.sourceReadinessRows || []) {
+            if (!sourceRow?.ok) {
+                messages.push(`${sourceRow.label} source needs setup.`);
+            }
+        }
+
+        return dedupeStrings(messages)
+            .sort((a, b) => scoreOverviewAttentionMessage(b) - scoreOverviewAttentionMessage(a))
+            .slice(0, 6)
+            .map((message, index) => ({
+                id: `fallback-attention-${index + 1}`,
+                title: message,
+                evidence: [],
+                recommendation: "",
+                severity: "medium",
+                area: "traffic",
+                confidence: "medium",
+                targetRoute: "",
+                source: "fallback",
+            }));
+    }
+
+    function buildOverviewNextActions(payload = {}) {
+        if (Array.isArray(payload?.trafficInsights) && payload.trafficInsights.length) {
+            const byRecommendation = new Map();
+            for (const item of payload.trafficInsights) {
+                const recommendation = normalizeString(item?.recommendation);
+                if (!recommendation) {
+                    continue;
+                }
+                const key = normalizeLower(recommendation);
+                if (byRecommendation.has(key)) {
+                    continue;
+                }
+                byRecommendation.set(key, {
+                    id: `insight-action-${item.id}`,
+                    text: recommendation,
+                    area: item.area,
+                    severity: item.severity,
+                    confidence: item.confidence,
+                    targetRoute: item.targetRoute,
+                    source: "insight",
+                });
+            }
+
+            const rows = [...byRecommendation.values()].slice(0, 6);
+            if (rows.length) {
+                return rows;
+            }
+        }
+
+        const actions = [];
+
+        for (const suggestion of payload?.reportSuggestions || []) {
+            actions.push(suggestion);
+        }
+
+        if (Number(payload?.bookingSummary?.pendingCount || 0) > 0) {
+            actions.push("Review pending booking requests.");
+        }
+
+        if (Number(payload?.leadsSummary?.newCount || 0) > 0) {
+            actions.push("Follow up with new leads.");
+        }
+
+        if (Number(payload?.seoSummary?.missingBasics || 0) > 0) {
+            actions.push("Fix SEO title and description on pages missing basics.");
+        }
+
+        if (!payload?.isLoadingTraffic && payload?.trafficState !== "ok") {
+            actions.push("Configure Analytics in Website Settings > Reports.");
+        }
+
+        if (
+            Number(payload?.newsletterSummary?.activeSubscribers || 0) > 0
+            && Number(payload?.newsletterSummary?.sentCampaignsPeriod || 0) < 1
+        ) {
+            actions.push("Send a newsletter campaign to active subscribers.");
+        }
+
+        const deduped = dedupeStrings(actions).slice(0, 6);
+        if (deduped.length) {
+            return deduped.map((actionText, index) => ({
+                id: `fallback-action-${index + 1}`,
+                text: actionText,
+                area: "",
+                severity: "low",
+                confidence: "medium",
+                targetRoute: "",
+                source: "fallback",
+            }));
+        }
+
+        return [{
+            id: "fallback-action-default",
+            text: "Performance looks stable. Keep monitoring this report weekly.",
+            area: "",
+            severity: "info",
+            confidence: "medium",
+            targetRoute: "",
+            source: "fallback",
+        }];
+    }
+
+    function buildOverviewDataConfidenceRows(payload = {}) {
+        const rows = (payload?.sourceReadinessRows || []).map((sourceRow) => ({
+            label: sourceRow?.label || "Source",
+            ok: !!sourceRow?.ok,
+            status: sourceRow?.ok ? "ready" : "check",
+            statusLabel: sourceRow?.ok ? "Ready" : "Check",
+            message: normalizeString(sourceRow?.message) || "Status unavailable.",
+        }));
+
+        if (payload?.isLoadingTraffic) {
+            rows.push({
+                label: "Traffic analytics",
+                ok: false,
+                status: "loading",
+                statusLabel: "Checking",
+                message: "Checking traffic analytics...",
+            });
+            return rows;
+        }
+
+        const trafficReady = payload?.trafficDisplayState === "ok";
+        const trafficLabel = payload?.trafficPeriod?.label || payload?.selectedPeriodLabel || "Selected period";
+        const partialProviderMessage = normalizeString(payload?.trafficResponse?.message);
+        const trafficIsPartial = trafficReady && !!partialProviderMessage;
+        const insightIds = new Set(
+            (payload?.trafficInsights || []).map((insight) => normalizeString(insight?.id)).filter(Boolean),
+        );
+        const hasAnalyticsConfigInsight = insightIds.has("analytics-not-configured");
+        const hasTrafficPartialInsight = insightIds.has("traffic-partial");
+        let trafficMessage = trafficReady
+            ? `${trafficLabel} traffic analytics loaded.`
+            : resolveTrafficStateMessage(payload?.trafficDisplayState || "");
+
+        if (trafficIsPartial) {
+            trafficMessage = "Traffic analytics connected, but some breakdowns are unavailable.";
+            if (hasTrafficPartialInsight) {
+                trafficMessage = "See attention items for details about partial analytics coverage.";
+            }
+        } else if (!trafficReady && hasAnalyticsConfigInsight) {
+            trafficMessage = "See attention items for analytics setup steps.";
+        }
+
+        rows.push({
+            label: "Traffic analytics",
+            ok: trafficReady && !trafficIsPartial,
+            status: trafficReady ? (trafficIsPartial ? "partial" : "ready") : "check",
+            statusLabel: trafficReady ? (trafficIsPartial ? "Partial" : "Ready") : "Check",
+            message: trafficMessage || "Traffic analytics are not connected yet.",
+        });
+
+        return rows;
+    }
+
     function resolveLeadSourceLabel(sourceKey) {
         if (sourceKey === "booking") {
             return "Booking";
@@ -1435,183 +2374,196 @@
             {#if activeTab === "overview"}
                 <div class="reports-overview-layout">
                     <div class="reports-overview-main">
-                        <div class="reports-kpi-grid">
-                            {#each overviewMetricCards as metric (metric.key)}
-                                <article class="panel reports-kpi-card">
-                                    <div class="reports-kpi-head">
-                                        <span class="txt-sm txt-hint">{metric.label}</span>
-                                        <i class={metric.icon} aria-hidden="true" />
-                                    </div>
-                                    <div class="reports-kpi-value">{metric.value}</div>
-                                    <div class="txt-sm txt-hint">{metric.hint}</div>
-                                </article>
-                            {/each}
-                        </div>
+                        <section class="panel reports-overview-section">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">This period in one view</h5>
+                                <p class="txt-sm txt-hint m-b-0">Business summary for {selectedPeriodLabel.toLowerCase()}.</p>
+                            </div>
+                            <div class="reports-kpi-grid reports-overview-kpi-grid">
+                                {#each overviewMetricCards as metric (metric.key)}
+                                    <article class="panel reports-kpi-card reports-overview-kpi-card">
+                                        <div class="reports-kpi-head">
+                                            <span class="txt-sm txt-hint reports-kpi-label">{metric.label}</span>
+                                            <i class={metric.icon} aria-hidden="true" />
+                                        </div>
+                                        <div class="reports-kpi-value">{metric.value}</div>
+                                        <div class="txt-sm txt-hint reports-kpi-hint">{metric.hint}</div>
+                                    </article>
+                                {/each}
+                            </div>
+                        </section>
 
-                        <div class="reports-grid-two m-t-sm">
+                        <div class="reports-grid-two">
                             <article class="panel">
                                 <div class="section-head m-b-sm">
-                                    <h5 class="m-0">Leads by type</h5>
-                                    <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
+                                    <h5 class="m-0">Lead and booking activity</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Pipeline movement in this period.</p>
                                 </div>
                                 <div class="reports-mini-stack">
-                                    <div class="reports-mini-row"><span>Contact form</span><strong>{leadsSummary.contactCount}</strong></div>
-                                    <div class="reports-mini-row"><span>WhatsApp</span><strong>{leadsSummary.whatsappCount}</strong></div>
-                                    <div class="reports-mini-row"><span>Booking</span><strong>{leadsSummary.bookingCount}</strong></div>
+                                    <div class="reports-mini-row"><span>Contact form leads</span><strong>{leadsSummary.contactCount}</strong></div>
+                                    <div class="reports-mini-row"><span>WhatsApp leads</span><strong>{leadsSummary.whatsappCount}</strong></div>
+                                    <div class="reports-mini-row"><span>Booking leads</span><strong>{leadsSummary.bookingCount}</strong></div>
+                                    <div class="reports-mini-row"><span>Pending booking requests</span><strong>{bookingSummary.pendingCount}</strong></div>
+                                    <div class="reports-mini-row"><span>Confirmed bookings</span><strong>{bookingSummary.confirmedCount}</strong></div>
                                 </div>
                             </article>
 
                             <article class="panel">
                                 <div class="section-head m-b-sm">
-                                    <h5 class="m-0">Booking status</h5>
-                                    <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
-                                </div>
-                                <div class="reports-mini-stack">
-                                    <div class="reports-mini-row"><span>Pending</span><strong>{bookingSummary.pendingCount}</strong></div>
-                                    <div class="reports-mini-row"><span>Confirmed</span><strong>{bookingSummary.confirmedCount}</strong></div>
-                                    <div class="reports-mini-row"><span>Cancelled</span><strong>{bookingSummary.cancelledCount}</strong></div>
-                                    <div class="reports-mini-row"><span>Upcoming</span><strong>{bookingSummary.upcomingCount}</strong></div>
-                                </div>
-                            </article>
-                        </div>
-
-                        <div class="reports-grid-two m-t-sm">
-                            <article class="panel">
-                                <div class="section-head m-b-sm">
-                                    <h5 class="m-0">Newsletter activity</h5>
-                                    <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
+                                    <h5 class="m-0">Newsletter and SEO status</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Audience growth and visibility health.</p>
                                 </div>
                                 <div class="reports-mini-stack">
                                     <div class="reports-mini-row"><span>Active subscribers</span><strong>{newsletterSummary.activeSubscribers}</strong></div>
                                     <div class="reports-mini-row"><span>New subscribers</span><strong>{newsletterSummary.newSubscribersPeriod}</strong></div>
-                                    <div class="reports-mini-row"><span>Sent campaigns</span><strong>{newsletterSummary.sentCampaignsPeriod}</strong></div>
-                                    <div class="reports-mini-row"><span>Recipients reached</span><strong>{newsletterSummary.recipientsReachedPeriod}</strong></div>
-                                </div>
-                            </article>
-
-                            <article class="panel">
-                                <div class="section-head m-b-sm">
-                                    <h5 class="m-0">SEO health</h5>
-                                    <p class="txt-sm txt-hint m-b-0">Current pages status.</p>
-                                </div>
-                                <div class="reports-mini-stack">
-                                    <div class="reports-mini-row"><span>Good</span><strong>{seoSummary.good}</strong></div>
-                                    <div class="reports-mini-row"><span>Needs attention</span><strong>{seoSummary.needsAttention}</strong></div>
-                                    <div class="reports-mini-row"><span>Missing basics</span><strong>{seoSummary.missingBasics}</strong></div>
-                                    <div class="reports-mini-row"><span>Noindex pages</span><strong>{seoSummary.noindexPages}</strong></div>
+                                    <div class="reports-mini-row"><span>Campaigns sent</span><strong>{newsletterSummary.sentCampaignsPeriod}</strong></div>
+                                    <div class="reports-mini-row"><span>Pages needing SEO attention</span><strong>{seoSummary.needsAttention}</strong></div>
+                                    <div class="reports-mini-row"><span>Pages missing SEO basics</span><strong>{seoSummary.missingBasics}</strong></div>
                                 </div>
                             </article>
                         </div>
 
                         {#if trafficState === "ok"}
-                            <div class="reports-grid-two m-t-sm">
-                                <article class="panel">
-                                    <div class="section-head m-b-sm">
-                                        <h5 class="m-0">Traffic summary</h5>
-                                        <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
+                            <section class="panel">
+                                <div class="section-head m-b-sm">
+                                    <h5 class="m-0">Traffic highlights</h5>
+                                    <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
+                                </div>
+                                <div class="reports-mini-stack">
+                                    <div class="reports-mini-row"><span>Visitors</span><strong>{formatMetricNumber(trafficSummary?.visitors)}</strong></div>
+                                    <div class="reports-mini-row"><span>Pageviews</span><strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong></div>
+                                    <div class="reports-mini-row"><span>Bounce rate</span><strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong></div>
+                                    <div class="reports-mini-row"><span>Visit duration</span><strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong></div>
+                                    <div class="reports-mini-row reports-mini-row--wrap">
+                                        <span>Top page</span>
+                                        <span class="txt-sm txt-hint">
+                                            {#if topTrafficPage}
+                                                {topTrafficPage.page || "/"} - {formatMetricNumber(topTrafficPage.visitors)} visitors
+                                            {:else}
+                                                No page data available.
+                                            {/if}
+                                        </span>
                                     </div>
-                                    <div class="reports-mini-stack">
-                                        <div class="reports-mini-row"><span>Visitors</span><strong>{formatMetricNumber(trafficSummary?.visitors)}</strong></div>
-                                        <div class="reports-mini-row"><span>Pageviews</span><strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong></div>
-                                        <div class="reports-mini-row"><span>Bounce rate</span><strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong></div>
-                                        <div class="reports-mini-row"><span>Visit duration</span><strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong></div>
+                                    <div class="reports-mini-row reports-mini-row--wrap">
+                                        <span>Top source</span>
+                                        <span class="txt-sm txt-hint">
+                                            {#if topTrafficSource}
+                                                {topTrafficSource.source || "Direct"} - {formatMetricNumber(topTrafficSource.visitors)} visitors
+                                            {:else}
+                                                No source data available.
+                                            {/if}
+                                        </span>
                                     </div>
-                                </article>
-
-                                <article class="panel">
-                                    <div class="section-head m-b-sm">
-                                        <h5 class="m-0">Traffic highlights</h5>
-                                        <p class="txt-sm txt-hint m-b-0">Top page, source, and device trends.</p>
+                                    <div class="reports-mini-row reports-mini-row--wrap">
+                                        <span>Top device</span>
+                                        <span class="txt-sm txt-hint">
+                                            {#if topTrafficDevice}
+                                                {topTrafficDevice.device || "Unknown"} - {formatMetricNumber(topTrafficDevice.visitors)} visitors
+                                            {:else}
+                                                No device data available.
+                                            {/if}
+                                        </span>
                                     </div>
-                                    <div class="reports-mini-stack">
-                                        <div class="reports-mini-row reports-mini-row--wrap">
-                                            <span>Top page</span>
-                                            <span class="txt-sm txt-hint">
-                                                {#if topTrafficPage}
-                                                    {topTrafficPage.page || "/"} - {formatMetricNumber(topTrafficPage.visitors)} visitors
-                                                {:else}
-                                                    No page data available.
-                                                {/if}
-                                            </span>
-                                        </div>
-                                        <div class="reports-mini-row reports-mini-row--wrap">
-                                            <span>Top source</span>
-                                            <span class="txt-sm txt-hint">
-                                                {#if topTrafficSource}
-                                                    {topTrafficSource.source || "Direct"} - {formatMetricNumber(topTrafficSource.visitors)} visitors
-                                                {:else}
-                                                    No source data available.
-                                                {/if}
-                                            </span>
-                                        </div>
-                                        <div class="reports-mini-row reports-mini-row--wrap">
-                                            <span>Top device</span>
-                                            <span class="txt-sm txt-hint">
-                                                {#if topTrafficDevice}
-                                                    {topTrafficDevice.device || "Unknown"} - {formatMetricNumber(topTrafficDevice.visitors)} visitors
-                                                {:else}
-                                                    No device data available.
-                                                {/if}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </article>
-                            </div>
+                                </div>
+                            </section>
+                        {:else}
+                            <section class="panel">
+                                <div class="section-head m-b-sm">
+                                    <h5 class="m-0">Traffic analytics</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Traffic analytics are not connected yet.</p>
+                                </div>
+                                <div class="empty-state m-b-0">{resolveTrafficStateMessage(trafficDisplayState)}</div>
+                            </section>
                         {/if}
                     </div>
 
                     <aside class="reports-overview-rail">
-                        <section class="panel report-health-panel">
+                        <section class="panel report-health-panel reports-rail-card reports-rail-card--attention">
                             <div class="report-health-head">
                                 <div class="report-health-main">
-                                    <h5 class="m-0">Report health</h5>
-                                    <p class="txt-sm txt-hint m-b-0">Key warnings and next actions for this period.</p>
+                                    <h5 class="m-0">Attention needed now</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Priority items that need follow-up in this period.</p>
                                 </div>
                                 <div class="report-health-meta">
                                     <span class={`label label-sm ${reportHealthState.pillClass}`}>{reportHealthState.label}</span>
-                                    <span class="summary-pill">{reportWarnings.length} warnings - {reportSuggestions.length} suggestions</span>
+                                    <span class="summary-pill">{overviewAttentionItems.length} item(s)</span>
                                 </div>
                             </div>
-
-                            <div class="report-health-group m-t-8">
-                                <div class="report-health-group-title">Warnings</div>
-                                {#if reportWarnings.length}
-                                    {#each reportWarnings as warning}
-                                        <div class="report-health-item warning">
-                                            <span class="label label-sm report-health-pill warning">Warning</span>
-                                            <span>{warning}</span>
+                            {#if overviewAttentionItems.length}
+                                {#each overviewAttentionItems as attentionItem (attentionItem.id)}
+                                    <div class={`report-health-item reports-rail-item ${attentionItem.severity === "high" ? "warning" : ""}`}>
+                                        <div class="report-health-item-headline">
+                                            <span class={`label label-sm report-health-pill ${resolveInsightSeverityPillClass(attentionItem.severity)}`}>
+                                                {resolveInsightSeverityLabel(attentionItem.severity)}
+                                            </span>
+                                            {#if attentionItem.source === "insight"}
+                                                <span class="label label-sm">{resolveInsightAreaLabel(attentionItem.area)}</span>
+                                                <span class="label label-sm">{resolveInsightConfidenceLabel(attentionItem.confidence)}</span>
+                                            {/if}
                                         </div>
-                                    {/each}
-                                {:else}
-                                    <p class="txt-sm txt-hint m-b-0">No warnings for this period.</p>
-                                {/if}
-                            </div>
-
-                            <div class="report-health-group m-t-8">
-                                <div class="report-health-group-title">Suggestions</div>
-                                {#if reportSuggestions.length}
-                                    {#each reportSuggestions as suggestion}
-                                        <div class="report-health-item">
-                                            <span class="label label-sm report-health-pill">Info</span>
-                                            <span>{suggestion}</span>
+                                        <div class="report-health-item-body">
+                                            <span class="report-health-item-title">{attentionItem.title}</span>
+                                            {#if attentionItem.evidence?.length}
+                                                <span class="txt-xs txt-hint reports-rail-evidence">{truncate(attentionItem.evidence[0], 120)}</span>
+                                            {/if}
                                         </div>
-                                    {/each}
-                                {:else}
-                                    <p class="txt-sm txt-hint m-b-0">No suggestions yet.</p>
-                                {/if}
-                            </div>
+                                    </div>
+                                {/each}
+                            {:else}
+                                <p class="txt-sm txt-hint m-b-0 reports-rail-empty">No urgent issues detected for this period. Review recommendations and data confidence for lower-priority suggestions.</p>
+                            {/if}
                         </section>
 
-                        <section class="panel report-sources-panel">
+                        <section class="panel report-health-panel reports-rail-card reports-rail-card--actions">
                             <div class="section-head m-b-sm">
-                                <h5 class="m-0">Data coverage</h5>
-                                <p class="txt-sm txt-hint m-b-0">Availability of the data sources used in this dashboard.</p>
+                                <h5 class="m-0">Recommended next actions</h5>
+                                <p class="txt-sm txt-hint m-b-0">Suggested business actions based on current report signals.</p>
                             </div>
-                            <div class="reports-mini-stack">
-                                {#each sourceReadinessRows as sourceRow}
-                                    <div class="reports-mini-row">
-                                        <span>{sourceRow.label}</span>
-                                        <span class:txt-success={sourceRow.ok} class:txt-hint={!sourceRow.ok}>{sourceRow.message}</span>
+                            {#if overviewNextActions.length}
+                                {#each overviewNextActions as nextAction (nextAction.id)}
+                                    <div class="report-health-item reports-rail-item">
+                                        <div class="report-health-item-headline">
+                                            <span class="label label-sm report-health-pill">Next</span>
+                                            {#if nextAction.source === "insight"}
+                                                <span class="label label-sm">{resolveInsightAreaLabel(nextAction.area)}</span>
+                                                <span class="label label-sm">{resolveInsightConfidenceLabel(nextAction.confidence)}</span>
+                                            {/if}
+                                        </div>
+                                        <div class="report-health-item-body">
+                                            <span class="report-health-item-title">{nextAction.text}</span>
+                                        </div>
+                                    </div>
+                                {/each}
+                            {:else}
+                                <p class="txt-sm txt-hint m-b-0 reports-rail-empty">No recommendations yet.</p>
+                            {/if}
+                        </section>
+
+                        <section class="panel report-sources-panel reports-rail-card reports-rail-card--confidence">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Data confidence</h5>
+                                <p class="txt-sm txt-hint m-b-0">Data source coverage and analytics connection status.</p>
+                            </div>
+                            <div class="reports-mini-stack reports-confidence-list">
+                                {#each overviewDataConfidenceRows as sourceRow}
+                                    <div class="report-health-item reports-rail-item reports-rail-item--confidence">
+                                        <div class="report-health-item-headline">
+                                            <span class="reports-mini-row-label">{sourceRow.label}</span>
+                                            <span
+                                                class={`label label-sm ${
+                                                    sourceRow.status === "ready"
+                                                        ? "label-success"
+                                                        : sourceRow.status === "loading"
+                                                            ? ""
+                                                            : "label-warning"
+                                                }`}
+                                            >
+                                                {sourceRow.statusLabel || (sourceRow.ok ? "Ready" : "Check")}
+                                            </span>
+                                        </div>
+                                        <div class="report-health-item-body">
+                                            <span class="txt-xs txt-hint m-b-0 reports-confidence-note">{sourceRow.message}</span>
+                                        </div>
                                     </div>
                                 {/each}
                             </div>
@@ -1619,217 +2571,448 @@
                     </aside>
                 </div>
             {:else if activeTab === "leads"}
-                <div class="reports-tab-grid">
-                    <article class="panel">
+                <div class="reports-traffic-layout">
+                    <section class="panel reports-breakdown-card">
                         <div class="section-head m-b-sm">
                             <h5 class="m-0">Leads summary</h5>
                             <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
                         </div>
-                        <div class="reports-mini-stack">
-                            <div class="reports-mini-row"><span>Total leads</span><strong>{leadsSummary.total}</strong></div>
-                            <div class="reports-mini-row"><span>New</span><strong>{leadsSummary.newCount}</strong></div>
-                            <div class="reports-mini-row"><span>Read</span><strong>{leadsSummary.readCount}</strong></div>
-                            <div class="reports-mini-row"><span>Archived</span><strong>{leadsSummary.archivedCount}</strong></div>
-                        </div>
-                    </article>
-
-                    <article class="panel">
-                        <div class="section-head m-b-sm">
-                            <h5 class="m-0">Lead types</h5>
-                            <p class="txt-sm txt-hint m-b-0">Contact form, WhatsApp, and Booking channels.</p>
-                        </div>
-                        <div class="reports-mini-stack">
-                            <div class="reports-mini-row"><span>Contact form</span><strong>{leadsSummary.contactCount}</strong></div>
-                            <div class="reports-mini-row"><span>WhatsApp</span><strong>{leadsSummary.whatsappCount}</strong></div>
-                            <div class="reports-mini-row"><span>Booking</span><strong>{leadsSummary.bookingCount}</strong></div>
-                        </div>
-                    </article>
-                </div>
-
-                <section class="panel m-t-sm">
-                    <div class="section-head m-b-sm">
-                        <h5 class="m-0">Recent leads ({selectedPeriodLabel})</h5>
-                        <p class="txt-sm txt-hint m-b-0">Latest entries from contact and WhatsApp channels.</p>
-                    </div>
-
-                    {#if !sortedRecentLeads.length}
-                        <div class="empty-state m-b-0">No data available for this period.</div>
-                    {:else}
-                        <div class="reports-list">
-                            {#each sortedRecentLeads as lead (lead.key)}
-                                <div class="reports-list-item">
-                                    <div class="reports-list-main">
-                                        <div class="reports-list-title">{lead.name}</div>
-                                        <div class="txt-sm txt-hint">
-                                            {resolveLeadSourceLabel(lead.sourceKey)} - {resolveLeadStatusLabel(lead.statusKey)}
-                                            {#if lead.email || lead.phone}
-                                                - {lead.email || lead.phone}
-                                            {/if}
-                                        </div>
-                                        {#if lead.subject || lead.message}
-                                            <div class="txt-sm reports-list-snippet">
-                                                {truncate(lead.subject || lead.message, 120)}
-                                            </div>
-                                        {/if}
-                                    </div>
-                                    <div class="txt-xs txt-hint reports-list-meta">{formatDateTime(lead.created)}</div>
+                        <div class="report-metric-grid">
+                            {#each leadsSummaryMetricRows as metricRow (metricRow.label)}
+                                <div class="report-metric-row">
+                                    <span>{metricRow.label}</span>
+                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
                                 </div>
                             {/each}
                         </div>
-                    {/if}
-                </section>
-            {:else if activeTab === "booking"}
-                <div class="reports-tab-grid">
-                    <article class="panel">
-                        <div class="section-head m-b-sm">
-                            <h5 class="m-0">Appointments summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
-                        </div>
-                        <div class="reports-mini-stack">
-                            <div class="reports-mini-row"><span>Total appointments</span><strong>{bookingSummary.total}</strong></div>
-                            <div class="reports-mini-row"><span>Pending</span><strong>{bookingSummary.pendingCount}</strong></div>
-                            <div class="reports-mini-row"><span>Confirmed</span><strong>{bookingSummary.confirmedCount}</strong></div>
-                            <div class="reports-mini-row"><span>Cancelled</span><strong>{bookingSummary.cancelledCount}</strong></div>
-                            <div class="reports-mini-row"><span>Upcoming</span><strong>{bookingSummary.upcomingCount}</strong></div>
-                        </div>
-                    </article>
+                        {#if !leadsHasRecords}
+                            <div class="report-empty-state">No leads recorded for this period.</div>
+                        {/if}
+                    </section>
 
-                    <article class="panel">
+                    <section class="panel reports-breakdown-card">
                         <div class="section-head m-b-sm">
-                            <h5 class="m-0">Top services</h5>
-                            <p class="txt-sm txt-hint m-b-0">Most requested services in the selected period.</p>
+                            <h5 class="m-0">Lead sources</h5>
+                            <p class="txt-sm txt-hint m-b-0">Contact form, WhatsApp, and booking channels.</p>
                         </div>
-
-                        {#if !topBookingServices.length}
-                            <div class="empty-state m-b-0">No booking service data for this period.</div>
-                        {:else}
-                            <div class="reports-mini-stack">
-                                {#each topBookingServices as serviceRow}
-                                    <div class="reports-mini-row"><span>{serviceRow.label}</span><strong>{serviceRow.count}</strong></div>
+                        {#if leadSourcesHasData}
+                            {@const maxLeadSources = resolveTrafficMaxCount(leadSourceBreakdownRows)}
+                            <div class="report-bar-list">
+                                {#each leadSourceBreakdownRows as sourceRow}
+                                    <div class="report-bar-item">
+                                        <div class="report-bar-head">
+                                            <span class="report-bar-label">{sourceRow.label}</span>
+                                            <strong class="report-bar-value">{formatMetricNumber(sourceRow.count)}</strong>
+                                        </div>
+                                        {#if sourceRow.meta}
+                                            <div class="txt-xs txt-hint report-bar-meta">{sourceRow.meta}</div>
+                                        {/if}
+                                        <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(sourceRow.count, maxLeadSources)}%;`} /></div>
+                                    </div>
                                 {/each}
                             </div>
+                        {:else}
+                            <div class="report-empty-state">No leads recorded for this period.</div>
                         {/if}
-                    </article>
-                </div>
+                    </section>
 
-                <section class="panel m-t-sm">
-                    <div class="section-head m-b-sm">
-                        <h5 class="m-0">Upcoming appointments</h5>
-                        <p class="txt-sm txt-hint m-b-0">Next pending/confirmed requests.</p>
-                    </div>
-
-                    {#if !upcomingAppointments.length}
-                        <div class="empty-state m-b-0">No upcoming appointments right now.</div>
-                    {:else}
-                        <div class="reports-list">
-                            {#each upcomingAppointments as appointment (appointment.id)}
-                                <div class="reports-list-item">
-                                    <div class="reports-list-main">
-                                        <div class="reports-list-title">{appointment.name}</div>
-                                        <div class="txt-sm txt-hint">
-                                            {appointment.serviceLabel} - {resolveAppointmentStatusLabel(appointment.statusKey)}
-                                            {#if appointment.email || appointment.phone}
-                                                - {appointment.email || appointment.phone}
-                                            {/if}
-                                        </div>
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Follow-up needed</h5>
+                            <p class="txt-sm txt-hint m-b-0">New leads and the latest lead activity.</p>
+                        </div>
+                        <div class="reports-grid-two">
+                            <article class="report-breakdown-item">
+                                <div class="report-breakdown-head">
+                                    <h6 class="m-0 report-breakdown-title">Lead status</h6>
+                                    <span class={`label label-sm ${leadsSummary.newCount > 0 ? "label-warning" : "label-success"}`}>
+                                        {leadsSummary.newCount > 0 ? "Action needed" : "On track"}
+                                    </span>
+                                </div>
+                                <div class="report-metric-grid report-metric-grid--compact">
+                                    <div class="report-metric-row">
+                                        <span>New leads</span>
+                                        <strong>{formatMetricNumber(leadsSummary.newCount)}</strong>
                                     </div>
-                                    <div class="txt-xs txt-hint reports-list-meta">{formatAppointmentDateTime(appointment.date, appointment.time)}</div>
+                                    <div class="report-metric-row">
+                                        <span>Read leads</span>
+                                        <strong>{formatMetricNumber(leadsSummary.readCount)}</strong>
+                                    </div>
+                                    <div class="report-metric-row">
+                                        <span>Archived leads</span>
+                                        <strong>{formatMetricNumber(leadsSummary.archivedCount)}</strong>
+                                    </div>
+                                </div>
+                                {#if leadsSummary.newCount > 0}
+                                    <p class="txt-xs txt-hint m-b-0">
+                                        {formatMetricNumber(leadsSummary.newCount)} new lead{leadsSummary.newCount === 1 ? "" : "s"} waiting for follow-up.
+                                    </p>
+                                {:else if leadsHasRecords}
+                                    <p class="txt-xs txt-hint m-b-0">No new leads need follow-up right now.</p>
+                                {:else}
+                                    <div class="report-empty-state">No leads recorded for this period.</div>
+                                {/if}
+                            </article>
+
+                            <article class="report-breakdown-item">
+                                <h6 class="m-0 report-breakdown-title">Recent leads</h6>
+                                {#if !sortedRecentLeads.length}
+                                    <div class="report-empty-state">No leads recorded for this period.</div>
+                                {:else}
+                                    <div class="reports-list">
+                                        {#each sortedRecentLeads as lead (lead.key)}
+                                            <div class="reports-list-item">
+                                                <div class="reports-list-main">
+                                                    <div class="reports-list-title">{lead.name}</div>
+                                                    <div class="txt-sm txt-hint">
+                                                        {resolveLeadSourceLabel(lead.sourceKey)} - {resolveLeadStatusLabel(lead.statusKey)}
+                                                        {#if lead.email || lead.phone}
+                                                            - {lead.email || lead.phone}
+                                                        {/if}
+                                                    </div>
+                                                    {#if lead.subject || lead.message}
+                                                        <div class="txt-sm reports-list-snippet">
+                                                            {truncate(lead.subject || lead.message, 120)}
+                                                        </div>
+                                                    {/if}
+                                                </div>
+                                                <div class="txt-xs txt-hint reports-list-meta">{formatDateTime(lead.created)}</div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </article>
+                        </div>
+                    </section>
+                </div>
+            {:else if activeTab === "booking"}
+                <div class="reports-traffic-layout">
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Booking summary</h5>
+                            <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
+                        </div>
+                        <div class="report-metric-grid">
+                            {#each bookingSummaryMetricRows as metricRow (metricRow.label)}
+                                <div class="report-metric-row">
+                                    <span>{metricRow.label}</span>
+                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
                                 </div>
                             {/each}
                         </div>
-                    {/if}
-                </section>
-            {:else if activeTab === "newsletter"}
-                <div class="reports-tab-grid">
-                    <article class="panel">
+                        {#if !bookingHasRequests}
+                            <div class="report-empty-state">No booking requests recorded for this period.</div>
+                        {/if}
+                    </section>
+
+                    <section class="panel reports-breakdown-card">
                         <div class="section-head m-b-sm">
-                            <h5 class="m-0">Newsletter summary</h5>
+                            <h5 class="m-0">Status and service demand</h5>
+                            <p class="txt-sm txt-hint m-b-0">Booking statuses and most requested services.</p>
+                        </div>
+                        <div class="reports-grid-two">
+                            <article class="report-breakdown-item">
+                                <h6 class="m-0 report-breakdown-title">Booking status</h6>
+                                {#if bookingStatusHasData}
+                                    {@const maxBookingStatus = resolveTrafficMaxCount(bookingStatusBreakdownRows)}
+                                    <div class="report-bar-list">
+                                        {#each bookingStatusBreakdownRows as statusRow}
+                                            <div class="report-bar-item">
+                                                <div class="report-bar-head">
+                                                    <span class="report-bar-label">{statusRow.label}</span>
+                                                    <strong class="report-bar-value">{formatMetricNumber(statusRow.count)}</strong>
+                                                </div>
+                                                {#if statusRow.meta}
+                                                    <div class="txt-xs txt-hint report-bar-meta">{statusRow.meta}</div>
+                                                {/if}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(statusRow.count, maxBookingStatus)}%;`} /></div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    <div class="report-empty-state">No booking requests recorded for this period.</div>
+                                {/if}
+                            </article>
+
+                            <article class="report-breakdown-item">
+                                <h6 class="m-0 report-breakdown-title">Top services</h6>
+                                {#if bookingServicesHasData}
+                                    {@const maxBookingServices = resolveTrafficMaxCount(bookingServiceBreakdownRows)}
+                                    <div class="report-bar-list">
+                                        {#each bookingServiceBreakdownRows as serviceRow}
+                                            <div class="report-bar-item">
+                                                <div class="report-bar-head">
+                                                    <span class="report-bar-label">{truncate(serviceRow.label, 56)}</span>
+                                                    <strong class="report-bar-value">{formatMetricNumber(serviceRow.count)}</strong>
+                                                </div>
+                                                {#if serviceRow.meta}
+                                                    <div class="txt-xs txt-hint report-bar-meta">{serviceRow.meta}</div>
+                                                {/if}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(serviceRow.count, maxBookingServices)}%;`} /></div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    <div class="report-empty-state">No booking service data for this period.</div>
+                                {/if}
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Operational attention</h5>
+                            <p class="txt-sm txt-hint m-b-0">Pending booking requests and upcoming appointments.</p>
+                        </div>
+                        <div class="reports-grid-two">
+                            <article class="report-breakdown-item">
+                                <div class="report-breakdown-head">
+                                    <h6 class="m-0 report-breakdown-title">Pending bookings</h6>
+                                    <span class={`label label-sm ${bookingSummary.pendingCount > 0 ? "label-warning" : "label-success"}`}>
+                                        {bookingSummary.pendingCount > 0 ? "Action needed" : "On track"}
+                                    </span>
+                                </div>
+                                <div class="report-metric-grid report-metric-grid--compact">
+                                    <div class="report-metric-row">
+                                        <span>Pending requests</span>
+                                        <strong>{formatMetricNumber(bookingSummary.pendingCount)}</strong>
+                                    </div>
+                                    <div class="report-metric-row">
+                                        <span>Upcoming appointments</span>
+                                        <strong>{formatMetricNumber(bookingSummary.upcomingCount)}</strong>
+                                    </div>
+                                </div>
+                                {#if bookingSummary.pendingCount > 0}
+                                    <p class="txt-xs txt-hint m-b-0">
+                                        {formatMetricNumber(bookingSummary.pendingCount)} pending booking request{bookingSummary.pendingCount === 1 ? "" : "s"} {bookingSummary.pendingCount === 1 ? "needs" : "need"} review.
+                                    </p>
+                                {:else if bookingHasRequests}
+                                    <p class="txt-xs txt-hint m-b-0">No pending booking requests right now.</p>
+                                {:else}
+                                    <div class="report-empty-state">No booking requests recorded for this period.</div>
+                                {/if}
+                            </article>
+
+                            <article class="report-breakdown-item">
+                                <h6 class="m-0 report-breakdown-title">Upcoming appointments</h6>
+                                {#if !upcomingAppointments.length}
+                                    <div class="report-empty-state">No upcoming appointments right now.</div>
+                                {:else}
+                                    <div class="reports-list">
+                                        {#each upcomingAppointments as appointment (appointment.id)}
+                                            <div class="reports-list-item">
+                                                <div class="reports-list-main">
+                                                    <div class="reports-list-title">{appointment.name}</div>
+                                                    <div class="txt-sm txt-hint">
+                                                        {appointment.serviceLabel} - {resolveAppointmentStatusLabel(appointment.statusKey)}
+                                                        {#if appointment.email || appointment.phone}
+                                                            - {appointment.email || appointment.phone}
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                                <div class="txt-xs txt-hint reports-list-meta">{formatAppointmentDateTime(appointment.date, appointment.time)}</div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </article>
+                        </div>
+                    </section>
+                </div>
+            {:else if activeTab === "newsletter"}
+                <div class="reports-traffic-layout">
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Audience summary</h5>
                             <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
                         </div>
-                        <div class="reports-mini-stack">
-                            <div class="reports-mini-row"><span>Active subscribers</span><strong>{newsletterSummary.activeSubscribers}</strong></div>
-                            <div class="reports-mini-row"><span>New subscribers</span><strong>{newsletterSummary.newSubscribersPeriod}</strong></div>
-                            <div class="reports-mini-row"><span>Sent campaigns</span><strong>{newsletterSummary.sentCampaignsPeriod}</strong></div>
-                            <div class="reports-mini-row"><span>Recipients reached</span><strong>{newsletterSummary.recipientsReachedPeriod}</strong></div>
-                            <div class="reports-mini-row"><span>Draft campaigns</span><strong>{newsletterSummary.draftCampaigns}</strong></div>
+                        <div class="report-metric-grid">
+                            {#each newsletterAudienceMetricRows as metricRow (metricRow.label)}
+                                <div class="report-metric-row">
+                                    <span>{metricRow.label}</span>
+                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
+                                </div>
+                            {/each}
                         </div>
-                    </article>
+                        {#if !newsletterHasSubscribers}
+                            <div class="report-empty-state">No newsletter subscribers recorded for this period.</div>
+                        {/if}
+                    </section>
 
-                    <article class="panel">
+                    <section class="panel reports-breakdown-card">
                         <div class="section-head m-b-sm">
-                            <h5 class="m-0">Recent sent campaigns</h5>
-                            <p class="txt-sm txt-hint m-b-0">Latest sent records for this website.</p>
+                            <h5 class="m-0">Campaign output</h5>
+                            <p class="txt-sm txt-hint m-b-0">Submission activity and provider-accepted recipients for this period.</p>
+                        </div>
+                        <div class="reports-grid-two">
+                            <article class="report-breakdown-item">
+                                <h6 class="m-0 report-breakdown-title">Campaign metrics</h6>
+                                <div class="report-metric-grid report-metric-grid--compact">
+                                    {#each newsletterCampaignMetricRows as metricRow (metricRow.label)}
+                                        <div class="report-metric-row">
+                                            <span>{metricRow.label}</span>
+                                            <strong>{formatMetricNumber(metricRow.count)}</strong>
+                                        </div>
+                                    {/each}
+                                </div>
+                                {#if !newsletterHasCampaignOutput}
+                                    <div class="report-empty-state">No campaigns submitted for this period.</div>
+                                {/if}
+                            </article>
+
+                            <article class="report-breakdown-item">
+                                <h6 class="m-0 report-breakdown-title">Campaign status mix</h6>
+                                {#if newsletterCampaignStatusHasData}
+                                    {@const maxNewsletterStatus = resolveTrafficMaxCount(newsletterCampaignStatusRows)}
+                                    <div class="report-bar-list">
+                                        {#each newsletterCampaignStatusRows as statusRow}
+                                            <div class="report-bar-item">
+                                                <div class="report-bar-head">
+                                                    <span class="report-bar-label">{statusRow.label}</span>
+                                                    <strong class="report-bar-value">{formatMetricNumber(statusRow.count)}</strong>
+                                                </div>
+                                                {#if statusRow.meta}
+                                                    <div class="txt-xs txt-hint report-bar-meta">{statusRow.meta}</div>
+                                                {/if}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(statusRow.count, maxNewsletterStatus)}%;`} /></div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    <div class="report-empty-state">No campaigns submitted for this period.</div>
+                                {/if}
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Operational attention</h5>
+                            <p class="txt-sm txt-hint m-b-0">Pending confirmations and recent campaign activity.</p>
+                        </div>
+                        <div class="reports-grid-two">
+                            <article class="report-breakdown-item">
+                                <div class="report-breakdown-head">
+                                    <h6 class="m-0 report-breakdown-title">Pending confirmations</h6>
+                                    <span class={`label label-sm ${pendingSubscribersCount > 0 ? "label-warning" : "label-success"}`}>
+                                        {pendingSubscribersCount > 0 ? "Action needed" : "On track"}
+                                    </span>
+                                </div>
+                                <div class="report-metric-grid report-metric-grid--compact">
+                                    <div class="report-metric-row">
+                                        <span>Pending confirmations</span>
+                                        <strong>{formatMetricNumber(pendingSubscribersCount)}</strong>
+                                    </div>
+                                    <div class="report-metric-row">
+                                        <span>Campaigns submitted</span>
+                                        <strong>{formatMetricNumber(newsletterSummary.sentCampaignsPeriod)}</strong>
+                                    </div>
+                                </div>
+                                {#if pendingSubscribersCount > 0}
+                                    <p class="txt-xs txt-hint m-b-0">
+                                        {formatMetricNumber(pendingSubscribersCount)} subscriber confirmation{pendingSubscribersCount === 1 ? "" : "s"} still pending.
+                                    </p>
+                                {:else if newsletterHasSubscribers}
+                                    <p class="txt-xs txt-hint m-b-0">No pending confirmations right now.</p>
+                                {:else}
+                                    <div class="report-empty-state">No newsletter subscribers recorded for this period.</div>
+                                {/if}
+
+                                {#if newsletterSummary.sentCampaignsPeriod < 1}
+                                    <div class="report-empty-state">No campaigns submitted for this period.</div>
+                                {/if}
+                            </article>
+
+                            <article class="report-breakdown-item">
+                                <h6 class="m-0 report-breakdown-title">Recent submitted campaigns</h6>
+                                {#if !recentSentCampaigns.length}
+                                    <div class="report-empty-state">No campaigns submitted for this period.</div>
+                                {:else}
+                                    <div class="reports-list">
+                                        {#each recentSentCampaigns as campaign}
+                                            <div class="reports-list-item">
+                                                <div class="reports-list-main">
+                                                    <div class="reports-list-title">{truncate(campaign.subject, 80)}</div>
+                                                    <div class="txt-sm txt-hint">
+                                                        {formatMetricNumber(campaign.recipientsCount)} recipients submitted - {formatDateTime(campaign.sentTs || campaign.updatedTs || campaign.createdTs)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            </article>
+                        </div>
+                    </section>
+                </div>
+            {:else if activeTab === "seo"}
+                <div class="reports-traffic-layout">
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">SEO summary</h5>
+                            <p class="txt-sm txt-hint m-b-0">Search visibility basics across this website.</p>
+                        </div>
+                        <div class="report-metric-grid">
+                            {#each seoSummaryMetricRows as metricRow (metricRow.label)}
+                                <div class="report-metric-row">
+                                    <span>{metricRow.label}</span>
+                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
+                                </div>
+                            {/each}
+                        </div>
+                    </section>
+
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Quick SEO fixes</h5>
+                            <p class="txt-sm txt-hint m-b-0">Most common page issues affecting search visibility basics.</p>
+                        </div>
+                        {#if seoIssueBreakdownHasData}
+                            {@const maxSeoIssueCount = resolveTrafficMaxCount(seoIssueBreakdownRows)}
+                            <div class="report-bar-list">
+                                {#each seoIssueBreakdownRows as issueRow}
+                                    <div class="report-bar-item">
+                                        <div class="report-bar-head">
+                                            <span class="report-bar-label">{issueRow.label}</span>
+                                            <strong class="report-bar-value">{formatMetricNumber(issueRow.count)}</strong>
+                                        </div>
+                                        {#if issueRow.meta}
+                                            <div class="txt-xs txt-hint report-bar-meta">{issueRow.meta}</div>
+                                        {/if}
+                                        <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(issueRow.count, maxSeoIssueCount)}%;`} /></div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {:else}
+                            <div class="report-empty-state">No SEO issues detected for this website.</div>
+                        {/if}
+                    </section>
+
+                    <section class="panel reports-breakdown-card">
+                        <div class="section-head m-b-sm">
+                            <h5 class="m-0">Pages needing attention</h5>
+                            <p class="txt-sm txt-hint m-b-0">Prioritized pages for quick SEO fixes.</p>
                         </div>
 
-                        {#if !recentSentCampaigns.length}
-                            <div class="empty-state m-b-0">No sent campaigns available.</div>
+                        {#if !prioritizedSeoRows.length}
+                            <div class="report-empty-state">No SEO issues detected for this website.</div>
                         {:else}
-                            <div class="reports-mini-stack">
-                                {#each recentSentCampaigns as campaign}
-                                    <div class="reports-mini-row reports-mini-row--wrap">
-                                        <span>{truncate(campaign.subject, 80)}</span>
-                                        <span class="txt-sm txt-hint">
-                                            {campaign.recipientsCount} recipients - {formatDateTime(campaign.sentTs || campaign.updatedTs || campaign.createdTs)}
+                            <div class="reports-list">
+                                {#each prioritizedSeoRows as pageRow (pageRow.id)}
+                                    <div class="reports-list-item">
+                                        <div class="reports-list-main">
+                                            <div class="reports-list-title">{pageRow.title}</div>
+                                            <div class="txt-sm txt-hint">{pageRow.reasons.join(" - ")}</div>
+                                        </div>
+                                        <span class={`label label-sm ${pageRow.healthKey === "missing-basics" ? "label-danger" : "label-warning"}`}>
+                                            {resolveSeoHealthLabel(pageRow.healthKey)}
                                         </span>
                                     </div>
                                 {/each}
                             </div>
                         {/if}
-                    </article>
+                    </section>
                 </div>
-            {:else if activeTab === "seo"}
-                <div class="reports-tab-grid">
-                    <article class="panel">
-                        <div class="section-head m-b-sm">
-                            <h5 class="m-0">Page SEO health</h5>
-                            <p class="txt-sm txt-hint m-b-0">Current pages status for this website.</p>
-                        </div>
-                        <div class="reports-mini-stack">
-                            <div class="reports-mini-row"><span>Total pages</span><strong>{seoSummary.totalPages}</strong></div>
-                            <div class="reports-mini-row"><span>Good</span><strong>{seoSummary.good}</strong></div>
-                            <div class="reports-mini-row"><span>Needs attention</span><strong>{seoSummary.needsAttention}</strong></div>
-                            <div class="reports-mini-row"><span>Missing basics</span><strong>{seoSummary.missingBasics}</strong></div>
-                        </div>
-                    </article>
-
-                    <article class="panel">
-                        <div class="section-head m-b-sm">
-                            <h5 class="m-0">SEO gaps</h5>
-                            <p class="txt-sm txt-hint m-b-0">Most common blockers found in pages.</p>
-                        </div>
-                        <div class="reports-mini-stack">
-                            <div class="reports-mini-row"><span>Missing title</span><strong>{seoSummary.missingTitle}</strong></div>
-                            <div class="reports-mini-row"><span>Missing description</span><strong>{seoSummary.missingDescription}</strong></div>
-                            <div class="reports-mini-row"><span>Missing social image</span><strong>{seoSummary.missingSocialImage}</strong></div>
-                            <div class="reports-mini-row"><span>Noindex pages</span><strong>{seoSummary.noindexPages}</strong></div>
-                        </div>
-                    </article>
-                </div>
-
-                <section class="panel m-t-sm">
-                    <div class="section-head m-b-sm">
-                        <h5 class="m-0">Pages needing attention</h5>
-                        <p class="txt-sm txt-hint m-b-0">Focus on these pages first.</p>
-                    </div>
-
-                    {#if !seoSummary.pageRows.length}
-                        <div class="empty-state m-b-0">No pages need SEO attention right now.</div>
-                    {:else}
-                        <div class="reports-list">
-                            {#each seoSummary.pageRows as pageRow (pageRow.id)}
-                                <div class="reports-list-item">
-                                    <div class="reports-list-main">
-                                        <div class="reports-list-title">{pageRow.title}</div>
-                                        <div class="txt-sm txt-hint">{pageRow.reasons.join(" - ")}</div>
-                                    </div>
-                                    <span class={`label label-sm ${pageRow.healthKey === "missing-basics" ? "label-danger" : "label-warning"}`}>
-                                        {resolveSeoHealthLabel(pageRow.healthKey)}
-                                    </span>
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
-                </section>
             {:else if activeTab === "traffic"}
                 {#if isLoadingTraffic}
                     <section class="panel reports-placeholder-panel">
@@ -1839,208 +3022,453 @@
                         </div>
                     </section>
                 {:else if trafficState === "ok"}
-                    <div class="reports-tab-grid">
-                        <article class="panel">
+                    <div class="reports-traffic-layout">
+                        <section class="panel reports-breakdown-card">
                             <div class="section-head m-b-sm">
-                                <h5 class="m-0">Traffic summary</h5>
+                                <h5 class="m-0">Traffic overview</h5>
                                 <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
                             </div>
-                            <div class="reports-mini-stack">
-                                <div class="reports-mini-row"><span>Visitors</span><strong>{formatMetricNumber(trafficSummary?.visitors)}</strong></div>
-                                <div class="reports-mini-row"><span>Pageviews</span><strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong></div>
-                                <div class="reports-mini-row"><span>Bounce rate</span><strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong></div>
-                                <div class="reports-mini-row"><span>Visit duration</span><strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong></div>
-                            </div>
-                        </article>
-
-                        <article class="panel">
-                            <div class="section-head m-b-sm">
-                                <h5 class="m-0">Top pages</h5>
-                                <p class="txt-sm txt-hint m-b-0">Most viewed pages in the selected period.</p>
-                            </div>
-
-                            {#if trafficTopPages.length}
-                                <div class="reports-mini-stack">
-                                    {#each trafficTopPages.slice(0, 8) as pageRow}
-                                        <div class="reports-mini-row reports-mini-row--wrap">
-                                            <span>{pageRow.page || "/"}</span>
-                                            <span class="txt-sm txt-hint">
-                                                {formatMetricNumber(pageRow.visitors)} visitors - {formatMetricNumber(pageRow.pageviews)} pageviews
-                                            </span>
-                                        </div>
-                                    {/each}
+                            <div class="report-metric-grid">
+                                <div class="report-metric-row">
+                                    <span>Visitors</span>
+                                    <strong>{formatMetricNumber(trafficSummary?.visitors)}</strong>
                                 </div>
-                            {:else}
-                                <div class="empty-state m-b-0">No top pages data available for this period.</div>
+                                <div class="report-metric-row">
+                                    <span>Pageviews</span>
+                                    <strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong>
+                                </div>
+                                <div class="report-metric-row">
+                                    <span>Bounce / interaction rate</span>
+                                    <strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong>
+                                </div>
+                                <div class="report-metric-row">
+                                    <span>Average visit duration</span>
+                                    <strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong>
+                                </div>
+                            </div>
+                            {#if trafficOverviewMessage}
+                                <p class="txt-sm txt-hint m-b-0 report-traffic-state-note">
+                                    <span class={`label label-sm ${resolveMetricStatePillClass(trafficOverviewStatus)}`}>
+                                        {trafficOverviewStatusLabel}
+                                    </span>
+                                    {trafficOverviewMessage}
+                                </p>
                             {/if}
-                        </article>
-                    </div>
-
-                    <div class="reports-grid-two m-t-sm">
-                        <article class="panel">
-                            <div class="section-head m-b-sm">
-                                <h5 class="m-0">Traffic sources</h5>
-                                <p class="txt-sm txt-hint m-b-0">Main traffic sources by visitors.</p>
-                            </div>
-
-                            {#if trafficSources.length}
-                                <div class="reports-mini-stack">
-                                    {#each trafficSources.slice(0, 8) as sourceRow}
-                                        <div class="reports-mini-row"><span>{sourceRow.source || "Direct"}</span><strong>{formatMetricNumber(sourceRow.visitors)}</strong></div>
-                                    {/each}
-                                </div>
-                            {:else}
-                                <div class="empty-state m-b-0">No traffic source data available for this period.</div>
-                            {/if}
-                        </article>
-
-                        <article class="panel">
-                            <div class="section-head m-b-sm">
-                                <h5 class="m-0">Devices</h5>
-                                <p class="txt-sm txt-hint m-b-0">Visitors by device type.</p>
-                            </div>
-
-                            {#if trafficDevices.length}
-                                <div class="reports-mini-stack">
-                                    {#each trafficDevices.slice(0, 8) as deviceRow}
-                                        <div class="reports-mini-row"><span>{deviceRow.device || "Unknown"}</span><strong>{formatMetricNumber(deviceRow.visitors)}</strong></div>
-                                    {/each}
-                                </div>
-                            {:else}
-                                <div class="empty-state m-b-0">No device data available for this period.</div>
-                            {/if}
-                        </article>
-                    </div>
-
-                    {#if hasExpandedTrafficMetrics}
-                        {#if trafficEntryPages.length || trafficExitPages.length}
-                            <div class="reports-grid-two m-t-sm">
-                                {#if trafficEntryPages.length}
-                                    <article class="panel">
-                                        <div class="section-head m-b-sm">
-                                            <h5 class="m-0">Entry pages</h5>
-                                            <p class="txt-sm txt-hint m-b-0">Where visitors started their sessions.</p>
-                                        </div>
-                                        <div class="reports-mini-stack">
-                                            {#each trafficEntryPages.slice(0, 8) as entryPage}
-                                                <div class="reports-mini-row reports-mini-row--wrap">
-                                                    <span>{entryPage.page || "/"}</span>
-                                                    <span class="txt-sm txt-hint">
-                                                        {formatMetricNumber(entryPage.visitors)} visitors - {formatMetricNumber(entryPage.pageviews)} pageviews
-                                                    </span>
-                                                </div>
-                                            {/each}
-                                        </div>
-                                    </article>
-                                {/if}
-
-                                {#if trafficExitPages.length}
-                                    <article class="panel">
-                                        <div class="section-head m-b-sm">
-                                            <h5 class="m-0">Exit pages</h5>
-                                            <p class="txt-sm txt-hint m-b-0">Where visitors left the site.</p>
-                                        </div>
-                                        <div class="reports-mini-stack">
-                                            {#each trafficExitPages.slice(0, 8) as exitPage}
-                                                <div class="reports-mini-row reports-mini-row--wrap">
-                                                    <span>{exitPage.page || "/"}</span>
-                                                    <span class="txt-sm txt-hint">
-                                                        {formatMetricNumber(exitPage.visitors)} visitors - {formatMetricNumber(exitPage.pageviews)} pageviews
-                                                    </span>
-                                                </div>
-                                            {/each}
-                                        </div>
-                                    </article>
-                                {/if}
-                            </div>
-                        {/if}
-
-                        {#if trafficCountries.length || trafficRegions.length}
-                            <div class="reports-grid-two m-t-sm">
-                                {#if trafficCountries.length}
-                                    <article class="panel">
-                                        <div class="section-head m-b-sm">
-                                            <h5 class="m-0">Countries</h5>
-                                            <p class="txt-sm txt-hint m-b-0">Visitor location breakdown.</p>
-                                        </div>
-                                        <div class="reports-mini-stack">
-                                            {#each trafficCountries.slice(0, 8) as countryRow}
-                                                <div class="reports-mini-row"><span>{countryRow.label || "Unknown"}</span><strong>{formatMetricNumber(countryRow.visitors)}</strong></div>
-                                            {/each}
-                                        </div>
-                                    </article>
-                                {/if}
-
-                                {#if trafficRegions.length}
-                                    <article class="panel">
-                                        <div class="section-head m-b-sm">
-                                            <h5 class="m-0">Regions</h5>
-                                            <p class="txt-sm txt-hint m-b-0">Visitor location breakdown.</p>
-                                        </div>
-                                        <div class="reports-mini-stack">
-                                            {#each trafficRegions.slice(0, 8) as regionRow}
-                                                <div class="reports-mini-row"><span>{regionRow.label || "Unknown"}</span><strong>{formatMetricNumber(regionRow.visitors)}</strong></div>
-                                            {/each}
-                                        </div>
-                                    </article>
-                                {/if}
-                            </div>
-                        {/if}
-
-                        {#if trafficCities.length || trafficBrowsers.length}
-                            <div class="reports-grid-two m-t-sm">
-                                {#if trafficCities.length}
-                                    <article class="panel">
-                                        <div class="section-head m-b-sm">
-                                            <h5 class="m-0">Cities</h5>
-                                            <p class="txt-sm txt-hint m-b-0">Visitor location breakdown.</p>
-                                        </div>
-                                        <div class="reports-mini-stack">
-                                            {#each trafficCities.slice(0, 8) as cityRow}
-                                                <div class="reports-mini-row"><span>{cityRow.label || "Unknown"}</span><strong>{formatMetricNumber(cityRow.visitors)}</strong></div>
-                                            {/each}
-                                        </div>
-                                    </article>
-                                {/if}
-
-                                {#if trafficBrowsers.length}
-                                    <article class="panel">
-                                        <div class="section-head m-b-sm">
-                                            <h5 class="m-0">Browsers</h5>
-                                            <p class="txt-sm txt-hint m-b-0">Visitor technology breakdown.</p>
-                                        </div>
-                                        <div class="reports-mini-stack">
-                                            {#each trafficBrowsers.slice(0, 8) as browserRow}
-                                                <div class="reports-mini-row"><span>{browserRow.label || "Unknown"}</span><strong>{formatMetricNumber(browserRow.visitors)}</strong></div>
-                                            {/each}
-                                        </div>
-                                    </article>
-                                {/if}
-                            </div>
-                        {/if}
-
-                        {#if trafficOperatingSystems.length}
-                            <section class="panel m-t-sm">
-                                <div class="section-head m-b-sm">
-                                    <h5 class="m-0">Operating systems</h5>
-                                    <p class="txt-sm txt-hint m-b-0">Visitor technology breakdown.</p>
-                                </div>
-                                <div class="reports-mini-stack">
-                                    {#each trafficOperatingSystems.slice(0, 8) as osRow}
-                                        <div class="reports-mini-row"><span>{osRow.label || "Unknown"}</span><strong>{formatMetricNumber(osRow.visitors)}</strong></div>
-                                    {/each}
-                                </div>
-                            </section>
-                        {/if}
-                    {:else}
-                        <section class="panel m-t-sm">
-                            <div class="section-head m-b-sm">
-                                <h5 class="m-0">Expanded analytics breakdown</h5>
-                                <p class="txt-sm txt-hint m-b-0">Additional native analytics dimensions are currently unavailable for this period.</p>
-                            </div>
-                            <div class="empty-state m-b-0">No expanded analytics data available for this period.</div>
                         </section>
-                    {/if}
+
+                        <section class="panel reports-breakdown-card">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Content performance</h5>
+                                <p class="txt-sm txt-hint m-b-0">Top, entry, and exit pages for this period.</p>
+                            </div>
+                            <div class="reports-grid-three">
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Top pages</h6>
+                                    {#if trafficTopPageRows.length}
+                                        {@const maxTopPages = resolveTrafficMaxCount(trafficTopPageRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficTopPageRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label || "/", 56)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    {#if row.meta}
+                                                        <div class="txt-xs txt-hint report-bar-meta">{row.meta}</div>
+                                                    {/if}
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxTopPages)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No top pages data available for this period.</div>
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Entry pages</h6>
+                                    {#if trafficEntryPageRows.length}
+                                        {@const maxEntryPages = resolveTrafficMaxCount(trafficEntryPageRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficEntryPageRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label || "/", 56)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    {#if row.meta}
+                                                        <div class="txt-xs txt-hint report-bar-meta">{row.meta}</div>
+                                                    {/if}
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxEntryPages)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No entry pages data available for this period.</div>
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Exit pages</h6>
+                                    {#if trafficExitPageRows.length}
+                                        {@const maxExitPages = resolveTrafficMaxCount(trafficExitPageRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficExitPageRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label || "/", 56)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    {#if row.meta}
+                                                        <div class="txt-xs txt-hint report-bar-meta">{row.meta}</div>
+                                                    {/if}
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxExitPages)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No exit pages data available for this period.</div>
+                                    {/if}
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="panel reports-breakdown-card">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Acquisition</h5>
+                                <p class="txt-sm txt-hint m-b-0">Sources that drove visits in this period.</p>
+                            </div>
+                            {#if trafficSourceRows.length}
+                                {@const maxSources = resolveTrafficMaxCount(trafficSourceRows)}
+                                <div class="report-bar-list">
+                                    {#each trafficSourceRows as row}
+                                        <div class="report-bar-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{truncate(row.label, 56)}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                            </div>
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxSources)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No source data available for this period.</div>
+                            {/if}
+                        </section>
+
+                        <section class="panel reports-breakdown-card">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Audience and technology</h5>
+                                <p class="txt-sm txt-hint m-b-0">Visitor locations, devices, and technology details.</p>
+                            </div>
+                            <div class="reports-grid-three">
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Countries</h6>
+                                    {#if trafficCountryRows.length}
+                                        {@const maxCountries = resolveTrafficMaxCount(trafficCountryRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficCountryRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 42)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxCountries)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No country data available.</div>
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Regions</h6>
+                                    {#if trafficRegionRows.length}
+                                        {@const maxRegions = resolveTrafficMaxCount(trafficRegionRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficRegionRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 42)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxRegions)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No region data available.</div>
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Cities</h6>
+                                    {#if trafficCityRows.length}
+                                        {@const maxCities = resolveTrafficMaxCount(trafficCityRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficCityRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 42)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxCities)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No city data available.</div>
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Devices</h6>
+                                    {#if trafficDeviceRows.length}
+                                        {@const maxDevices = resolveTrafficMaxCount(trafficDeviceRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficDeviceRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 42)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxDevices)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No device data available.</div>
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Browsers</h6>
+                                    {#if trafficBrowserRows.length}
+                                        {@const maxBrowsers = resolveTrafficMaxCount(trafficBrowserRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficBrowserRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 42)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxBrowsers)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No browser data available.</div>
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Operating systems</h6>
+                                    {#if trafficOperatingSystemRows.length}
+                                        {@const maxOperatingSystems = resolveTrafficMaxCount(trafficOperatingSystemRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficOperatingSystemRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 42)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxOperatingSystems)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">No operating system data available.</div>
+                                    {/if}
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="panel reports-breakdown-card">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Tracked actions and scroll depth</h5>
+                                <p class="txt-sm txt-hint m-b-0">Conversion events and engagement depth signals.</p>
+                            </div>
+                            <div class="reports-grid-two">
+                                <article class="report-breakdown-item">
+                                    <div class="report-breakdown-head">
+                                        <h6 class="m-0 report-breakdown-title">Tracked actions</h6>
+                                        <span class={`label label-sm ${resolveMetricStatePillClass(trafficConversionsState)}`}>
+                                            {resolveMetricStateLabel(trafficConversionsState)}
+                                        </span>
+                                    </div>
+                                    <p class="txt-xs txt-hint m-b-0">{trafficConversionsMessage}</p>
+                                    {#if trafficConversionShowMeasuredSummary}
+                                        <div class="report-metric-grid report-metric-grid--compact">
+                                            <div class="report-metric-row"><span>Total actions</span><strong>{formatMetricNumber(trafficConversionTotalsAllEvents)}</strong></div>
+                                            <div class="report-metric-row"><span>Action types</span><strong>{formatMetricNumber(trafficConversionTotalsUniqueEventTypes)}</strong></div>
+                                        </div>
+                                    {:else if trafficConversionShowKnownSummary}
+                                        <div class="report-metric-grid report-metric-grid--compact">
+                                            <div class="report-metric-row"><span>Known actions</span><strong>{formatMetricNumber(trafficConversionTotalsAllEvents)}</strong></div>
+                                            <div class="report-metric-row"><span>Known action types</span><strong>{formatMetricNumber(trafficConversionTotalsUniqueEventTypes)}</strong></div>
+                                        </div>
+                                    {:else}
+                                        <div class="report-empty-state">{trafficConversionUnavailableMessage}</div>
+                                    {/if}
+                                    {#if trafficConversionShouldRenderBreakdowns && trafficConversionByTypeRenderableRows.length}
+                                        {@const maxConversionTypes = resolveTrafficMaxCount(trafficConversionByTypeRenderableRows)}
+                                        {#if trafficConversionIsPartial}
+                                            <div class="report-empty-state">Some conversion event breakdowns are unavailable. Showing directional data only.</div>
+                                        {/if}
+                                        <div class="report-bar-list">
+                                            {#each trafficConversionByTypeRenderableRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 48)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxConversionTypes)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        {#if trafficConversionIsOk}
+                                            <div class="report-empty-state">No tracked actions recorded for this period.</div>
+                                        {:else if trafficConversionShowKnownSummary}
+                                            <div class="report-empty-state">{trafficConversionUnavailableMessage}</div>
+                                        {/if}
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <div class="report-breakdown-head">
+                                        <h6 class="m-0 report-breakdown-title">Scroll depth</h6>
+                                        <span class={`label label-sm ${resolveMetricStatePillClass(trafficScrollDepthState)}`}>
+                                            {resolveMetricStateLabel(trafficScrollDepthState)}
+                                        </span>
+                                    </div>
+                                    <p class="txt-xs txt-hint m-b-0">{trafficScrollDepthMessage}</p>
+                                    {#if trafficScrollDepthShouldRenderBreakdowns && trafficScrollDepthThresholdRenderableRows.length}
+                                        {@const maxScrollThreshold = resolveTrafficMaxCount(trafficScrollDepthThresholdRenderableRows)}
+                                        {#if trafficScrollDepthIsPartial}
+                                            <div class="report-empty-state">Some scroll depth metrics are unavailable. Showing directional data only.</div>
+                                        {/if}
+                                        <div class="report-bar-list">
+                                            {#each trafficScrollDepthThresholdRenderableRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{row.label}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxScrollThreshold)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        {#if trafficScrollDepthIsOk}
+                                            <div class="report-empty-state">No scroll depth events recorded for this period.</div>
+                                        {:else}
+                                            <div class="report-empty-state">{trafficScrollDepthUnavailableMessage}</div>
+                                        {/if}
+                                    {/if}
+                                </article>
+                            </div>
+
+                            <div class="reports-grid-three m-t-sm">
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Actions by page</h6>
+                                    {#if trafficConversionShouldRenderBreakdowns && trafficConversionByPageRenderableRows.length}
+                                        {@const maxConversionsByPage = resolveTrafficMaxCount(trafficConversionByPageRenderableRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficConversionByPageRenderableRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 40)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxConversionsByPage)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        {#if trafficConversionIsOk}
+                                            <div class="report-empty-state">No per-page action data available.</div>
+                                        {:else}
+                                            <div class="report-empty-state">{trafficConversionUnavailableMessage}</div>
+                                        {/if}
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Actions by source block</h6>
+                                    {#if trafficConversionShouldRenderBreakdowns && trafficConversionBySourceRenderableRows.length}
+                                        {@const maxConversionsBySource = resolveTrafficMaxCount(trafficConversionBySourceRenderableRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficConversionBySourceRenderableRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 40)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxConversionsBySource)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        {#if trafficConversionIsOk}
+                                            <div class="report-empty-state">No source block action data available.</div>
+                                        {:else}
+                                            <div class="report-empty-state">{trafficConversionUnavailableMessage}</div>
+                                        {/if}
+                                    {/if}
+                                </article>
+
+                                <article class="report-breakdown-item">
+                                    <h6 class="m-0 report-breakdown-title">Actions by CTA type</h6>
+                                    {#if trafficConversionShouldRenderBreakdowns && trafficConversionByCtaRenderableRows.length}
+                                        {@const maxConversionsByCta = resolveTrafficMaxCount(trafficConversionByCtaRenderableRows)}
+                                        <div class="report-bar-list">
+                                            {#each trafficConversionByCtaRenderableRows as row}
+                                                <div class="report-bar-item">
+                                                    <div class="report-bar-head">
+                                                        <span class="report-bar-label">{truncate(row.label, 40)}</span>
+                                                        <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                    </div>
+                                                    <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxConversionsByCta)}%;`} /></div>
+                                                </div>
+                                            {/each}
+                                        </div>
+                                    {:else}
+                                        {#if trafficConversionIsOk}
+                                            <div class="report-empty-state">No CTA action data available.</div>
+                                        {:else}
+                                            <div class="report-empty-state">{trafficConversionUnavailableMessage}</div>
+                                        {/if}
+                                    {/if}
+                                </article>
+                            </div>
+
+                            <article class="report-breakdown-item m-t-sm">
+                                <h6 class="m-0 report-breakdown-title">Scroll depth by page</h6>
+                                {#if trafficScrollDepthShouldRenderBreakdowns && trafficScrollDepthByPageRenderableRows.length}
+                                    {@const maxScrollByPage = resolveTrafficMaxCount(trafficScrollDepthByPageRenderableRows)}
+                                    <div class="report-bar-list">
+                                        {#each trafficScrollDepthByPageRenderableRows as row}
+                                            <div class="report-bar-item">
+                                                <div class="report-bar-head">
+                                                    <span class="report-bar-label">{truncate(row.label, 56)}</span>
+                                                    <strong class="report-bar-value">{formatMetricNumber(row.count)}</strong>
+                                                </div>
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(row.count, maxScrollByPage)}%;`} /></div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    {#if trafficScrollDepthIsOk}
+                                        <div class="report-empty-state">No per-page scroll depth data available.</div>
+                                    {:else}
+                                        <div class="report-empty-state">{trafficScrollDepthUnavailableMessage}</div>
+                                    {/if}
+                                {/if}
+                            </article>
+                        </section>
+                    </div>
                 {:else}
                     <section class="panel reports-placeholder-panel">
                         <div class="section-head m-b-sm">
@@ -2065,57 +3493,84 @@
 
 <style>
     .reports-head.operations-head .head-main {
-        gap: 16px;
+        gap: 12px;
     }
 
-    .reports-head.operations-head .head-selector {
+    .reports-head.operations-head .head-description {
+        max-width: 520px;
+    }
+
+    .reports-head.operations-head .head-tools {
         display: flex;
-        align-items: flex-end;
+        align-items: center;
+        justify-content: space-between;
         gap: 10px;
         flex-wrap: wrap;
     }
 
-    .reports-head.operations-head .selector-row {
+    .reports-head.operations-head .head-tools > * {
+        min-width: 0;
+    }
+
+    .reports-head.operations-head .head-selector {
+        width: min(100%, 760px);
         display: grid;
-        gap: 6px;
+        grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+        align-items: end;
+        gap: 8px;
     }
 
-    .reports-head.operations-head .selector-row--website {
-        min-width: 100%;
+    .reports-head.operations-head .selector-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
     }
 
-    .reports-head.operations-head .selector-row--period {
-        min-width: min(100%, 260px);
+    .reports-head.operations-head .selector-row .input {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .reports-head.operations-head .selector-row--website .selector-label {
+        min-width: 60px;
+    }
+
+    .reports-head.operations-head .selector-row--period .selector-label {
+        min-width: 52px;
     }
 
     .reports-head.operations-head .summary-badges {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+        justify-content: flex-end;
     }
 
     .reports-body {
-        display: grid;
-        gap: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
     }
 
     .reports-tabs {
+        width: fit-content;
+        max-width: 100%;
+        margin-top: 0;
         flex-wrap: wrap;
     }
 
     .reports-overview-layout {
         display: grid;
-        gap: 12px;
-        grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+        gap: 10px;
+        grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
         align-items: start;
     }
 
-    .reports-overview-main {
-        display: grid;
-        gap: 10px;
-    }
-
-    .reports-overview-rail {
+    .reports-overview-main,
+    .reports-overview-rail,
+    .reports-traffic-layout,
+    .report-health-panel {
         display: grid;
         gap: 10px;
     }
@@ -2126,9 +3581,22 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .reports-overview-kpi-grid {
+        grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+        gap: 8px;
+    }
+
     .reports-kpi-card {
         display: grid;
         gap: 6px;
+    }
+
+    .reports-overview-kpi-card {
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
+        box-shadow: none;
+        padding: 10px;
+        gap: 5px;
     }
 
     .reports-kpi-head {
@@ -2138,21 +3606,182 @@
         gap: 8px;
     }
 
+    .reports-kpi-label {
+        font-weight: 600;
+    }
+
     .reports-kpi-value {
-        font-size: 26px;
+        font-size: 24px;
         line-height: 1.1;
         font-weight: 700;
         color: var(--txtPrimaryColor);
     }
 
+    .reports-kpi-hint {
+        line-height: 1.35;
+    }
+
+    .reports-overview-section {
+        display: grid;
+        gap: 8px;
+    }
+
     .reports-grid-two,
-    .reports-tab-grid {
+    .reports-grid-three {
         display: grid;
         gap: 10px;
+    }
+
+    .reports-grid-two {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .reports-mini-stack {
+    .reports-grid-three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .reports-breakdown-card {
+        display: grid;
+        gap: 10px;
+        background: color-mix(in srgb, var(--baseAlt1Color) 9%, var(--baseColor));
+    }
+
+    .reports-breakdown-card,
+    .reports-rail-card {
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        box-shadow: none;
+    }
+
+    .report-breakdown-item {
+        display: grid;
+        gap: 8px;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
+        padding: 9px 10px;
+        min-width: 0;
+    }
+
+    .report-breakdown-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .report-breakdown-title {
+        font-size: var(--baseFontSize);
+        line-height: 1.35;
+    }
+
+    .report-metric-grid {
+        display: grid;
+        gap: 7px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .report-metric-grid--compact {
+        grid-template-columns: 1fr;
+    }
+
+    .report-metric-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 9px;
+        border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 88%, transparent);
+        border-radius: var(--baseRadius);
+        background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
+        min-width: 0;
+    }
+
+    .report-metric-row > span {
+        min-width: 0;
+        color: var(--txtHintColor);
+        font-size: var(--smFontSize);
+        line-height: 1.35;
+    }
+
+    .report-metric-row > strong {
+        flex: 0 0 auto;
+        color: var(--txtPrimaryColor);
+        font-size: var(--mdFontSize);
+        line-height: 1.2;
+    }
+
+    .report-traffic-state-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .report-empty-state {
+        border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 85%, transparent);
+        border-radius: var(--baseRadius);
+        background: color-mix(in srgb, var(--baseAlt1Color) 8%, var(--baseColor));
+        color: var(--txtHintColor);
+        font-size: var(--smFontSize);
+        line-height: var(--smLineHeight);
+        padding: 8px 10px;
+    }
+
+    .report-bar-list {
+        display: grid;
+        gap: 6px;
+    }
+
+    .report-bar-item {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .report-bar-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .report-bar-label {
+        min-width: 0;
+        color: var(--txtPrimaryColor);
+        font-size: var(--smFontSize);
+        line-height: 1.35;
+    }
+
+    .report-bar-value {
+        flex: 0 0 auto;
+        color: var(--txtPrimaryColor);
+        font-size: var(--smFontSize);
+        line-height: 1.2;
+    }
+
+    .report-bar-meta {
+        line-height: 1.35;
+    }
+
+    .report-bar-track {
+        width: 100%;
+        height: 5px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--baseAlt2Color) 72%, transparent);
+        overflow: hidden;
+    }
+
+    .report-bar-fill {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: color-mix(in srgb, var(--primaryColor) 58%, var(--txtHintColor));
+    }
+
+    .reports-mini-stack,
+    .reports-list {
         display: grid;
         gap: 8px;
     }
@@ -2168,14 +3797,18 @@
         background: var(--baseColor);
     }
 
+    .reports-mini-row-label {
+        min-width: 0;
+    }
+
     .reports-mini-row--wrap {
         align-items: flex-start;
         flex-direction: column;
     }
 
-    .reports-list {
-        display: grid;
-        gap: 8px;
+    .reports-confidence-note {
+        margin: 0;
+        line-height: 1.35;
     }
 
     .reports-list-item {
@@ -2207,9 +3840,9 @@
         white-space: nowrap;
     }
 
-    .report-health-panel {
-        display: grid;
-        gap: 10px;
+    .reports-rail-card {
+        background: color-mix(in srgb, var(--baseAlt1Color) 10%, var(--baseColor));
+        gap: 8px;
     }
 
     .report-health-head {
@@ -2232,45 +3865,77 @@
         flex-wrap: wrap;
     }
 
-    .report-health-group-title {
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--txtHintColor);
-        margin-bottom: 6px;
-        font-weight: 700;
-    }
-
     .report-health-item {
         display: grid;
-        grid-template-columns: auto 1fr;
         gap: 8px;
-        align-items: flex-start;
         padding: 8px 0;
         border-top: 1px dashed var(--baseAlt2Color);
         color: var(--txtPrimaryColor);
     }
 
+    .reports-rail-item {
+        gap: 6px;
+        padding: 7px 0;
+    }
+
+    .report-health-item-headline {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .report-health-item-body {
+        display: grid;
+        gap: 4px;
+    }
+
+    .report-health-item-title {
+        line-height: 1.35;
+        font-weight: 600;
+    }
+
+    .reports-rail-evidence {
+        line-height: 1.4;
+    }
+
+    .reports-rail-empty {
+        padding: 2px 0 1px;
+    }
+
+    .report-health-panel .report-health-item:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+    }
+
     .report-health-item.warning {
-        color: color-mix(in srgb, var(--warningColor) 80%, var(--txtPrimaryColor));
+        border-left: 2px solid color-mix(in srgb, var(--warningColor) 55%, var(--baseAlt2Color));
+        padding-left: 8px;
     }
 
     .report-health-pill {
-        min-width: 56px;
+        min-width: 52px;
         justify-content: center;
     }
 
-    .report-health-pill.warning {
-        border-color: color-mix(in srgb, var(--warningColor) 45%, var(--baseAlt2Color));
-        color: color-mix(in srgb, var(--warningColor) 88%, var(--txtPrimaryColor));
-        background: color-mix(in srgb, var(--warningColor) 14%, var(--baseColor));
+    .reports-confidence-list {
+        gap: 0;
+    }
+
+    .reports-confidence-list .reports-rail-item {
+        border-top: 1px dashed var(--baseAlt2Color);
+    }
+
+    .reports-confidence-list .reports-rail-item:first-of-type {
+        border-top: 0;
+        padding-top: 0;
     }
 
     .reports-placeholder-panel {
         min-height: 180px;
         display: grid;
         align-content: start;
-        gap: 8px;
+        gap: 10px;
     }
 
     @media (max-width: 1220px) {
@@ -2279,15 +3944,32 @@
         }
 
         .reports-overview-rail {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: 1fr;
         }
     }
 
     @media (max-width: 980px) {
+        .reports-head.operations-head .head-tools {
+            align-items: stretch;
+        }
+
+        .reports-head.operations-head .summary-badges {
+            justify-content: flex-start;
+        }
+
+        .reports-head.operations-head .head-selector {
+            grid-template-columns: 1fr;
+            width: 100%;
+        }
+
         .reports-grid-two,
-        .reports-tab-grid,
+        .reports-grid-three,
         .reports-kpi-grid,
         .reports-overview-rail {
+            grid-template-columns: 1fr;
+        }
+
+        .report-metric-grid {
             grid-template-columns: 1fr;
         }
 
@@ -2302,10 +3984,6 @@
     }
 
     @media (max-width: 760px) {
-        .reports-head.operations-head .head-selector {
-            width: 100%;
-        }
-
         .reports-head.operations-head .selector-row {
             min-width: 100%;
         }
