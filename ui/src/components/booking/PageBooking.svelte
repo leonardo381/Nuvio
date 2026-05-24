@@ -43,6 +43,12 @@
         { key: "oldest", label: "Oldest" },
         { key: "upcoming", label: "Upcoming first" },
     ];
+    const appointmentPriorityFilterOptions = [
+        { key: "all", label: "All priorities" },
+        { key: "high", label: "High" },
+        { key: "normal", label: "Normal" },
+        { key: "low", label: "Low" },
+    ];
     const appointmentViewOptions = [
         { key: "inbox", label: "Inbox", icon: "ri-inbox-line" },
         { key: "archived", label: "Archived", icon: "ri-archive-line" },
@@ -117,6 +123,7 @@
     let appointmentStatusFilter = "all";
     let appointmentDateFilter = "all";
     let appointmentServiceFilter = "all";
+    let appointmentPriorityFilter = "all";
     let appointmentSearch = "";
     let appointmentSort = "newest";
     let selectedAppointmentIds = [];
@@ -568,6 +575,13 @@
                 return false;
             }
 
+            if (
+                appointmentPriorityFilter !== "all"
+                && normalizeServicePriority(appointment.servicePriorityKey) !== appointmentPriorityFilter
+            ) {
+                return false;
+            }
+
             if (!matchAppointmentDateFilter(appointment, appointmentDateFilter)) {
                 return false;
             }
@@ -578,6 +592,8 @@
                     appointment.email,
                     appointment.phone,
                     appointment.serviceLabel,
+                    appointment.servicePriorityLabel,
+                    appointment.servicePriorityKey,
                     appointment.customerNotes,
                     appointment.internalNotes,
                 ]
@@ -601,6 +617,7 @@
         appointmentStatusFilter,
         appointmentDateFilter,
         appointmentServiceFilter,
+        appointmentPriorityFilter,
         appointmentSort,
     ].join(":");
     $: if (appointmentsVisibleResetKey !== lastAppointmentVisibleResetKey) {
@@ -2608,6 +2625,13 @@
         const serviceDescription = serviceDescriptionSnapshot
             || normalizeString(expandedService?.description)
             || normalizeString(serviceRecord?.description);
+        const servicePriorityKey = mapDisplayOrderToPriority(
+            readNonNegativeInteger(
+                expandedService?.displayOrder ?? serviceRecord?.displayOrder,
+                50,
+            ),
+        );
+        const servicePriorityLabel = formatServicePriorityLabel(servicePriorityKey);
 
         const statusKey = normalizeStatus(record?.[appointmentStatusFieldName]);
         const statusMeta = getStatusMeta(statusKey);
@@ -2619,6 +2643,8 @@
             serviceLabel,
             serviceDurationMinutes,
             serviceDescription,
+            servicePriorityKey,
+            servicePriorityLabel,
             name: normalizeString(record?.name) || "Unnamed customer",
             email: normalizeString(record?.email),
             phone: normalizeString(record?.phone),
@@ -4195,6 +4221,7 @@
         appointmentStatusFilter = "all";
         appointmentDateFilter = "all";
         appointmentServiceFilter = "all";
+        appointmentPriorityFilter = "all";
         appointmentSearch = "";
         appointmentSort = "newest";
     }
@@ -4365,7 +4392,7 @@
                                 id="booking-appointment-search"
                                 class="input input-sm"
                                 type="text"
-                                placeholder="Search by name, email, phone, service, or notes..."
+                                placeholder="Search appointments..."
                                 bind:value={appointmentSearch}
                             />
                         </div>
@@ -4394,6 +4421,15 @@
                                 <option value="all">All services</option>
                                 {#each appointmentServiceOptions as serviceOption (serviceOption.id)}
                                     <option value={serviceOption.id}>{serviceOption.label}</option>
+                                {/each}
+                            </select>
+                        </div>
+
+                        <div class="booking-control-cell booking-control-cell--select">
+                            <label class="txt-sm txt-hint" for="booking-appointment-priority-filter">Priority</label>
+                            <select id="booking-appointment-priority-filter" class="input input-sm" bind:value={appointmentPriorityFilter}>
+                                {#each appointmentPriorityFilterOptions as option (option.key)}
+                                    <option value={option.key}>{option.label}</option>
                                 {/each}
                             </select>
                         </div>
@@ -5998,16 +6034,23 @@
                     </div>
 
                     <div class="form-field m-b-0 booking-manual-slot-field">
-                        <label class="txt-sm txt-hint">Time</label>
+                        <div class="booking-manual-slot-head">
+                            {#if manualAppointmentForm.time}
+                                <span class="label label-sm booking-manual-slot-selected-pill">Selected: {manualAppointmentForm.time}</span>
+                            {/if}
+                        </div>
                         {#if !manualAppointmentForm.serviceId || !manualAppointmentForm.date}
-                            <div class="txt-xs txt-hint">Select service and date to load available times.</div>
+                            <p class="txt-xs txt-hint m-b-0 booking-manual-slot-message">Select service and date to load available times.</p>
                         {:else if isLoadingManualAppointmentSlots}
-                            <div class="txt-xs txt-hint">Loading available times...</div>
+                            <p class="txt-xs txt-hint m-b-0 booking-manual-slot-message booking-manual-slot-message--loading">Loading available times...</p>
                         {:else if manualAppointmentSlotsError}
-                            <div class="txt-xs txt-danger">{manualAppointmentSlotsError}</div>
+                            <p class="txt-xs txt-danger m-b-0 booking-manual-slot-message booking-manual-slot-message--error">{manualAppointmentSlotsError}</p>
                         {:else if !manualAppointmentAvailableSlots.length}
-                            <div class="txt-xs txt-hint">No available times for this date.</div>
+                            <p class="txt-xs txt-hint m-b-0 booking-manual-slot-message">No available times for this date.</p>
                         {:else}
+                            {#if !manualAppointmentForm.time}
+                                <p class="txt-xs txt-hint m-b-0 booking-manual-slot-message booking-manual-slot-message--ready">Choose one available time.</p>
+                            {/if}
                             <div class="booking-manual-slots">
                                 {#each manualAppointmentAvailableSlots as slot}
                                     <button
@@ -6434,7 +6477,7 @@
     }
 
     .booking-controls--appointments {
-        grid-template-columns: 1.6fr repeat(4, minmax(130px, 0.8fr)) auto;
+        grid-template-columns: 1.5fr repeat(5, minmax(120px, 0.78fr)) auto;
     }
 
     .booking-control-cell {
@@ -7673,12 +7716,50 @@
 
     .booking-manual-slot-field {
         grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .booking-manual-slot-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .booking-manual-slot-selected-pill {
+        white-space: nowrap;
+    }
+
+    .booking-manual-slot-message {
+        line-height: 1.35;
+    }
+
+    .booking-manual-slot-message--loading {
+        opacity: 0.9;
+    }
+
+    .booking-manual-slot-message--error {
+        padding: 6px 8px;
+        border-left: 2px solid color-mix(in srgb, var(--dangerColor) 55%, var(--baseAlt2Color));
+        background: color-mix(in srgb, var(--dangerColor) 6%, transparent);
+        border-radius: 3px;
+    }
+
+    .booking-manual-slot-message--ready {
+        color: color-mix(in srgb, var(--txtHintColor) 88%, var(--txtPrimaryColor));
     }
 
     .booking-manual-slots {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+    }
+
+    .booking-manual-slot-btn {
+        min-width: 76px;
     }
 
     .booking-manual-slot-btn.active {
