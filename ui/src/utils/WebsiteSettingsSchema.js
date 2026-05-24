@@ -7,6 +7,10 @@ const bookingConfirmationModes = new Set(["request", "autoConfirm"]);
 const websiteFeatureFlagKeys = ["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"];
 const websiteFeatureSectionKeys = new Set(["whatsapp", "contactForm", "reviews", "newsletter", "booking", "reports", "i18n"]);
 const hiddenWebsiteSettingsFeatureKeys = new Set(["reviews"]);
+const contactFormTemplateVariablesHint = "Available variables: {{websiteName}}, {{submittedAt}}, {{leadSource}}, {{leadName}}, {{leadEmail}}, {{leadPhone}}, {{leadSubject}}, {{leadMessage}}.";
+const whatsappTemplateVariablesHint = "Available variables: {{websiteName}}, {{submittedAt}}, {{leadSource}}, {{source}}, {{pageUrl}}, {{whatsappPhone}}, {{defaultMessage}}.";
+const bookingTemplateVariablesHint = "Available variables: {{websiteName}}, {{submittedAt}}, {{customerName}}, {{customerEmail}}, {{customerPhone}}, {{serviceName}}, {{serviceDuration}}, {{appointmentDate}}, {{appointmentTime}}, {{appointmentStatus}}, {{notes}}.";
+const newsletterConfirmationTemplateVariablesHint = "Available variables: {{websiteName}}, {{subscriberEmail}}, {{confirmationUrl}}, {{submittedAt}}. The confirmation link block is always injected by Nuvio.";
 
 export const websiteSettingsSchema = {
     fields: [
@@ -147,7 +151,7 @@ export const websiteSettingsSchema = {
                             label: "Business notification template",
                             type: "object",
                             editableBy: [ROLE_ADMIN, ROLE_CLIENT],
-                            hint: "Customize operational emails sent to your team when new WhatsApp interactions are tracked.",
+                            hint: `Customize operational emails sent to your team when new WhatsApp interactions are tracked. ${whatsappTemplateVariablesHint}`,
                             fields: [
                                 {
                                     key: "enabled",
@@ -249,7 +253,7 @@ export const websiteSettingsSchema = {
                             label: "Business notification template",
                             type: "object",
                             editableBy: [ROLE_ADMIN, ROLE_CLIENT],
-                            hint: "Customize operational emails sent to your team when new contact form leads arrive.",
+                            hint: `Customize operational emails sent to your team when new contact form leads arrive. ${contactFormTemplateVariablesHint}`,
                             fields: [
                                 {
                                     key: "enabled",
@@ -437,7 +441,7 @@ export const websiteSettingsSchema = {
                             label: "Confirmation email template",
                             type: "object",
                             editableBy: [ROLE_ADMIN, ROLE_CLIENT],
-                            hint: "Customize the email subscribers receive to confirm their newsletter subscription.",
+                            hint: `Customize the email subscribers receive to confirm their newsletter subscription. ${newsletterConfirmationTemplateVariablesHint}`,
                             fields: [
                                 {
                                     key: "enabled",
@@ -544,7 +548,7 @@ export const websiteSettingsSchema = {
                             label: "Business notification template",
                             type: "object",
                             editableBy: [ROLE_ADMIN, ROLE_CLIENT],
-                            hint: "Customize operational emails sent to your team when new booking requests arrive.",
+                            hint: `Customize operational emails sent to your team when new booking requests arrive. ${bookingTemplateVariablesHint}`,
                             fields: [
                                 {
                                     key: "enabled",
@@ -596,7 +600,7 @@ export const websiteSettingsSchema = {
                             label: "Visitor request email",
                             type: "object",
                             editableBy: [ROLE_ADMIN, ROLE_CLIENT],
-                            hint: "Customize the email visitors receive after sending a booking request.",
+                            hint: `Customize the email visitors receive after sending a booking request. ${bookingTemplateVariablesHint}`,
                             fields: [
                                 {
                                     key: "enabled",
@@ -633,7 +637,7 @@ export const websiteSettingsSchema = {
                             label: "Visitor confirmation email",
                             type: "object",
                             editableBy: [ROLE_ADMIN, ROLE_CLIENT],
-                            hint: "Customize the email visitors receive when an appointment is confirmed.",
+                            hint: `Customize the email visitors receive when an appointment is confirmed. ${bookingTemplateVariablesHint}`,
                             fields: [
                                 {
                                     key: "enabled",
@@ -670,7 +674,7 @@ export const websiteSettingsSchema = {
                             label: "Visitor reschedule email",
                             type: "object",
                             editableBy: [ROLE_ADMIN, ROLE_CLIENT],
-                            hint: "Customize the email visitors receive when an appointment is rescheduled.",
+                            hint: `Customize the email visitors receive when an appointment is rescheduled. ${bookingTemplateVariablesHint}`,
                             fields: [
                                 {
                                     key: "enabled",
