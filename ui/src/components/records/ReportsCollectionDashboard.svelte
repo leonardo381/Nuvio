@@ -252,15 +252,8 @@
         const featureFlags = settings?.featureFlags && typeof settings.featureFlags === "object"
             ? settings.featureFlags
             : {};
-        const reportsSettings = settings?.reports && typeof settings.reports === "object"
-            ? settings.reports
-            : {};
 
         if (featureFlags.reports === false) {
-            return false;
-        }
-
-        if (reportsSettings.enabled === false) {
             return false;
         }
 

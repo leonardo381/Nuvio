@@ -340,15 +340,16 @@
                 };
             })
             .filter(Boolean);
+        const editableLeadsChannels = leadsChannels.filter((channel) => channel.hasEditableFields);
 
-        if (leadsChannels.length) {
+        if (editableLeadsChannels.length) {
             features.push({
                 key: websiteSettingsLeadsFeatureKey,
                 label: "Leads",
                 icon: "ri-user-line",
                 field: null,
-                hasEditableFields: leadsChannels.some((channel) => channel.hasEditableFields),
-                groupedFeatures: leadsChannels,
+                hasEditableFields: true,
+                groupedFeatures: editableLeadsChannels,
             });
         }
 
@@ -362,6 +363,10 @@
             }
 
             const field = websiteSettingsFieldsByKey.get(key) || null;
+            if (!field) {
+                continue;
+            }
+
             features.push({
                 key,
                 label: field?.label || websiteSettingsFeatureLabelByKey?.[key] || "Feature",

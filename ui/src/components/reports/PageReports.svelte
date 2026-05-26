@@ -5,6 +5,7 @@
     import { collections, isCollectionsLoading, loadCollections } from "@/stores/collections";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
+    import { normalizeWebsiteSettingsValue } from "@/utils/WebsiteSettingsSchema";
 
     $pageTitle = "Reports";
 
@@ -26,6 +27,7 @@
     ];
 
     const archivedStatusAliases = ["archived", "archive"];
+    const clientTrafficUnavailableMessage = "Traffic analytics are not configured for this website yet.";
 
     let activeTab = "overview";
     let selectedPeriod = "thisMonth";
@@ -51,8 +53,19 @@
     let lastTrafficKey = "";
     let dataLoadToken = 0;
     let trafficLoadToken = 0;
+    let lastTrafficAnalyticsSetupSeed = "";
+    let isSavingTrafficAnalyticsSetup = false;
+    let trafficAnalyticsSetupError = "";
+    let trafficAnalyticsSetupSuccess = "";
 
     let trafficResponse = null;
+    let trafficAnalyticsSetupDraft = {
+        enabled: false,
+        siteId: "",
+        scriptEnabled: false,
+        scriptUrl: "",
+        scrollDepth: false,
+    };
 
     loadCollections();
 
@@ -64,9 +77,42 @@
     $: subscribersCollection = resolveCollectionByAliases(["subscribers"]);
     $: campaignsCollection = resolveCollectionByAliases(["campaigns"]);
     $: pagesCollection = resolveCollectionByAliases(["pages"]);
+    $: websiteSettingsField = resolveWebsiteSettingsField(websitesCollection);
 
     $: selectedWebsite = websites.find((website) => website.id === selectedWebsiteId) || null;
+    $: selectedWebsiteSettings = normalizeWebsiteSettingsValue(selectedWebsite?.[websiteSettingsField]);
+    $: selectedWebsiteFeatureFlags = selectedWebsiteSettings?.featureFlags && typeof selectedWebsiteSettings.featureFlags === "object"
+        ? selectedWebsiteSettings.featureFlags
+        : {};
+    $: selectedWebsiteReportsSettings = selectedWebsiteSettings?.reports && typeof selectedWebsiteSettings.reports === "object"
+        ? selectedWebsiteSettings.reports
+        : {};
+    $: selectedWebsiteReportsAnalytics = selectedWebsiteReportsSettings?.analytics && typeof selectedWebsiteReportsSettings.analytics === "object"
+        ? selectedWebsiteReportsSettings.analytics
+        : {};
+    $: selectedWebsiteReportsEvents = selectedWebsiteReportsAnalytics?.events && typeof selectedWebsiteReportsAnalytics.events === "object"
+        ? selectedWebsiteReportsAnalytics.events
+        : {};
     $: reportsFeatureAvailable = resolveReportsFeatureAvailable(selectedWebsite);
+    $: canConfigureTrafficAnalytics = ApiClient.isAdminSuperuser();
+    $: trafficAnalyticsSetupMissingReasons = resolveTrafficAnalyticsSetupMissingReasons(selectedWebsiteReportsAnalytics);
+    $: showTrafficAnalyticsSetup = canConfigureTrafficAnalytics && trafficAnalyticsSetupMissingReasons.length > 0;
+    $: trafficAnalyticsSetupSeed = [
+        normalizeString(selectedWebsite?.id),
+        normalizeString(selectedWebsite?.updated),
+        selectedWebsiteReportsAnalytics?.enabled ? "1" : "0",
+        normalizeLower(selectedWebsiteReportsAnalytics?.provider),
+        normalizeString(selectedWebsiteReportsAnalytics?.siteId),
+        selectedWebsiteReportsAnalytics?.scriptEnabled ? "1" : "0",
+        normalizeString(selectedWebsiteReportsAnalytics?.scriptUrl),
+        selectedWebsiteReportsEvents?.scrollDepth ? "1" : "0",
+    ].join("|");
+    $: if (trafficAnalyticsSetupSeed !== lastTrafficAnalyticsSetupSeed) {
+        lastTrafficAnalyticsSetupSeed = trafficAnalyticsSetupSeed;
+        trafficAnalyticsSetupDraft = buildTrafficAnalyticsSetupDraft(selectedWebsiteReportsAnalytics);
+        trafficAnalyticsSetupError = "";
+        trafficAnalyticsSetupSuccess = "";
+    }
 
     $: selectedPeriodLabel = periodOptions.find((option) => option.key === selectedPeriod)?.label || "This month";
     $: selectedTrafficPeriod = mapPeriodToTrafficPeriod(selectedPeriod);
@@ -658,6 +704,7 @@
         selectedPeriodLabel,
         trafficResponse,
         trafficInsights,
+        canConfigureTrafficAnalytics,
     });
 
     $: historyPlaceholderMessage = "Monthly report history will appear here once automatic snapshots are enabled.";
@@ -699,40 +746,47 @@
         return "thisMonth";
     }
 
-    function resolveTrafficStateMessage(stateKey) {
-        if (stateKey === "feature_unavailable") {
+    function resolveTrafficStateMessage(stateKey, options = {}) {
+        const normalizedState = normalizeLower(stateKey);
+        const isAdminViewer = !!options?.isAdminViewer;
+
+        if (normalizedState === "feature_unavailable") {
             return "Traffic analytics are not available for this website.";
         }
 
-        if (stateKey === "analytics_disabled") {
+        if (!isAdminViewer) {
+            return clientTrafficUnavailableMessage;
+        }
+
+        if (normalizedState === "analytics_disabled") {
             return "Traffic analytics are disabled.";
         }
 
-        if (stateKey === "analytics_not_configured") {
+        if (normalizedState === "analytics_not_configured") {
             return "Analytics are not configured yet.";
         }
 
-        if (stateKey === "provider_unconfigured") {
+        if (normalizedState === "provider_unconfigured") {
             return "Analytics provider is not configured on the server yet.";
         }
 
-        if (stateKey === "provider_auth_missing") {
+        if (normalizedState === "provider_auth_missing") {
             return "Analytics provider authentication is not configured on the server yet.";
         }
 
-        if (stateKey === "provider_auth_error") {
+        if (normalizedState === "provider_auth_error") {
             return "Unable to authenticate with the analytics provider.";
         }
 
-        if (stateKey === "provider_not_found") {
+        if (normalizedState === "provider_not_found") {
             return "Analytics website was not found for this configuration.";
         }
 
-        if (stateKey === "provider_not_implemented" || stateKey === "provider_unsupported") {
+        if (normalizedState === "provider_not_implemented" || normalizedState === "provider_unsupported") {
             return "Analytics provider is not connected yet.";
         }
 
-        if (stateKey === "provider_error") {
+        if (normalizedState === "provider_error") {
             return "Unable to load traffic analytics right now.";
         }
 
@@ -1083,41 +1137,66 @@
         return `${normalized.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
     }
 
-    function parseSettings(rawSettings) {
-        if (rawSettings && typeof rawSettings === "object" && !Array.isArray(rawSettings)) {
-            return rawSettings;
-        }
-
-        if (typeof rawSettings === "string") {
-            try {
-                const parsed = JSON.parse(rawSettings);
-                return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-            } catch (_) {
-                return {};
-            }
-        }
-
-        return {};
-    }
-
     function resolveReportsFeatureAvailable(website) {
-        const settings = parseSettings(website?.settings);
+        const settings = normalizeWebsiteSettingsValue(
+            website?.[websiteSettingsField] ?? website?.settings,
+        );
         const featureFlags = settings?.featureFlags && typeof settings.featureFlags === "object"
             ? settings.featureFlags
-            : {};
-        const reportsSettings = settings?.reports && typeof settings.reports === "object"
-            ? settings.reports
             : {};
 
         if (featureFlags.reports === false) {
             return false;
         }
 
-        if (reportsSettings.enabled === false) {
-            return false;
+        return true;
+    }
+
+    function resolveWebsiteSettingsField(collection) {
+        const allIdentifiers = CommonHelper.getAllCollectionIdentifiers(collection)
+            .map((field) => normalizeLower(field));
+
+        if (allIdentifiers.includes("settings")) {
+            return "settings";
         }
 
-        return true;
+        return "settings";
+    }
+
+    function buildTrafficAnalyticsSetupDraft(analyticsSettings) {
+        const settings = analyticsSettings && typeof analyticsSettings === "object"
+            ? analyticsSettings
+            : {};
+        const events = settings?.events && typeof settings.events === "object"
+            ? settings.events
+            : {};
+
+        return {
+            enabled: !!settings.enabled,
+            siteId: normalizeString(settings.siteId),
+            scriptEnabled: !!settings.scriptEnabled,
+            scriptUrl: normalizeString(settings.scriptUrl),
+            scrollDepth: !!events.scrollDepth,
+        };
+    }
+
+    function resolveTrafficAnalyticsSetupMissingReasons(analyticsSettings) {
+        const settings = analyticsSettings && typeof analyticsSettings === "object"
+            ? analyticsSettings
+            : {};
+        const missing = [];
+
+        if (normalizeLower(settings.provider) !== "umami") {
+            missing.push("Analytics provider must be set to Umami.");
+        }
+        if (!settings.enabled) {
+            missing.push("Enable analytics tracking.");
+        }
+        if (!normalizeString(settings.siteId)) {
+            missing.push("Add the Umami site ID.");
+        }
+
+        return missing;
     }
 
     function resolveCollectionByAliases(aliases = []) {
@@ -1316,6 +1395,69 @@
             if (currentToken === trafficLoadToken) {
                 isLoadingTraffic = false;
             }
+        }
+    }
+
+    async function saveTrafficAnalyticsSetup() {
+        trafficAnalyticsSetupError = "";
+        trafficAnalyticsSetupSuccess = "";
+
+        if (!selectedWebsite?.id || !websitesCollection?.id || !websiteSettingsField) {
+            trafficAnalyticsSetupError = "Unable to save traffic analytics settings for this website.";
+            return;
+        }
+
+        const nextSiteId = normalizeString(trafficAnalyticsSetupDraft.siteId);
+        if (trafficAnalyticsSetupDraft.enabled && !nextSiteId) {
+            trafficAnalyticsSetupError = "Add the Umami site ID to enable traffic analytics.";
+            return;
+        }
+
+        isSavingTrafficAnalyticsSetup = true;
+
+        try {
+            const fullSettings = normalizeWebsiteSettingsValue(selectedWebsite?.[websiteSettingsField]);
+            const reportsSettings = fullSettings?.reports && typeof fullSettings.reports === "object"
+                ? fullSettings.reports
+                : {};
+            const analyticsSettings = reportsSettings?.analytics && typeof reportsSettings.analytics === "object"
+                ? reportsSettings.analytics
+                : {};
+            const analyticsEvents = analyticsSettings?.events && typeof analyticsSettings.events === "object"
+                ? analyticsSettings.events
+                : {};
+
+            const nextSettings = normalizeWebsiteSettingsValue({
+                ...fullSettings,
+                reports: {
+                    ...reportsSettings,
+                    analytics: {
+                        ...analyticsSettings,
+                        provider: "umami",
+                        enabled: !!trafficAnalyticsSetupDraft.enabled,
+                        siteId: nextSiteId,
+                        scriptEnabled: !!trafficAnalyticsSetupDraft.scriptEnabled,
+                        scriptUrl: normalizeString(trafficAnalyticsSetupDraft.scriptUrl),
+                        events: {
+                            ...analyticsEvents,
+                            scrollDepth: !!trafficAnalyticsSetupDraft.scrollDepth,
+                        },
+                    },
+                },
+            });
+
+            await ApiClient.collection(websitesCollection.id).update(selectedWebsite.id, {
+                [websiteSettingsField]: structuredClone(nextSettings),
+            });
+
+            trafficAnalyticsSetupSuccess = "Traffic analytics settings saved.";
+            await loadWebsites();
+            await loadTrafficData();
+        } catch (err) {
+            ApiClient.error(err);
+            trafficAnalyticsSetupError = err?.response?.message || err?.message || "Failed to save traffic analytics settings.";
+        } finally {
+            isSavingTrafficAnalyticsSetup = false;
         }
     }
 
@@ -2193,7 +2335,9 @@
         const hasTrafficPartialInsight = insightIds.has("traffic-partial");
         let trafficMessage = trafficReady
             ? `${trafficLabel} traffic analytics loaded.`
-            : resolveTrafficStateMessage(payload?.trafficDisplayState || "");
+            : resolveTrafficStateMessage(payload?.trafficDisplayState || "", {
+                isAdminViewer: !!payload?.canConfigureTrafficAnalytics,
+            });
 
         if (trafficIsPartial) {
             trafficMessage = "Traffic analytics connected, but some breakdowns are unavailable.";
@@ -2472,7 +2616,9 @@
                                     <h5 class="m-0">Traffic analytics</h5>
                                     <p class="txt-sm txt-hint m-b-0">Traffic analytics are not connected yet.</p>
                                 </div>
-                                <div class="empty-state m-b-0">{resolveTrafficStateMessage(trafficDisplayState)}</div>
+                                <div class="empty-state m-b-0">
+                                    {resolveTrafficStateMessage(trafficDisplayState, { isAdminViewer: canConfigureTrafficAnalytics })}
+                                </div>
                             </section>
                         {/if}
                     </div>
@@ -3475,8 +3621,77 @@
                             <h5 class="m-0">Traffic</h5>
                             <p class="txt-sm txt-hint m-b-0">Analytics status for this website.</p>
                         </div>
-                        <div class="empty-state m-b-0">{resolveTrafficStateMessage(trafficDisplayState)}</div>
+                        <div class="empty-state m-b-0">
+                            {resolveTrafficStateMessage(trafficDisplayState, { isAdminViewer: canConfigureTrafficAnalytics })}
+                        </div>
                     </section>
+                    {#if showTrafficAnalyticsSetup}
+                        <section class="panel reports-breakdown-card reports-analytics-setup-card">
+                            <div class="section-head m-b-sm">
+                                <h5 class="m-0">Traffic analytics setup</h5>
+                                <p class="txt-sm txt-hint m-b-0">Configure Umami website settings for this website.</p>
+                            </div>
+                            {#if trafficAnalyticsSetupMissingReasons.length}
+                                <div class="report-empty-state reports-analytics-setup-missing">
+                                    {#each trafficAnalyticsSetupMissingReasons as missingReason}
+                                        <div>{missingReason}</div>
+                                    {/each}
+                                </div>
+                            {/if}
+                            <div class="reports-analytics-setup-grid">
+                                <label class="reports-analytics-setup-toggle">
+                                    <input type="checkbox" bind:checked={trafficAnalyticsSetupDraft.enabled} />
+                                    <span>Enable analytics tracking</span>
+                                </label>
+                                <label class="reports-analytics-setup-field">
+                                    <span class="txt-sm txt-hint">Provider</span>
+                                    <input class="input input-sm" type="text" value="Umami" disabled />
+                                </label>
+                                <label class="reports-analytics-setup-field">
+                                    <span class="txt-sm txt-hint">Umami site ID</span>
+                                    <input
+                                        class="input input-sm"
+                                        type="text"
+                                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                                        bind:value={trafficAnalyticsSetupDraft.siteId}
+                                    />
+                                </label>
+                                <label class="reports-analytics-setup-toggle">
+                                    <input type="checkbox" bind:checked={trafficAnalyticsSetupDraft.scriptEnabled} />
+                                    <span>Inject analytics tracking script</span>
+                                </label>
+                                <label class="reports-analytics-setup-field">
+                                    <span class="txt-sm txt-hint">Analytics script URL</span>
+                                    <input
+                                        class="input input-sm"
+                                        type="text"
+                                        placeholder="https://umami.example.com/script.js"
+                                        bind:value={trafficAnalyticsSetupDraft.scriptUrl}
+                                    />
+                                </label>
+                                <label class="reports-analytics-setup-toggle">
+                                    <input type="checkbox" bind:checked={trafficAnalyticsSetupDraft.scrollDepth} />
+                                    <span>Track scroll depth events</span>
+                                </label>
+                            </div>
+                            <div class="settings-section-actions m-t-sm">
+                                <button
+                                    type="button"
+                                    class="btn btn-sm"
+                                    disabled={isSavingTrafficAnalyticsSetup}
+                                    on:click={saveTrafficAnalyticsSetup}
+                                >
+                                    {isSavingTrafficAnalyticsSetup ? "Saving..." : "Save traffic analytics settings"}
+                                </button>
+                            </div>
+                            {#if trafficAnalyticsSetupError}
+                                <p class="txt-danger m-t-8 m-b-0">{trafficAnalyticsSetupError}</p>
+                            {/if}
+                            {#if trafficAnalyticsSetupSuccess}
+                                <p class="txt-success m-t-8 m-b-0">{trafficAnalyticsSetupSuccess}</p>
+                            {/if}
+                        </section>
+                    {/if}
                 {/if}
             {:else if activeTab === "history"}
                 <section class="panel reports-placeholder-panel">
@@ -3938,6 +4153,49 @@
         gap: 10px;
     }
 
+    .reports-analytics-setup-card {
+        gap: 10px;
+    }
+
+    .reports-analytics-setup-missing {
+        display: grid;
+        gap: 4px;
+    }
+
+    .reports-analytics-setup-grid {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .reports-analytics-setup-field {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .reports-analytics-setup-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        border-radius: var(--baseRadius);
+        background: color-mix(in srgb, var(--baseAlt1Color) 12%, var(--baseColor));
+        padding: 7px 9px;
+    }
+
+    .reports-analytics-setup-toggle > span {
+        color: var(--txtPrimaryColor);
+        font-size: var(--smFontSize);
+        line-height: 1.35;
+    }
+
+    .reports-analytics-setup-toggle > input {
+        margin: 0;
+        flex: 0 0 auto;
+    }
+
     @media (max-width: 1220px) {
         .reports-overview-layout {
             grid-template-columns: 1fr;
@@ -3965,7 +4223,8 @@
         .reports-grid-two,
         .reports-grid-three,
         .reports-kpi-grid,
-        .reports-overview-rail {
+        .reports-overview-rail,
+        .reports-analytics-setup-grid {
             grid-template-columns: 1fr;
         }
 
