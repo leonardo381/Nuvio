@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -25,6 +26,7 @@ const (
 	nuvioReportsTrafficPeriodLastMonth = "lastMonth"
 	nuvioReportsTrafficPeriodLast30d   = "last30Days"
 	nuvioReportsTrafficPeriodAllTime   = "allTime"
+	nuvioReportsDashboardMaxScan       = 5000
 )
 
 var (
@@ -52,7 +54,6 @@ type nuvioWebsiteReportsAnalyticsConfig struct {
 	SiteID            string
 	ScriptEnabled     bool
 	ScriptURL         string
-	APIURL            string
 	EventsScrollDepth bool
 }
 
@@ -222,6 +223,112 @@ type nuvioReportsTrafficResponse struct {
 	FetchedAt        string                               `json:"fetchedAt,omitempty"`
 }
 
+type nuvioReportsDashboardFeatureFlags struct {
+	Reports bool `json:"reports"`
+}
+
+type nuvioReportsDashboardWebsiteSEODefaults struct {
+	SEOTitle       string `json:"seoTitle"`
+	SEODescription string `json:"seoDescription"`
+	SEOSocialImage bool   `json:"seoSocialImage"`
+}
+
+type nuvioReportsDashboardContactDTO struct {
+	ID      string `json:"id"`
+	Website string `json:"website"`
+	Channel string `json:"channel"`
+	Status  string `json:"status"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Phone   string `json:"phone"`
+	Subject string `json:"subject"`
+	Message string `json:"message"`
+	Created string `json:"created"`
+}
+
+type nuvioReportsDashboardWhatsappDTO struct {
+	ID             string `json:"id"`
+	Website        string `json:"website"`
+	Status         string `json:"status"`
+	Source         string `json:"source"`
+	Name           string `json:"name"`
+	Email          string `json:"email"`
+	Phone          string `json:"phone"`
+	Message        string `json:"message"`
+	DefaultMessage string `json:"defaultMessage"`
+	Created        string `json:"created"`
+}
+
+type nuvioReportsDashboardAppointmentDTO struct {
+	ID      string `json:"id"`
+	Website string `json:"website"`
+	Service string `json:"service"`
+	Status  string `json:"status"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Phone   string `json:"phone"`
+	Date    string `json:"date"`
+	Time    string `json:"time"`
+	Created string `json:"created"`
+}
+
+type nuvioReportsDashboardBookingServiceDTO struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type nuvioReportsDashboardSubscriberDTO struct {
+	ID      string `json:"id"`
+	Email   string `json:"email"`
+	Status  string `json:"status"`
+	Created string `json:"created"`
+}
+
+type nuvioReportsDashboardCampaignDTO struct {
+	ID              string `json:"id"`
+	Subject         string `json:"subject"`
+	Status          string `json:"status"`
+	RecipientsCount any    `json:"recipientsCount"`
+	SentAt          string `json:"sentAt"`
+	Updated         string `json:"updated"`
+	Created         string `json:"created"`
+}
+
+type nuvioReportsDashboardPageDTO struct {
+	ID             string `json:"id"`
+	Website        string `json:"website"`
+	Title          string `json:"title"`
+	Name           string `json:"name"`
+	Slug           string `json:"slug"`
+	Path           string `json:"path"`
+	URL            string `json:"url"`
+	SEOTitle       string `json:"seo_title"`
+	SEODescription string `json:"seo_description"`
+	SEOSocialImage any    `json:"seo_social_image"`
+	SEONoindex     any    `json:"seo_noindex"`
+	Updated        string `json:"updated"`
+	Created        string `json:"created"`
+}
+
+type nuvioReportsDashboardDatasets struct {
+	Contacts        []nuvioReportsDashboardContactDTO        `json:"contacts"`
+	Whatsapp        []nuvioReportsDashboardWhatsappDTO       `json:"whatsapp"`
+	Appointments    []nuvioReportsDashboardAppointmentDTO    `json:"appointments"`
+	BookingServices []nuvioReportsDashboardBookingServiceDTO `json:"bookingServices"`
+	Subscribers     []nuvioReportsDashboardSubscriberDTO     `json:"subscribers"`
+	Campaigns       []nuvioReportsDashboardCampaignDTO       `json:"campaigns"`
+	Pages           []nuvioReportsDashboardPageDTO           `json:"pages"`
+}
+
+type nuvioReportsDashboardResponse struct {
+	State              string                                  `json:"state"`
+	WebsiteID          string                                  `json:"websiteId"`
+	Period             nuvioReportsTrafficPeriod               `json:"period"`
+	FeatureFlags       nuvioReportsDashboardFeatureFlags       `json:"featureFlags"`
+	WebsiteSEODefaults nuvioReportsDashboardWebsiteSEODefaults `json:"websiteSeoDefaults"`
+	Datasets           nuvioReportsDashboardDatasets           `json:"datasets"`
+}
+
 type nuvioReportsTrafficPeriodQuery struct {
 	Period    nuvioReportsTrafficPeriod
 	StartAtMs int64
@@ -323,10 +430,63 @@ func (err *nuvioReportsTrafficStateError) Unwrap() error {
 func registerNuvioReportsRoutes(e *core.ServeEvent) {
 	reportsGroup := e.Router.Group("/api/nuvio/reports").Bind(apis.RequireSuperuserAuth())
 
+	reportsGroup.GET("/dashboard", func(e *core.RequestEvent) error {
+		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
+		if websiteID == "" {
+			return e.BadRequestError("Missing websiteId.", nil)
+		}
+		if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+			return err
+		}
+
+		periodQuery, err := resolveNuvioReportsTrafficPeriod(strings.TrimSpace(e.Request.URL.Query().Get("period")), time.Now().UTC())
+		if err != nil {
+			return e.BadRequestError("Invalid period. Use thisMonth, lastMonth, last30Days, or allTime.", nil)
+		}
+
+		website, analyticsConfig, err := loadNuvioWebsiteReportsAnalyticsConfig(e.App, websiteID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Website not found.", nil)
+			}
+			return e.BadRequestError("Failed to load Reports dashboard settings.", nil)
+		}
+
+		datasets, err := loadNuvioReportsDashboardDatasets(e.App, websiteID)
+		if err != nil {
+			e.App.Logger().Error(
+				"NUVIO reports dashboard data load failed",
+				"websiteId",
+				websiteID,
+				"period",
+				periodQuery.Period.Key,
+				"error",
+				err.Error(),
+			)
+			return e.BadRequestError("Failed to load Reports dashboard data.", nil)
+		}
+
+		response := nuvioReportsDashboardResponse{
+			State:     "ok",
+			WebsiteID: websiteID,
+			Period:    periodQuery.Period,
+			FeatureFlags: nuvioReportsDashboardFeatureFlags{
+				Reports: analyticsConfig.FeatureAvailable,
+			},
+			WebsiteSEODefaults: buildNuvioReportsDashboardWebsiteSEODefaults(website),
+			Datasets:           datasets,
+		}
+
+		return e.JSON(http.StatusOK, response)
+	})
+
 	reportsGroup.GET("/traffic", func(e *core.RequestEvent) error {
 		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
 		if websiteID == "" {
 			return e.BadRequestError("Missing websiteId.", nil)
+		}
+		if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+			return err
 		}
 
 		periodQuery, err := resolveNuvioReportsTrafficPeriod(strings.TrimSpace(e.Request.URL.Query().Get("period")), time.Now().UTC())
@@ -394,7 +554,7 @@ func registerNuvioReportsRoutes(e *core.ServeEvent) {
 			))
 		}
 
-		umamiConfig, err := loadNuvioUmamiConfig(analyticsConfig)
+		umamiConfig, err := loadNuvioUmamiConfig()
 		if err != nil {
 			if stateErr, ok := unwrapNuvioReportsTrafficStateError(err); ok {
 				return e.JSON(http.StatusOK, buildNuvioReportsTrafficStateResponse(
@@ -523,7 +683,6 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 		SiteID:            "",
 		ScriptEnabled:     false,
 		ScriptURL:         "",
-		APIURL:            "",
 		EventsScrollDepth: false,
 	}
 
@@ -547,7 +706,6 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 				config.ScriptEnabled = value
 			}
 			config.ScriptURL = strings.TrimSpace(parseStringValue(analyticsSettings["scriptUrl"]))
-			config.APIURL = strings.TrimSpace(parseStringValue(analyticsSettings["apiUrl"]))
 			if eventsSettings, ok := toStringAnyMap(analyticsSettings["events"]); ok {
 				if value, ok := parseBoolValue(eventsSettings["scrollDepth"]); ok {
 					config.EventsScrollDepth = value
@@ -559,14 +717,268 @@ func loadNuvioWebsiteReportsAnalyticsConfig(
 	return website, config, nil
 }
 
-func loadNuvioUmamiConfig(analyticsConfig nuvioWebsiteReportsAnalyticsConfig) (nuvioUmamiConfig, error) {
-	rawAPIURL := strings.TrimSpace(analyticsConfig.APIURL)
-	if rawAPIURL == "" {
-		rawAPIURL = strings.TrimSpace(os.Getenv("NUVIO_UMAMI_API_URL"))
+func buildNuvioReportsDashboardWebsiteSEODefaults(website *core.Record) nuvioReportsDashboardWebsiteSEODefaults {
+	if website == nil {
+		return nuvioReportsDashboardWebsiteSEODefaults{}
 	}
 
+	seoTitle := strings.TrimSpace(website.GetString("seoTitle"))
+	if seoTitle == "" {
+		seoTitle = strings.TrimSpace(website.GetString("seo_title"))
+	}
+
+	seoDescription := strings.TrimSpace(website.GetString("seoDescription"))
+	if seoDescription == "" {
+		seoDescription = strings.TrimSpace(website.GetString("seo_description"))
+	}
+
+	seoImageValue := website.Get("seoImage")
+	if seoImageValue == nil {
+		seoImageValue = website.Get("seo_image")
+	}
+
+	return nuvioReportsDashboardWebsiteSEODefaults{
+		SEOTitle:       seoTitle,
+		SEODescription: seoDescription,
+		SEOSocialImage: hasNuvioReportsDashboardFileValue(seoImageValue),
+	}
+}
+
+func hasNuvioReportsDashboardFileValue(value any) bool {
+	switch typed := value.(type) {
+	case []string:
+		for _, item := range typed {
+			if strings.TrimSpace(item) != "" {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if hasNuvioReportsDashboardFileValue(item) {
+				return true
+			}
+		}
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return false
+		}
+
+		if strings.HasPrefix(trimmed, "[") {
+			var parsed []any
+			if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+				return hasNuvioReportsDashboardFileValue(parsed)
+			}
+		}
+
+		return true
+	default:
+		return value != nil
+	}
+
+	return false
+}
+
+func loadNuvioReportsDashboardDatasets(app core.App, websiteID string) (nuvioReportsDashboardDatasets, error) {
+	datasets := nuvioReportsDashboardDatasets{
+		Contacts:        make([]nuvioReportsDashboardContactDTO, 0),
+		Whatsapp:        make([]nuvioReportsDashboardWhatsappDTO, 0),
+		Appointments:    make([]nuvioReportsDashboardAppointmentDTO, 0),
+		BookingServices: make([]nuvioReportsDashboardBookingServiceDTO, 0),
+		Subscribers:     make([]nuvioReportsDashboardSubscriberDTO, 0),
+		Campaigns:       make([]nuvioReportsDashboardCampaignDTO, 0),
+		Pages:           make([]nuvioReportsDashboardPageDTO, 0),
+	}
+
+	contacts, err := findNuvioReportsDashboardRecordsByWebsite(app, nuvioContactsCollectionID, websiteID, "-created")
+	if err != nil {
+		return datasets, err
+	}
+	for _, record := range contacts {
+		datasets.Contacts = append(datasets.Contacts, nuvioReportsDashboardContactDTO{
+			ID:      strings.TrimSpace(record.Id),
+			Website: resolveNuvioPublicRelationID(record, "website"),
+			Channel: strings.TrimSpace(record.GetString("channel")),
+			Status:  strings.TrimSpace(record.GetString("status")),
+			Name:    strings.TrimSpace(record.GetString("name")),
+			Email:   strings.TrimSpace(record.GetString("email")),
+			Phone:   strings.TrimSpace(record.GetString("phone")),
+			Subject: strings.TrimSpace(record.GetString("subject")),
+			Message: strings.TrimSpace(record.GetString("message")),
+			Created: strings.TrimSpace(record.GetString("created")),
+		})
+	}
+
+	whatsapp, err := findNuvioReportsDashboardRecordsByWebsite(app, nuvioWhatsappCollectionID, websiteID, "-created")
+	if err != nil {
+		return datasets, err
+	}
+	for _, record := range whatsapp {
+		datasets.Whatsapp = append(datasets.Whatsapp, nuvioReportsDashboardWhatsappDTO{
+			ID:             strings.TrimSpace(record.Id),
+			Website:        resolveNuvioPublicRelationID(record, "website"),
+			Status:         strings.TrimSpace(record.GetString("status")),
+			Source:         strings.TrimSpace(record.GetString("source")),
+			Name:           strings.TrimSpace(record.GetString("name")),
+			Email:          strings.TrimSpace(record.GetString("email")),
+			Phone:          strings.TrimSpace(record.GetString("phone")),
+			Message:        strings.TrimSpace(record.GetString("message")),
+			DefaultMessage: strings.TrimSpace(record.GetString("defaultMessage")),
+			Created:        strings.TrimSpace(record.GetString("created")),
+		})
+	}
+
+	appointments, err := findNuvioReportsDashboardRecordsByWebsite(app, nuvioAppointmentsCollectionID, websiteID, "-created")
+	if err != nil {
+		return datasets, err
+	}
+	for _, record := range appointments {
+		datasets.Appointments = append(datasets.Appointments, nuvioReportsDashboardAppointmentDTO{
+			ID:      strings.TrimSpace(record.Id),
+			Website: resolveNuvioPublicRelationID(record, "website"),
+			Service: resolveNuvioPublicRelationID(record, "service"),
+			Status:  strings.TrimSpace(record.GetString("status")),
+			Name:    strings.TrimSpace(record.GetString("name")),
+			Email:   strings.TrimSpace(record.GetString("email")),
+			Phone:   strings.TrimSpace(record.GetString("phone")),
+			Date:    strings.TrimSpace(record.GetString("date")),
+			Time:    strings.TrimSpace(record.GetString("time")),
+			Created: strings.TrimSpace(record.GetString("created")),
+		})
+	}
+
+	bookingServices, err := findNuvioReportsDashboardRecordsByWebsite(app, nuvioBookingServicesCollectionID, websiteID, "+name")
+	if err != nil {
+		return datasets, err
+	}
+	for _, record := range bookingServices {
+		datasets.BookingServices = append(datasets.BookingServices, nuvioReportsDashboardBookingServiceDTO{
+			ID:   strings.TrimSpace(record.Id),
+			Name: strings.TrimSpace(record.GetString("name")),
+		})
+	}
+
+	subscribers, err := findNuvioReportsDashboardRecordsByWebsite(app, nuvioSubscribersCollectionID, websiteID, "-created")
+	if err != nil {
+		return datasets, err
+	}
+	for _, record := range subscribers {
+		datasets.Subscribers = append(datasets.Subscribers, nuvioReportsDashboardSubscriberDTO{
+			ID:      strings.TrimSpace(record.Id),
+			Email:   strings.TrimSpace(record.GetString("email")),
+			Status:  strings.TrimSpace(record.GetString("status")),
+			Created: strings.TrimSpace(record.GetString("created")),
+		})
+	}
+
+	campaigns, err := findNuvioReportsDashboardRecordsByWebsite(app, nuvioCampaignsCollectionID, websiteID, "-updated")
+	if err != nil {
+		return datasets, err
+	}
+	for _, record := range campaigns {
+		datasets.Campaigns = append(datasets.Campaigns, nuvioReportsDashboardCampaignDTO{
+			ID:              strings.TrimSpace(record.Id),
+			Subject:         strings.TrimSpace(record.GetString("subject")),
+			Status:          strings.TrimSpace(record.GetString("status")),
+			RecipientsCount: record.Get("recipientsCount"),
+			SentAt:          strings.TrimSpace(record.GetString("sentAt")),
+			Updated:         strings.TrimSpace(record.GetString("updated")),
+			Created:         strings.TrimSpace(record.GetString("created")),
+		})
+	}
+
+	pages, err := findNuvioReportsDashboardRecordsByWebsite(app, nuvioPagesCollectionID, websiteID, "-updated")
+	if err != nil {
+		return datasets, err
+	}
+	for _, record := range pages {
+		seoSocialImage := record.Get("seo_social_image")
+		if seoSocialImage == nil {
+			seoSocialImage = record.Get("seoSocialImage")
+		}
+
+		seoNoindex := record.Get("seo_noindex")
+		if seoNoindex == nil {
+			seoNoindex = record.Get("seoNoindex")
+		}
+
+		seoTitle := strings.TrimSpace(record.GetString("seo_title"))
+		if seoTitle == "" {
+			seoTitle = strings.TrimSpace(record.GetString("seoTitle"))
+		}
+
+		seoDescription := strings.TrimSpace(record.GetString("seo_description"))
+		if seoDescription == "" {
+			seoDescription = strings.TrimSpace(record.GetString("seoDescription"))
+		}
+
+		datasets.Pages = append(datasets.Pages, nuvioReportsDashboardPageDTO{
+			ID:             strings.TrimSpace(record.Id),
+			Website:        resolveNuvioPublicRelationID(record, "website"),
+			Title:          strings.TrimSpace(record.GetString("title")),
+			Name:           strings.TrimSpace(record.GetString("name")),
+			Slug:           strings.TrimSpace(record.GetString("slug")),
+			Path:           strings.TrimSpace(record.GetString("path")),
+			URL:            strings.TrimSpace(record.GetString("url")),
+			SEOTitle:       seoTitle,
+			SEODescription: seoDescription,
+			SEOSocialImage: seoSocialImage,
+			SEONoindex:     seoNoindex,
+			Updated:        strings.TrimSpace(record.GetString("updated")),
+			Created:        strings.TrimSpace(record.GetString("created")),
+		})
+	}
+
+	return datasets, nil
+}
+
+func findNuvioReportsDashboardRecordsByWebsite(
+	app core.App,
+	collectionID string,
+	websiteID string,
+	sortExpr string,
+) ([]*core.Record, error) {
+	collection, err := app.FindCachedCollectionByNameOrId(collectionID)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := "website={:websiteId}"
+	params := dbx.Params{
+		"websiteId": websiteID,
+	}
+
+	records, err := app.FindRecordsByFilter(
+		collection,
+		filter,
+		sortExpr,
+		nuvioReportsDashboardMaxScan,
+		0,
+		params,
+	)
+	if err == nil {
+		return records, nil
+	}
+
+	if strings.TrimSpace(sortExpr) != "" && strings.Contains(strings.ToLower(err.Error()), "invalid sort field") {
+		return app.FindRecordsByFilter(
+			collection,
+			filter,
+			"",
+			nuvioReportsDashboardMaxScan,
+			0,
+			params,
+		)
+	}
+
+	return nil, err
+}
+
+func resolveTrustedNuvioUmamiAPIURL() (string, error) {
+	rawAPIURL := strings.TrimSpace(os.Getenv("NUVIO_UMAMI_API_URL"))
+
 	if rawAPIURL == "" {
-		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
+		return "", newNuvioReportsTrafficStateError(
 			"provider_unconfigured",
 			"Traffic analytics provider is not configured right now.",
 			nil,
@@ -575,18 +987,27 @@ func loadNuvioUmamiConfig(analyticsConfig nuvioWebsiteReportsAnalyticsConfig) (n
 
 	normalizedAPIURL, err := normalizeNuvioAnalyticsURL(rawAPIURL)
 	if err != nil {
-		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
+		return "", newNuvioReportsTrafficStateError(
 			"provider_unconfigured",
-			"Traffic analytics provider is not configured right now.",
+			"Traffic analytics provider is misconfigured right now.",
 			err,
 		)
+	}
+
+	return normalizedAPIURL, nil
+}
+
+func loadNuvioUmamiConfig() (nuvioUmamiConfig, error) {
+	normalizedAPIURL, err := resolveTrustedNuvioUmamiAPIURL()
+	if err != nil {
+		return nuvioUmamiConfig{}, err
 	}
 
 	requestBaseURL, loginURL := resolveNuvioUmamiURLs(normalizedAPIURL)
 	if requestBaseURL == "" {
 		return nuvioUmamiConfig{}, newNuvioReportsTrafficStateError(
 			"provider_unconfigured",
-			"Traffic analytics provider is not configured right now.",
+			"Traffic analytics provider is misconfigured right now.",
 			nil,
 		)
 	}

@@ -1175,14 +1175,6 @@
         return next;
     }
 
-    function buildWebsiteFilterValue() {
-        if (selectedWebsiteId === ALL_WEBSITES_KEY) {
-            return "";
-        }
-
-        return `website="${selectedWebsiteId}"`;
-    }
-
     function resolveLeadFollowUpSupport(lead) {
         if (!lead?.sourceKey) {
             return {
@@ -1207,28 +1199,28 @@
         };
     }
 
-    async function loadRecordsByCollection(collection, requestKeyPrefix) {
-        if (!collection?.id) {
-            return [];
+    async function updateLeadStatusBySource(sourceKey, recordId, nextStatusValue) {
+        if (normalizeLower(sourceKey) === "whatsapp") {
+            return ApiClient.updateLeadWhatsappStatus(recordId, nextStatusValue, {
+                requestKey: `nuvio_leads_whatsapp_status_${recordId || "unknown"}`,
+            });
         }
 
-        const filter = buildWebsiteFilterValue();
-        const requestOptions = {
-            sort: "-created",
-            requestKey: `${requestKeyPrefix}_${selectedWebsiteId || ALL_WEBSITES_KEY}`,
-            expand: "website",
-        };
+        return ApiClient.updateLeadContactStatus(recordId, nextStatusValue, {
+            requestKey: `nuvio_leads_contact_status_${recordId || "unknown"}`,
+        });
+    }
 
-        if (filter) {
-            requestOptions.filter = filter;
+    async function updateLeadFollowUpBySource(sourceKey, recordId, payload = {}) {
+        if (normalizeLower(sourceKey) === "whatsapp") {
+            return ApiClient.updateLeadWhatsappFollowUp(recordId, payload, {
+                requestKey: `nuvio_leads_whatsapp_followup_${recordId || "unknown"}`,
+            });
         }
 
-        try {
-            return await ApiClient.collection(collection.id).getFullList(requestOptions);
-        } catch (err) {
-            ApiClient.error(err, false);
-            return [];
-        }
+        return ApiClient.updateLeadContactFollowUp(recordId, payload, {
+            requestKey: `nuvio_leads_contact_followup_${recordId || "unknown"}`,
+        });
     }
 
     async function loadWebsites() {
@@ -1240,8 +1232,7 @@
         isLoadingWebsites = true;
 
         try {
-            websites = await ApiClient.collection(websitesCollection.id).getFullList({
-                sort: resolveWebsitesSort(websitesCollection),
+            websites = await ApiClient.getBackofficeWebsites({
                 requestKey: "nuvio_leads_websites",
             });
         } catch (err) {
@@ -1255,7 +1246,7 @@
     async function loadLeads() {
         leadsError = "";
 
-        if (!hasAnyLeadCollections) {
+        if (!selectedWebsiteId) {
             contactsRecords = [];
             whatsappRecords = [];
             return;
@@ -1264,13 +1255,13 @@
         isLoadingLeads = true;
 
         try {
-            const [nextContacts, nextWhatsApp] = await Promise.all([
-                loadRecordsByCollection(contactsCollection, "nuvio_leads_contacts"),
-                loadRecordsByCollection(whatsappCollection, "nuvio_leads_whatsapp"),
-            ]);
+            const response = await ApiClient.getLeadsDashboard({
+                websiteId: selectedWebsiteId,
+                requestKey: `nuvio_leads_dashboard_${selectedWebsiteId || "unknown"}`,
+            });
 
-            contactsRecords = nextContacts;
-            whatsappRecords = nextWhatsApp;
+            contactsRecords = Array.isArray(response?.datasets?.contacts) ? response.datasets.contacts : [];
+            whatsappRecords = Array.isArray(response?.datasets?.whatsapp) ? response.datasets.whatsapp : [];
         } catch (err) {
             leadsError = "Unable to load leads right now. Please refresh and try again.";
             ApiClient.error(err, false);
@@ -1403,7 +1394,7 @@
         }
 
         const statusSupport = resolveLeadStatusSupport(selectedLead);
-        if (!statusSupport?.collectionId || !statusSupport?.fieldName) {
+        if (!statusSupport?.supportsToggle && !statusSupport?.supportsArchive) {
             return;
         }
 
@@ -1422,11 +1413,8 @@
         const recordId = selectedLead.recordId;
 
         try {
-            await ApiClient.collection(statusSupport.collectionId).update(recordId, {
-                [statusSupport.fieldName]: nextStatusValue,
-            });
-
-            patchLeadRecord(sourceKey, recordId, { [statusSupport.fieldName]: nextStatusValue });
+            await updateLeadStatusBySource(sourceKey, recordId, nextStatusValue);
+            patchLeadRecord(sourceKey, recordId, { status: nextStatusValue });
             dispatchSidebarBadgeRefresh();
 
             const nextLabel = normalizedTargetStatus === normalizeLower(statusSupport.readValue)
@@ -1470,12 +1458,12 @@
         leadFollowUpError = "";
         isSavingLeadFollowUp = true;
         const patchData = {
-            [selectedLeadFollowUpSupport.notesFieldName]: leadNotesDraft,
+            notes: leadNotesDraft,
         };
 
         try {
-            await ApiClient.collection(selectedLeadFollowUpSupport.collectionId).update(selectedLead.recordId, patchData);
-            patchLeadRecord(selectedLead.sourceKey, selectedLead.recordId, patchData);
+            await updateLeadFollowUpBySource(selectedLead.sourceKey, selectedLead.recordId, patchData);
+            patchLeadRecord(selectedLead.sourceKey, selectedLead.recordId, { notes: leadNotesDraft });
             addSuccessToast("Lead note saved.");
         } catch (err) {
             ApiClient.error(err, false);
@@ -1494,15 +1482,15 @@
         leadFollowUpError = "";
         isSavingLeadFollowUp = true;
         const patchData = {
-            [selectedLeadFollowUpSupport.lastContactedFieldName]: new Date().toISOString(),
+            lastContactedAt: new Date().toISOString(),
         };
 
-        if (leadNotesDirty && selectedLeadFollowUpSupport.notesFieldName) {
-            patchData[selectedLeadFollowUpSupport.notesFieldName] = leadNotesDraft;
+        if (leadNotesDirty && canSaveSelectedLeadNote) {
+            patchData.notes = leadNotesDraft;
         }
 
         try {
-            await ApiClient.collection(selectedLeadFollowUpSupport.collectionId).update(selectedLead.recordId, patchData);
+            await updateLeadFollowUpBySource(selectedLead.sourceKey, selectedLead.recordId, patchData);
             patchLeadRecord(selectedLead.sourceKey, selectedLead.recordId, patchData);
             addSuccessToast("Lead marked as contacted.");
         } catch (err) {
@@ -1621,9 +1609,6 @@
         }
 
         const statusSupport = resolveLeadStatusSupport(lead);
-        if (!statusSupport?.collectionId || !statusSupport?.fieldName) {
-            return null;
-        }
 
         const normalizedStatusKey = normalizeLower(lead?.statusKey);
         const normalizedCurrentStatus = normalizeLower(lead?.statusValue);
@@ -1728,9 +1713,11 @@
         try {
             const updateResults = await Promise.allSettled(
                 operations.map((operation) =>
-                    ApiClient.collection(operation.statusSupport.collectionId).update(operation.lead.recordId, {
-                        [operation.statusSupport.fieldName]: operation.nextStatus,
-                    })),
+                    updateLeadStatusBySource(
+                        operation.lead.sourceKey,
+                        operation.lead.recordId,
+                        operation.nextStatus,
+                    )),
             );
 
             const successfulKeys = [];
@@ -1745,7 +1732,7 @@
 
                 if (result.status === "fulfilled") {
                     patchLeadRecord(operation.lead.sourceKey, operation.lead.recordId, {
-                        [operation.statusSupport.fieldName]: operation.nextStatus,
+                        status: operation.nextStatus,
                     });
                     successCount += 1;
                     successfulKeys.push(normalizeString(operation.lead.key));

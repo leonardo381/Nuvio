@@ -11,6 +11,12 @@
 !nuvio_booking.go
 !nuvio_booking_calendar.go
 !nuvio_reports.go
+!nuvio_leads_dashboard.go
+!nuvio_public_content.go
+!nuvio_backoffice_websites.go
+!nuvio_cms_backoffice.go
+!nuvio_backoffice_websites_test.go
+!*_test.go
 
 # ignore Go cache anywhere
 .gocache/

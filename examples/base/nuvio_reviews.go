@@ -254,11 +254,15 @@ func maxInt(a int, b int) int {
 // NUVIO CUSTOM START: Collection-backed dashboard Reviews module routes + sync.
 func registerNuvioReviewsRoutes(e *core.ServeEvent) {
 	reviewsGroup := e.Router.Group("/api/nuvio/reviews").Bind(apis.RequireSuperuserAuth())
+	reviewsAdminGroup := e.Router.Group("/api/nuvio/reviews").Bind(apis.RequireAdminSuperuserAuth())
 
 	reviewsGroup.GET("/dashboard", func(e *core.RequestEvent) error {
 		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
 		if websiteID == "" {
 			return e.BadRequestError("Missing websiteId.", nil)
+		}
+		if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+			return err
 		}
 
 		payload, err := buildNuvioReviewsDashboardPayload(e.App, websiteID, nuvioReviewsDefaultDashboardLimit)
@@ -273,7 +277,7 @@ func registerNuvioReviewsRoutes(e *core.ServeEvent) {
 		return e.JSON(http.StatusOK, payload)
 	})
 
-	reviewsGroup.POST("/sync", func(e *core.RequestEvent) error {
+	reviewsAdminGroup.POST("/sync", func(e *core.RequestEvent) error {
 		body := struct {
 			WebsiteID string `json:"websiteId"`
 		}{}

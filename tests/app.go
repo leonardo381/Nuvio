@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -68,6 +69,50 @@ func (t *TestApp) registerEventCall(name string) {
 	t.EventCalls[name]++
 }
 
+func ensureDefaultTestSuperuserAdminRole(app core.App) error {
+	if app == nil {
+		return nil
+	}
+
+	superusersCollection, err := app.FindCollectionByNameOrId(core.CollectionNameSuperusers)
+	if err != nil || superusersCollection == nil {
+		return err
+	}
+
+	if superusersCollection.Fields.GetByName("role") == nil {
+		superusersCollection.Fields.Add(&core.SelectField{
+			Name:      "role",
+			MaxSelect: 1,
+			Values:    []string{"admin", "client"},
+		})
+		if err := app.Save(superusersCollection); err != nil {
+			return err
+		}
+	}
+
+	superusers, err := app.FindAllRecords(superusersCollection.Id)
+	if err != nil {
+		return err
+	}
+
+	for _, superuser := range superusers {
+		if superuser == nil {
+			continue
+		}
+
+		if strings.TrimSpace(superuser.GetString("role")) != "" {
+			continue
+		}
+
+		superuser.Set("role", "admin")
+		if err := app.Save(superuser); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // NewTestApp creates and initializes a test application instance.
 //
 // It is the caller's responsibility to call app.Cleanup() when the app is no longer needed.
@@ -123,6 +168,12 @@ func NewTestAppWithConfig(config core.BaseAppConfig) (*TestApp, error) {
 
 	// apply any missing migrations
 	if err := app.RunAllMigrations(); err != nil {
+		return nil, err
+	}
+
+	// keep superuser-auth test fixtures explicit with role="admin"
+	// so privileged CRUD tests don't rely on missing-role behavior.
+	if err := ensureDefaultTestSuperuserAdminRole(app); err != nil {
 		return nil, err
 	}
 

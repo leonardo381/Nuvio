@@ -14,6 +14,7 @@ import (
 	"net/mail"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,19 +25,161 @@ import (
 )
 
 const (
-	nuvioSubscribersCollectionID                = "pbc_1661203400"
-	nuvioCampaignsCollectionID                  = "pbc_1661203500"
-	nuvioNewsletterStatusPending                = "pending"
-	nuvioNewsletterStatusActive                 = "active"
-	nuvioNewsletterStatusUnsubscribed           = "unsubscribed"
-	nuvioNewsletterTokenBytes                   = 32
-	nuvioNewsletterConfirmationTTL              = 72 * time.Hour
-	nuvioNewsletterMaxSubscriberScan            = 5000
-	nuvioNewsletterMaxNameLen                   = 200
-	nuvioNewsletterTemplateSubjectMax           = 160
-	nuvioNewsletterTemplateTextMax              = 4000
-	nuvioNewsletterPublicBaseURLEnv             = "NUVIO_PUBLIC_BASE_URL"
-	nuvioNewsletterCampaignBatchSize            = 100
+	nuvioSubscribersCollectionID      = "pbc_1661203400"
+	nuvioCampaignsCollectionID        = "pbc_1661203500"
+	nuvioSubscriberGroupsCollectionID = "pbc_1661203600"
+	nuvioNewsletterStatusPending      = "pending"
+	nuvioNewsletterStatusActive       = "active"
+	nuvioNewsletterStatusUnsubscribed = "unsubscribed"
+	nuvioNewsletterTokenBytes         = 32
+	nuvioNewsletterConfirmationTTL    = 72 * time.Hour
+	nuvioNewsletterMaxSubscriberScan  = 5000
+	nuvioNewsletterMaxNameLen         = 200
+	nuvioNewsletterTemplateSubjectMax = 160
+	nuvioNewsletterTemplateTextMax    = 4000
+	nuvioNewsletterPublicBaseURLEnv   = "NUVIO_PUBLIC_BASE_URL"
+	nuvioNewsletterCampaignBatchSize  = 100
+	nuvioNewsletterBackofficeNameMax  = 200
+	nuvioNewsletterBackofficeSlugMax  = 120
+)
+
+var (
+	nuvioNewsletterBackofficeSubscribersCollectionAliases = []string{
+		nuvioSubscribersCollectionID,
+		"Subscribers",
+		"subscribers",
+	}
+	nuvioNewsletterBackofficeCampaignsCollectionAliases = []string{
+		nuvioCampaignsCollectionID,
+		"Campaigns",
+		"campaigns",
+	}
+	nuvioNewsletterBackofficeGroupsCollectionAliases = []string{
+		nuvioSubscriberGroupsCollectionID,
+		"SubscriberGroups",
+		"subscribergroups",
+		"subscriber_groups",
+	}
+	nuvioNewsletterBackofficeSubscribersSourceFieldAliases = []string{
+		"source",
+		"sourceLabel",
+		"source_label",
+		"origin",
+	}
+	nuvioNewsletterBackofficeSubscribersGroupsFieldAliases = []string{
+		"groups",
+		"groupIds",
+		"subscriberGroups",
+		"subscriber_groups",
+	}
+	nuvioNewsletterBackofficeCampaignRecipientsTypeFieldAliases = []string{
+		"recipientsType",
+		"recipientType",
+		"recipients_type",
+	}
+	nuvioNewsletterBackofficeCampaignRecipientsIDsFieldAliases = []string{
+		"recipientsIds",
+		"recipientIds",
+		"recipients_ids",
+	}
+	nuvioNewsletterBackofficeAllowedSubscriberStatus = []string{
+		nuvioNewsletterStatusPending,
+		nuvioNewsletterStatusActive,
+		nuvioNewsletterStatusUnsubscribed,
+	}
+	nuvioNewsletterBackofficeAllowedCampaignStatus = []string{
+		"draft",
+		"sent",
+	}
+	nuvioNewsletterBackofficeAllowedRecipientsType = []string{
+		"all",
+		"manual",
+	}
+	nuvioNewsletterBackofficeAllowedCampaignCreateStatus = []string{
+		"draft",
+	}
+	nuvioNewsletterBackofficeAllowedCampaignUpdateStatus = []string{
+		"draft",
+	}
+	nuvioNewsletterBackofficeWebsiteFieldAliases = []string{
+		"website",
+		"site",
+	}
+	nuvioNewsletterBackofficeSubscriberEmailFieldAliases = []string{
+		"email",
+	}
+	nuvioNewsletterBackofficeSubscriberNameFieldAliases = []string{
+		"name",
+	}
+	nuvioNewsletterBackofficeSubscriberStatusFieldAliases = []string{
+		"status",
+	}
+	nuvioNewsletterBackofficeGroupNameFieldAliases = []string{
+		"name",
+	}
+	nuvioNewsletterBackofficeGroupSlugFieldAliases = []string{
+		"slug",
+	}
+	nuvioNewsletterBackofficeCampaignSubjectFieldAliases = []string{
+		"subject",
+	}
+	nuvioNewsletterBackofficeCampaignBodyFieldAliases = []string{
+		"body",
+	}
+	nuvioNewsletterBackofficeCampaignStatusFieldAliases = []string{
+		"status",
+	}
+	nuvioNewsletterBackofficeCampaignRecipientsCountFieldAliases = []string{
+		"recipientsCount",
+		"recipientCount",
+		"recipients_count",
+	}
+	nuvioNewsletterBackofficeCampaignSentAtFieldAliases = []string{
+		"sentAt",
+		"sent_at",
+	}
+	nuvioNewsletterBackofficeLifecycleFieldAliases = map[string]struct{}{
+		"confirmationtokenhash":      {},
+		"confirmationtokenexpiresat": {},
+		"unsubscribetokenhash":       {},
+	}
+	nuvioNewsletterBackofficeSubscriberCreateAllowedPayloadKeys = map[string]struct{}{
+		"websiteid": {},
+		"email":     {},
+		"name":      {},
+		"status":    {},
+		"source":    {},
+		"groups":    {},
+	}
+	nuvioNewsletterBackofficeSubscriberUpdateAllowedPayloadKeys = map[string]struct{}{
+		"email":  {},
+		"name":   {},
+		"status": {},
+		"source": {},
+		"groups": {},
+	}
+	nuvioNewsletterBackofficeGroupCreateAllowedPayloadKeys = map[string]struct{}{
+		"websiteid": {},
+		"name":      {},
+		"slug":      {},
+	}
+	nuvioNewsletterBackofficeCampaignCreateAllowedPayloadKeys = map[string]struct{}{
+		"websiteid":      {},
+		"subject":        {},
+		"body":           {},
+		"status":         {},
+		"recipientstype": {},
+		"recipientsids":  {},
+	}
+	nuvioNewsletterBackofficeCampaignUpdateAllowedPayloadKeys = map[string]struct{}{
+		"subject":        {},
+		"body":           {},
+		"status":         {},
+		"recipientstype": {},
+		"recipientsids":  {},
+	}
+	nuvioNewsletterBackofficeSlugUnsafeCharsRegex = regexp.MustCompile(`[^a-z0-9-]+`)
+	nuvioNewsletterBackofficeSlugMultiDashRegex   = regexp.MustCompile(`-+`)
 )
 
 type nuvioNewsletterConfirmationTemplateConfig struct {
@@ -87,10 +230,116 @@ type nuvioPreparedCampaignRecipient struct {
 	Message                       nuvioTransactionalEmailMessage
 }
 
+type nuvioNewsletterBackofficeSubscriberDTO struct {
+	ID             string   `json:"id"`
+	Website        string   `json:"website"`
+	Email          string   `json:"email"`
+	Name           string   `json:"name"`
+	Status         string   `json:"status"`
+	Source         string   `json:"source"`
+	Groups         []string `json:"groups"`
+	ConfirmedAt    string   `json:"confirmedAt"`
+	UnsubscribedAt string   `json:"unsubscribedAt"`
+	Created        string   `json:"created"`
+	Updated        string   `json:"updated"`
+}
+
+type nuvioNewsletterBackofficeCampaignDTO struct {
+	ID              string   `json:"id"`
+	Website         string   `json:"website"`
+	Subject         string   `json:"subject"`
+	Body            string   `json:"body"`
+	Status          string   `json:"status"`
+	RecipientsType  string   `json:"recipientsType"`
+	RecipientsIDs   []string `json:"recipientsIds"`
+	RecipientsCount int      `json:"recipientsCount"`
+	SentAt          string   `json:"sentAt"`
+	Created         string   `json:"created"`
+	Updated         string   `json:"updated"`
+}
+
+type nuvioNewsletterBackofficeGroupDTO struct {
+	ID      string `json:"id"`
+	Website string `json:"website"`
+	Name    string `json:"name"`
+	Slug    string `json:"slug"`
+	Created string `json:"created"`
+	Updated string `json:"updated"`
+}
+
+type nuvioNewsletterBackofficeDatasets struct {
+	Subscribers []nuvioNewsletterBackofficeSubscriberDTO `json:"subscribers"`
+	Campaigns   []nuvioNewsletterBackofficeCampaignDTO   `json:"campaigns"`
+	Groups      []nuvioNewsletterBackofficeGroupDTO      `json:"groups"`
+}
+
+type nuvioNewsletterBackofficeSubscribersCapabilities struct {
+	AllowedStatus  []string `json:"allowedStatus"`
+	SupportsName   bool     `json:"supportsName"`
+	SupportsSource bool     `json:"supportsSource"`
+	SupportsGroups bool     `json:"supportsGroups"`
+}
+
+type nuvioNewsletterBackofficeCampaignCapabilities struct {
+	AllowedStatus         []string `json:"allowedStatus"`
+	AllowedRecipientsType []string `json:"allowedRecipientsType"`
+}
+
+type nuvioNewsletterBackofficeCapabilities struct {
+	Subscribers nuvioNewsletterBackofficeSubscribersCapabilities `json:"subscribers"`
+	Campaigns   nuvioNewsletterBackofficeCampaignCapabilities    `json:"campaigns"`
+}
+
+type nuvioNewsletterBackofficeDashboardResponse struct {
+	State        string                                `json:"state"`
+	WebsiteID    string                                `json:"websiteId"`
+	Datasets     nuvioNewsletterBackofficeDatasets     `json:"datasets"`
+	Capabilities nuvioNewsletterBackofficeCapabilities `json:"capabilities"`
+}
+
 // NUVIO CUSTOM START: Newsletter V1 send endpoint (server-side campaign dispatch via Resend).
 func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	newsletterPublicGroup := e.Router.Group("/api/nuvio/newsletter")
-	newsletterAdminGroup := e.Router.Group("/api/nuvio/newsletter").Bind(apis.RequireSuperuserAuth())
+	newsletterAdminGroup := e.Router.Group("/api/nuvio/newsletter").Bind(apis.RequireAdminSuperuserAuth())
+	newsletterBackofficeGroup := e.Router.Group("/api/nuvio/newsletter/backoffice").Bind(apis.RequireSuperuserAuth())
+
+	newsletterBackofficeGroup.GET("/dashboard", func(e *core.RequestEvent) error {
+		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
+		if websiteID == "" {
+			return e.BadRequestError("Missing websiteId.", nil)
+		}
+		if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+			return err
+		}
+
+		datasets, capabilities, err := loadNuvioNewsletterBackofficeDashboard(e.App, websiteID)
+		if err != nil {
+			e.App.Logger().Error(
+				"NUVIO newsletter backoffice dashboard load failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.BadRequestError("Failed to load Newsletter dashboard data.", nil)
+		}
+
+		return e.JSON(http.StatusOK, nuvioNewsletterBackofficeDashboardResponse{
+			State:        "ok",
+			WebsiteID:    websiteID,
+			Datasets:     datasets,
+			Capabilities: capabilities,
+		})
+	})
+
+	newsletterBackofficeGroup.POST("/subscribers", handleNuvioNewsletterBackofficeSubscriberCreate)
+	newsletterBackofficeGroup.PATCH("/subscribers/{id}", handleNuvioNewsletterBackofficeSubscriberUpdate)
+	newsletterBackofficeGroup.DELETE("/subscribers/{id}", handleNuvioNewsletterBackofficeSubscriberDelete)
+	newsletterBackofficeGroup.POST("/groups", handleNuvioNewsletterBackofficeGroupCreate)
+	newsletterBackofficeGroup.POST("/campaigns", handleNuvioNewsletterBackofficeCampaignCreate)
+	newsletterBackofficeGroup.PATCH("/campaigns/{id}", handleNuvioNewsletterBackofficeCampaignUpdate)
+	newsletterBackofficeGroup.DELETE("/campaigns/{id}", handleNuvioNewsletterBackofficeCampaignDelete)
+	newsletterBackofficeGroup.POST("/campaigns/{id}/duplicate", handleNuvioNewsletterBackofficeCampaignDuplicate)
 
 	newsletterPublicGroup.POST("/subscribe", func(e *core.RequestEvent) error {
 		payload := nuvioNewsletterSubscribePayload{}
@@ -1976,6 +2225,1289 @@ func buildNuvioCampaignUnsubscribeFooterHTML(websiteName string, unsubscribeURL 
 		"<p>You are receiving this email because you subscribed to updates from " + escapedWebsiteName + ".</p>",
 		`<p>Unsubscribe: <a href="` + escapedURL + `">` + escapedURL + "</a></p>",
 	}, "")
+}
+
+func loadNuvioNewsletterBackofficeDashboard(
+	app core.App,
+	websiteID string,
+) (nuvioNewsletterBackofficeDatasets, nuvioNewsletterBackofficeCapabilities, error) {
+	datasets := nuvioNewsletterBackofficeDatasets{
+		Subscribers: []nuvioNewsletterBackofficeSubscriberDTO{},
+		Campaigns:   []nuvioNewsletterBackofficeCampaignDTO{},
+		Groups:      []nuvioNewsletterBackofficeGroupDTO{},
+	}
+
+	subscribersCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(app, nuvioNewsletterBackofficeSubscribersCollectionAliases)
+	if err != nil {
+		return datasets, nuvioNewsletterBackofficeCapabilities{}, err
+	}
+	campaignsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(app, nuvioNewsletterBackofficeCampaignsCollectionAliases)
+	if err != nil {
+		return datasets, nuvioNewsletterBackofficeCapabilities{}, err
+	}
+	groupsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(app, nuvioNewsletterBackofficeGroupsCollectionAliases)
+	if err != nil {
+		return datasets, nuvioNewsletterBackofficeCapabilities{}, err
+	}
+
+	subscriberSourceFieldName := resolveNuvioCollectionFieldNameByAliases(subscribersCollection, nuvioNewsletterBackofficeSubscribersSourceFieldAliases)
+	subscriberGroupsFieldName := resolveNuvioCollectionFieldNameByAliases(subscribersCollection, nuvioNewsletterBackofficeSubscribersGroupsFieldAliases)
+	campaignRecipientsTypeFieldName := resolveNuvioCollectionFieldNameByAliases(campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsTypeFieldAliases)
+	campaignRecipientsIDsFieldName := resolveNuvioCollectionFieldNameByAliases(campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsIDsFieldAliases)
+
+	subscribers, err := findNuvioNewsletterBackofficeRecordsByWebsite(
+		app,
+		subscribersCollection,
+		websiteID,
+		[]string{"-created"},
+	)
+	if err != nil {
+		return datasets, nuvioNewsletterBackofficeCapabilities{}, err
+	}
+	for _, record := range subscribers {
+		datasets.Subscribers = append(datasets.Subscribers, buildNuvioNewsletterBackofficeSubscriberDTO(record, subscriberSourceFieldName, subscriberGroupsFieldName))
+	}
+
+	campaigns, err := findNuvioNewsletterBackofficeRecordsByWebsite(
+		app,
+		campaignsCollection,
+		websiteID,
+		[]string{"-sentAt,-updated,-created", "-updated,-created", "-created"},
+	)
+	if err != nil {
+		return datasets, nuvioNewsletterBackofficeCapabilities{}, err
+	}
+	for _, record := range campaigns {
+		datasets.Campaigns = append(datasets.Campaigns, buildNuvioNewsletterBackofficeCampaignDTO(record, campaignRecipientsTypeFieldName, campaignRecipientsIDsFieldName))
+	}
+
+	groups, err := findNuvioNewsletterBackofficeRecordsByWebsite(
+		app,
+		groupsCollection,
+		websiteID,
+		[]string{"+name", "+created"},
+	)
+	if err != nil {
+		return datasets, nuvioNewsletterBackofficeCapabilities{}, err
+	}
+	for _, record := range groups {
+		datasets.Groups = append(datasets.Groups, buildNuvioNewsletterBackofficeGroupDTO(record))
+	}
+
+	capabilities := nuvioNewsletterBackofficeCapabilities{
+		Subscribers: nuvioNewsletterBackofficeSubscribersCapabilities{
+			AllowedStatus:  resolveNuvioNewsletterBackofficeAllowedSelectValues(subscribersCollection, "status", nuvioNewsletterBackofficeAllowedSubscriberStatus),
+			SupportsName:   resolveNuvioCollectionFieldNameByAliases(subscribersCollection, []string{"name"}) != "",
+			SupportsSource: subscriberSourceFieldName != "",
+			SupportsGroups: subscriberGroupsFieldName != "",
+		},
+		Campaigns: nuvioNewsletterBackofficeCampaignCapabilities{
+			AllowedStatus:         resolveNuvioNewsletterBackofficeAllowedSelectValues(campaignsCollection, "status", nuvioNewsletterBackofficeAllowedCampaignStatus),
+			AllowedRecipientsType: resolveNuvioNewsletterBackofficeAllowedSelectValues(campaignsCollection, campaignRecipientsTypeFieldName, nuvioNewsletterBackofficeAllowedRecipientsType),
+		},
+	}
+
+	return datasets, capabilities, nil
+}
+
+func buildNuvioNewsletterBackofficeSubscriberDTO(
+	record *core.Record,
+	sourceFieldName string,
+	groupsFieldName string,
+) nuvioNewsletterBackofficeSubscriberDTO {
+	if record == nil {
+		return nuvioNewsletterBackofficeSubscriberDTO{Groups: []string{}}
+	}
+
+	source := ""
+	if sourceFieldName != "" {
+		source = strings.TrimSpace(parseStringValue(record.Get(sourceFieldName)))
+	}
+
+	groupIDs := []string{}
+	if groupsFieldName != "" {
+		groupIDs = parseNuvioRecipientIDs(record.Get(groupsFieldName))
+	}
+
+	return nuvioNewsletterBackofficeSubscriberDTO{
+		ID:             strings.TrimSpace(record.Id),
+		Website:        resolveNuvioPublicRelationID(record, "website", "site"),
+		Email:          strings.TrimSpace(record.GetString("email")),
+		Name:           strings.TrimSpace(record.GetString("name")),
+		Status:         normalizeNuvioSubscriberStatus(record.GetString("status")),
+		Source:         source,
+		Groups:         groupIDs,
+		ConfirmedAt:    strings.TrimSpace(record.GetString("confirmedAt")),
+		UnsubscribedAt: strings.TrimSpace(record.GetString("unsubscribedAt")),
+		Created:        strings.TrimSpace(record.GetString("created")),
+		Updated:        strings.TrimSpace(record.GetString("updated")),
+	}
+}
+
+func buildNuvioNewsletterBackofficeCampaignDTO(
+	record *core.Record,
+	recipientsTypeFieldName string,
+	recipientsIDsFieldName string,
+) nuvioNewsletterBackofficeCampaignDTO {
+	if record == nil {
+		return nuvioNewsletterBackofficeCampaignDTO{
+			RecipientsIDs: []string{},
+		}
+	}
+
+	recipientsType := ""
+	for _, fieldName := range []string{
+		strings.TrimSpace(recipientsTypeFieldName),
+		"recipientsType",
+		"recipientType",
+		"recipients_type",
+	} {
+		if fieldName == "" {
+			continue
+		}
+		value := strings.ToLower(strings.TrimSpace(record.GetString(fieldName)))
+		if value != "" {
+			recipientsType = value
+			break
+		}
+	}
+	if recipientsType == "" {
+		recipientsType = "all"
+	}
+
+	recipientsIDs := []string{}
+	for _, fieldName := range []string{
+		strings.TrimSpace(recipientsIDsFieldName),
+		"recipientsIds",
+		"recipientIds",
+		"recipients_ids",
+	} {
+		if fieldName == "" {
+			continue
+		}
+		values := parseNuvioRecipientIDs(record.Get(fieldName))
+		if len(values) > 0 {
+			recipientsIDs = values
+			break
+		}
+	}
+
+	return nuvioNewsletterBackofficeCampaignDTO{
+		ID:              strings.TrimSpace(record.Id),
+		Website:         resolveNuvioPublicRelationID(record, "website", "site"),
+		Subject:         strings.TrimSpace(record.GetString("subject")),
+		Body:            strings.TrimSpace(record.GetString("body")),
+		Status:          strings.ToLower(strings.TrimSpace(record.GetString("status"))),
+		RecipientsType:  recipientsType,
+		RecipientsIDs:   recipientsIDs,
+		RecipientsCount: parseNuvioNonNegativeInt(record.Get("recipientsCount"), 0),
+		SentAt:          strings.TrimSpace(record.GetString("sentAt")),
+		Created:         strings.TrimSpace(record.GetString("created")),
+		Updated:         strings.TrimSpace(record.GetString("updated")),
+	}
+}
+
+func buildNuvioNewsletterBackofficeGroupDTO(record *core.Record) nuvioNewsletterBackofficeGroupDTO {
+	if record == nil {
+		return nuvioNewsletterBackofficeGroupDTO{}
+	}
+
+	return nuvioNewsletterBackofficeGroupDTO{
+		ID:      strings.TrimSpace(record.Id),
+		Website: resolveNuvioPublicRelationID(record, "website", "site"),
+		Name:    strings.TrimSpace(record.GetString("name")),
+		Slug:    strings.TrimSpace(record.GetString("slug")),
+		Created: strings.TrimSpace(record.GetString("created")),
+		Updated: strings.TrimSpace(record.GetString("updated")),
+	}
+}
+
+func resolveNuvioNewsletterBackofficeAllowedSelectValues(
+	collection *core.Collection,
+	fieldName string,
+	fallback []string,
+) []string {
+	if len(fallback) == 0 {
+		return []string{}
+	}
+
+	seen := map[string]struct{}{}
+
+	if collection != nil && strings.TrimSpace(fieldName) != "" {
+		if field := collection.Fields.GetByName(fieldName); field != nil {
+			if selectField, ok := field.(*core.SelectField); ok {
+				for _, rawValue := range selectField.Values {
+					normalizedValue := strings.ToLower(strings.TrimSpace(rawValue))
+					if normalizedValue == "" {
+						continue
+					}
+					for _, allowedValue := range fallback {
+						if normalizedValue == allowedValue {
+							seen[allowedValue] = struct{}{}
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if len(seen) == 0 {
+		for _, fallbackValue := range fallback {
+			seen[fallbackValue] = struct{}{}
+		}
+	}
+
+	ordered := make([]string, 0, len(fallback))
+	for _, fallbackValue := range fallback {
+		if _, exists := seen[fallbackValue]; exists {
+			ordered = append(ordered, fallbackValue)
+		}
+	}
+
+	return ordered
+}
+
+func findNuvioNewsletterBackofficeCollectionByAliases(app core.App, aliases []string) (*core.Collection, error) {
+	var lastErr error
+
+	for _, alias := range aliases {
+		candidate := strings.TrimSpace(alias)
+		if candidate == "" {
+			continue
+		}
+
+		collection, err := app.FindCachedCollectionByNameOrId(candidate)
+		if err == nil {
+			return collection, nil
+		}
+
+		lastErr = err
+		if !errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+
+	return nil, fmt.Errorf("collection not found for aliases")
+}
+
+func findNuvioNewsletterBackofficeRecordsByWebsite(
+	app core.App,
+	collection *core.Collection,
+	websiteID string,
+	sortCandidates []string,
+) ([]*core.Record, error) {
+	if collection == nil {
+		return nil, fmt.Errorf("missing collection")
+	}
+
+	websiteFieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"website", "site"})
+	if websiteFieldName == "" {
+		return nil, fmt.Errorf("missing website relation field")
+	}
+
+	filterExpr := websiteFieldName + "={:websiteId}"
+	params := dbx.Params{
+		"websiteId": websiteID,
+	}
+
+	sanitizedSortCandidates := make([]string, 0, len(sortCandidates)+1)
+	for _, rawSort := range sortCandidates {
+		sortExpr := strings.TrimSpace(rawSort)
+		if sortExpr != "" {
+			sanitizedSortCandidates = append(sanitizedSortCandidates, sortExpr)
+		}
+	}
+	sanitizedSortCandidates = append(sanitizedSortCandidates, "")
+
+	var lastErr error
+	for _, sortExpr := range sanitizedSortCandidates {
+		records, err := app.FindRecordsByFilter(
+			collection,
+			filterExpr,
+			sortExpr,
+			nuvioNewsletterMaxSubscriberScan,
+			0,
+			params,
+		)
+		if err == nil {
+			return records, nil
+		}
+
+		lastErr = err
+		if sortExpr != "" && strings.Contains(strings.ToLower(err.Error()), "invalid sort field") {
+			continue
+		}
+
+		return nil, err
+	}
+
+	return nil, lastErr
+}
+
+func handleNuvioNewsletterBackofficeSubscriberCreate(e *core.RequestEvent) error {
+	subscribersCollection, groupsCollection, subscriberSourceFieldName, subscriberGroupsFieldName, err := resolveNuvioNewsletterBackofficeSubscriberCollectionsAndFields(e.App)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice subscriber create resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to create subscriber.", nil)
+	}
+
+	payload, err := parseNuvioNewsletterBackofficePayloadMap(e)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	if err := validateNuvioNewsletterBackofficePayloadKeys(payload, nuvioNewsletterBackofficeSubscriberCreateAllowedPayloadKeys); err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	websiteID := strings.TrimSpace(parseStringValue(payload["websiteId"]))
+	if websiteID == "" {
+		return e.BadRequestError("Missing websiteId.", nil)
+	}
+	if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+		return err
+	}
+
+	email, ok := normalizeNuvioEmail(parseStringValue(payload["email"]))
+	if !ok {
+		return e.BadRequestError("A valid email is required.", nil)
+	}
+
+	status, err := parseNuvioNewsletterBackofficeStatusValue(payload, "status", nuvioNewsletterBackofficeAllowedSubscriberStatus, nuvioNewsletterStatusPending)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	groupIDs, err := parseAndValidateNuvioNewsletterBackofficeGroupIDsByWebsite(e.App, groupsCollection, websiteID, payload["groups"])
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	record := core.NewRecord(subscribersCollection)
+	setNuvioNewsletterBackofficeRelationField(record, subscribersCollection, nuvioNewsletterBackofficeWebsiteFieldAliases, websiteID)
+	setNuvioNewsletterBackofficeStringField(record, subscribersCollection, nuvioNewsletterBackofficeSubscriberEmailFieldAliases, email)
+	setNuvioNewsletterBackofficeStringField(record, subscribersCollection, nuvioNewsletterBackofficeSubscriberNameFieldAliases, sanitizeNuvioNewsletterName(parseStringValue(payload["name"])))
+	setNuvioNewsletterBackofficeStringField(record, subscribersCollection, nuvioNewsletterBackofficeSubscriberStatusFieldAliases, status)
+
+	if subscriberSourceFieldName != "" {
+		record.Set(subscriberSourceFieldName, sanitizeNuvioNewsletterBackofficeTextValue(parseStringValue(payload["source"]), nuvioNewsletterTemplateSubjectMax))
+	}
+	if subscriberGroupsFieldName != "" {
+		record.Set(subscriberGroupsFieldName, groupIDs)
+	}
+
+	if saveErr := e.App.Save(record); saveErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice subscriber create save failed",
+			"websiteId",
+			websiteID,
+			"error",
+			saveErr.Error(),
+		)
+		return e.BadRequestError("Failed to create subscriber.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state":      "ok",
+		"subscriber": buildNuvioNewsletterBackofficeSubscriberDTO(record, subscriberSourceFieldName, subscriberGroupsFieldName),
+	})
+}
+
+func handleNuvioNewsletterBackofficeSubscriberUpdate(e *core.RequestEvent) error {
+	subscribersCollection, groupsCollection, subscriberSourceFieldName, subscriberGroupsFieldName, err := resolveNuvioNewsletterBackofficeSubscriberCollectionsAndFields(e.App)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice subscriber update resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to update subscriber.", nil)
+	}
+
+	record, err := resolveNuvioNewsletterBackofficeRecordWriteTarget(e, subscribersCollection, "Subscriber not found.")
+	if err != nil {
+		return err
+	}
+
+	websiteID := strings.TrimSpace(resolveNuvioPublicRelationID(record, "website", "site"))
+	if websiteID == "" {
+		return e.ForbiddenError("The authorized record is not allowed to perform this action.", nil)
+	}
+
+	payload, err := parseNuvioNewsletterBackofficePayloadMap(e)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+	if len(payload) == 0 {
+		return e.BadRequestError("At least one subscriber field is required.", nil)
+	}
+
+	if err := validateNuvioNewsletterBackofficePayloadKeys(payload, nuvioNewsletterBackofficeSubscriberUpdateAllowedPayloadKeys); err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	if rawEmail, hasEmail := payload["email"]; hasEmail {
+		email, ok := normalizeNuvioEmail(parseStringValue(rawEmail))
+		if !ok {
+			return e.BadRequestError("A valid email is required.", nil)
+		}
+		setNuvioNewsletterBackofficeStringField(record, subscribersCollection, nuvioNewsletterBackofficeSubscriberEmailFieldAliases, email)
+	}
+
+	if rawName, hasName := payload["name"]; hasName {
+		setNuvioNewsletterBackofficeStringField(record, subscribersCollection, nuvioNewsletterBackofficeSubscriberNameFieldAliases, sanitizeNuvioNewsletterName(parseStringValue(rawName)))
+	}
+
+	if _, hasStatus := payload["status"]; hasStatus {
+		status, statusErr := parseNuvioNewsletterBackofficeStatusValue(payload, "status", nuvioNewsletterBackofficeAllowedSubscriberStatus, "")
+		if statusErr != nil {
+			return e.BadRequestError(statusErr.Error(), nil)
+		}
+		setNuvioNewsletterBackofficeStringField(record, subscribersCollection, nuvioNewsletterBackofficeSubscriberStatusFieldAliases, status)
+	}
+
+	if rawSource, hasSource := payload["source"]; hasSource && subscriberSourceFieldName != "" {
+		record.Set(subscriberSourceFieldName, sanitizeNuvioNewsletterBackofficeTextValue(parseStringValue(rawSource), nuvioNewsletterTemplateSubjectMax))
+	}
+
+	if rawGroups, hasGroups := payload["groups"]; hasGroups {
+		groupIDs, groupsErr := parseAndValidateNuvioNewsletterBackofficeGroupIDsByWebsite(e.App, groupsCollection, websiteID, rawGroups)
+		if groupsErr != nil {
+			return e.BadRequestError(groupsErr.Error(), nil)
+		}
+		if subscriberGroupsFieldName != "" {
+			record.Set(subscriberGroupsFieldName, groupIDs)
+		}
+	}
+
+	if saveErr := e.App.Save(record); saveErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice subscriber update save failed",
+			"recordId",
+			record.Id,
+			"error",
+			saveErr.Error(),
+		)
+		return e.BadRequestError("Failed to update subscriber.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state":      "ok",
+		"subscriber": buildNuvioNewsletterBackofficeSubscriberDTO(record, subscriberSourceFieldName, subscriberGroupsFieldName),
+	})
+}
+
+func handleNuvioNewsletterBackofficeSubscriberDelete(e *core.RequestEvent) error {
+	subscribersCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(e.App, nuvioNewsletterBackofficeSubscribersCollectionAliases)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice subscriber delete collection resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to delete subscriber.", nil)
+	}
+
+	record, err := resolveNuvioNewsletterBackofficeRecordWriteTarget(e, subscribersCollection, "Subscriber not found.")
+	if err != nil {
+		return err
+	}
+
+	if deleteErr := e.App.Delete(record); deleteErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice subscriber delete failed",
+			"recordId",
+			record.Id,
+			"error",
+			deleteErr.Error(),
+		)
+		return e.BadRequestError("Failed to delete subscriber.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state": "ok",
+	})
+}
+
+func handleNuvioNewsletterBackofficeGroupCreate(e *core.RequestEvent) error {
+	groupsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(e.App, nuvioNewsletterBackofficeGroupsCollectionAliases)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice group create collection resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to create group.", nil)
+	}
+
+	payload, err := parseNuvioNewsletterBackofficePayloadMap(e)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	if err := validateNuvioNewsletterBackofficePayloadKeys(payload, nuvioNewsletterBackofficeGroupCreateAllowedPayloadKeys); err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	websiteID := strings.TrimSpace(parseStringValue(payload["websiteId"]))
+	if websiteID == "" {
+		return e.BadRequestError("Missing websiteId.", nil)
+	}
+	if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+		return err
+	}
+
+	name := sanitizeNuvioNewsletterBackofficeTextValue(parseStringValue(payload["name"]), nuvioNewsletterBackofficeNameMax)
+	if name == "" {
+		return e.BadRequestError("Group name is required.", nil)
+	}
+
+	slugInput := parseStringValue(payload["slug"])
+	if strings.TrimSpace(slugInput) == "" {
+		slugInput = name
+	}
+	slug := normalizeNuvioNewsletterBackofficeSlug(slugInput)
+	if slug == "" {
+		return e.BadRequestError("Invalid group slug.", nil)
+	}
+
+	record := core.NewRecord(groupsCollection)
+	setNuvioNewsletterBackofficeRelationField(record, groupsCollection, nuvioNewsletterBackofficeWebsiteFieldAliases, websiteID)
+	setNuvioNewsletterBackofficeStringField(record, groupsCollection, nuvioNewsletterBackofficeGroupNameFieldAliases, name)
+	setNuvioNewsletterBackofficeStringField(record, groupsCollection, nuvioNewsletterBackofficeGroupSlugFieldAliases, slug)
+
+	if saveErr := e.App.Save(record); saveErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice group create save failed",
+			"websiteId",
+			websiteID,
+			"error",
+			saveErr.Error(),
+		)
+		return e.BadRequestError("Failed to create group.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state": "ok",
+		"group": buildNuvioNewsletterBackofficeGroupDTO(record),
+	})
+}
+
+func handleNuvioNewsletterBackofficeCampaignCreate(e *core.RequestEvent) error {
+	campaignsCollection, subscribersCollection, recipientsTypeFieldName, recipientsIDsFieldName, err := resolveNuvioNewsletterBackofficeCampaignCollectionsAndFields(e.App)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign create resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to create campaign.", nil)
+	}
+
+	payload, err := parseNuvioNewsletterBackofficePayloadMap(e)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	if err := validateNuvioNewsletterBackofficePayloadKeys(payload, nuvioNewsletterBackofficeCampaignCreateAllowedPayloadKeys); err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	websiteID := strings.TrimSpace(parseStringValue(payload["websiteId"]))
+	if websiteID == "" {
+		return e.BadRequestError("Missing websiteId.", nil)
+	}
+	if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+		return err
+	}
+
+	subject := sanitizeNuvioNewsletterBackofficeTextValue(parseStringValue(payload["subject"]), nuvioNewsletterTemplateSubjectMax)
+	if subject == "" {
+		return e.BadRequestError("Campaign subject is required.", nil)
+	}
+
+	body := sanitizeNuvioNewsletterBackofficeTextValue(parseStringValue(payload["body"]), nuvioNewsletterTemplateTextMax)
+	if body == "" {
+		return e.BadRequestError("Campaign body is required.", nil)
+	}
+
+	status, err := parseNuvioNewsletterBackofficeStatusValue(payload, "status", nuvioNewsletterBackofficeAllowedCampaignCreateStatus, "draft")
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	recipientsType, recipientsIDs, err := parseAndValidateNuvioNewsletterBackofficeCampaignRecipientsPayload(
+		e.App,
+		subscribersCollection,
+		websiteID,
+		payload,
+		recipientsIDsFieldName,
+	)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	record := core.NewRecord(campaignsCollection)
+	setNuvioNewsletterBackofficeRelationField(record, campaignsCollection, nuvioNewsletterBackofficeWebsiteFieldAliases, websiteID)
+	setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignSubjectFieldAliases, subject)
+	setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignBodyFieldAliases, body)
+	setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignStatusFieldAliases, status)
+	if recipientsTypeFieldName != "" {
+		record.Set(recipientsTypeFieldName, recipientsType)
+	}
+	if recipientsIDsFieldName != "" {
+		record.Set(recipientsIDsFieldName, recipientsIDs)
+	}
+	setNuvioNewsletterBackofficeNumberField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsCountFieldAliases, resolveNuvioNewsletterBackofficeRecipientsCount(recipientsType, recipientsIDs))
+	setNuvioNewsletterBackofficeNullableStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignSentAtFieldAliases, "")
+
+	if saveErr := e.App.Save(record); saveErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign create save failed",
+			"websiteId",
+			websiteID,
+			"error",
+			saveErr.Error(),
+		)
+		return e.BadRequestError("Failed to create campaign.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state":    "ok",
+		"campaign": buildNuvioNewsletterBackofficeCampaignDTO(record, recipientsTypeFieldName, recipientsIDsFieldName),
+	})
+}
+
+func handleNuvioNewsletterBackofficeCampaignUpdate(e *core.RequestEvent) error {
+	campaignsCollection, subscribersCollection, recipientsTypeFieldName, recipientsIDsFieldName, err := resolveNuvioNewsletterBackofficeCampaignCollectionsAndFields(e.App)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign update resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to update campaign.", nil)
+	}
+
+	record, err := resolveNuvioNewsletterBackofficeRecordWriteTarget(e, campaignsCollection, "Campaign not found.")
+	if err != nil {
+		return err
+	}
+
+	if normalizeNuvioNewsletterCampaignStatus(record.GetString("status")) == "sent" {
+		return e.BadRequestError("Sent campaigns are read-only.", nil)
+	}
+
+	payload, err := parseNuvioNewsletterBackofficePayloadMap(e)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+	if len(payload) == 0 {
+		return e.BadRequestError("At least one campaign field is required.", nil)
+	}
+	if err := validateNuvioNewsletterBackofficePayloadKeys(payload, nuvioNewsletterBackofficeCampaignUpdateAllowedPayloadKeys); err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	websiteID := strings.TrimSpace(resolveNuvioPublicRelationID(record, "website", "site"))
+	if websiteID == "" {
+		return e.ForbiddenError("The authorized record is not allowed to perform this action.", nil)
+	}
+
+	if rawSubject, hasSubject := payload["subject"]; hasSubject {
+		subject := sanitizeNuvioNewsletterBackofficeTextValue(parseStringValue(rawSubject), nuvioNewsletterTemplateSubjectMax)
+		if subject == "" {
+			return e.BadRequestError("Campaign subject is required.", nil)
+		}
+		setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignSubjectFieldAliases, subject)
+	}
+
+	if rawBody, hasBody := payload["body"]; hasBody {
+		body := sanitizeNuvioNewsletterBackofficeTextValue(parseStringValue(rawBody), nuvioNewsletterTemplateTextMax)
+		if body == "" {
+			return e.BadRequestError("Campaign body is required.", nil)
+		}
+		setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignBodyFieldAliases, body)
+	}
+
+	if _, hasStatus := payload["status"]; hasStatus {
+		status, statusErr := parseNuvioNewsletterBackofficeStatusValue(payload, "status", nuvioNewsletterBackofficeAllowedCampaignUpdateStatus, "")
+		if statusErr != nil {
+			return e.BadRequestError(statusErr.Error(), nil)
+		}
+		setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignStatusFieldAliases, status)
+	}
+
+	resolvedType := resolveNuvioNewsletterBackofficeCampaignRecordRecipientsType(record, recipientsTypeFieldName)
+	resolvedIDs := resolveNuvioNewsletterBackofficeCampaignRecordRecipientsIDs(record, recipientsIDsFieldName)
+
+	if rawType, hasType := payload["recipientsType"]; hasType {
+		nextType, typeErr := parseNuvioNewsletterBackofficeRecipientsType(rawType)
+		if typeErr != nil {
+			return e.BadRequestError(typeErr.Error(), nil)
+		}
+		resolvedType = nextType
+	}
+
+	if rawIDs, hasIDs := payload["recipientsIds"]; hasIDs {
+		nextIDs, idsErr := validateNuvioNewsletterBackofficeSubscriberIDsByWebsite(e.App, subscribersCollection, websiteID, rawIDs, resolvedType)
+		if idsErr != nil {
+			return e.BadRequestError(idsErr.Error(), nil)
+		}
+		resolvedIDs = nextIDs
+	}
+
+	if _, hasType := payload["recipientsType"]; hasType {
+		if recipientsTypeFieldName != "" {
+			record.Set(recipientsTypeFieldName, resolvedType)
+		}
+	}
+	if _, hasIDs := payload["recipientsIds"]; hasIDs {
+		if recipientsIDsFieldName != "" {
+			record.Set(recipientsIDsFieldName, resolvedIDs)
+		}
+	}
+	if _, hasType := payload["recipientsType"]; hasType {
+		setNuvioNewsletterBackofficeNumberField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsCountFieldAliases, resolveNuvioNewsletterBackofficeRecipientsCount(resolvedType, resolvedIDs))
+	} else if _, hasIDs := payload["recipientsIds"]; hasIDs {
+		setNuvioNewsletterBackofficeNumberField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsCountFieldAliases, resolveNuvioNewsletterBackofficeRecipientsCount(resolvedType, resolvedIDs))
+	}
+
+	if saveErr := e.App.Save(record); saveErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign update save failed",
+			"recordId",
+			record.Id,
+			"error",
+			saveErr.Error(),
+		)
+		return e.BadRequestError("Failed to update campaign.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state":    "ok",
+		"campaign": buildNuvioNewsletterBackofficeCampaignDTO(record, recipientsTypeFieldName, recipientsIDsFieldName),
+	})
+}
+
+func handleNuvioNewsletterBackofficeCampaignDelete(e *core.RequestEvent) error {
+	campaignsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(e.App, nuvioNewsletterBackofficeCampaignsCollectionAliases)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign delete collection resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to delete campaign.", nil)
+	}
+
+	record, err := resolveNuvioNewsletterBackofficeRecordWriteTarget(e, campaignsCollection, "Campaign not found.")
+	if err != nil {
+		return err
+	}
+
+	if deleteErr := e.App.Delete(record); deleteErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign delete failed",
+			"recordId",
+			record.Id,
+			"error",
+			deleteErr.Error(),
+		)
+		return e.BadRequestError("Failed to delete campaign.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state": "ok",
+	})
+}
+
+func handleNuvioNewsletterBackofficeCampaignDuplicate(e *core.RequestEvent) error {
+	campaignsCollection, subscribersCollection, recipientsTypeFieldName, recipientsIDsFieldName, err := resolveNuvioNewsletterBackofficeCampaignCollectionsAndFields(e.App)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign duplicate resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to duplicate campaign.", nil)
+	}
+
+	sourceRecord, err := resolveNuvioNewsletterBackofficeRecordWriteTarget(e, campaignsCollection, "Campaign not found.")
+	if err != nil {
+		return err
+	}
+
+	websiteID := strings.TrimSpace(resolveNuvioPublicRelationID(sourceRecord, "website", "site"))
+	if websiteID == "" {
+		return e.ForbiddenError("The authorized record is not allowed to perform this action.", nil)
+	}
+
+	recipientsType := resolveNuvioNewsletterBackofficeCampaignRecordRecipientsType(sourceRecord, recipientsTypeFieldName)
+	recipientsIDsRaw := resolveNuvioNewsletterBackofficeCampaignRecordRecipientsIDs(sourceRecord, recipientsIDsFieldName)
+	recipientsIDs, err := validateNuvioNewsletterBackofficeSubscriberIDsByWebsite(e.App, subscribersCollection, websiteID, recipientsIDsRaw, recipientsType)
+	if err != nil {
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	record := core.NewRecord(campaignsCollection)
+	setNuvioNewsletterBackofficeRelationField(record, campaignsCollection, nuvioNewsletterBackofficeWebsiteFieldAliases, websiteID)
+	setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignSubjectFieldAliases, sanitizeNuvioNewsletterBackofficeTextValue(sourceRecord.GetString("subject"), nuvioNewsletterTemplateSubjectMax))
+	setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignBodyFieldAliases, sanitizeNuvioNewsletterBackofficeTextValue(sourceRecord.GetString("body"), nuvioNewsletterTemplateTextMax))
+	setNuvioNewsletterBackofficeStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignStatusFieldAliases, "draft")
+	if recipientsTypeFieldName != "" {
+		record.Set(recipientsTypeFieldName, recipientsType)
+	}
+	if recipientsIDsFieldName != "" {
+		record.Set(recipientsIDsFieldName, recipientsIDs)
+	}
+	setNuvioNewsletterBackofficeNumberField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsCountFieldAliases, resolveNuvioNewsletterBackofficeRecipientsCount(recipientsType, recipientsIDs))
+	setNuvioNewsletterBackofficeNullableStringField(record, campaignsCollection, nuvioNewsletterBackofficeCampaignSentAtFieldAliases, "")
+
+	if saveErr := e.App.Save(record); saveErr != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign duplicate save failed",
+			"sourceRecordId",
+			sourceRecord.Id,
+			"error",
+			saveErr.Error(),
+		)
+		return e.BadRequestError("Failed to duplicate campaign.", nil)
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"state":    "ok",
+		"campaign": buildNuvioNewsletterBackofficeCampaignDTO(record, recipientsTypeFieldName, recipientsIDsFieldName),
+	})
+}
+
+func resolveNuvioNewsletterBackofficeSubscriberCollectionsAndFields(
+	app core.App,
+) (*core.Collection, *core.Collection, string, string, error) {
+	subscribersCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(app, nuvioNewsletterBackofficeSubscribersCollectionAliases)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+
+	groupsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(app, nuvioNewsletterBackofficeGroupsCollectionAliases)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+
+	subscriberSourceFieldName := resolveNuvioCollectionFieldNameByAliases(subscribersCollection, nuvioNewsletterBackofficeSubscribersSourceFieldAliases)
+	subscriberGroupsFieldName := resolveNuvioCollectionFieldNameByAliases(subscribersCollection, nuvioNewsletterBackofficeSubscribersGroupsFieldAliases)
+
+	return subscribersCollection, groupsCollection, subscriberSourceFieldName, subscriberGroupsFieldName, nil
+}
+
+func resolveNuvioNewsletterBackofficeCampaignCollectionsAndFields(
+	app core.App,
+) (*core.Collection, *core.Collection, string, string, error) {
+	campaignsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(app, nuvioNewsletterBackofficeCampaignsCollectionAliases)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+
+	subscribersCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(app, nuvioNewsletterBackofficeSubscribersCollectionAliases)
+	if err != nil {
+		return nil, nil, "", "", err
+	}
+
+	recipientsTypeFieldName := resolveNuvioCollectionFieldNameByAliases(campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsTypeFieldAliases)
+	recipientsIDsFieldName := resolveNuvioCollectionFieldNameByAliases(campaignsCollection, nuvioNewsletterBackofficeCampaignRecipientsIDsFieldAliases)
+	return campaignsCollection, subscribersCollection, recipientsTypeFieldName, recipientsIDsFieldName, nil
+}
+
+func parseNuvioNewsletterBackofficePayloadMap(e *core.RequestEvent) (map[string]any, error) {
+	payload := map[string]any{}
+	if err := e.BindBody(&payload); err != nil {
+		return nil, fmt.Errorf("Invalid request payload")
+	}
+	return payload, nil
+}
+
+func validateNuvioNewsletterBackofficePayloadKeys(
+	payload map[string]any,
+	allowed map[string]struct{},
+) error {
+	for key := range payload {
+		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+		if normalizedKey == "" {
+			return fmt.Errorf("Invalid payload field")
+		}
+
+		lifecycleProbe := strings.ReplaceAll(normalizedKey, "_", "")
+		lifecycleProbe = strings.ReplaceAll(lifecycleProbe, "-", "")
+		if _, lifecycleField := nuvioNewsletterBackofficeLifecycleFieldAliases[lifecycleProbe]; lifecycleField {
+			return fmt.Errorf("Lifecycle token fields are not allowed in this endpoint")
+		}
+		if _, ok := allowed[normalizedKey]; !ok {
+			return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(key))
+		}
+	}
+	return nil
+}
+
+func resolveNuvioNewsletterBackofficeRecordWriteTarget(
+	e *core.RequestEvent,
+	collection *core.Collection,
+	notFoundMessage string,
+) (*core.Record, error) {
+	recordID := strings.TrimSpace(e.Request.PathValue("id"))
+	if recordID == "" {
+		return nil, e.BadRequestError("Missing record id.", nil)
+	}
+	if collection == nil {
+		return nil, e.BadRequestError("Failed to resolve backoffice collection.", nil)
+	}
+
+	record, err := e.App.FindRecordById(collection.Id, recordID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, e.NotFoundError(notFoundMessage, nil)
+		}
+		return nil, e.BadRequestError("Failed to load record.", nil)
+	}
+
+	websiteID := strings.TrimSpace(resolveNuvioPublicRelationID(record, "website", "site"))
+	if websiteID == "" {
+		return nil, e.ForbiddenError("The authorized record is not allowed to perform this action.", nil)
+	}
+
+	if accessErr := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); accessErr != nil {
+		return nil, accessErr
+	}
+
+	return record, nil
+}
+
+func parseNuvioNewsletterBackofficeStatusValue(
+	payload map[string]any,
+	fieldName string,
+	allowed []string,
+	defaultValue string,
+) (string, error) {
+	rawValue, hasValue := payload[fieldName]
+	if !hasValue {
+		if strings.TrimSpace(defaultValue) == "" {
+			return "", fmt.Errorf("Status is required")
+		}
+		return strings.ToLower(strings.TrimSpace(defaultValue)), nil
+	}
+
+	normalizedValue := strings.ToLower(strings.TrimSpace(parseStringValue(rawValue)))
+	if normalizedValue == "" {
+		return "", fmt.Errorf("Status is required")
+	}
+
+	for _, allowedValue := range allowed {
+		if normalizedValue == allowedValue {
+			return normalizedValue, nil
+		}
+	}
+
+	return "", fmt.Errorf("Invalid status value")
+}
+
+func parseAndValidateNuvioNewsletterBackofficeGroupIDsByWebsite(
+	app core.App,
+	groupsCollection *core.Collection,
+	websiteID string,
+	rawGroups any,
+) ([]string, error) {
+	groupIDs := parseNuvioRecipientIDs(rawGroups)
+	if len(groupIDs) == 0 {
+		return []string{}, nil
+	}
+	if groupsCollection == nil {
+		return nil, fmt.Errorf("Subscriber groups are not configured")
+	}
+
+	normalizedGroupIDs := dedupeNuvioNewsletterBackofficeIDs(groupIDs)
+	for _, groupID := range normalizedGroupIDs {
+		groupRecord, err := app.FindRecordById(groupsCollection.Id, groupID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("Subscriber group not found")
+			}
+			return nil, fmt.Errorf("Failed to validate subscriber groups")
+		}
+
+		groupWebsiteID := strings.TrimSpace(resolveNuvioPublicRelationID(groupRecord, "website", "site"))
+		if groupWebsiteID == "" || groupWebsiteID != websiteID {
+			return nil, fmt.Errorf("Subscriber groups must belong to the selected website")
+		}
+	}
+
+	return normalizedGroupIDs, nil
+}
+
+func parseAndValidateNuvioNewsletterBackofficeCampaignRecipientsPayload(
+	app core.App,
+	subscribersCollection *core.Collection,
+	websiteID string,
+	payload map[string]any,
+	recipientsIDsFieldName string,
+) (string, []string, error) {
+	recipientsType := "manual"
+	if rawType, hasType := payload["recipientsType"]; hasType {
+		nextType, err := parseNuvioNewsletterBackofficeRecipientsType(rawType)
+		if err != nil {
+			return "", nil, err
+		}
+		recipientsType = nextType
+	}
+
+	recipientsIDsRaw := payload["recipientsIds"]
+	if recipientsIDsFieldName != "" {
+		if rawAlias, hasAlias := payload[recipientsIDsFieldName]; hasAlias {
+			recipientsIDsRaw = rawAlias
+		}
+	}
+
+	recipientsIDs, err := validateNuvioNewsletterBackofficeSubscriberIDsByWebsite(
+		app,
+		subscribersCollection,
+		websiteID,
+		recipientsIDsRaw,
+		recipientsType,
+	)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return recipientsType, recipientsIDs, nil
+}
+
+func parseNuvioNewsletterBackofficeRecipientsType(rawValue any) (string, error) {
+	normalizedValue := strings.ToLower(strings.TrimSpace(parseStringValue(rawValue)))
+	if normalizedValue == "" {
+		normalizedValue = "manual"
+	}
+
+	for _, allowed := range nuvioNewsletterBackofficeAllowedRecipientsType {
+		if normalizedValue == allowed {
+			return normalizedValue, nil
+		}
+	}
+
+	return "", fmt.Errorf("Invalid recipientsType value")
+}
+
+func validateNuvioNewsletterBackofficeSubscriberIDsByWebsite(
+	app core.App,
+	subscribersCollection *core.Collection,
+	websiteID string,
+	rawRecipientsIDs any,
+	recipientsType string,
+) ([]string, error) {
+	if recipientsType == "all" {
+		return []string{}, nil
+	}
+
+	recipientsIDs := dedupeNuvioNewsletterBackofficeIDs(parseNuvioRecipientIDs(rawRecipientsIDs))
+	if len(recipientsIDs) == 0 {
+		return []string{}, nil
+	}
+
+	if subscribersCollection == nil {
+		return nil, fmt.Errorf("Subscribers collection is not configured")
+	}
+
+	validatedRecipientsIDs := make([]string, 0, len(recipientsIDs))
+	for _, subscriberID := range recipientsIDs {
+		subscriberRecord, err := app.FindRecordById(subscribersCollection.Id, subscriberID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("Recipient subscriber not found")
+			}
+			return nil, fmt.Errorf("Failed to validate recipients")
+		}
+
+		subscriberWebsiteID := strings.TrimSpace(resolveNuvioPublicRelationID(subscriberRecord, "website", "site"))
+		if subscriberWebsiteID == "" || subscriberWebsiteID != websiteID {
+			return nil, fmt.Errorf("Recipients must belong to the selected website")
+		}
+
+		validatedRecipientsIDs = append(validatedRecipientsIDs, subscriberID)
+	}
+
+	return validatedRecipientsIDs, nil
+}
+
+func setNuvioNewsletterBackofficeRelationField(record *core.Record, collection *core.Collection, aliases []string, value string) {
+	setNuvioNewsletterBackofficeStringField(record, collection, aliases, value)
+}
+
+func setNuvioNewsletterBackofficeStringField(record *core.Record, collection *core.Collection, aliases []string, value string) {
+	if record == nil || collection == nil {
+		return
+	}
+
+	fieldName := resolveNuvioCollectionFieldNameByAliases(collection, aliases)
+	if fieldName == "" {
+		return
+	}
+
+	record.Set(fieldName, strings.TrimSpace(value))
+}
+
+func setNuvioNewsletterBackofficeNullableStringField(record *core.Record, collection *core.Collection, aliases []string, value string) {
+	if record == nil || collection == nil {
+		return
+	}
+
+	fieldName := resolveNuvioCollectionFieldNameByAliases(collection, aliases)
+	if fieldName == "" {
+		return
+	}
+
+	normalizedValue := strings.TrimSpace(value)
+	if normalizedValue == "" {
+		record.Set(fieldName, "")
+		return
+	}
+
+	record.Set(fieldName, normalizedValue)
+}
+
+func setNuvioNewsletterBackofficeNumberField(record *core.Record, collection *core.Collection, aliases []string, value int) {
+	if record == nil || collection == nil {
+		return
+	}
+
+	fieldName := resolveNuvioCollectionFieldNameByAliases(collection, aliases)
+	if fieldName == "" {
+		return
+	}
+
+	record.Set(fieldName, value)
+}
+
+func normalizeNuvioNewsletterBackofficeSlug(rawSlug string) string {
+	slug := strings.ToLower(strings.TrimSpace(rawSlug))
+	if slug == "" {
+		return ""
+	}
+
+	slug = nuvioNewsletterBackofficeSlugUnsafeCharsRegex.ReplaceAllString(slug, "-")
+	slug = nuvioNewsletterBackofficeSlugMultiDashRegex.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	if slug == "" {
+		return ""
+	}
+
+	if len([]rune(slug)) > nuvioNewsletterBackofficeSlugMax {
+		slug = string([]rune(slug)[:nuvioNewsletterBackofficeSlugMax])
+		slug = strings.Trim(slug, "-")
+	}
+
+	return slug
+}
+
+func sanitizeNuvioNewsletterBackofficeTextValue(raw string, maxLen int) string {
+	normalized := strings.TrimSpace(raw)
+	if normalized == "" || maxLen <= 0 {
+		return normalized
+	}
+
+	runes := []rune(normalized)
+	if len(runes) > maxLen {
+		return strings.TrimSpace(string(runes[:maxLen]))
+	}
+
+	return normalized
+}
+
+func dedupeNuvioNewsletterBackofficeIDs(rawIDs []string) []string {
+	if len(rawIDs) == 0 {
+		return []string{}
+	}
+
+	seen := map[string]struct{}{}
+	deduped := make([]string, 0, len(rawIDs))
+
+	for _, rawID := range rawIDs {
+		normalizedID := strings.TrimSpace(rawID)
+		if normalizedID == "" {
+			continue
+		}
+
+		if _, exists := seen[normalizedID]; exists {
+			continue
+		}
+
+		seen[normalizedID] = struct{}{}
+		deduped = append(deduped, normalizedID)
+	}
+
+	return deduped
+}
+
+func resolveNuvioNewsletterBackofficeCampaignRecordRecipientsType(
+	record *core.Record,
+	recipientsTypeFieldName string,
+) string {
+	for _, fieldName := range []string{
+		strings.TrimSpace(recipientsTypeFieldName),
+		"recipientsType",
+		"recipientType",
+		"recipients_type",
+	} {
+		if fieldName == "" {
+			continue
+		}
+
+		value := strings.ToLower(strings.TrimSpace(record.GetString(fieldName)))
+		if value == "all" || value == "manual" {
+			return value
+		}
+	}
+
+	return "manual"
+}
+
+func resolveNuvioNewsletterBackofficeCampaignRecordRecipientsIDs(
+	record *core.Record,
+	recipientsIDsFieldName string,
+) []string {
+	for _, fieldName := range []string{
+		strings.TrimSpace(recipientsIDsFieldName),
+		"recipientsIds",
+		"recipientIds",
+		"recipients_ids",
+	} {
+		if fieldName == "" {
+			continue
+		}
+
+		values := dedupeNuvioNewsletterBackofficeIDs(parseNuvioRecipientIDs(record.Get(fieldName)))
+		if len(values) > 0 {
+			return values
+		}
+	}
+
+	return []string{}
+}
+
+func resolveNuvioNewsletterBackofficeRecipientsCount(recipientsType string, recipientsIDs []string) int {
+	if recipientsType != "manual" {
+		return 0
+	}
+	return len(recipientsIDs)
+}
+
+func normalizeNuvioNewsletterCampaignStatus(rawStatus string) string {
+	return strings.ToLower(strings.TrimSpace(rawStatus))
 }
 
 // NUVIO CUSTOM END: Newsletter V1 send endpoint (server-side campaign dispatch via Resend).

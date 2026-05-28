@@ -77,7 +77,7 @@
     let normalizedCampaignManualRecipientsCount = 0;
     let activeSubscriberIdsByGroupId = new Map();
     let groupSelectionMetaById = new Map();
-    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastAudienceRecipientsResetKey = "";    let lastPersistedContextKey = "";    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
+    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastAudienceRecipientsResetKey = "";    let lastPersistedContextKey = "";    let isNewsletterAdminSuperuser = ApiClient.isAdminSuperuser();    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
     $: campaignsCollection = findCollectionByRequiredNames($collections, ["Campaigns", "campaigns"]);
     $: subscriberGroupsCollection = findCollectionByRequiredNames($collections, ["SubscriberGroups", "subscribergroups"]);
     $: missingCollectionNames = [];
@@ -103,9 +103,7 @@
     $: if (!websitesCollection?.id) {        websites = [];        selectedWebsiteId = "";        lastWebsitesCollectionId = "";    } else if (websitesCollection.id !== lastWebsitesCollectionId) {        lastWebsitesCollectionId = websitesCollection.id;        loadWebsites();    };    $: websiteDataKey = `${selectedWebsiteId}:${subscribersCollection?.id || ""}:${campaignsCollection?.id || ""}:${subscriberGroupsCollection?.id || ""}`;
     $: if (selectedWebsiteId && hasNewsletterCollections && websiteDataKey !== lastDataKey) {
         lastDataKey = websiteDataKey;
-        loadSubscribers();
-        loadCampaigns();
-        loadSubscriberGroups();
+        loadNewsletterDashboard();
     }
 
     $: if (!selectedWebsiteId || !hasSubscriberGroupsFeature) {
@@ -609,6 +607,9 @@
         return composerRecipients.some((id) => !persistedSet.has(id));
     }
     function getSendCampaignDisabledReason(campaign) {
+        if (!isNewsletterAdminSuperuser) {
+            return "Only admin users can send campaigns.";
+        }
         if (!campaign?.id) {
             return "Invalid campaign.";
         }
@@ -1176,7 +1177,7 @@
         nextCreateGroupIds.add(groupId);
         subscriberForm = { ...subscriberForm, groupIds: [...nextCreateGroupIds] };
     }
-    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
+    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        if (!isNewsletterAdminSuperuser) {            addWarningToast("Only admin users can send campaigns.");            return;        }        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
     }
 
@@ -1259,7 +1260,7 @@
         pendingDeleteCampaign = null;
         await deleteDraftCampaign(campaign);
     }
-    async function loadWebsites() {        if (!websitesCollection?.id) {            websites = [];            selectedWebsiteId = "";            return;        }        isLoadingWebsites = true;        try {            websites = await ApiClient.collection(websitesCollection.id).getFullList({                sort: resolveWebsitesSort(websitesCollection),                requestKey: "nuvio_newsletter_websites",            });            if (!websites.length) {
+    async function loadWebsites() {        isNewsletterAdminSuperuser = ApiClient.isAdminSuperuser();        if (!websitesCollection?.id) {            websites = [];            selectedWebsiteId = "";            return;        }        isLoadingWebsites = true;        try {            websites = await ApiClient.getBackofficeWebsites({                requestKey: "nuvio_newsletter_websites",            });            if (!websites.length) {
                 selectedWebsiteId = "";
                 subscribers = [];
                 campaigns = [];
@@ -1275,33 +1276,37 @@
             resetSubscriberSelection();
             ApiClient.error(err);
         }
-        isLoadingWebsites = false;    }    async function loadSubscribers() {        if (!hasNewsletterCollections || !selectedWebsiteId) {            subscribers = [];            resetSubscriberSelection();            return;        }        isLoadingSubscribers = true;        try {            subscribers = await ApiClient.collection(subscribersCollection.id).getFullList({                filter: `website="${selectedWebsiteId}"`,                sort: "-created",                requestKey: "nuvio_newsletter_subscribers_" + selectedWebsiteId,            });        } catch (err) {            subscribers = [];            ApiClient.error(err);        }        isLoadingSubscribers = false;    }    async function loadCampaigns() {
+        isLoadingWebsites = false;    }    async function loadNewsletterDashboard() {
         if (!hasNewsletterCollections || !selectedWebsiteId) {
+            subscribers = [];
             campaigns = [];
-            return;
-        }
-        isLoadingCampaigns = true;        try {            campaigns = await ApiClient.collection(campaignsCollection.id).getFullList({                filter: `website="${selectedWebsiteId}"`,                sort: "-created",                requestKey: "nuvio_newsletter_campaigns_" + selectedWebsiteId,            });        } catch (err) {            campaigns = [];            ApiClient.error(err);        }        isLoadingCampaigns = false;
-    }
-
-    async function loadSubscriberGroups() {
-        if (!selectedWebsiteId || !hasSubscriberGroupsFeature) {
             subscriberGroups = [];
+            resetSubscriberSelection();
             return;
         }
 
+        isLoadingSubscribers = true;
+        isLoadingCampaigns = true;
         isLoadingSubscriberGroups = true;
 
         try {
-            subscriberGroups = await ApiClient.collection(subscriberGroupsCollection.id).getFullList({
-                filter: `website="${selectedWebsiteId}"`,
-                sort: "+name",
-                requestKey: "nuvio_newsletter_subscriber_groups_" + selectedWebsiteId,
+            const response = await ApiClient.getNewsletterBackofficeDashboard({
+                websiteId: selectedWebsiteId,
+                requestKey: "nuvio_newsletter_dashboard_" + selectedWebsiteId,
             });
+            const datasets = response?.datasets || {};
+            subscribers = Array.isArray(datasets?.subscribers) ? datasets.subscribers : [];
+            campaigns = Array.isArray(datasets?.campaigns) ? datasets.campaigns : [];
+            subscriberGroups = Array.isArray(datasets?.groups) ? datasets.groups : [];
         } catch (err) {
+            subscribers = [];
+            campaigns = [];
             subscriberGroups = [];
             ApiClient.error(err);
         }
 
+        isLoadingSubscribers = false;
+        isLoadingCampaigns = false;
         isLoadingSubscriberGroups = false;
     }
     function handleWebsiteChange() {
@@ -1322,26 +1327,24 @@
             return;
         }
         const email = normalizedSubscriberFormEmail;        if (!isValidEmail(email)) {            subscriberFormError = "Please provide a valid subscriber email.";            return;        }        if (subscriberAlreadyExists) {            subscriberFormError = "This email is already subscribed for this website.";            return;        }        subscriberFormError = "";        isCreatingSubscriber = true;        try {            const payload = {
-                website: selectedWebsiteId,
+                websiteId: selectedWebsiteId,
                 email,
                 status: "pending",
+                name: normalizeSubscriberName(subscriberForm.name),
+                source: subscriberLeadSource,
+                groups: hasSubscriberGroupsFeature && Array.isArray(subscriberForm.groupIds)
+                    ? normalizeIdList(subscriberForm.groupIds)
+                    : [],
             };
-            if (subscribersSupportsNameField) {
-                payload.name = normalizeSubscriberName(subscriberForm.name);
-            }
-            if (subscribersSupportsSourceField) {
-                payload.source = subscriberLeadSource;
-            }
-            if (hasSubscriberGroupsFeature && Array.isArray(subscriberForm.groupIds) && subscriberForm.groupIds.length) {
-                payload[subscriberGroupsFieldName] = normalizeIdList(subscriberForm.groupIds);
-            }
-            await ApiClient.collection(subscribersCollection.id).create(payload);            subscriberForm = {
+            await ApiClient.createNewsletterSubscriber(payload, {
+                requestKey: "nuvio_newsletter_subscriber_create_" + selectedWebsiteId,
+            });            subscriberForm = {
                 name: "",
                 email: "",
                 status: "pending",
                 groupIds: [],
             };
-            await loadSubscribers();            addSuccessToast("Subscriber added.");            focusSubscriberEmailInput();        } catch (err) {            ApiClient.error(err);        }        isCreatingSubscriber = false;
+            await loadNewsletterDashboard();            addSuccessToast("Subscriber added.");            focusSubscriberEmailInput();        } catch (err) {            ApiClient.error(err);        }        isCreatingSubscriber = false;
     }
 
     async function saveSubscriberEdit(subscriber) {
@@ -1354,22 +1357,19 @@
 
         try {
             const payload = {
+                email: normalizeEmail(editingSubscriberForm.email),
                 status: normalizeStatus(subscriber?.status) || "pending",
+                source: subscriberLeadSource,
+                groups: hasSubscriberGroupsFeature
+                    ? normalizeIdList(editingSubscriberForm.groupIds)
+                    : [],
             };
-            if (subscribersSupportsNameField) {
-                payload.name = normalizeSubscriberName(editingSubscriberForm.name);
-            }
+            payload.name = normalizeSubscriberName(editingSubscriberForm.name);
 
-            if (hasSubscriberGroupsFeature) {
-                payload[subscriberGroupsFieldName] = normalizeIdList(editingSubscriberForm.groupIds);
-            }
-
-            if (payload.status === "active" && !subscriber.confirmedAt) {
-                payload.confirmedAt = new Date().toISOString();
-            }
-
-            await ApiClient.collection(subscribersCollection.id).update(subscriber.id, payload);
-            await loadSubscribers();
+            await ApiClient.updateNewsletterSubscriber(subscriber.id, payload, {
+                requestKey: "nuvio_newsletter_subscriber_update_" + subscriber.id,
+            });
+            await loadNewsletterDashboard();
             cancelEditSubscriber();
             addSuccessToast("Subscriber updated.");
         } catch (err) {
@@ -1387,6 +1387,11 @@
             || !!resendingSubscriberId
             || normalizeStatus(subscriber?.status) !== "pending"
         ) {
+            return;
+        }
+
+        if (!isNewsletterAdminSuperuser) {
+            addWarningToast("Only admin users can send newsletter confirmations.");
             return;
         }
 
@@ -1417,7 +1422,7 @@
                 addWarningToast("This contact has unsubscribed and was not invited.");
             } else {
                 addSuccessToast("Confirmation email sent.");
-                await loadSubscribers();
+                await loadNewsletterDashboard();
             }
         } catch (err) {
             ApiClient.error(err, false);
@@ -1435,12 +1440,14 @@
         deletingSubscriberId = subscriber.id;
 
         try {
-            await ApiClient.collection(subscribersCollection.id).delete(subscriber.id);
+            await ApiClient.deleteNewsletterSubscriber(subscriber.id, {
+                requestKey: "nuvio_newsletter_subscriber_delete_" + subscriber.id,
+            });
             if (editingSubscriberId === subscriber.id) {
                 cancelEditSubscriber();
             }
             selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriber.id);
-            await loadSubscribers();
+            await loadNewsletterDashboard();
             addSuccessToast("Subscriber deleted.");
         } catch (err) {
             ApiClient.error(err);
@@ -1473,15 +1480,18 @@
         isCreatingSubscriberGroup = true;
 
         try {
-            const createdGroup = await ApiClient.collection(subscriberGroupsCollection.id).create({
-                website: selectedWebsiteId,
+            const response = await ApiClient.createNewsletterGroup({
+                websiteId: selectedWebsiteId,
                 name,
                 slug: slugifyGroupName(name),
+            }, {
+                requestKey: "nuvio_newsletter_group_create_" + selectedWebsiteId,
             });
+            const createdGroup = response?.group || null;
 
             subscriberGroupForm = { name: "" };
             autoSelectCreatedGroupForCurrentFlow(createdGroup?.id);
-            await loadSubscriberGroups();
+            await loadNewsletterDashboard();
             addSuccessToast("Subscriber group added.");
         } catch (err) {
             ApiClient.error(err);
@@ -1492,6 +1502,11 @@
 
     async function sendCampaign(campaign) {
         if (!campaign?.id || isSendingCampaign[campaign.id]) {
+            return false;
+        }
+
+        if (!isNewsletterAdminSuperuser) {
+            addWarningToast("Only admin users can send campaigns.");
             return false;
         }
 
@@ -1537,7 +1552,7 @@
                 sent = true;
             }
 
-            await loadCampaigns();
+            await loadNewsletterDashboard();
         } catch (err) {
             ApiClient.error(err, false);
             addErrorToast("Campaign could not be sent. Please try again or check email configuration.");
@@ -1647,21 +1662,27 @@
         const normalizedRecipientsType = "manual";
         const normalizedRecipientsIds = normalizeManualRecipientIds(campaignForm.recipientsIds);
         const payload = {
-            website: selectedWebsiteId,
+            websiteId: selectedWebsiteId,
             subject: `${campaignForm.subject || ""}`.trim(),
             body: `${campaignForm.body || ""}`.trim(),
             status: "draft",
             recipientsType: normalizedRecipientsType,
             recipientsIds: normalizedRecipientsIds,
         };
-        payload[campaignRecipientsTypeFieldName] = normalizedRecipientsType;
-        payload[campaignRecipientsIdsFieldName] = normalizedRecipientsIds;
 
         if (editingCampaignId) {
             isSavingCampaign = true;
             try {
-                await ApiClient.collection(campaignsCollection.id).update(editingCampaignId, payload);
-                await loadCampaigns();
+                await ApiClient.updateNewsletterCampaign(editingCampaignId, {
+                    subject: payload.subject,
+                    body: payload.body,
+                    status: payload.status,
+                    recipientsType: payload.recipientsType,
+                    recipientsIds: payload.recipientsIds,
+                }, {
+                    requestKey: "nuvio_newsletter_campaign_update_" + editingCampaignId,
+                });
+                await loadNewsletterDashboard();
                 addSuccessToast("Campaign draft updated.");
                 resetCampaignComposer();
                 campaignWorkspace = "audience";
@@ -1674,11 +1695,10 @@
 
         isCreatingCampaign = true;
         try {
-            await ApiClient.collection(campaignsCollection.id).create({
-                ...payload,
-                recipientsCount: 0,
+            await ApiClient.createNewsletterCampaign(payload, {
+                requestKey: "nuvio_newsletter_campaign_create_" + selectedWebsiteId,
             });
-            await loadCampaigns();
+            await loadNewsletterDashboard();
             addSuccessToast("Draft campaign created.");
             resetCampaignComposer();
             campaignWorkspace = "audience";
@@ -1696,25 +1716,13 @@
         isDuplicatingCampaign[campaign.id] = true;
         isDuplicatingCampaign = { ...isDuplicatingCampaign };
 
-        const copiedRecipientsType = normalizeStatus(getCampaignRecipientsType(campaign)) === "all" ? "all" : "manual";
-        const copiedRecipientsIds = normalizeIdList(getCampaignRecipientIds(campaign));
-        const payload = {
-            website: campaign.website || selectedWebsiteId,
-            subject: `${campaign.subject || ""}`.trim(),
-            body: `${campaign.body || ""}`.trim(),
-            status: "draft",
-            recipientsType: copiedRecipientsType,
-            recipientsIds: copiedRecipientsIds,
-            recipientsCount: 0,
-            sentAt: null,
-        };
-        payload[campaignRecipientsTypeFieldName] = copiedRecipientsType;
-        payload[campaignRecipientsIdsFieldName] = copiedRecipientsIds;
-
         try {
-            const createdCampaign = await ApiClient.collection(campaignsCollection.id).create(payload);
-            await loadCampaigns();
-            const nextDraft = campaigns.find((item) => item.id === createdCampaign?.id) || createdCampaign;
+            const response = await ApiClient.duplicateNewsletterCampaign(campaign.id, {
+                requestKey: "nuvio_newsletter_campaign_duplicate_" + campaign.id,
+            });
+            const createdCampaign = response?.campaign || null;
+            await loadNewsletterDashboard();
+            const nextDraft = campaigns.find((item) => item.id === createdCampaign?.id) || createdCampaign || campaign;
             startEditCampaign(nextDraft);
             campaignWorkspace = "builder";
             addSuccessToast("Draft created from sent campaign.");
@@ -1739,7 +1747,9 @@
         deletingCampaignId = campaign.id;
 
         try {
-            await ApiClient.collection(campaignsCollection.id).delete(campaign.id);
+            await ApiClient.deleteNewsletterCampaign(campaign.id, {
+                requestKey: "nuvio_newsletter_campaign_delete_" + campaign.id,
+            });
 
             if (editingCampaignId === campaign.id) {
                 resetCampaignComposer();
@@ -1750,7 +1760,7 @@
                 pendingSendCampaign = null;
             }
 
-            await loadCampaigns();
+            await loadNewsletterDashboard();
             addSuccessToast("Draft deleted.");
         } catch (err) {
             console.error("Unable to delete draft campaign:", err);
@@ -1767,9 +1777,7 @@
 
     function refreshAll() {
         loadWebsites();
-        loadSubscribers();
-        loadCampaigns();
-        loadSubscriberGroups();
+        loadNewsletterDashboard();
     }
     // NUVIO CUSTOM END: Newsletter V1 dedicated section/page (collection-backed).
 </script>
@@ -2238,7 +2246,7 @@
                                                             >
                                                                 <span class="txt">Edit</span>
                                                             </button>
-                                                            {#if normalizeStatus(subscriber.status) === "pending"}
+                                                            {#if normalizeStatus(subscriber.status) === "pending" && isNewsletterAdminSuperuser}
                                                                 <button
                                                                     type="button"
                                                                     class="btn btn-sm btn-outline action-btn"

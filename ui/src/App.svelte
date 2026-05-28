@@ -185,6 +185,10 @@
             const total = Number(result?.totalItems || 0);
             return Number.isFinite(total) ? total : 0;
         } catch (err) {
+            if ((err?.status << 0) === 403) {
+                return null;
+            }
+
             ApiClient.error(err, false);
             return null;
         }
@@ -258,7 +262,12 @@
     }
 
     async function refreshSidebarNavBadges() {
-        if (!$superuser?.id || !showAppSidebar || !ApiClient.isSuperuserAuth()) {
+        if (
+            !$superuser?.id
+            || !showAppSidebar
+            || !ApiClient.isSuperuserAuth()
+            || !canAccessAdminAreas
+        ) {
             leadsSidebarBadgeCount = 0;
             bookingSidebarBadgeCount = 0;
             return;
@@ -312,7 +321,7 @@
 
     onMount(() => {
         window.addEventListener(sidebarBadgeRefreshEventName, handleSidebarBadgeRefreshEvent);
-        if (ApiClient.isSuperuserAuth()) {
+        if (ApiClient.isSuperuserAuth() && ApiClient.isAdminSuperuser()) {
             refreshSidebarNavBadges();
         }
     });

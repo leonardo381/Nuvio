@@ -127,6 +127,18 @@ func main() {
 			registerNuvioReportsRoutes(e)
 			// NUVIO CUSTOM END: Register Reports traffic analytics routes.
 
+			// NUVIO CUSTOM START: Register scoped backoffice websites selector routes.
+			registerNuvioBackofficeWebsitesRoutes(e)
+			// NUVIO CUSTOM END: Register scoped backoffice websites selector routes.
+
+			// NUVIO CUSTOM START: Register scoped CMS backoffice dashboard routes.
+			registerNuvioCMSBackofficeRoutes(e)
+			// NUVIO CUSTOM END: Register scoped CMS backoffice dashboard routes.
+
+			// NUVIO CUSTOM START: Register public content DTO routes.
+			registerNuvioPublicContentRoutes(e)
+			// NUVIO CUSTOM END: Register public content DTO routes.
+
 			if !e.Router.HasRoute(http.MethodGet, "/{path...}") {
 				e.Router.GET("/{path...}", apis.Static(os.DirFS(publicDir), indexFallback))
 			}

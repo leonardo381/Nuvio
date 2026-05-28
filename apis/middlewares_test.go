@@ -302,6 +302,305 @@ func TestRequireSuperuserAuth(t *testing.T) {
 	}
 }
 
+func TestRequireAdminSuperuserAuth(t *testing.T) {
+	t.Parallel()
+
+	beforeTestFuncWithRole := func(role string) func(testing.TB, *tests.TestApp, *core.ServeEvent) {
+		return func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+			superusersCollection, err := app.FindCollectionByNameOrId(core.CollectionNameSuperusers)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if superusersCollection.Fields.GetByName("role") == nil {
+				superusersCollection.Fields.Add(&core.SelectField{
+					Name:      "role",
+					MaxSelect: 1,
+					Values:    []string{"admin", "client"},
+				})
+				if err := app.Save(superusersCollection); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			superuser, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "test@example.com")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			superuser.Set("role", role)
+			if role == "manager" {
+				err = app.SaveNoValidate(superuser)
+			} else {
+				err = app.Save(superuser)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			e.Router.GET("/my/test", func(e *core.RequestEvent) error {
+				return e.String(200, "test123")
+			}).Bind(apis.RequireAdminSuperuserAuth())
+		}
+	}
+
+	scenarios := []tests.ApiScenario{
+		{
+			Name:            "guest",
+			Method:          http.MethodGet,
+			URL:             "/my/test",
+			BeforeTestFunc:  beforeTestFuncWithRole("admin"),
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "expired/invalid token",
+			Method: http.MethodGet,
+			URL:    "/my/test",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjE2NDA5OTE2NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.0pDcBPGDpL2Khh76ivlRi7ugiLBSYvasct3qpHV3rfs",
+			},
+			BeforeTestFunc:  beforeTestFuncWithRole("admin"),
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "valid regular user auth token",
+			Method: http.MethodGet,
+			URL:    "/my/test",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6IjRxMXhsY2xtZmxva3UzMyIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoiX3BiX3VzZXJzX2F1dGhfIiwiZXhwIjoyNTI0NjA0NDYxLCJyZWZyZXNoYWJsZSI6dHJ1ZX0.ZT3F0Z3iM-xbGgSG3LEKiEzHrPHr8t8IuHLZGGNuxLo",
+			},
+			BeforeTestFunc:  beforeTestFuncWithRole("admin"),
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "valid admin superuser auth token",
+			Method: http.MethodGet,
+			URL:    "/my/test",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc:  beforeTestFuncWithRole("admin"),
+			ExpectedStatus:  200,
+			ExpectedContent: []string{"test123"},
+		},
+		{
+			Name:   "valid client-role superuser auth token",
+			Method: http.MethodGet,
+			URL:    "/my/test",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc:  beforeTestFuncWithRole("client"),
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "valid superuser auth token with missing role",
+			Method: http.MethodGet,
+			URL:    "/my/test",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc:  beforeTestFuncWithRole(""),
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+		{
+			Name:   "valid superuser auth token with unknown role",
+			Method: http.MethodGet,
+			URL:    "/my/test",
+			Headers: map[string]string{
+				"Authorization": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6InN5d2JoZWNuaDQ2cmhtMCIsInR5cGUiOiJhdXRoIiwiY29sbGVjdGlvbklkIjoicGJjXzMxNDI2MzU4MjMiLCJleHAiOjI1MjQ2MDQ0NjEsInJlZnJlc2hhYmxlIjp0cnVlfQ.UXgO3j-0BumcugrFjbd7j0M4MQvbrLggLlcu_YNGjoY",
+			},
+			BeforeTestFunc:  beforeTestFuncWithRole("manager"),
+			ExpectedStatus:  403,
+			ExpectedContent: []string{`"data":{}`},
+			ExpectedEvents:  map[string]int{"*": 0},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		scenario.Test(t)
+	}
+}
+
+func TestCanAccessWebsite(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	superuser, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	makeAuthRecord := func(role string, websiteAccess []string) *core.Record {
+		record := superuser.Clone()
+		record.Set("role", role)
+		record.Set("websiteAccess", websiteAccess)
+		return record
+	}
+
+	testCases := []struct {
+		name       string
+		authRecord *core.Record
+		websiteID  string
+		expected   bool
+	}{
+		{
+			name:       "admin superuser allowed for any website",
+			authRecord: makeAuthRecord("admin", nil),
+			websiteID:  "website-any",
+			expected:   true,
+		},
+		{
+			name:       "client superuser allowed for assigned website",
+			authRecord: makeAuthRecord("client", []string{"website-assigned", "website-other"}),
+			websiteID:  "website-assigned",
+			expected:   true,
+		},
+		{
+			name:       "client superuser denied for unassigned website",
+			authRecord: makeAuthRecord("client", []string{"website-assigned"}),
+			websiteID:  "website-foreign",
+			expected:   false,
+		},
+		{
+			name:       "client superuser denied with empty websiteAccess",
+			authRecord: makeAuthRecord("client", []string{}),
+			websiteID:  "website-any",
+			expected:   false,
+		},
+		{
+			name:       "client superuser denied with empty websiteId",
+			authRecord: makeAuthRecord("client", []string{"website-assigned"}),
+			websiteID:  "",
+			expected:   false,
+		},
+		{
+			name:       "missing role denied",
+			authRecord: makeAuthRecord("", []string{"website-assigned"}),
+			websiteID:  "website-assigned",
+			expected:   false,
+		},
+		{
+			name:       "unknown role denied",
+			authRecord: makeAuthRecord("manager", []string{"website-assigned"}),
+			websiteID:  "website-assigned",
+			expected:   false,
+		},
+		{
+			name:       "unauthenticated denied",
+			authRecord: nil,
+			websiteID:  "website-assigned",
+			expected:   false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			canAccess, err := apis.CanAccessWebsite(app, tc.authRecord, tc.websiteID)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			if canAccess != tc.expected {
+				t.Fatalf("expected canAccess=%v, got %v", tc.expected, canAccess)
+			}
+		})
+	}
+}
+
+func TestRequireWebsiteAccess(t *testing.T) {
+	t.Parallel()
+
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	superuser, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "test@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	makeAuthRecord := func(role string, websiteAccess []string) *core.Record {
+		record := superuser.Clone()
+		record.Set("role", role)
+		record.Set("websiteAccess", websiteAccess)
+		return record
+	}
+
+	testCases := []struct {
+		name        string
+		authRecord  *core.Record
+		websiteID   string
+		expectError bool
+	}{
+		{
+			name:        "admin superuser allowed for any website",
+			authRecord:  makeAuthRecord("admin", nil),
+			websiteID:   "website-any",
+			expectError: false,
+		},
+		{
+			name:        "client superuser allowed for assigned website",
+			authRecord:  makeAuthRecord("client", []string{"website-assigned"}),
+			websiteID:   "website-assigned",
+			expectError: false,
+		},
+		{
+			name:        "client superuser denied for unassigned website",
+			authRecord:  makeAuthRecord("client", []string{"website-assigned"}),
+			websiteID:   "website-foreign",
+			expectError: true,
+		},
+		{
+			name:        "client superuser denied with empty websiteAccess",
+			authRecord:  makeAuthRecord("client", []string{}),
+			websiteID:   "website-assigned",
+			expectError: true,
+		},
+		{
+			name:        "missing role denied",
+			authRecord:  makeAuthRecord("", []string{"website-assigned"}),
+			websiteID:   "website-assigned",
+			expectError: true,
+		},
+		{
+			name:        "unknown role denied",
+			authRecord:  makeAuthRecord("manager", []string{"website-assigned"}),
+			websiteID:   "website-assigned",
+			expectError: true,
+		},
+		{
+			name:        "unauthenticated denied",
+			authRecord:  nil,
+			websiteID:   "website-assigned",
+			expectError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := apis.RequireWebsiteAccessById(app, tc.authRecord, tc.websiteID)
+			if tc.expectError && err == nil {
+				t.Fatal("expected forbidden error, got nil")
+			}
+			if !tc.expectError && err != nil {
+				t.Fatalf("expected nil error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestRequireSuperuserOrOwnerAuth(t *testing.T) {
 	t.Parallel()
 

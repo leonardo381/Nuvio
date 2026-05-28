@@ -111,6 +111,7 @@
     let availabilityRecords = [];
     let exceptionsRecords = [];
     let appointmentRecords = [];
+    let bookingDashboardWebsite = null;
 
     let isLoadingWebsites = false;
     let isLoadingBookingData = false;
@@ -221,7 +222,6 @@
     $: bookingAvailabilityCollection = resolveCollectionByAliases(["BookingAvailability", "booking_availability", "bookingavailability"]);
     $: bookingExceptionsCollection = resolveCollectionByAliases(["BookingExceptions", "bookingexceptions"]);
     $: appointmentsCollection = resolveCollectionByAliases(["Appointments", "appointments"]);
-    $: websiteSettingsFieldName = resolveCollectionFieldNameByAliases(websitesCollection, ["settings"]) || "settings";
 
     $: missingBookingCollections = [];
     $: if (!bookingServicesCollection?.name) {
@@ -277,7 +277,9 @@
     );
 
     $: selectedWebsite = websites.find((website) => website.id === selectedWebsiteId) || null;
-    $: selectedWebsiteBookingSettings = resolveWebsiteBookingSettings(selectedWebsite?.[websiteSettingsFieldName]);
+    $: selectedWebsiteBookingSettings = resolveDashboardWebsiteBookingSettings(
+        bookingDashboardWebsite?.booking,
+    );
 
     $: normalizedAppointments = appointmentRecords.map((record) => normalizeAppointment(record));
 
@@ -1159,6 +1161,37 @@
         };
     }
 
+    function resolveDashboardWebsiteBookingSettings(rawBooking) {
+        const booking = readObject(rawBooking);
+        const rules = parseBookingRules(booking.rules);
+        const businessNotificationsReady = readBoolean(booking.businessNotificationsReady, false);
+        const usingContactFormFallback = readBoolean(booking.usingContactFormFallback, false);
+
+        return {
+            featureAvailable: readBoolean(booking.featureAvailable, true),
+            enabled: readBoolean(booking.enabled, true),
+            confirmationMode: normalizeBookingConfirmationMode(booking.confirmationMode),
+            rules,
+            bookingNotifications: {
+                enabled: businessNotificationsReady,
+                to: [],
+                cc: [],
+            },
+            contactNotifications: {
+                enabled: false,
+                to: [],
+                cc: [],
+            },
+            effectiveNotifications: {
+                enabled: businessNotificationsReady,
+                to: [],
+                cc: [],
+            },
+            usingContactFormFallback,
+            businessNotificationsReady,
+        };
+    }
+
     function createDefaultExceptionForm() {
         return {
             id: "",
@@ -1622,14 +1655,14 @@
         if (!websitesCollection?.id) {
             websites = [];
             selectedWebsiteId = "";
+            bookingDashboardWebsite = null;
             return;
         }
 
         isLoadingWebsites = true;
 
         try {
-            websites = await ApiClient.collection(websitesCollection.id).getFullList({
-                sort: resolveWebsitesSort(websitesCollection),
+            websites = await ApiClient.getBackofficeWebsites({
                 requestKey: "nuvio_booking_websites",
             });
 
@@ -1641,6 +1674,7 @@
         } catch (err) {
             websites = [];
             selectedWebsiteId = "";
+            bookingDashboardWebsite = null;
             ApiClient.error(err, false);
             addErrorToast("Unable to load websites right now.");
         }
@@ -1654,6 +1688,7 @@
             availabilityRecords = [];
             exceptionsRecords = [];
             appointmentRecords = [];
+            bookingDashboardWebsite = null;
             availabilityWindowCounter = 0;
             availabilityRows = createDefaultAvailabilityRows();
             isSavingAvailability = {};
@@ -1671,37 +1706,21 @@
         bookingLoadError = "";
 
         try {
-            const filter = `website="${selectedWebsiteId}"`;
-            const [services, availability, exceptions, appointments] = await Promise.all([
-                ApiClient.collection(bookingServicesCollection.id).getFullList({
-                    filter,
-                    sort: "+name",
-                    requestKey: `nuvio_booking_services_${selectedWebsiteId}`,
-                }),
-                ApiClient.collection(bookingAvailabilityCollection.id).getFullList({
-                    filter,
-                    sort: "-created",
-                    requestKey: `nuvio_booking_availability_${selectedWebsiteId}`,
-                }),
-                bookingExceptionsCollection?.id
-                    ? ApiClient.collection(bookingExceptionsCollection.id).getFullList({
-                        filter,
-                        sort: "-date,-updated,-created",
-                        requestKey: `nuvio_booking_exceptions_${selectedWebsiteId}`,
-                    })
-                    : Promise.resolve([]),
-                ApiClient.collection(appointmentsCollection.id).getFullList({
-                    filter,
-                    sort: "-created",
-                    expand: "service",
-                    requestKey: `nuvio_booking_appointments_${selectedWebsiteId}`,
-                }),
-            ]);
+            const response = await ApiClient.getBookingBackofficeDashboard({
+                websiteId: selectedWebsiteId,
+                requestKey: `nuvio_booking_dashboard_${selectedWebsiteId}`,
+            });
+            const datasets = isPlainObject(response?.datasets) ? response.datasets : {};
+            const services = Array.isArray(datasets.services) ? datasets.services : [];
+            const availability = Array.isArray(datasets.availability) ? datasets.availability : [];
+            const exceptions = Array.isArray(datasets.exceptions) ? datasets.exceptions : [];
+            const appointments = Array.isArray(datasets.appointments) ? datasets.appointments : [];
 
             servicesRecords = services;
             availabilityRecords = availability;
-            exceptionsRecords = Array.isArray(exceptions) ? exceptions : [];
+            exceptionsRecords = exceptions;
             appointmentRecords = appointments;
+            bookingDashboardWebsite = isPlainObject(response?.website) ? response.website : null;
             availabilityWindowCounter = 0;
             availabilityRows = createAvailabilityRowsFromRecords(availabilityRecords);
             selectedExceptionId = "";
@@ -1731,6 +1750,7 @@
             availabilityRecords = [];
             exceptionsRecords = [];
             appointmentRecords = [];
+            bookingDashboardWebsite = null;
             availabilityWindowCounter = 0;
             availabilityRows = createDefaultAvailabilityRows();
             isSavingAvailability = {};
@@ -2052,15 +2072,16 @@
         };
 
         try {
-            const response = await ApiClient.send("/api/nuvio/booking/admin/appointments", {
-                method: "POST",
-                body: payload,
+            const response = await ApiClient.createBookingBackofficeAppointment(payload, {
                 requestKey: `nuvio_booking_manual_create_${selectedWebsiteId}`,
             });
 
             await loadBookingData();
 
-            const createdAppointmentId = normalizeString(response?.appointmentId);
+            const createdAppointmentId = normalizeString(
+                response?.appointment?.id
+                    || response?.appointmentId,
+            );
             if (createdAppointmentId) {
                 selectedAppointmentId = createdAppointmentId;
             }
@@ -2113,9 +2134,7 @@
         };
 
         try {
-            const response = await ApiClient.send(`/api/nuvio/booking/admin/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
-                method: "POST",
-                body: payload,
+            const response = await ApiClient.rescheduleBookingBackofficeAppointment(appointmentId, payload, {
                 requestKey: `nuvio_booking_reschedule_${selectedWebsiteId}_${appointmentId}`,
             });
 
@@ -2123,6 +2142,9 @@
             selectedAppointmentId = appointmentId;
             closeReschedulePanel();
             addSuccessToast("Appointment rescheduled.");
+            if (payload.sendEmail) {
+                addSuccessToast("Reschedule saved. Confirmation email sending is now handled outside this scoped action.");
+            }
 
             if (normalizeString(response?.warning)) {
                 addErrorToast(normalizeString(response.warning));
@@ -2593,6 +2615,7 @@
     function normalizeAppointment(record) {
         const id = normalizeString(record?.id);
         const serviceId = normalizeRelationId(record?.service);
+        const serviceSnapshot = readObject(record?.serviceSnapshot);
         const expandedService = Array.isArray(record?.expand?.service)
             ? record.expand.service[0]
             : record?.expand?.service;
@@ -2613,16 +2636,20 @@
             appointmentServiceDescriptionSnapshotFieldAliases,
         );
 
-        const serviceLabel = serviceNameSnapshot
+        const serviceLabel = normalizeString(serviceSnapshot.name)
+            || serviceNameSnapshot
             || normalizeString(expandedService?.name)
             || serviceLabelById.get(serviceId)
             || "Service not found";
         const serviceDurationMinutes = [
+            readNonNegativeInteger(serviceSnapshot.durationMinutes, 0),
+            readNonNegativeInteger(record?.durationMinutes, 0),
             serviceDurationSnapshot,
             readNonNegativeInteger(expandedService?.durationMinutes, 0),
             readNonNegativeInteger(serviceRecord?.durationMinutes, 0),
         ].find((value) => Number.isFinite(value) && value > 0) || 0;
-        const serviceDescription = serviceDescriptionSnapshot
+        const serviceDescription = normalizeString(serviceSnapshot.description)
+            || serviceDescriptionSnapshot
             || normalizeString(expandedService?.description)
             || normalizeString(serviceRecord?.description);
         const servicePriorityKey = mapDisplayOrderToPriority(
@@ -2816,7 +2843,7 @@
     }
 
     async function setSelectedAppointmentStatus(nextStatus, options = {}) {
-        if (!selectedAppointment?.id || !nextStatus || isUpdatingAppointmentStatus || !appointmentsCollection?.id) {
+        if (!selectedAppointment?.id || !nextStatus || isUpdatingAppointmentStatus) {
             return;
         }
 
@@ -2827,26 +2854,34 @@
         updatingAppointmentId = selectedAppointment.id;
 
         try {
-            const response = await ApiClient.send(`/api/nuvio/booking/admin/appointments/${encodeURIComponent(selectedAppointment.id)}/status`, {
-                method: "POST",
-                body: {
-                    status: statusValue,
-                    sendEmail,
-                },
+            const response = await ApiClient.updateBookingBackofficeAppointmentStatus(selectedAppointment.id, {
+                status: statusValue,
+            }, {
                 requestKey: `nuvio_booking_status_${selectedWebsiteId}_${selectedAppointment.id}`,
             });
 
-            const resolvedStatus = normalizeStatus(response?.status || statusValue);
+            const resolvedAppointment = isPlainObject(response?.appointment) ? response.appointment : {};
+            const resolvedStatus = normalizeStatus(
+                resolvedAppointment.status
+                    || response?.status
+                    || statusValue,
+            );
             const patchPayload = {
                 [appointmentStatusFieldName]: resolvedStatus,
             };
 
-            const confirmedAtValue = normalizeString(response?.confirmedAt);
+            const confirmedAtValue = normalizeString(
+                resolvedAppointment.confirmedAt
+                    || response?.confirmedAt,
+            );
             if (confirmedAtValue) {
                 patchPayload[appointmentConfirmedAtFieldName || "confirmedAt"] = confirmedAtValue;
             }
 
-            const cancelledAtValue = normalizeString(response?.cancelledAt);
+            const cancelledAtValue = normalizeString(
+                resolvedAppointment.cancelledAt
+                    || response?.cancelledAt,
+            );
             if (cancelledAtValue) {
                 patchPayload[appointmentCancelledAtFieldName || "cancelledAt"] = cancelledAtValue;
             }
@@ -2855,6 +2890,9 @@
             dispatchSidebarBadgeRefresh();
 
             addSuccessToast(`Appointment marked as ${resolvedStatus}.`);
+            if (sendEmail) {
+                addSuccessToast("Status updated. Confirmation email sending is now handled outside this scoped action.");
+            }
             if (normalizeString(response?.warning)) {
                 addErrorToast(normalizeString(response.warning));
             }
@@ -2868,20 +2906,27 @@
     }
 
     async function saveSelectedAppointmentInternalNotes() {
-        if (!selectedAppointment?.id || !appointmentsCollection?.id || isSavingAppointmentInternalNotes) {
+        if (!selectedAppointment?.id || isSavingAppointmentInternalNotes) {
             return;
         }
 
         isSavingAppointmentInternalNotes = true;
 
         try {
-            await ApiClient.collection(appointmentsCollection.id).update(selectedAppointment.id, {
-                [appointmentInternalNotesFieldName]: appointmentInternalNotesDraft,
+            const response = await ApiClient.updateBookingBackofficeAppointmentInternalNotes(selectedAppointment.id, {
+                internalNotes: appointmentInternalNotesDraft,
+            }, {
+                requestKey: `nuvio_booking_notes_${selectedWebsiteId}_${selectedAppointment.id}`,
             });
+            const resolvedAppointment = isPlainObject(response?.appointment) ? response.appointment : null;
+            const resolvedInternalNotes = normalizeString(
+                resolvedAppointment?.internalNotes ?? appointmentInternalNotesDraft,
+            );
 
             patchAppointmentRecord(selectedAppointment.id, {
-                [appointmentInternalNotesFieldName]: appointmentInternalNotesDraft,
+                [appointmentInternalNotesFieldName]: resolvedInternalNotes,
             });
+            appointmentInternalNotesDraft = resolvedInternalNotes;
 
             addSuccessToast("Internal notes saved.");
         } catch (err) {
@@ -2895,7 +2940,6 @@
     async function setSelectedAppointmentArchiveState(nextArchived) {
         if (
             !selectedAppointment?.id
-            || !appointmentsCollection?.id
             || isUpdatingAppointmentArchive
             || isBulkUpdatingAppointments
         ) {
@@ -2903,13 +2947,18 @@
         }
 
         isUpdatingAppointmentArchive = true;
-        const archivedAtValue = nextArchived ? new Date().toISOString() : "";
         const patchFieldName = appointmentArchivedAtFieldName || "archivedAt";
 
         try {
-            await ApiClient.collection(appointmentsCollection.id).update(selectedAppointment.id, {
-                [patchFieldName]: archivedAtValue,
+            const response = await ApiClient.updateBookingBackofficeAppointmentArchive(selectedAppointment.id, {
+                archived: !!nextArchived,
+            }, {
+                requestKey: `nuvio_booking_archive_${selectedWebsiteId}_${selectedAppointment.id}`,
             });
+            const resolvedAppointment = isPlainObject(response?.appointment) ? response.appointment : {};
+            const archivedAtValue = nextArchived
+                ? normalizeString(resolvedAppointment.archivedAt) || new Date().toISOString()
+                : "";
 
             patchAppointmentRecord(selectedAppointment.id, {
                 [patchFieldName]: archivedAtValue,
@@ -2929,8 +2978,7 @@
 
     async function applyBulkAppointmentArchiveState(nextArchived) {
         if (
-            !appointmentsCollection?.id
-            || !selectedAppointmentIds.length
+            !selectedAppointmentIds.length
             || isBulkUpdatingAppointments
             || isUpdatingAppointmentArchive
         ) {
@@ -2939,7 +2987,6 @@
 
         isBulkUpdatingAppointments = true;
         const patchFieldName = appointmentArchivedAtFieldName || "archivedAt";
-        const archivedAtValue = nextArchived ? new Date().toISOString() : "";
 
         try {
             const selectedSet = new Set(selectedAppointmentIds.map((id) => normalizeString(id)).filter(Boolean));
@@ -2954,14 +3001,17 @@
 
             const updates = selectedAppointments.map((appointment) => ({
                 id: normalizeString(appointment.id),
-                promise: ApiClient.collection(appointmentsCollection.id).update(appointment.id, {
-                    [patchFieldName]: archivedAtValue,
+                promise: ApiClient.updateBookingBackofficeAppointmentArchive(appointment.id, {
+                    archived: !!nextArchived,
+                }, {
+                    requestKey: `nuvio_booking_archive_bulk_${selectedWebsiteId}_${normalizeString(appointment.id)}`,
                 }),
             }));
 
             const results = await Promise.allSettled(updates.map((item) => item.promise));
             const succeededIds = new Set();
             const failedIds = [];
+            const updatedRecordsById = new Map();
             let firstFailureReason = null;
 
             results.forEach((result, index) => {
@@ -2972,6 +3022,9 @@
 
                 if (result.status === "fulfilled") {
                     succeededIds.add(target.id);
+                    if (isPlainObject(result.value?.appointment)) {
+                        updatedRecordsById.set(target.id, result.value.appointment);
+                    }
                 } else {
                     failedIds.push(target.id);
                     if (!firstFailureReason) {
@@ -2986,6 +3039,11 @@
                     if (!succeededIds.has(recordId)) {
                         return record;
                     }
+
+                    const resolvedAppointment = updatedRecordsById.get(recordId) || {};
+                    const archivedAtValue = nextArchived
+                        ? normalizeString(resolvedAppointment.archivedAt) || new Date().toISOString()
+                        : "";
 
                     return {
                         ...record,
@@ -3079,8 +3137,7 @@
 
     async function applyBulkServiceActive(targetActive) {
         if (
-            !bookingServicesCollection?.id
-            || !selectedServiceIds.length
+            !selectedServiceIds.length
             || isBulkUpdatingServices
             || isSavingService
         ) {
@@ -3101,13 +3158,16 @@
 
             const results = await Promise.allSettled(
                 selectedRecords.map((record) =>
-                    ApiClient.collection(bookingServicesCollection.id).update(normalizeString(record?.id), {
+                    ApiClient.updateBookingBackofficeService(normalizeString(record?.id), {
                         active: !!targetActive,
+                    }, {
+                        requestKey: `nuvio_booking_service_bulk_${selectedWebsiteId}_${normalizeString(record?.id)}`,
                     })),
             );
 
             const succeededIds = new Set();
             const failedIds = [];
+            const updatedRecordsById = new Map();
 
             results.forEach((result, index) => {
                 const serviceId = normalizeString(selectedRecords[index]?.id);
@@ -3117,6 +3177,9 @@
 
                 if (result.status === "fulfilled") {
                     succeededIds.add(serviceId);
+                    if (isPlainObject(result.value?.service)) {
+                        updatedRecordsById.set(serviceId, result.value.service);
+                    }
                 } else {
                     ApiClient.error(result.reason, false);
                     failedIds.push(serviceId);
@@ -3130,8 +3193,10 @@
                         return record;
                     }
 
+                    const updatedService = updatedRecordsById.get(recordId) || {};
                     return {
                         ...record,
+                        ...updatedService,
                         active: !!targetActive,
                     };
                 });
@@ -3153,7 +3218,7 @@
     }
 
     async function saveService() {
-        if (!selectedWebsiteId || !bookingServicesCollection?.id || isSavingService) {
+        if (!selectedWebsiteId || isSavingService) {
             return;
         }
 
@@ -3185,7 +3250,10 @@
 
         try {
             if (serviceForm.id) {
-                const updated = await ApiClient.collection(bookingServicesCollection.id).update(serviceForm.id, payload);
+                const response = await ApiClient.updateBookingBackofficeService(serviceForm.id, payload, {
+                    requestKey: `nuvio_booking_service_update_${selectedWebsiteId}_${serviceForm.id}`,
+                });
+                const updated = isPlainObject(response?.service) ? response.service : response;
                 servicesRecords = servicesRecords.map((record) =>
                     normalizeString(record?.id) === normalizeString(updated?.id)
                         ? { ...record, ...updated }
@@ -3193,10 +3261,13 @@
                 );
                 addSuccessToast("Service updated.");
             } else {
-                const created = await ApiClient.collection(bookingServicesCollection.id).create({
-                    website: selectedWebsiteId,
+                const response = await ApiClient.createBookingBackofficeService({
+                    websiteId: selectedWebsiteId,
                     ...payload,
+                }, {
+                    requestKey: `nuvio_booking_service_create_${selectedWebsiteId}`,
                 });
+                const created = isPlainObject(response?.service) ? response.service : response;
                 servicesRecords = [created, ...servicesRecords];
                 isCreatingService = false;
                 selectedServiceId = created.id;
@@ -3600,7 +3671,7 @@
     }
 
     async function saveAvailabilityWindow(dayKey, windowKey, options = {}) {
-        if (!selectedWebsiteId || !bookingAvailabilityCollection?.id) {
+        if (!selectedWebsiteId) {
             return false;
         }
 
@@ -3630,17 +3701,17 @@
         const normalizedEndTime = normalizeString(window.endTime) || "17:00";
         const normalizedActive = !!window.active;
 
-        const payload = {
-            website: selectedWebsiteId,
-            dayOfWeek: dayKey,
-            startTime: normalizedStartTime,
-            endTime: normalizedEndTime,
-            active: normalizedActive,
-        };
-
         try {
             if (window.recordId) {
-                const updated = await ApiClient.collection(bookingAvailabilityCollection.id).update(window.recordId, payload);
+                const response = await ApiClient.updateBookingBackofficeAvailability(window.recordId, {
+                    dayOfWeek: dayKey,
+                    startTime: normalizedStartTime,
+                    endTime: normalizedEndTime,
+                    active: normalizedActive,
+                }, {
+                    requestKey: `nuvio_booking_availability_update_${selectedWebsiteId}_${window.recordId}`,
+                });
+                const updated = isPlainObject(response?.availability) ? response.availability : response;
                 availabilityRecords = availabilityRecords.map((record) =>
                     normalizeString(record?.id) === normalizeString(updated?.id)
                         ? { ...record, ...updated }
@@ -3682,7 +3753,16 @@
                     addSuccessToast(`${row.label} window updated.`);
                 }
             } else {
-                const created = await ApiClient.collection(bookingAvailabilityCollection.id).create(payload);
+                const response = await ApiClient.createBookingBackofficeAvailability({
+                    websiteId: selectedWebsiteId,
+                    dayOfWeek: dayKey,
+                    startTime: normalizedStartTime,
+                    endTime: normalizedEndTime,
+                    active: normalizedActive,
+                }, {
+                    requestKey: `nuvio_booking_availability_create_${selectedWebsiteId}_${dayKey}_${windowKey}`,
+                });
+                const created = isPlainObject(response?.availability) ? response.availability : response;
                 availabilityRecords = [created, ...availabilityRecords];
 
                 const nextRows = availabilityRows.map((dayRow) => {
@@ -3956,7 +4036,6 @@
     async function applyBulkExceptionActive(targetActive) {
         if (
             !selectedWebsiteId
-            || !bookingExceptionsCollection?.id
             || !selectedExceptionIds.length
             || isBulkUpdatingExceptions
             || isSavingException
@@ -3984,8 +4063,10 @@
 
                     return {
                         id: normalizeString(exception.id),
-                        promise: ApiClient.collection(bookingExceptionsCollection.id).update(exception.id, {
+                        promise: ApiClient.updateBookingBackofficeException(exception.id, {
                             active: !!targetActive,
+                        }, {
+                            requestKey: `nuvio_booking_exception_bulk_${selectedWebsiteId}_${normalizeString(exception.id)}`,
                         }),
                     };
                 })
@@ -4011,7 +4092,10 @@
                 }
 
                 if (result.status === "fulfilled") {
-                    updatedRecordsById.set(target.id, result.value);
+                    const resolvedException = isPlainObject(result.value?.exception)
+                        ? result.value.exception
+                        : result.value;
+                    updatedRecordsById.set(target.id, resolvedException);
                 } else {
                     failedIds.push(target.id);
                     if (!firstFailureReason) {
@@ -4098,7 +4182,7 @@
     }
 
     async function saveException() {
-        if (!selectedWebsiteId || !bookingExceptionsCollection?.id || isSavingException) {
+        if (!selectedWebsiteId || isSavingException) {
             return;
         }
 
@@ -4113,7 +4197,6 @@
 
         const typeValue = normalizeExceptionType(exceptionForm.type);
         const payload = {
-            website: selectedWebsiteId,
             date: normalizeString(exceptionForm.date),
             type: typeValue,
             startTime: typeValue === "customHours" ? normalizeString(exceptionForm.startTime) : "",
@@ -4124,7 +4207,10 @@
 
         try {
             if (normalizeString(exceptionForm.id)) {
-                const updated = await ApiClient.collection(bookingExceptionsCollection.id).update(exceptionForm.id, payload);
+                const response = await ApiClient.updateBookingBackofficeException(exceptionForm.id, payload, {
+                    requestKey: `nuvio_booking_exception_update_${selectedWebsiteId}_${exceptionForm.id}`,
+                });
+                const updated = isPlainObject(response?.exception) ? response.exception : response;
                 exceptionsRecords = exceptionsRecords.map((record) =>
                     normalizeString(record?.id) === normalizeString(updated?.id)
                         ? { ...record, ...updated }
@@ -4134,7 +4220,13 @@
                 selectedExceptionId = normalizeString(updated?.id);
                 addSuccessToast("Exception updated.");
             } else {
-                const created = await ApiClient.collection(bookingExceptionsCollection.id).create(payload);
+                const response = await ApiClient.createBookingBackofficeException({
+                    websiteId: selectedWebsiteId,
+                    ...payload,
+                }, {
+                    requestKey: `nuvio_booking_exception_create_${selectedWebsiteId}`,
+                });
+                const created = isPlainObject(response?.exception) ? response.exception : response;
                 exceptionsRecords = [created, ...exceptionsRecords];
                 isCreatingException = false;
                 selectedExceptionId = normalizeString(created?.id);
@@ -4152,7 +4244,7 @@
     }
 
     async function saveBookingRules() {
-        if (!selectedWebsiteId || !websitesCollection?.id || !selectedWebsite) {
+        if (!selectedWebsiteId) {
             return;
         }
 
@@ -4174,37 +4266,25 @@
         isSavingBookingRules = true;
 
         try {
-            const currentSettings = parseSettingsObject(selectedWebsite?.[websiteSettingsFieldName]);
-            const bookingSettings = readObject(currentSettings.booking);
-            const currentRules = readObject(bookingSettings.rules);
-
-            const nextSettings = {
-                ...currentSettings,
-                booking: {
-                    ...bookingSettings,
-                    rules: {
-                        ...currentRules,
-                        minNoticeHours,
-                        bookingWindowDays,
-                        bufferMinutes,
-                    },
+            const response = await ApiClient.updateBookingBackofficeRules({
+                websiteId: selectedWebsiteId,
+                rules: {
+                    minNoticeHours,
+                    bookingWindowDays,
+                    bufferMinutes,
                 },
-            };
-
-            const updatedWebsite = await ApiClient.collection(websitesCollection.id).update(selectedWebsiteId, {
-                [websiteSettingsFieldName]: nextSettings,
+            }, {
+                requestKey: `nuvio_booking_rules_${selectedWebsiteId}`,
             });
-
-            websites = websites.map((website) =>
-                normalizeString(website?.id) === normalizeString(updatedWebsite?.id)
-                    ? { ...website, ...updatedWebsite }
-                    : website,
-            );
+            if (isPlainObject(response?.website)) {
+                bookingDashboardWebsite = response.website;
+            }
+            const resolvedRules = parseBookingRules(response?.website?.booking?.rules);
 
             bookingRulesDraft = createBookingRulesDraftFromSettings({
-                minNoticeHours,
-                bookingWindowDays,
-                bufferMinutes,
+                minNoticeHours: resolvedRules.minNoticeHours,
+                bookingWindowDays: resolvedRules.bookingWindowDays,
+                bufferMinutes: resolvedRules.bufferMinutes,
             });
             addSuccessToast("Booking rules saved.");
             await loadSlotPreview();

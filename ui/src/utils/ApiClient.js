@@ -31,6 +31,609 @@ PocketBase.prototype.isClientSuperuser = function () {
 };
 
 /**
+ * Loads scoped backoffice website selector options.
+ *
+ * @param {Object} [options]
+ * @param {String} [options.requestKey]
+ * @returns {Promise<Array>}
+ */
+PocketBase.prototype.getBackofficeWebsites = async function (options = {}) {
+    const requestKey = `${options?.requestKey || ""}`.trim() || "nuvio_backoffice_websites";
+    const response = await this.send("/api/nuvio/backoffice/websites", {
+        method: "GET",
+        requestKey,
+    });
+
+    return Array.isArray(response) ? response : [];
+};
+
+/**
+ * Loads scoped Reports dashboard datasets for a website.
+ *
+ * @param {Object} params
+ * @param {String} params.websiteId
+ * @param {String} [params.period]
+ * @param {String} [params.requestKey]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.getReportsDashboard = async function (params = {}) {
+    const websiteId = `${params?.websiteId || ""}`.trim();
+    const period = `${params?.period || ""}`.trim();
+    const requestKey = `${params?.requestKey || ""}`.trim() || `nuvio_reports_dashboard_${websiteId || "unknown"}`;
+
+    return this.send("/api/nuvio/reports/dashboard", {
+        method: "GET",
+        query: {
+            websiteId,
+            period,
+        },
+        requestKey,
+    });
+};
+
+/**
+ * Loads scoped Leads dashboard datasets for a website.
+ *
+ * @param {Object} params
+ * @param {String} params.websiteId
+ * @param {String} [params.requestKey]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.getLeadsDashboard = async function (params = {}) {
+    const websiteId = `${params?.websiteId || ""}`.trim();
+    const requestKey = `${params?.requestKey || ""}`.trim() || `nuvio_leads_dashboard_${websiteId || "unknown"}`;
+
+    return this.send("/api/nuvio/leads/dashboard", {
+        method: "GET",
+        query: {
+            websiteId,
+        },
+        requestKey,
+    });
+};
+
+/**
+ * Updates a contact lead status through scoped backend endpoint.
+ *
+ * @param {String} id
+ * @param {String} status
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateLeadContactStatus = async function (id, status, options = {}) {
+    const leadId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/leads/contacts/${encodeURIComponent(leadId)}/status`, {
+        method: "PATCH",
+        body: {
+            status: `${status || ""}`.trim(),
+        },
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_lead_contact_status_${leadId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates a WhatsApp lead status through scoped backend endpoint.
+ *
+ * @param {String} id
+ * @param {String} status
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateLeadWhatsappStatus = async function (id, status, options = {}) {
+    const leadId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/leads/whatsapp/${encodeURIComponent(leadId)}/status`, {
+        method: "PATCH",
+        body: {
+            status: `${status || ""}`.trim(),
+        },
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_lead_whatsapp_status_${leadId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates contact lead follow-up fields through scoped backend endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {String} [payload.notes]
+ * @param {String|null} [payload.lastContactedAt]
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateLeadContactFollowUp = async function (id, payload = {}, options = {}) {
+    const leadId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/leads/contacts/${encodeURIComponent(leadId)}/follow-up`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_lead_contact_followup_${leadId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates WhatsApp lead follow-up fields through scoped backend endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {String} [payload.notes]
+ * @param {String|null} [payload.lastContactedAt]
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateLeadWhatsappFollowUp = async function (id, payload = {}, options = {}) {
+    const leadId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/leads/whatsapp/${encodeURIComponent(leadId)}/follow-up`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_lead_whatsapp_followup_${leadId || "unknown"}`,
+    });
+};
+
+/**
+ * Loads scoped Newsletter dashboard datasets for a website.
+ *
+ * @param {Object} params
+ * @param {String} params.websiteId
+ * @param {String} [params.requestKey]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.getNewsletterBackofficeDashboard = async function (params = {}) {
+    const websiteId = `${params?.websiteId || ""}`.trim();
+    const requestKey = `${params?.requestKey || ""}`.trim() || `nuvio_newsletter_dashboard_${websiteId || "unknown"}`;
+
+    return this.send("/api/nuvio/newsletter/backoffice/dashboard", {
+        method: "GET",
+        query: {
+            websiteId,
+        },
+        requestKey,
+    });
+};
+
+/**
+ * Creates a subscriber through scoped Newsletter backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.createNewsletterSubscriber = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/newsletter/backoffice/subscribers", {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_subscriber_create_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates a subscriber through scoped Newsletter backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateNewsletterSubscriber = async function (id, payload = {}, options = {}) {
+    const subscriberId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/newsletter/backoffice/subscribers/${encodeURIComponent(subscriberId)}`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_subscriber_update_${subscriberId || "unknown"}`,
+    });
+};
+
+/**
+ * Deletes a subscriber through scoped Newsletter backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.deleteNewsletterSubscriber = async function (id, options = {}) {
+    const subscriberId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/newsletter/backoffice/subscribers/${encodeURIComponent(subscriberId)}`, {
+        method: "DELETE",
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_subscriber_delete_${subscriberId || "unknown"}`,
+    });
+};
+
+/**
+ * Creates a subscriber group through scoped Newsletter backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.createNewsletterGroup = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/newsletter/backoffice/groups", {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_group_create_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Creates a campaign through scoped Newsletter backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.createNewsletterCampaign = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/newsletter/backoffice/campaigns", {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_campaign_create_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates a campaign through scoped Newsletter backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateNewsletterCampaign = async function (id, payload = {}, options = {}) {
+    const campaignId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/newsletter/backoffice/campaigns/${encodeURIComponent(campaignId)}`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_campaign_update_${campaignId || "unknown"}`,
+    });
+};
+
+/**
+ * Deletes a campaign through scoped Newsletter backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.deleteNewsletterCampaign = async function (id, options = {}) {
+    const campaignId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/newsletter/backoffice/campaigns/${encodeURIComponent(campaignId)}`, {
+        method: "DELETE",
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_campaign_delete_${campaignId || "unknown"}`,
+    });
+};
+
+/**
+ * Duplicates a campaign as draft through scoped Newsletter backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.duplicateNewsletterCampaign = async function (id, options = {}) {
+    const campaignId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/newsletter/backoffice/campaigns/${encodeURIComponent(campaignId)}/duplicate`, {
+        method: "POST",
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_campaign_duplicate_${campaignId || "unknown"}`,
+    });
+};
+
+/**
+ * Loads scoped Booking dashboard datasets for a website.
+ *
+ * @param {Object} params
+ * @param {String} params.websiteId
+ * @param {String} [params.requestKey]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.getBookingBackofficeDashboard = async function (params = {}) {
+    const websiteId = `${params?.websiteId || ""}`.trim();
+    const requestKey = `${params?.requestKey || ""}`.trim() || `nuvio_booking_dashboard_${websiteId || "unknown"}`;
+
+    return this.send("/api/nuvio/booking/backoffice/dashboard", {
+        method: "GET",
+        query: {
+            websiteId,
+        },
+        requestKey,
+    });
+};
+
+/**
+ * Creates a booking appointment through scoped backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.createBookingBackofficeAppointment = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/booking/backoffice/appointments", {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_appointment_create_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates appointment status through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateBookingBackofficeAppointmentStatus = async function (id, payload = {}, options = {}) {
+    const appointmentId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/appointments/${encodeURIComponent(appointmentId)}/status`, {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_appointment_status_${appointmentId || "unknown"}`,
+    });
+};
+
+/**
+ * Reschedules an appointment through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.rescheduleBookingBackofficeAppointment = async function (id, payload = {}, options = {}) {
+    const appointmentId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/appointments/${encodeURIComponent(appointmentId)}/reschedule`, {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_appointment_reschedule_${appointmentId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates appointment internal notes through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateBookingBackofficeAppointmentInternalNotes = async function (id, payload = {}, options = {}) {
+    const appointmentId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/appointments/${encodeURIComponent(appointmentId)}/internal-notes`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_appointment_internal_notes_${appointmentId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates appointment archive state through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateBookingBackofficeAppointmentArchive = async function (id, payload = {}, options = {}) {
+    const appointmentId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/appointments/${encodeURIComponent(appointmentId)}/archive`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_appointment_archive_${appointmentId || "unknown"}`,
+    });
+};
+
+/**
+ * Creates a booking service through scoped backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.createBookingBackofficeService = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/booking/backoffice/services", {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_service_create_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates a booking service through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateBookingBackofficeService = async function (id, payload = {}, options = {}) {
+    const serviceId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/services/${encodeURIComponent(serviceId)}`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_service_update_${serviceId || "unknown"}`,
+    });
+};
+
+/**
+ * Creates a booking availability window through scoped backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.createBookingBackofficeAvailability = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/booking/backoffice/availability", {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_availability_create_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates a booking availability window through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateBookingBackofficeAvailability = async function (id, payload = {}, options = {}) {
+    const availabilityId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/availability/${encodeURIComponent(availabilityId)}`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_availability_update_${availabilityId || "unknown"}`,
+    });
+};
+
+/**
+ * Creates a booking exception through scoped backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.createBookingBackofficeException = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/booking/backoffice/exceptions", {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_exception_create_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates a booking exception through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateBookingBackofficeException = async function (id, payload = {}, options = {}) {
+    const exceptionId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/exceptions/${encodeURIComponent(exceptionId)}`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_exception_update_${exceptionId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates booking rules through scoped backoffice endpoint.
+ *
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateBookingBackofficeRules = async function (payload = {}, options = {}) {
+    const websiteId = `${payload?.websiteId || ""}`.trim();
+    return this.send("/api/nuvio/booking/backoffice/settings/rules", {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_rules_update_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Loads scoped CMS dashboard data for a website/page context.
+ *
+ * @param {Object} params
+ * @param {String} params.websiteId
+ * @param {String} [params.pageId]
+ * @param {String} [params.requestKey]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.getCMSDashboard = async function (params = {}) {
+    const websiteId = `${params?.websiteId || ""}`.trim();
+    const pageId = `${params?.pageId || ""}`.trim();
+    const requestKey = `${params?.requestKey || ""}`.trim() || `nuvio_cms_dashboard_${websiteId || "unknown"}_${pageId || "none"}`;
+
+    const query = {
+        websiteId,
+    };
+
+    if (pageId) {
+        query.pageId = pageId;
+    }
+
+    return this.send("/api/nuvio/cms/dashboard", {
+        method: "GET",
+        query,
+        requestKey,
+    });
+};
+
+/**
+ * Updates website identity/global SEO fields through scoped CMS endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateCMSWebsiteIdentity = async function (id, payload = {}, options = {}) {
+    const websiteId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/cms/websites/${encodeURIComponent(websiteId)}/identity`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_cms_website_identity_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates website settings fields through scoped CMS endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateCMSWebsiteSettings = async function (id, payload = {}, options = {}) {
+    const websiteId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/cms/websites/${encodeURIComponent(websiteId)}/settings`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_cms_website_settings_${websiteId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates page SEO fields through scoped CMS endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateCMSPageSEO = async function (id, payload = {}, options = {}) {
+    const pageId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/cms/pages/${encodeURIComponent(pageId)}/seo`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_cms_page_seo_${pageId || "unknown"}`,
+    });
+};
+
+/**
+ * Updates block props/translations through scoped CMS endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.updateCMSBlock = async function (id, payload = {}, options = {}) {
+    const blockId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/cms/blocks/${encodeURIComponent(blockId)}`, {
+        method: "PATCH",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_cms_block_${blockId || "unknown"}`,
+    });
+};
+
+/**
  * Clears the authorized state and redirects to the login page.
  *
  * @param {Boolean} [redirect] Whether to redirect to the login page.

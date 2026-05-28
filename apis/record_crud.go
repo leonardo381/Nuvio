@@ -44,6 +44,10 @@ func recordsList(e *core.RequestEvent) error {
 		return err
 	}
 
+	if err := RequireAdminSuperuserForRawRecordAccess(e); err != nil {
+		return err
+	}
+
 	requestInfo, err := e.RequestInfo()
 	if err != nil {
 		return firstApiError(err, e.BadRequestError("", err))
@@ -152,6 +156,10 @@ func recordView(e *core.RequestEvent) error {
 		return err
 	}
 
+	if err := RequireAdminSuperuserForRawRecordAccess(e); err != nil {
+		return err
+	}
+
 	recordId := e.Request.PathValue("id")
 	if recordId == "" {
 		return e.NotFoundError("", nil)
@@ -219,6 +227,10 @@ func recordCreate(responseWriteAfterTx bool, optFinalizer func(data any) error) 
 
 		err = checkCollectionRateLimit(e, collection, "create")
 		if err != nil {
+			return err
+		}
+
+		if err := RequireAdminSuperuserForRawRecordAccess(e); err != nil {
 			return err
 		}
 
@@ -405,6 +417,10 @@ func recordUpdate(responseWriteAfterTx bool, optFinalizer func(data any) error) 
 			return err
 		}
 
+		if err := RequireAdminSuperuserForRawRecordAccess(e); err != nil {
+			return err
+		}
+
 		recordId := e.Request.PathValue("id")
 		if recordId == "" {
 			return e.NotFoundError("", nil)
@@ -541,6 +557,10 @@ func recordDelete(responseWriteAfterTx bool, optFinalizer func(data any) error) 
 
 		err = checkCollectionRateLimit(e, collection, "delete")
 		if err != nil {
+			return err
+		}
+
+		if err := RequireAdminSuperuserForRawRecordAccess(e); err != nil {
 			return err
 		}
 

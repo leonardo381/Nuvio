@@ -48,8 +48,16 @@ const (
 	DefaultRequireGuestOnlyMiddlewareId                 = "pbRequireGuestOnly"
 	DefaultRequireAuthMiddlewareId                      = "pbRequireAuth"
 	DefaultRequireSuperuserAuthMiddlewareId             = "pbRequireSuperuserAuth"
+	DefaultRequireAdminSuperuserAuthMiddlewareId        = "pbRequireAdminSuperuserAuth"
 	DefaultRequireSuperuserOrOwnerAuthMiddlewareId      = "pbRequireSuperuserOrOwnerAuth"
 	DefaultRequireSameCollectionContextAuthMiddlewareId = "pbRequireSameCollectionContextAuth"
+)
+
+const (
+	SuperuserRoleAdmin  = "admin"
+	SuperuserRoleClient = "client"
+
+	superuserWebsiteAccessFieldName = "websiteAccess"
 )
 
 // RequireGuestOnly middleware requires a request to NOT have a valid
@@ -107,6 +115,123 @@ func RequireSuperuserAuth() *hook.Handler[*core.RequestEvent] {
 		Id:   DefaultRequireSuperuserAuthMiddlewareId,
 		Func: requireAuth(core.CollectionNameSuperusers),
 	}
+}
+
+// RequireAdminSuperuserAuth middleware requires a request to have
+// a valid superuser Authorization header with role "admin".
+func RequireAdminSuperuserAuth() *hook.Handler[*core.RequestEvent] {
+	return &hook.Handler[*core.RequestEvent]{
+		Id: DefaultRequireAdminSuperuserAuthMiddlewareId,
+		Func: func(e *core.RequestEvent) error {
+			if e.Auth == nil {
+				return e.UnauthorizedError("The request requires valid record authorization token.", nil)
+			}
+
+			if e.Auth.Collection().Name != core.CollectionNameSuperusers {
+				return e.ForbiddenError("The authorized record is not allowed to perform this action.", nil)
+			}
+
+			if !IsAdminSuperuser(e.Auth) {
+				return e.ForbiddenError("The authorized record is not allowed to perform this action.", nil)
+			}
+
+			return e.Next()
+		},
+	}
+}
+
+func normalizeSuperuserRole(authRecord *core.Record) string {
+	if authRecord == nil {
+		return ""
+	}
+
+	collection := authRecord.Collection()
+	if collection == nil || collection.Name != core.CollectionNameSuperusers {
+		return ""
+	}
+
+	return strings.TrimSpace(strings.ToLower(authRecord.GetString("role")))
+}
+
+// IsAdminSuperuser returns whether the provided auth record is a superuser
+// with role "admin".
+func IsAdminSuperuser(authRecord *core.Record) bool {
+	return normalizeSuperuserRole(authRecord) == SuperuserRoleAdmin
+}
+
+// IsClientSuperuser returns whether the provided auth record is a superuser
+// with role "client".
+func IsClientSuperuser(authRecord *core.Record) bool {
+	return normalizeSuperuserRole(authRecord) == SuperuserRoleClient
+}
+
+// RequireAdminSuperuserForRawRecordAccess checks whether raw record CRUD
+// requests are allowed for the authenticated actor.
+//
+// Access behavior:
+//   - unauthenticated and non-superuser auth are left to existing route rules
+//   - superusers with role "admin" are allowed
+//   - superusers with missing, unknown or non-admin role are denied
+func RequireAdminSuperuserForRawRecordAccess(e *core.RequestEvent) error {
+	if e == nil || e.Auth == nil {
+		return nil
+	}
+
+	collection := e.Auth.Collection()
+	if collection == nil || collection.Name != core.CollectionNameSuperusers {
+		return nil
+	}
+
+	if IsAdminSuperuser(e.Auth) {
+		return nil
+	}
+
+	return router.NewForbiddenError("The authorized record is not allowed to perform this action.", nil)
+}
+
+// CanAccessWebsite returns whether the authenticated superuser can access
+// website-scoped data for the provided website id.
+//
+// Access behavior:
+//   - admin superusers are allowed for all websites
+//   - client superusers are allowed only for assigned websiteAccess ids
+//   - all other auth records are denied
+func CanAccessWebsite(_ core.App, authRecord *core.Record, websiteID string) (bool, error) {
+	if IsAdminSuperuser(authRecord) {
+		return true, nil
+	}
+
+	if !IsClientSuperuser(authRecord) {
+		return false, nil
+	}
+
+	trimmedWebsiteID := strings.TrimSpace(websiteID)
+	if trimmedWebsiteID == "" {
+		return false, nil
+	}
+
+	for _, allowedWebsiteID := range authRecord.GetStringSlice(superuserWebsiteAccessFieldName) {
+		if strings.TrimSpace(allowedWebsiteID) == trimmedWebsiteID {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// RequireWebsiteAccessById checks whether the auth record can access the
+// provided website id and returns a forbidden error when access is denied.
+func RequireWebsiteAccessById(app core.App, authRecord *core.Record, websiteID string) error {
+	canAccess, err := CanAccessWebsite(app, authRecord, websiteID)
+	if err != nil {
+		return err
+	}
+
+	if !canAccess {
+		return router.NewForbiddenError("The authorized record is not allowed to perform this action.", nil)
+	}
+
+	return nil
 }
 
 // RequireSuperuserOrOwnerAuth middleware requires a request to have

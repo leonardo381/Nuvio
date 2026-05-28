@@ -42,6 +42,7 @@
     let subscribersRecords = [];
     let campaignsRecords = [];
     let pagesRecords = [];
+    let dashboardResponse = null;
 
     let isLoadingWebsites = false;
     let isLoadingData = false;
@@ -53,6 +54,7 @@
     let lastTrafficKey = "";
     let dataLoadToken = 0;
     let trafficLoadToken = 0;
+    let lastSelectedWebsiteHydrationKey = "";
     let lastTrafficAnalyticsSetupSeed = "";
     let isSavingTrafficAnalyticsSetup = false;
     let trafficAnalyticsSetupError = "";
@@ -70,16 +72,14 @@
     loadCollections();
 
     $: websitesCollection = resolveCollectionByAliases(["websites"]);
-    $: contactsCollection = resolveCollectionByAliases(["contacts", "contact"]);
-    $: whatsappCollection = resolveCollectionByAliases(["whatsapp", "whatsapp_interactions", "whatsapp_clicks"]);
-    $: appointmentsCollection = resolveCollectionByAliases(["appointments"]);
-    $: bookingServicesCollection = resolveCollectionByAliases(["bookingservices"]);
-    $: subscribersCollection = resolveCollectionByAliases(["subscribers"]);
-    $: campaignsCollection = resolveCollectionByAliases(["campaigns"]);
-    $: pagesCollection = resolveCollectionByAliases(["pages"]);
     $: websiteSettingsField = resolveWebsiteSettingsField(websitesCollection);
 
     $: selectedWebsite = websites.find((website) => website.id === selectedWebsiteId) || null;
+    $: selectedWebsiteHydrationKey = `${websitesCollection?.id || ""}:${selectedWebsiteId || ""}`;
+    $: if (selectedWebsiteHydrationKey !== lastSelectedWebsiteHydrationKey) {
+        lastSelectedWebsiteHydrationKey = selectedWebsiteHydrationKey;
+        hydrateSelectedWebsiteRecord();
+    }
     $: selectedWebsiteSettings = normalizeWebsiteSettingsValue(selectedWebsite?.[websiteSettingsField]);
     $: selectedWebsiteFeatureFlags = selectedWebsiteSettings?.featureFlags && typeof selectedWebsiteSettings.featureFlags === "object"
         ? selectedWebsiteSettings.featureFlags
@@ -300,16 +300,94 @@
     $: trafficScrollDepthByPageRenderableRows = trafficScrollDepthIsPartial
         ? trafficScrollDepthByPageRows.filter((row) => Number(row?.count) > 0)
         : trafficScrollDepthByPageRows;
+    $: trafficVisitorsCount = Number(trafficSummary?.visitors) || 0;
+    $: trafficVisitsCount = Number(trafficSummary?.visits) || 0;
+    $: trafficPageviewsCount = Number(trafficSummary?.pageviews) || 0;
+    $: trafficHasNativeBreakdowns = hasPositiveTrafficRows(trafficTopPageRows)
+        || hasPositiveTrafficRows(trafficEntryPageRows)
+        || hasPositiveTrafficRows(trafficExitPageRows)
+        || hasPositiveTrafficRows(trafficSourceRows)
+        || hasPositiveTrafficRows(trafficCountryRows)
+        || hasPositiveTrafficRows(trafficRegionRows)
+        || hasPositiveTrafficRows(trafficCityRows)
+        || hasPositiveTrafficRows(trafficDeviceRows)
+        || hasPositiveTrafficRows(trafficBrowserRows)
+        || hasPositiveTrafficRows(trafficOperatingSystemRows);
+    $: trafficHasConversionSignals = hasPositiveTrafficRows(trafficConversionByTypeRenderableRows)
+        || hasPositiveTrafficRows(trafficConversionByPageRenderableRows)
+        || hasPositiveTrafficRows(trafficConversionBySourceRenderableRows)
+        || hasPositiveTrafficRows(trafficConversionByCtaRenderableRows);
+    $: trafficHasScrollSignals = hasPositiveTrafficRows(trafficScrollDepthThresholdRenderableRows)
+        || hasPositiveTrafficRows(trafficScrollDepthByPageRenderableRows);
+    $: trafficHasAnyMeasuredActivity = trafficVisitorsCount > 0
+        || trafficVisitsCount > 0
+        || trafficPageviewsCount > 0
+        || trafficHasNativeBreakdowns
+        || trafficHasConversionSignals
+        || trafficHasScrollSignals;
+    $: trafficNoDataYet = trafficState === "ok" && !trafficHasAnyMeasuredActivity;
+    $: trafficNoDataMessage = canConfigureTrafficAnalytics
+        ? "No traffic data yet for this period. Publish and visit the public website to start collecting analytics."
+        : "No traffic data yet for this period. Traffic metrics will appear after the public website receives visits.";
+    $: trafficHeroCards = [
+        {
+            key: "visitors",
+            label: "Visitors",
+            value: formatMetricNumber(trafficVisitorsCount),
+            hint: trafficPeriod?.label || selectedPeriodLabel,
+            meta: `${formatMetricNumber(trafficPageviewsCount)} pageviews tracked`,
+            icon: "ri-user-search-line",
+            badgeLabel: trafficOverviewStatusLabel,
+            badgeClass: resolveMetricStatePillClass(trafficOverviewStatus),
+        },
+        {
+            key: "visits",
+            label: "Visits",
+            value: formatMetricNumber(trafficVisitsCount),
+            hint: "Total sessions in this period",
+            meta: trafficVisitorsCount > 0
+                ? formatShareOfTotal(trafficVisitsCount, trafficVisitorsCount, "sessions per visitor (directional)")
+                : "",
+            icon: "ri-footprint-line",
+            badgeLabel: trafficVisitsCount > 0 ? "Active" : "No visits yet",
+            badgeClass: trafficVisitsCount > 0 ? "label-success" : "",
+        },
+        {
+            key: "pageviews",
+            label: "Pageviews",
+            value: formatMetricNumber(trafficPageviewsCount),
+            hint: "Pages viewed across your website",
+            meta: trafficVisitsCount > 0
+                ? formatShareOfTotal(trafficPageviewsCount, trafficVisitsCount, "views per visit (directional)")
+                : "",
+            icon: "ri-file-chart-line",
+            badgeLabel: trafficPageviewsCount > 0 ? "Reading activity" : "No pageviews yet",
+            badgeClass: trafficPageviewsCount > 0 ? "label-success" : "",
+        },
+        {
+            key: "bounceRate",
+            label: "Bounce / interaction rate",
+            value: formatBounceRate(trafficSummary?.bounceRate),
+            hint: "Single-page visits compared with interactions",
+            meta: trafficOverviewMessage || "",
+            icon: "ri-bar-chart-grouped-line",
+            badgeLabel: trafficOverviewStatusLabel,
+            badgeClass: resolveMetricStatePillClass(trafficOverviewStatus),
+        },
+        {
+            key: "visitDuration",
+            label: "Average visit duration",
+            value: formatDurationSeconds(trafficSummary?.visitDurationSeconds),
+            hint: "Time spent per visit on average",
+            meta: trafficNoDataYet ? "Data appears after public visits are tracked." : "",
+            icon: "ri-timer-line",
+            badgeLabel: trafficNoDataYet ? "Awaiting traffic" : "Measured",
+            badgeClass: trafficNoDataYet ? "label-warning" : "label-success",
+        },
+    ];
 
     $: dataKey = [
         selectedWebsiteId,
-        contactsCollection?.id || "",
-        whatsappCollection?.id || "",
-        appointmentsCollection?.id || "",
-        bookingServicesCollection?.id || "",
-        subscribersCollection?.id || "",
-        campaignsCollection?.id || "",
-        pagesCollection?.id || "",
     ].join(":");
     $: trafficKey = [
         selectedWebsiteId,
@@ -407,12 +485,6 @@
         })
         .sort((a, b) => (a.scheduledTs || 0) - (b.scheduledTs || 0))
         .slice(0, 8);
-    $: leadsSummaryMetricRows = [
-        { label: "Total leads", count: leadsSummary.total },
-        { label: "New leads", count: leadsSummary.newCount },
-        { label: "Read leads", count: leadsSummary.readCount },
-        { label: "Archived leads", count: leadsSummary.archivedCount },
-    ];
     $: leadSourceBreakdownRows = [
         {
             label: "Contact form",
@@ -432,13 +504,6 @@
     ];
     $: leadsHasRecords = leadsSummary.total > 0;
     $: leadSourcesHasData = hasPositiveTrafficRows(leadSourceBreakdownRows);
-    $: bookingSummaryMetricRows = [
-        { label: "Total requests", count: bookingSummary.total },
-        { label: "Pending bookings", count: bookingSummary.pendingCount },
-        { label: "Confirmed bookings", count: bookingSummary.confirmedCount },
-        { label: "Cancelled bookings", count: bookingSummary.cancelledCount },
-        { label: "Upcoming appointments", count: bookingSummary.upcomingCount },
-    ];
     $: bookingStatusBreakdownRows = [
         {
             label: "Pending",
@@ -466,6 +531,113 @@
     $: bookingHasRequests = bookingSummary.total > 0;
     $: bookingStatusHasData = hasPositiveTrafficRows(bookingStatusBreakdownRows);
     $: bookingServicesHasData = hasPositiveTrafficRows(bookingServiceBreakdownRows);
+    $: leadsActionNeededCount = leadsSummary.newCount;
+    $: leadsHeroCards = [
+        {
+            key: "totalLeads",
+            label: "Total leads",
+            value: formatMetricNumber(leadsSummary.total),
+            hint: `Tracked in ${selectedPeriodLabel.toLowerCase()}`,
+            meta: `${formatMetricNumber(leadsSummary.contactCount)} contact | ${formatMetricNumber(leadsSummary.whatsappCount)} WhatsApp | ${formatMetricNumber(leadsSummary.bookingCount)} booking`,
+            icon: "ri-mail-line",
+            badgeLabel: leadsHasRecords ? "Active period" : "No activity",
+            badgeClass: leadsHasRecords ? "label-success" : "",
+        },
+        {
+            key: "newLeads",
+            label: "New leads",
+            value: formatMetricNumber(leadsSummary.newCount),
+            hint: "Awaiting first follow-up",
+            meta: formatShareOfTotal(leadsSummary.newCount, leadsSummary.total, "leads"),
+            icon: "ri-notification-3-line",
+            badgeLabel: leadsSummary.newCount > 0 ? "Action needed" : "On track",
+            badgeClass: leadsSummary.newCount > 0 ? "label-warning" : "label-success",
+        },
+        {
+            key: "readLeads",
+            label: "Read leads",
+            value: formatMetricNumber(leadsSummary.readCount),
+            hint: "Reviewed in backoffice",
+            meta: formatShareOfTotal(leadsSummary.readCount, leadsSummary.total, "leads"),
+            icon: "ri-mail-open-line",
+            badgeLabel: leadsSummary.readCount > 0 ? "In progress" : "None yet",
+            badgeClass: leadsSummary.readCount > 0 ? "label-success" : "",
+        },
+        {
+            key: "archivedLeads",
+            label: "Archived leads",
+            value: formatMetricNumber(leadsSummary.archivedCount),
+            hint: "Closed or archived records",
+            meta: formatShareOfTotal(leadsSummary.archivedCount, leadsSummary.total, "leads"),
+            icon: "ri-archive-stack-line",
+            badgeLabel: leadsSummary.archivedCount > 0 ? "Archived" : "None",
+            badgeClass: leadsSummary.archivedCount > 0 ? "" : "",
+        },
+        {
+            key: "followUpNeeded",
+            label: "Follow-up needed",
+            value: formatMetricNumber(leadsActionNeededCount),
+            hint: leadsActionNeededCount > 0
+                ? "Prioritize new incoming leads"
+                : "No urgent follow-up right now",
+            meta: `${formatMetricNumber(leadsSummary.total)} total leads in period`,
+            icon: "ri-todo-line",
+            badgeLabel: leadsActionNeededCount > 0 ? "Needs attention" : "Healthy",
+            badgeClass: leadsActionNeededCount > 0 ? "label-warning" : "label-success",
+        },
+    ];
+    $: bookingHeroCards = [
+        {
+            key: "totalRequests",
+            label: "Total requests",
+            value: formatMetricNumber(bookingSummary.total),
+            hint: `Tracked in ${selectedPeriodLabel.toLowerCase()}`,
+            meta: `${formatMetricNumber(bookingSummary.pendingCount)} pending | ${formatMetricNumber(bookingSummary.confirmedCount)} confirmed`,
+            icon: "ri-calendar-check-line",
+            badgeLabel: bookingHasRequests ? "Active period" : "No activity",
+            badgeClass: bookingHasRequests ? "label-success" : "",
+        },
+        {
+            key: "pendingBookings",
+            label: "Pending bookings",
+            value: formatMetricNumber(bookingSummary.pendingCount),
+            hint: "Waiting for confirmation",
+            meta: formatShareOfTotal(bookingSummary.pendingCount, bookingSummary.total, "requests"),
+            icon: "ri-time-line",
+            badgeLabel: bookingSummary.pendingCount > 0 ? "Action needed" : "On track",
+            badgeClass: bookingSummary.pendingCount > 0 ? "label-warning" : "label-success",
+        },
+        {
+            key: "confirmedBookings",
+            label: "Confirmed bookings",
+            value: formatMetricNumber(bookingSummary.confirmedCount),
+            hint: "Confirmed appointments",
+            meta: formatShareOfTotal(bookingSummary.confirmedCount, bookingSummary.total, "requests"),
+            icon: "ri-checkbox-circle-line",
+            badgeLabel: bookingSummary.confirmedCount > 0 ? "Scheduled" : "None yet",
+            badgeClass: bookingSummary.confirmedCount > 0 ? "label-success" : "",
+        },
+        {
+            key: "cancelledBookings",
+            label: "Cancelled bookings",
+            value: formatMetricNumber(bookingSummary.cancelledCount),
+            hint: "Cancelled or declined requests",
+            meta: formatShareOfTotal(bookingSummary.cancelledCount, bookingSummary.total, "requests"),
+            icon: "ri-close-circle-line",
+            badgeLabel: bookingSummary.cancelledCount > 0 ? "Monitor" : "Stable",
+            badgeClass: bookingSummary.cancelledCount > 0 ? "label-warning" : "label-success",
+        },
+        {
+            key: "upcomingAppointments",
+            label: "Upcoming appointments",
+            value: formatMetricNumber(bookingSummary.upcomingCount),
+            hint: "Future confirmed or pending slots",
+            meta: `${formatMetricNumber(upcomingAppointments.length)} listed in operational view`,
+            icon: "ri-calendar-event-line",
+            badgeLabel: bookingSummary.upcomingCount > 0 ? "Upcoming" : "No upcoming",
+            badgeClass: bookingSummary.upcomingCount > 0 ? "label-success" : "",
+        },
+    ];
 
     $: normalizedSubscribers = normalizeSubscribers(subscribersRecords);
     $: normalizedCampaigns = normalizeCampaigns(campaignsRecords);
@@ -498,17 +670,74 @@
         }
         return isTimestampInPeriod(campaign.sentTs || campaign.updatedTs || campaign.createdTs, selectedPeriod);
     }).length;
-    $: newsletterAudienceMetricRows = [
-        { label: "Active subscribers", count: newsletterSummary.activeSubscribers },
-        { label: "Pending confirmations", count: pendingSubscribersCount },
-        { label: "Unsubscribed", count: unsubscribedSubscribersCount },
-        { label: `New subscribers (${selectedPeriodLabel})`, count: newsletterSummary.newSubscribersPeriod },
+    $: newsletterHeroCards = [
+        {
+            key: "activeSubscribers",
+            label: "Active subscribers",
+            value: formatMetricNumber(newsletterSummary.activeSubscribers),
+            hint: "Current active audience",
+            meta: `${formatMetricNumber(newsletterSummary.newSubscribersPeriod)} new in ${selectedPeriodLabel.toLowerCase()}`,
+            icon: "ri-user-follow-line",
+            badgeLabel: newsletterSummary.activeSubscribers > 0 ? "Audience live" : "No audience yet",
+            badgeClass: newsletterSummary.activeSubscribers > 0 ? "label-success" : "",
+        },
+        {
+            key: "newSubscribers",
+            label: "New subscribers",
+            value: formatMetricNumber(newsletterSummary.newSubscribersPeriod),
+            hint: `Added during ${selectedPeriodLabel.toLowerCase()}`,
+            meta: formatShareOfTotal(newsletterSummary.newSubscribersPeriod, normalizedSubscribers.length, "subscribers"),
+            icon: "ri-user-add-line",
+            badgeLabel: newsletterSummary.newSubscribersPeriod > 0 ? "Growing" : "Steady",
+            badgeClass: newsletterSummary.newSubscribersPeriod > 0 ? "label-success" : "",
+        },
+        {
+            key: "pendingConfirmations",
+            label: "Pending confirmations",
+            value: formatMetricNumber(pendingSubscribersCount),
+            hint: "Waiting to confirm subscription",
+            meta: formatShareOfTotal(pendingSubscribersCount, normalizedSubscribers.length, "subscribers"),
+            icon: "ri-time-line",
+            badgeLabel: pendingSubscribersCount > 0 ? "Needs attention" : "On track",
+            badgeClass: pendingSubscribersCount > 0 ? "label-warning" : "label-success",
+        },
+        {
+            key: "unsubscribed",
+            label: "Unsubscribed subscribers",
+            value: formatMetricNumber(unsubscribedSubscribersCount),
+            hint: "Audience churn to monitor",
+            meta: formatShareOfTotal(unsubscribedSubscribersCount, normalizedSubscribers.length, "subscribers"),
+            icon: "ri-user-unfollow-line",
+            badgeLabel: unsubscribedSubscribersCount > 0 ? "Review" : "Stable",
+            badgeClass: unsubscribedSubscribersCount > 0 ? "label-warning" : "label-success",
+        },
+        {
+            key: "campaignsSubmitted",
+            label: "Campaigns submitted",
+            value: formatMetricNumber(newsletterSummary.sentCampaignsPeriod),
+            hint: `${formatMetricNumber(newsletterSummary.recipientsReachedPeriod)} recipients submitted`,
+            meta: `${formatMetricNumber(newsletterSummary.draftCampaigns)} drafts | ${formatMetricNumber(failedCampaignSubmissionsPeriod)} failed`,
+            icon: "ri-send-plane-2-line",
+            badgeLabel: newsletterSummary.sentCampaignsPeriod > 0 ? "Active sending" : "No campaigns sent",
+            badgeClass: newsletterSummary.sentCampaignsPeriod > 0 ? "label-success" : "label-warning",
+        },
     ];
-    $: newsletterCampaignMetricRows = [
-        { label: "Campaigns submitted", count: newsletterSummary.sentCampaignsPeriod },
-        { label: "Recipients submitted", count: newsletterSummary.recipientsReachedPeriod },
-        { label: "Draft campaigns", count: newsletterSummary.draftCampaigns },
-        { label: "Failed submissions", count: failedCampaignSubmissionsPeriod },
+    $: newsletterSubscriberStatusRows = [
+        {
+            label: "Active subscribers",
+            count: newsletterSummary.activeSubscribers,
+            meta: formatShareOfTotal(newsletterSummary.activeSubscribers, normalizedSubscribers.length, "subscribers"),
+        },
+        {
+            label: "Pending confirmations",
+            count: pendingSubscribersCount,
+            meta: formatShareOfTotal(pendingSubscribersCount, normalizedSubscribers.length, "subscribers"),
+        },
+        {
+            label: "Unsubscribed",
+            count: unsubscribedSubscribersCount,
+            meta: formatShareOfTotal(unsubscribedSubscribersCount, normalizedSubscribers.length, "subscribers"),
+        },
     ];
     $: newsletterCampaignStatusRows = [
         {
@@ -529,22 +758,104 @@
     ];
     $: newsletterHasSubscribers = normalizedSubscribers.length > 0;
     $: newsletterHasCampaignOutput = newsletterSummary.sentCampaignsPeriod > 0 || newsletterSummary.draftCampaigns > 0 || failedCampaignSubmissionsPeriod > 0;
+    $: newsletterHasAnyCampaigns = normalizedCampaigns.length > 0;
+    $: newsletterSubscriberStatusHasData = hasPositiveTrafficRows(newsletterSubscriberStatusRows);
     $: newsletterCampaignStatusHasData = hasPositiveTrafficRows(newsletterCampaignStatusRows);
-
-    $: recentSentCampaigns = [...normalizedCampaigns]
-        .filter((campaign) => campaign.statusKey === "sent")
+    $: maxNewsletterSubscriberStatus = resolveTrafficMaxCount(newsletterSubscriberStatusRows);
+    $: maxNewsletterCampaignStatus = resolveTrafficMaxCount(newsletterCampaignStatusRows);
+    $: newsletterOperationalInsights = [
+        ...(pendingSubscribersCount > 0
+            ? [{
+                id: "pending-confirmations",
+                severity: "warning",
+                title: `${formatMetricNumber(pendingSubscribersCount)} pending confirmation${pendingSubscribersCount === 1 ? "" : "s"}`,
+                detail: "Review pending subscribers and prompt confirmations to improve active audience growth.",
+            }]
+            : []),
+        ...(!newsletterHasCampaignOutput && newsletterHasSubscribers
+            ? [{
+                id: "no-campaign-output",
+                severity: "warning",
+                title: "No campaign output in this period",
+                detail: "Consider sending at least one campaign to engage your active subscribers.",
+            }]
+            : []),
+        ...(newsletterHasSubscribers && newsletterSummary.sentCampaignsPeriod > 0
+            ? [{
+                id: "campaigns-active",
+                severity: "success",
+                title: "Campaign activity detected",
+                detail: `${formatMetricNumber(newsletterSummary.sentCampaignsPeriod)} campaign${newsletterSummary.sentCampaignsPeriod === 1 ? "" : "s"} submitted in this period.`,
+            }]
+            : []),
+        ...(!newsletterHasSubscribers
+            ? [{
+                id: "no-subscribers",
+                severity: "neutral",
+                title: "No subscribers recorded",
+                detail: "Start capturing newsletter signups to build your subscriber base.",
+            }]
+            : []),
+    ].slice(0, 4);
+    $: recentNewsletterCampaigns = [...normalizedCampaigns]
+        .filter((campaign) => isTimestampInPeriod(campaign.sentTs || campaign.updatedTs || campaign.createdTs, selectedPeriod))
         .sort((a, b) => (b.sentTs || b.updatedTs || b.createdTs || 0) - (a.sentTs || a.updatedTs || a.createdTs || 0))
         .slice(0, 8);
 
     $: normalizedPages = normalizePages(pagesRecords, websiteLabelById);
-    $: selectedWebsiteSeo = normalizeWebsiteSeo(selectedWebsite);
+    $: selectedWebsiteSeo = normalizeWebsiteSeo(dashboardResponse?.websiteSeoDefaults || selectedWebsite);
     $: seoSummary = buildSeoSummary(normalizedPages, selectedWebsiteSeo);
-    $: seoSummaryMetricRows = [
-        { label: "Total pages", count: seoSummary.totalPages },
-        { label: "Good pages", count: seoSummary.good },
-        { label: "Pages needing attention", count: seoSummary.needsAttention },
-        { label: "Missing basics", count: seoSummary.missingBasics },
-        { label: "Noindex pages", count: seoSummary.noindexPages },
+    $: seoHeroCards = [
+        {
+            key: "totalPages",
+            label: "Total pages",
+            value: formatMetricNumber(seoSummary.totalPages),
+            hint: "Pages included in this SEO audit",
+            meta: `${formatMetricNumber(seoSummary.good)} page${seoSummary.good === 1 ? "" : "s"} in good shape`,
+            icon: "ri-file-list-3-line",
+            badgeLabel: seoSummary.totalPages > 0 ? "Audited" : "No pages",
+            badgeClass: seoSummary.totalPages > 0 ? "label-success" : "",
+        },
+        {
+            key: "goodPages",
+            label: "Pages in good shape",
+            value: formatMetricNumber(seoSummary.good),
+            hint: "Title, description and sharing image covered",
+            meta: formatShareOfTotal(seoSummary.good, seoSummary.totalPages, "pages"),
+            icon: "ri-checkbox-circle-line",
+            badgeLabel: seoSummary.good > 0 ? "Healthy" : "Needs work",
+            badgeClass: seoSummary.good > 0 ? "label-success" : "label-warning",
+        },
+        {
+            key: "missingBasics",
+            label: "Pages missing basics",
+            value: formatMetricNumber(seoSummary.missingBasics),
+            hint: "Missing title or description",
+            meta: `${formatMetricNumber(seoSummary.missingTitle)} title | ${formatMetricNumber(seoSummary.missingDescription)} description`,
+            icon: "ri-alert-line",
+            badgeLabel: seoSummary.missingBasics > 0 ? "Priority fixes" : "Covered",
+            badgeClass: seoSummary.missingBasics > 0 ? "label-warning" : "label-success",
+        },
+        {
+            key: "noindexPages",
+            label: "Noindex pages",
+            value: formatMetricNumber(seoSummary.noindexPages),
+            hint: "Pages excluded from search index",
+            meta: formatShareOfTotal(seoSummary.noindexPages, seoSummary.totalPages, "pages"),
+            icon: "ri-eye-off-line",
+            badgeLabel: seoSummary.noindexPages > 0 ? "Review" : "None",
+            badgeClass: seoSummary.noindexPages > 0 ? "label-warning" : "label-success",
+        },
+        {
+            key: "needsAttention",
+            label: "Pages needing attention",
+            value: formatMetricNumber(seoSummary.needsAttention + seoSummary.missingBasics),
+            hint: "Pages with missing SEO items or review flags",
+            meta: `${formatMetricNumber(seoSummary.missingSocialImage)} missing sharing image`,
+            icon: "ri-search-eye-line",
+            badgeLabel: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "Action needed" : "Healthy",
+            badgeClass: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "label-warning" : "label-success",
+        },
     ];
     $: seoIssueBreakdownRows = [
         {
@@ -568,7 +879,56 @@
             meta: formatShareOfTotal(seoSummary.noindexPages, seoSummary.totalPages, "pages"),
         },
     ];
+    $: seoIssueAuditRows = seoIssueBreakdownRows.map((row) => ({
+        ...row,
+        description: resolveSeoIssueDescription(row.label),
+        severityLabel: resolveSeoIssueSeverityLabel(row.label),
+        severityClass: resolveSeoIssueSeverityPillClass(row.label),
+    }));
     $: seoIssueBreakdownHasData = hasPositiveTrafficRows(seoIssueBreakdownRows);
+    $: maxSeoIssueCount = resolveTrafficMaxCount(seoIssueBreakdownRows);
+    $: seoAttentionInsights = [
+        ...(seoSummary.missingBasics > 0
+            ? [{
+                id: "seo-basics",
+                severity: "warning",
+                title: `${formatMetricNumber(seoSummary.missingBasics)} page${seoSummary.missingBasics === 1 ? "" : "s"} missing SEO basics`,
+                detail: "Prioritize pages missing title or description to improve visibility clarity.",
+            }]
+            : []),
+        ...(seoSummary.needsAttention > 0
+            ? [{
+                id: "seo-attention",
+                severity: "warning",
+                title: `${formatMetricNumber(seoSummary.needsAttention)} page${seoSummary.needsAttention === 1 ? "" : "s"} need SEO review`,
+                detail: "Review sharing image coverage and noindex configuration where applicable.",
+            }]
+            : []),
+        ...(seoSummary.noindexPages > 0
+            ? [{
+                id: "seo-noindex",
+                severity: "neutral",
+                title: `${formatMetricNumber(seoSummary.noindexPages)} page${seoSummary.noindexPages === 1 ? "" : "s"} marked noindex`,
+                detail: "Confirm noindex is intentional for pages that should stay out of search results.",
+            }]
+            : []),
+        ...(seoSummary.totalPages > 0 && (seoSummary.needsAttention + seoSummary.missingBasics) < 1
+            ? [{
+                id: "seo-healthy",
+                severity: "success",
+                title: "No SEO issues detected in this report",
+                detail: "Core SEO visibility checks look healthy for the selected website and period.",
+            }]
+            : []),
+        ...(seoSummary.totalPages < 1
+            ? [{
+                id: "seo-no-pages",
+                severity: "neutral",
+                title: "No pages available for SEO analysis",
+                detail: "Publish pages to start receiving SEO health insights here.",
+            }]
+            : []),
+    ].slice(0, 4);
     $: prioritizedSeoRows = [...seoSummary.pageRows].sort((a, b) => {
         const aPriority = a?.healthKey === "missing-basics" ? 0 : 1;
         const bPriority = b?.healthKey === "missing-basics" ? 0 : 1;
@@ -578,34 +938,35 @@
         return normalizeString(a?.title).localeCompare(normalizeString(b?.title));
     });
 
+    $: isDashboardDataReady = !!selectedWebsiteId && !isLoadingData && !reportsLoadError;
     $: sourceReadinessRows = [
         {
             label: "Lead data",
-            ok: !!contactsCollection?.id || !!whatsappCollection?.id,
-            message: (!!contactsCollection?.id || !!whatsappCollection?.id)
-                ? "Data available."
-                : "Lead data source unavailable.",
+            ok: isDashboardDataReady,
+            message: isDashboardDataReady
+                ? `${formatMetricNumber(normalizedLeadRecords.length)} interaction(s) loaded.`
+                : (reportsLoadError ? "Lead data source unavailable." : "Loading lead data."),
         },
         {
             label: "Booking data",
-            ok: !!appointmentsCollection?.id,
-            message: appointmentsCollection?.id
-                ? "Appointments data available."
-                : "Booking appointments data source unavailable.",
+            ok: isDashboardDataReady,
+            message: isDashboardDataReady
+                ? `${formatMetricNumber(normalizedAppointments.length)} appointment(s) loaded.`
+                : (reportsLoadError ? "Booking appointments data source unavailable." : "Loading booking data."),
         },
         {
             label: "Newsletter data",
-            ok: !!subscribersCollection?.id || !!campaignsCollection?.id,
-            message: (!!subscribersCollection?.id || !!campaignsCollection?.id)
-                ? "Subscribers and campaigns data available."
-                : "Newsletter data sources unavailable.",
+            ok: isDashboardDataReady,
+            message: isDashboardDataReady
+                ? `${formatMetricNumber(normalizedSubscribers.length)} subscriber(s) and ${formatMetricNumber(normalizedCampaigns.length)} campaign(s) loaded.`
+                : (reportsLoadError ? "Newsletter data sources unavailable." : "Loading newsletter data."),
         },
         {
             label: "SEO pages",
-            ok: !!pagesCollection?.id,
-            message: pagesCollection?.id
+            ok: isDashboardDataReady,
+            message: isDashboardDataReady
                 ? `${normalizedPages.length} page(s) loaded.`
-                : "Pages data source unavailable.",
+                : (reportsLoadError ? "Pages data source unavailable." : "Loading SEO pages."),
         },
     ];
 
@@ -631,37 +992,52 @@
         {
             key: "leads",
             label: "Leads this period",
-            value: leadsSummary.total,
-            hint: `${leadsSummary.contactCount} contact - ${leadsSummary.whatsappCount} WhatsApp - ${leadsSummary.bookingCount} booking`,
+            value: formatMetricNumber(leadsSummary.total),
+            hint: `${formatMetricNumber(leadsSummary.newCount)} new leads in this period`,
+            meta: `${formatMetricNumber(leadsSummary.contactCount)} contact | ${formatMetricNumber(leadsSummary.whatsappCount)} WhatsApp | ${formatMetricNumber(leadsSummary.bookingCount)} booking`,
             icon: "ri-mail-line",
+            badgeLabel: leadsSummary.newCount > 0 ? `${formatMetricNumber(leadsSummary.newCount)} new` : "Stable",
+            badgeClass: leadsSummary.newCount > 0 ? "label-warning" : "label-success",
         },
         {
             key: "bookings",
             label: "Booking requests",
-            value: bookingSummary.total,
-            hint: `${bookingSummary.pendingCount} pending - ${bookingSummary.confirmedCount} confirmed`,
+            value: formatMetricNumber(bookingSummary.total),
+            hint: `${formatMetricNumber(bookingSummary.pendingCount)} pending requests`,
+            meta: `${formatMetricNumber(bookingSummary.confirmedCount)} confirmed | ${formatMetricNumber(bookingSummary.cancelledCount)} cancelled`,
             icon: "ri-calendar-check-line",
+            badgeLabel: bookingSummary.pendingCount > 0 ? "Needs follow-up" : "On track",
+            badgeClass: bookingSummary.pendingCount > 0 ? "label-warning" : "label-success",
         },
         {
             key: "subscribers",
             label: "Active subscribers",
-            value: newsletterSummary.activeSubscribers,
-            hint: `${newsletterSummary.newSubscribersPeriod} new in ${selectedPeriodLabel.toLowerCase()}`,
+            value: formatMetricNumber(newsletterSummary.activeSubscribers),
+            hint: `${formatMetricNumber(newsletterSummary.newSubscribersPeriod)} new in ${selectedPeriodLabel.toLowerCase()}`,
+            meta: `${formatMetricNumber(pendingSubscribersCount)} pending confirmations`,
             icon: "ri-user-follow-line",
+            badgeLabel: newsletterSummary.newSubscribersPeriod > 0 ? "Growing" : "Steady",
+            badgeClass: newsletterSummary.newSubscribersPeriod > 0 ? "label-success" : "",
         },
         {
             key: "campaigns",
             label: "Campaigns sent",
-            value: newsletterSummary.sentCampaignsPeriod,
-            hint: `${newsletterSummary.recipientsReachedPeriod} recipients submitted`,
+            value: formatMetricNumber(newsletterSummary.sentCampaignsPeriod),
+            hint: `${formatMetricNumber(newsletterSummary.recipientsReachedPeriod)} recipients submitted`,
+            meta: `${formatMetricNumber(newsletterSummary.draftCampaigns)} drafts`,
             icon: "ri-send-plane-2-line",
+            badgeLabel: newsletterSummary.sentCampaignsPeriod > 0 ? "Active" : "No campaigns",
+            badgeClass: newsletterSummary.sentCampaignsPeriod > 0 ? "label-success" : "label-warning",
         },
         {
             key: "seoAttention",
             label: "SEO pages needing attention",
-            value: seoSummary.needsAttention + seoSummary.missingBasics,
-            hint: `${seoSummary.missingTitle} missing title - ${seoSummary.missingDescription} missing description`,
+            value: formatMetricNumber(seoSummary.needsAttention + seoSummary.missingBasics),
+            hint: `${formatMetricNumber(seoSummary.missingTitle)} missing title | ${formatMetricNumber(seoSummary.missingDescription)} missing description`,
+            meta: `${formatMetricNumber(seoSummary.missingSocialImage)} missing sharing image`,
             icon: "ri-search-eye-line",
+            badgeLabel: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "Needs fixes" : "Healthy",
+            badgeClass: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "label-warning" : "label-success",
         },
         ...(trafficState === "ok" && trafficSummary
             ? [{
@@ -670,9 +1046,90 @@
                 value: formatMetricNumber(trafficSummary.visitors),
                 hint: `${formatMetricNumber(trafficSummary.pageviews)} pageviews`,
                 icon: "ri-line-chart-line",
+                badgeLabel: trafficOverviewStatusLabel,
+                badgeClass: resolveMetricStatePillClass(trafficOverviewStatus),
+                meta: `Bounce rate ${formatBounceRate(trafficSummary.bounceRate)}`,
             }]
             : []),
     ];
+    $: overviewLeadBookingRows = [
+        {
+            label: "Contact form leads",
+            count: leadsSummary.contactCount,
+            meta: formatShareOfTotal(leadsSummary.contactCount, leadsSummary.total, "leads"),
+        },
+        {
+            label: "WhatsApp leads",
+            count: leadsSummary.whatsappCount,
+            meta: formatShareOfTotal(leadsSummary.whatsappCount, leadsSummary.total, "leads"),
+        },
+        {
+            label: "Booking leads",
+            count: leadsSummary.bookingCount,
+            meta: formatShareOfTotal(leadsSummary.bookingCount, leadsSummary.total, "leads"),
+        },
+        {
+            label: "Pending booking requests",
+            count: bookingSummary.pendingCount,
+            meta: formatShareOfTotal(bookingSummary.pendingCount, bookingSummary.total, "requests"),
+        },
+        {
+            label: "Confirmed bookings",
+            count: bookingSummary.confirmedCount,
+            meta: formatShareOfTotal(bookingSummary.confirmedCount, bookingSummary.total, "requests"),
+        },
+    ];
+    $: overviewNewsletterSeoRows = [
+        {
+            label: "Active subscribers",
+            count: newsletterSummary.activeSubscribers,
+            meta: "",
+        },
+        {
+            label: "New subscribers",
+            count: newsletterSummary.newSubscribersPeriod,
+            meta: selectedPeriodLabel,
+        },
+        {
+            label: "Campaigns submitted",
+            count: newsletterSummary.sentCampaignsPeriod,
+            meta: `${formatMetricNumber(newsletterSummary.recipientsReachedPeriod)} recipients submitted`,
+        },
+        {
+            label: "Pages needing SEO attention",
+            count: seoSummary.needsAttention,
+            meta: formatShareOfTotal(seoSummary.needsAttention, seoSummary.totalPages, "pages"),
+        },
+        {
+            label: "Pages missing SEO basics",
+            count: seoSummary.missingBasics,
+            meta: formatShareOfTotal(seoSummary.missingBasics, seoSummary.totalPages, "pages"),
+        },
+    ];
+    $: overviewTrafficHighlightRows = trafficState === "ok"
+        ? [
+            {
+                label: "Top page",
+                value: topTrafficPage
+                    ? `${topTrafficPage.page || "/"} | ${formatMetricNumber(topTrafficPage.visitors)} visitors`
+                    : "No page data available.",
+            },
+            {
+                label: "Top source",
+                value: topTrafficSource
+                    ? `${topTrafficSource.source || "Direct"} | ${formatMetricNumber(topTrafficSource.visitors)} visitors`
+                    : "No source data available.",
+            },
+            {
+                label: "Top device",
+                value: topTrafficDevice
+                    ? `${topTrafficDevice.device || "Unknown"} | ${formatMetricNumber(topTrafficDevice.visitors)} visitors`
+                    : "No device data available.",
+            },
+        ]
+        : [];
+    $: maxLeadBookingRow = resolveTrafficMaxCount(overviewLeadBookingRows);
+    $: maxNewsletterSeoRow = resolveTrafficMaxCount(overviewNewsletterSeoRows);
     $: overviewAttentionItems = buildOverviewAttentionItems({
         reportWarnings,
         sourceReadinessRows,
@@ -707,7 +1164,72 @@
         canConfigureTrafficAnalytics,
     });
 
-    $: historyPlaceholderMessage = "Monthly report history will appear here once automatic snapshots are enabled.";
+    $: historyPlaceholderMessage = "Report archive entries will appear here once scheduled snapshots are enabled.";
+    $: historyReadySourcesCount = overviewDataConfidenceRows.filter((sourceRow) => normalizeLower(sourceRow?.status) === "ready").length;
+    $: historyTotalSourcesCount = overviewDataConfidenceRows.length;
+    $: historyArchiveStatusLabel = historyTotalSourcesCount > 0 ? "Awaiting snapshots" : "Checking sources";
+    $: historyArchiveStatusClass = historyTotalSourcesCount > 0 ? "label-warning" : "";
+    $: latestLeadActivityTs = resolveMaxTimestamp(periodLeadRecords.map((lead) => lead.createdTs));
+    $: latestBookingActivityTs = resolveMaxTimestamp(
+        periodAppointments.map((appointment) => Math.max(Number(appointment?.createdTs) || 0, Number(appointment?.scheduledTs) || 0)),
+    );
+    $: latestNewsletterActivityTs = resolveMaxTimestamp([
+        ...normalizedSubscribers.map((subscriber) => subscriber.createdTs),
+        ...normalizedCampaigns.map((campaign) => Math.max(
+            Number(campaign?.sentTs) || 0,
+            Number(campaign?.updatedTs) || 0,
+            Number(campaign?.createdTs) || 0,
+        )),
+    ]);
+    $: latestSeoActivityTs = resolveMaxTimestamp(
+        (pagesRecords || []).map((page) => Math.max(
+            toTimestamp(page?.updated),
+            toTimestamp(page?.created),
+        )),
+    );
+    $: historyActivityRows = [
+        ...(latestLeadActivityTs > 0
+            ? [{
+                id: "leads",
+                title: "Latest lead activity",
+                detail: `${formatMetricNumber(leadsSummary.total)} leads tracked in ${selectedPeriodLabel.toLowerCase()}.`,
+                timestampLabel: formatDateTime(latestLeadActivityTs),
+                statusLabel: leadsSummary.newCount > 0 ? "Follow-up needed" : "Stable",
+                statusClass: leadsSummary.newCount > 0 ? "label-warning" : "label-success",
+            }]
+            : []),
+        ...(latestBookingActivityTs > 0
+            ? [{
+                id: "booking",
+                title: "Latest booking activity",
+                detail: `${formatMetricNumber(bookingSummary.total)} booking requests tracked in this period.`,
+                timestampLabel: formatDateTime(latestBookingActivityTs),
+                statusLabel: bookingSummary.pendingCount > 0 ? "Pending requests" : "On track",
+                statusClass: bookingSummary.pendingCount > 0 ? "label-warning" : "label-success",
+            }]
+            : []),
+        ...(latestNewsletterActivityTs > 0
+            ? [{
+                id: "newsletter",
+                title: "Latest newsletter activity",
+                detail: `${formatMetricNumber(newsletterSummary.sentCampaignsPeriod)} campaigns submitted in this period.`,
+                timestampLabel: formatDateTime(latestNewsletterActivityTs),
+                statusLabel: newsletterSummary.sentCampaignsPeriod > 0 ? "Campaign activity" : "No campaigns yet",
+                statusClass: newsletterSummary.sentCampaignsPeriod > 0 ? "label-success" : "",
+            }]
+            : []),
+        ...(latestSeoActivityTs > 0
+            ? [{
+                id: "seo",
+                title: "Latest SEO audit signal",
+                detail: `${formatMetricNumber(seoSummary.needsAttention + seoSummary.missingBasics)} pages currently need review.`,
+                timestampLabel: formatDateTime(latestSeoActivityTs),
+                statusLabel: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "Needs review" : "Healthy",
+                statusClass: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "label-warning" : "label-success",
+            }]
+            : []),
+    ];
+    $: historyHasActivityRows = historyActivityRows.length > 0;
 
     export async function reload() {
         if (!websitesCollection?.id) {
@@ -1230,11 +1752,41 @@
         subscribersRecords = [];
         campaignsRecords = [];
         pagesRecords = [];
+        dashboardResponse = null;
     }
 
     function clearTrafficRecords() {
         trafficResponse = null;
         isLoadingTraffic = false;
+    }
+
+    async function hydrateSelectedWebsiteRecord() {
+        if (
+            !ApiClient.isAdminSuperuser()
+            || !websitesCollection?.id
+            || !selectedWebsiteId
+            || !websites.some((website) => website?.id === selectedWebsiteId)
+        ) {
+            return;
+        }
+
+        try {
+            const fullWebsiteRecord = await ApiClient.collection(websitesCollection.id).getOne(selectedWebsiteId, {
+                requestKey: `nuvio_reports_website_${selectedWebsiteId}`,
+            });
+
+            if (!fullWebsiteRecord?.id) {
+                return;
+            }
+
+            websites = websites.map((website) => (
+                website?.id === fullWebsiteRecord.id
+                    ? fullWebsiteRecord
+                    : website
+            ));
+        } catch (err) {
+            ApiClient.error(err, false);
+        }
     }
 
     async function loadWebsites() {
@@ -1247,8 +1799,7 @@
         isLoadingWebsites = true;
 
         try {
-            websites = await ApiClient.collection(websitesCollection.id).getFullList({
-                sort: resolveWebsitesSort(websitesCollection),
+            websites = await ApiClient.getBackofficeWebsites({
                 requestKey: "nuvio_reports_websites",
             });
 
@@ -1262,6 +1813,8 @@
             if (!websites.find((website) => website.id === selectedWebsiteId)) {
                 selectedWebsiteId = websites[0].id;
             }
+
+            await hydrateSelectedWebsiteRecord();
         } catch (err) {
             websites = [];
             selectedWebsiteId = "";
@@ -1272,23 +1825,6 @@
         }
 
         isLoadingWebsites = false;
-    }
-
-    async function loadRecordsByWebsite(collection, requestKeyPrefix, sort = "-created") {
-        if (!collection?.id || !selectedWebsiteId) {
-            return [];
-        }
-
-        try {
-            return await ApiClient.collection(collection.id).getFullList({
-                filter: `website="${selectedWebsiteId}"`,
-                sort,
-                requestKey: `${requestKeyPrefix}_${selectedWebsiteId}`,
-            });
-        } catch (err) {
-            ApiClient.error(err);
-            return [];
-        }
     }
 
     async function loadDashboardData() {
@@ -1303,40 +1839,36 @@
         reportsLoadError = "";
 
         try {
-            const [
-                nextContacts,
-                nextWhatsApp,
-                nextAppointments,
-                nextBookingServices,
-                nextSubscribers,
-                nextCampaigns,
-                nextPages,
-            ] = await Promise.all([
-                loadRecordsByWebsite(contactsCollection, "nuvio_reports_contacts"),
-                loadRecordsByWebsite(whatsappCollection, "nuvio_reports_whatsapp"),
-                loadRecordsByWebsite(appointmentsCollection, "nuvio_reports_appointments"),
-                loadRecordsByWebsite(bookingServicesCollection, "nuvio_reports_booking_services", "+name"),
-                loadRecordsByWebsite(subscribersCollection, "nuvio_reports_subscribers"),
-                loadRecordsByWebsite(campaignsCollection, "nuvio_reports_campaigns"),
-                loadRecordsByWebsite(pagesCollection, "nuvio_reports_pages", "-updated"),
-            ]);
+            const response = await ApiClient.getReportsDashboard({
+                websiteId: selectedWebsiteId,
+                period: selectedPeriod,
+                requestKey: `nuvio_reports_dashboard_${selectedWebsiteId}`,
+            });
 
             if (currentToken !== dataLoadToken) {
                 return;
             }
 
-            contactsRecords = nextContacts;
-            whatsappRecords = nextWhatsApp;
-            appointmentsRecords = nextAppointments;
-            bookingServicesRecords = nextBookingServices;
-            subscribersRecords = nextSubscribers;
-            campaignsRecords = nextCampaigns;
-            pagesRecords = nextPages;
+            const datasets = response?.datasets && typeof response.datasets === "object"
+                ? response.datasets
+                : {};
+
+            dashboardResponse = response && typeof response === "object"
+                ? response
+                : null;
+            contactsRecords = Array.isArray(datasets.contacts) ? datasets.contacts : [];
+            whatsappRecords = Array.isArray(datasets.whatsapp) ? datasets.whatsapp : [];
+            appointmentsRecords = Array.isArray(datasets.appointments) ? datasets.appointments : [];
+            bookingServicesRecords = Array.isArray(datasets.bookingServices) ? datasets.bookingServices : [];
+            subscribersRecords = Array.isArray(datasets.subscribers) ? datasets.subscribers : [];
+            campaignsRecords = Array.isArray(datasets.campaigns) ? datasets.campaigns : [];
+            pagesRecords = Array.isArray(datasets.pages) ? datasets.pages : [];
         } catch (err) {
             if (currentToken !== dataLoadToken) {
                 return;
             }
 
+            dashboardResponse = null;
             reportsLoadError = "Unable to load reports right now.";
             ApiClient.error(err);
         } finally {
@@ -1514,6 +2046,17 @@
         }
 
         return `${dateText || "-"}${timeText ? ` ${timeText}` : ""}`.trim();
+    }
+
+    function resolveMaxTimestamp(values = []) {
+        let maxTimestamp = 0;
+        for (const value of values || []) {
+            const timestamp = Number(value || 0);
+            if (Number.isFinite(timestamp) && timestamp > maxTimestamp) {
+                maxTimestamp = timestamp;
+            }
+        }
+        return maxTimestamp;
     }
 
     function getPeriodBounds(periodKey) {
@@ -1733,6 +2276,7 @@
             return {
                 id: normalizeString(record?.id),
                 title: normalizeString(record?.title) || normalizeString(record?.name) || "Untitled page",
+                slug: normalizeString(record?.slug || record?.path || record?.url || ""),
                 websiteId,
                 websiteLabel: websiteLabelMap.get(websiteId) || "",
                 seoTitle: normalizeString(record?.seo_title || record?.seoTitle),
@@ -1784,7 +2328,7 @@
         return {
             seoTitle: normalizeString(website?.seoTitle || website?.seo_title),
             seoDescription: stripHtml(website?.seoDescription || website?.seo_description),
-            seoSocialImage: hasFileValue(website?.seoImage || website?.seo_image),
+            seoSocialImage: toBoolean(website?.seoSocialImage) || hasFileValue(website?.seoImage || website?.seo_image),
         };
     }
 
@@ -1853,6 +2397,7 @@
                 summary.pageRows.push({
                     id: page.id,
                     title: page.title,
+                    slug: normalizeString(page?.slug),
                     healthKey,
                     reasons,
                 });
@@ -2379,6 +2924,16 @@
         return "New";
     }
 
+    function resolveLeadStatusPillClass(statusKey) {
+        if (statusKey === "new") {
+            return "label-warning";
+        }
+        if (statusKey === "read") {
+            return "label-success";
+        }
+        return "";
+    }
+
     function resolveAppointmentStatusLabel(statusKey) {
         if (statusKey === "confirmed") {
             return "Confirmed";
@@ -2387,6 +2942,100 @@
             return "Cancelled";
         }
         return "Pending";
+    }
+
+    function resolveAppointmentStatusPillClass(statusKey) {
+        if (statusKey === "confirmed") {
+            return "label-success";
+        }
+        if (statusKey === "pending") {
+            return "label-warning";
+        }
+        return "";
+    }
+
+    function resolveCampaignStatusLabel(statusKey) {
+        const normalized = normalizeLower(statusKey);
+        if (normalized === "sent") {
+            return "Submitted";
+        }
+        if (normalized === "draft") {
+            return "Draft";
+        }
+        if (normalized === "scheduled") {
+            return "Scheduled";
+        }
+        if (["failed", "error", "rejected"].includes(normalized)) {
+            return "Failed";
+        }
+        return "Campaign";
+    }
+
+    function resolveCampaignStatusPillClass(statusKey) {
+        const normalized = normalizeLower(statusKey);
+        if (normalized === "sent") {
+            return "label-success";
+        }
+        if (normalized === "scheduled") {
+            return "label-warning";
+        }
+        if (["failed", "error", "rejected"].includes(normalized)) {
+            return "label-danger";
+        }
+        return "";
+    }
+
+    function resolveSeoIssueDescription(issueLabel) {
+        const normalized = normalizeLower(issueLabel);
+        if (normalized.includes("title")) {
+            return "Missing page titles reduce clarity in search results.";
+        }
+        if (normalized.includes("description")) {
+            return "Missing descriptions limit search snippet quality.";
+        }
+        if (normalized.includes("sharing image")) {
+            return "Missing sharing images weaken social preview quality.";
+        }
+        if (normalized.includes("noindex")) {
+            return "Noindex pages are intentionally excluded from search indexing.";
+        }
+        return "Review this SEO issue to improve visibility health.";
+    }
+
+    function resolveSeoIssueSeverityLabel(issueLabel) {
+        const normalized = normalizeLower(issueLabel);
+        if (normalized.includes("title") || normalized.includes("description")) {
+            return "High priority";
+        }
+        if (normalized.includes("sharing image")) {
+            return "Medium priority";
+        }
+        if (normalized.includes("noindex")) {
+            return "Review";
+        }
+        return "Check";
+    }
+
+    function resolveSeoIssueSeverityPillClass(issueLabel) {
+        const normalized = normalizeLower(issueLabel);
+        if (normalized.includes("title") || normalized.includes("description")) {
+            return "label-danger";
+        }
+        if (normalized.includes("sharing image") || normalized.includes("noindex")) {
+            return "label-warning";
+        }
+        return "";
+    }
+
+    function resolveSeoReasonPillClass(reasonLabel) {
+        const normalized = normalizeLower(reasonLabel);
+        if (normalized.includes("title") || normalized.includes("description")) {
+            return "label-danger";
+        }
+        if (normalized.includes("noindex") || normalized.includes("missing")) {
+            return "label-warning";
+        }
+        return "";
     }
 
     function resolveSeoHealthLabel(healthKey) {
@@ -2518,113 +3167,130 @@
             {#if activeTab === "overview"}
                 <div class="reports-overview-layout">
                     <div class="reports-overview-main">
-                        <section class="panel reports-overview-section">
-                            <div class="section-head m-b-sm">
+                        <section class="panel reports-overview-section reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">This period in one view</h5>
                                 <p class="txt-sm txt-hint m-b-0">Business summary for {selectedPeriodLabel.toLowerCase()}.</p>
                             </div>
-                            <div class="reports-kpi-grid reports-overview-kpi-grid">
+                            <div class="reports-kpi-grid reports-overview-kpi-grid reports-kpi-grid--hero">
                                 {#each overviewMetricCards as metric (metric.key)}
-                                    <article class="panel reports-kpi-card reports-overview-kpi-card">
-                                        <div class="reports-kpi-head">
-                                            <span class="txt-sm txt-hint reports-kpi-label">{metric.label}</span>
-                                            <i class={metric.icon} aria-hidden="true" />
+                                    <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                        <div class="reports-kpi-top">
+                                            <span class="reports-kpi-icon" aria-hidden="true">
+                                                <i class={metric.icon} />
+                                            </span>
+                                            {#if metric.badgeLabel}
+                                                <span class={`label label-sm ${metric.badgeClass || ""}`}>{metric.badgeLabel}</span>
+                                            {/if}
                                         </div>
+                                        <span class="txt-xs txt-hint reports-kpi-title">{metric.label}</span>
                                         <div class="reports-kpi-value">{metric.value}</div>
-                                        <div class="txt-sm txt-hint reports-kpi-hint">{metric.hint}</div>
+                                        <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">{metric.hint}</p>
+                                        {#if metric.meta}
+                                            <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{metric.meta}</p>
+                                        {/if}
                                     </article>
                                 {/each}
                             </div>
                         </section>
 
-                        <div class="reports-grid-two">
-                            <article class="panel">
-                                <div class="section-head m-b-sm">
+                        <div class="reports-grid-two reports-overview-pulse-grid">
+                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
+                                <div class="section-head report-section-head m-b-sm">
                                     <h5 class="m-0">Lead and booking activity</h5>
                                     <p class="txt-sm txt-hint m-b-0">Pipeline movement in this period.</p>
                                 </div>
-                                <div class="reports-mini-stack">
-                                    <div class="reports-mini-row"><span>Contact form leads</span><strong>{leadsSummary.contactCount}</strong></div>
-                                    <div class="reports-mini-row"><span>WhatsApp leads</span><strong>{leadsSummary.whatsappCount}</strong></div>
-                                    <div class="reports-mini-row"><span>Booking leads</span><strong>{leadsSummary.bookingCount}</strong></div>
-                                    <div class="reports-mini-row"><span>Pending booking requests</span><strong>{bookingSummary.pendingCount}</strong></div>
-                                    <div class="reports-mini-row"><span>Confirmed bookings</span><strong>{bookingSummary.confirmedCount}</strong></div>
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each overviewLeadBookingRows as metricRow (metricRow.label)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{metricRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
+                                            </div>
+                                            {#if metricRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
+                                            {/if}
+                                            {#if maxLeadBookingRow > 0}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxLeadBookingRow)}%;`} /></div>
+                                            {/if}
+                                        </div>
+                                    {/each}
                                 </div>
-                            </article>
+                            </section>
 
-                            <article class="panel">
-                                <div class="section-head m-b-sm">
+                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
+                                <div class="section-head report-section-head m-b-sm">
                                     <h5 class="m-0">Newsletter and SEO status</h5>
                                     <p class="txt-sm txt-hint m-b-0">Audience growth and visibility health.</p>
                                 </div>
-                                <div class="reports-mini-stack">
-                                    <div class="reports-mini-row"><span>Active subscribers</span><strong>{newsletterSummary.activeSubscribers}</strong></div>
-                                    <div class="reports-mini-row"><span>New subscribers</span><strong>{newsletterSummary.newSubscribersPeriod}</strong></div>
-                                    <div class="reports-mini-row"><span>Campaigns sent</span><strong>{newsletterSummary.sentCampaignsPeriod}</strong></div>
-                                    <div class="reports-mini-row"><span>Pages needing SEO attention</span><strong>{seoSummary.needsAttention}</strong></div>
-                                    <div class="reports-mini-row"><span>Pages missing SEO basics</span><strong>{seoSummary.missingBasics}</strong></div>
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each overviewNewsletterSeoRows as metricRow (metricRow.label)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{metricRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
+                                            </div>
+                                            {#if metricRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
+                                            {/if}
+                                            {#if maxNewsletterSeoRow > 0}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxNewsletterSeoRow)}%;`} /></div>
+                                            {/if}
+                                        </div>
+                                    {/each}
                                 </div>
-                            </article>
+                            </section>
                         </div>
 
                         {#if trafficState === "ok"}
-                            <section class="panel">
-                                <div class="section-head m-b-sm">
-                                    <h5 class="m-0">Traffic highlights</h5>
-                                    <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
+                            <section class="panel reports-breakdown-card reports-section-shell reports-overview-traffic-card">
+                                <div class="section-head report-section-head report-section-head--with-meta m-b-sm">
+                                    <div class="report-section-main">
+                                        <h5 class="m-0">Traffic analytics pulse</h5>
+                                        <p class="txt-sm txt-hint m-b-0">{trafficOverviewMessage || (trafficPeriod?.label || selectedPeriodLabel)}</p>
+                                    </div>
+                                    <span class={`label label-sm ${resolveMetricStatePillClass(trafficOverviewStatus)}`}>{trafficOverviewStatusLabel}</span>
                                 </div>
-                                <div class="reports-mini-stack">
-                                    <div class="reports-mini-row"><span>Visitors</span><strong>{formatMetricNumber(trafficSummary?.visitors)}</strong></div>
-                                    <div class="reports-mini-row"><span>Pageviews</span><strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong></div>
-                                    <div class="reports-mini-row"><span>Bounce rate</span><strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong></div>
-                                    <div class="reports-mini-row"><span>Visit duration</span><strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong></div>
-                                    <div class="reports-mini-row reports-mini-row--wrap">
-                                        <span>Top page</span>
-                                        <span class="txt-sm txt-hint">
-                                            {#if topTrafficPage}
-                                                {topTrafficPage.page || "/"} - {formatMetricNumber(topTrafficPage.visitors)} visitors
-                                            {:else}
-                                                No page data available.
-                                            {/if}
-                                        </span>
-                                    </div>
-                                    <div class="reports-mini-row reports-mini-row--wrap">
-                                        <span>Top source</span>
-                                        <span class="txt-sm txt-hint">
-                                            {#if topTrafficSource}
-                                                {topTrafficSource.source || "Direct"} - {formatMetricNumber(topTrafficSource.visitors)} visitors
-                                            {:else}
-                                                No source data available.
-                                            {/if}
-                                        </span>
-                                    </div>
-                                    <div class="reports-mini-row reports-mini-row--wrap">
-                                        <span>Top device</span>
-                                        <span class="txt-sm txt-hint">
-                                            {#if topTrafficDevice}
-                                                {topTrafficDevice.device || "Unknown"} - {formatMetricNumber(topTrafficDevice.visitors)} visitors
-                                            {:else}
-                                                No device data available.
-                                            {/if}
-                                        </span>
-                                    </div>
+                                <div class="report-metric-grid reports-overview-traffic-metrics">
+                                    <div class="report-metric-row"><span>Visitors</span><strong>{formatMetricNumber(trafficSummary?.visitors)}</strong></div>
+                                    <div class="report-metric-row"><span>Pageviews</span><strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong></div>
+                                    <div class="report-metric-row"><span>Bounce rate</span><strong>{formatBounceRate(trafficSummary?.bounceRate)}</strong></div>
+                                    <div class="report-metric-row"><span>Visit duration</span><strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong></div>
                                 </div>
+                                {#if overviewTrafficHighlightRows.length}
+                                    <div class="reports-list reports-overview-traffic-highlights">
+                                        {#each overviewTrafficHighlightRows as highlightRow (highlightRow.label)}
+                                            <div class="reports-list-item reports-overview-traffic-highlight">
+                                                <div class="reports-list-main">
+                                                    <span class="txt-xs txt-hint">{highlightRow.label}</span>
+                                                    <span class="reports-list-title">{highlightRow.value}</span>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {/if}
                             </section>
                         {:else}
-                            <section class="panel">
-                                <div class="section-head m-b-sm">
-                                    <h5 class="m-0">Traffic analytics</h5>
-                                    <p class="txt-sm txt-hint m-b-0">Traffic analytics are not connected yet.</p>
+                            <section class="panel reports-breakdown-card reports-section-shell reports-overview-traffic-card reports-overview-traffic-card--disabled">
+                                <div class="section-head report-section-head report-section-head--with-meta m-b-sm">
+                                    <div class="report-section-main">
+                                        <h5 class="m-0">Traffic analytics</h5>
+                                        <p class="txt-sm txt-hint m-b-0">Traffic analytics are not connected yet.</p>
+                                    </div>
+                                    <span class={`label label-sm ${resolveMetricStatePillClass(trafficDisplayState)}`}>{resolveMetricStateLabel(trafficDisplayState)}</span>
                                 </div>
-                                <div class="empty-state m-b-0">
+                                <div class="report-empty-state reports-overview-traffic-empty">
                                     {resolveTrafficStateMessage(trafficDisplayState, { isAdminViewer: canConfigureTrafficAnalytics })}
                                 </div>
+                                {#if canConfigureTrafficAnalytics}
+                                    <p class="txt-xs txt-hint m-b-0">Admins can configure analytics from the Traffic tab setup card.</p>
+                                {/if}
                             </section>
                         {/if}
                     </div>
 
                     <aside class="reports-overview-rail">
-                        <section class="panel report-health-panel reports-rail-card reports-rail-card--attention">
+                        <section class="panel report-health-panel reports-rail-card reports-rail-card--attention reports-section-shell">
                             <div class="report-health-head">
                                 <div class="report-health-main">
                                     <h5 class="m-0">Attention needed now</h5>
@@ -2637,7 +3303,7 @@
                             </div>
                             {#if overviewAttentionItems.length}
                                 {#each overviewAttentionItems as attentionItem (attentionItem.id)}
-                                    <div class={`report-health-item reports-rail-item ${attentionItem.severity === "high" ? "warning" : ""}`}>
+                                    <div class={`report-health-item reports-rail-item reports-insight-card ${attentionItem.severity === "high" ? "warning" : ""}`}>
                                         <div class="report-health-item-headline">
                                             <span class={`label label-sm report-health-pill ${resolveInsightSeverityPillClass(attentionItem.severity)}`}>
                                                 {resolveInsightSeverityLabel(attentionItem.severity)}
@@ -2660,14 +3326,14 @@
                             {/if}
                         </section>
 
-                        <section class="panel report-health-panel reports-rail-card reports-rail-card--actions">
-                            <div class="section-head m-b-sm">
+                        <section class="panel report-health-panel reports-rail-card reports-rail-card--actions reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">Recommended next actions</h5>
                                 <p class="txt-sm txt-hint m-b-0">Suggested business actions based on current report signals.</p>
                             </div>
                             {#if overviewNextActions.length}
                                 {#each overviewNextActions as nextAction (nextAction.id)}
-                                    <div class="report-health-item reports-rail-item">
+                                    <div class="report-health-item reports-rail-item reports-action-card">
                                         <div class="report-health-item-headline">
                                             <span class="label label-sm report-health-pill">Next</span>
                                             {#if nextAction.source === "insight"}
@@ -2685,14 +3351,14 @@
                             {/if}
                         </section>
 
-                        <section class="panel report-sources-panel reports-rail-card reports-rail-card--confidence">
-                            <div class="section-head m-b-sm">
+                        <section class="panel report-sources-panel reports-rail-card reports-rail-card--confidence reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">Data confidence</h5>
                                 <p class="txt-sm txt-hint m-b-0">Data source coverage and analytics connection status.</p>
                             </div>
                             <div class="reports-mini-stack reports-confidence-list">
                                 {#each overviewDataConfidenceRows as sourceRow}
-                                    <div class="report-health-item reports-rail-item reports-rail-item--confidence">
+                                    <div class="report-health-item reports-rail-item reports-rail-item--confidence reports-confidence-row">
                                         <div class="report-health-item-headline">
                                             <span class="reports-mini-row-label">{sourceRow.label}</span>
                                             <span
@@ -2718,17 +3384,29 @@
                 </div>
             {:else if activeTab === "leads"}
                 <div class="reports-traffic-layout">
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-overview-section reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Leads summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
+                            <p class="txt-sm txt-hint m-b-0">Lead performance and follow-up status for {selectedPeriodLabel.toLowerCase()}.</p>
                         </div>
-                        <div class="report-metric-grid">
-                            {#each leadsSummaryMetricRows as metricRow (metricRow.label)}
-                                <div class="report-metric-row">
-                                    <span>{metricRow.label}</span>
-                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
-                                </div>
+                        <div class="reports-kpi-grid reports-kpi-grid--hero reports-tab-kpi-grid">
+                            {#each leadsHeroCards as metric (metric.key)}
+                                <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                    <div class="reports-kpi-top">
+                                        <span class="reports-kpi-icon" aria-hidden="true">
+                                            <i class={metric.icon} />
+                                        </span>
+                                        {#if metric.badgeLabel}
+                                            <span class={`label label-sm ${metric.badgeClass || ""}`}>{metric.badgeLabel}</span>
+                                        {/if}
+                                    </div>
+                                    <span class="txt-xs txt-hint reports-kpi-title">{metric.label}</span>
+                                    <div class="reports-kpi-value">{metric.value}</div>
+                                    <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">{metric.hint}</p>
+                                    {#if metric.meta}
+                                        <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{metric.meta}</p>
+                                    {/if}
+                                </article>
                             {/each}
                         </div>
                         {#if !leadsHasRecords}
@@ -2736,16 +3414,16 @@
                         {/if}
                     </section>
 
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Lead sources</h5>
                             <p class="txt-sm txt-hint m-b-0">Contact form, WhatsApp, and booking channels.</p>
                         </div>
                         {#if leadSourcesHasData}
                             {@const maxLeadSources = resolveTrafficMaxCount(leadSourceBreakdownRows)}
-                            <div class="report-bar-list">
+                            <div class="report-bar-list reports-pulse-list">
                                 {#each leadSourceBreakdownRows as sourceRow}
-                                    <div class="report-bar-item">
+                                    <div class="report-bar-item reports-pulse-item">
                                         <div class="report-bar-head">
                                             <span class="report-bar-label">{sourceRow.label}</span>
                                             <strong class="report-bar-value">{formatMetricNumber(sourceRow.count)}</strong>
@@ -2762,13 +3440,13 @@
                         {/if}
                     </section>
 
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Follow-up needed</h5>
                             <p class="txt-sm txt-hint m-b-0">New leads and the latest lead activity.</p>
                         </div>
-                        <div class="reports-grid-two">
-                            <article class="report-breakdown-item">
+                        <div class="reports-grid-two reports-operational-grid">
+                            <article class="report-breakdown-item reports-operational-card">
                                 <div class="report-breakdown-head">
                                     <h6 class="m-0 report-breakdown-title">Lead status</h6>
                                     <span class={`label label-sm ${leadsSummary.newCount > 0 ? "label-warning" : "label-success"}`}>
@@ -2776,6 +3454,10 @@
                                     </span>
                                 </div>
                                 <div class="report-metric-grid report-metric-grid--compact">
+                                    <div class="report-metric-row">
+                                        <span>Total leads</span>
+                                        <strong>{formatMetricNumber(leadsSummary.total)}</strong>
+                                    </div>
                                     <div class="report-metric-row">
                                         <span>New leads</span>
                                         <strong>{formatMetricNumber(leadsSummary.newCount)}</strong>
@@ -2800,20 +3482,23 @@
                                 {/if}
                             </article>
 
-                            <article class="report-breakdown-item">
+                            <article class="report-breakdown-item reports-operational-card">
                                 <h6 class="m-0 report-breakdown-title">Recent leads</h6>
                                 {#if !sortedRecentLeads.length}
                                     <div class="report-empty-state">No leads recorded for this period.</div>
                                 {:else}
-                                    <div class="reports-list">
+                                    <div class="reports-list reports-operational-list">
                                         {#each sortedRecentLeads as lead (lead.key)}
-                                            <div class="reports-list-item">
-                                                <div class="reports-list-main">
+                                            <div class="reports-list-item reports-operational-row">
+                                                <div class="reports-list-main reports-operational-main">
                                                     <div class="reports-list-title">{lead.name}</div>
-                                                    <div class="txt-sm txt-hint">
-                                                        {resolveLeadSourceLabel(lead.sourceKey)} - {resolveLeadStatusLabel(lead.statusKey)}
+                                                    <div class="reports-operational-chip-row">
+                                                        <span class="label label-sm">{resolveLeadSourceLabel(lead.sourceKey)}</span>
+                                                        <span class={`label label-sm ${resolveLeadStatusPillClass(lead.statusKey)}`}>
+                                                            {resolveLeadStatusLabel(lead.statusKey)}
+                                                        </span>
                                                         {#if lead.email || lead.phone}
-                                                            - {lead.email || lead.phone}
+                                                            <span class="txt-xs txt-hint">{lead.email || lead.phone}</span>
                                                         {/if}
                                                     </div>
                                                     {#if lead.subject || lead.message}
@@ -2822,7 +3507,7 @@
                                                         </div>
                                                     {/if}
                                                 </div>
-                                                <div class="txt-xs txt-hint reports-list-meta">{formatDateTime(lead.created)}</div>
+                                                <div class="txt-xs txt-hint reports-list-meta reports-operational-time">{formatDateTime(lead.created)}</div>
                                             </div>
                                         {/each}
                                     </div>
@@ -2833,17 +3518,29 @@
                 </div>
             {:else if activeTab === "booking"}
                 <div class="reports-traffic-layout">
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-overview-section reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Booking summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
+                            <p class="txt-sm txt-hint m-b-0">Booking requests and appointment pipeline for {selectedPeriodLabel.toLowerCase()}.</p>
                         </div>
-                        <div class="report-metric-grid">
-                            {#each bookingSummaryMetricRows as metricRow (metricRow.label)}
-                                <div class="report-metric-row">
-                                    <span>{metricRow.label}</span>
-                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
-                                </div>
+                        <div class="reports-kpi-grid reports-kpi-grid--hero reports-tab-kpi-grid">
+                            {#each bookingHeroCards as metric (metric.key)}
+                                <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                    <div class="reports-kpi-top">
+                                        <span class="reports-kpi-icon" aria-hidden="true">
+                                            <i class={metric.icon} />
+                                        </span>
+                                        {#if metric.badgeLabel}
+                                            <span class={`label label-sm ${metric.badgeClass || ""}`}>{metric.badgeLabel}</span>
+                                        {/if}
+                                    </div>
+                                    <span class="txt-xs txt-hint reports-kpi-title">{metric.label}</span>
+                                    <div class="reports-kpi-value">{metric.value}</div>
+                                    <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">{metric.hint}</p>
+                                    {#if metric.meta}
+                                        <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{metric.meta}</p>
+                                    {/if}
+                                </article>
                             {/each}
                         </div>
                         {#if !bookingHasRequests}
@@ -2851,19 +3548,19 @@
                         {/if}
                     </section>
 
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Status and service demand</h5>
                             <p class="txt-sm txt-hint m-b-0">Booking statuses and most requested services.</p>
                         </div>
                         <div class="reports-grid-two">
-                            <article class="report-breakdown-item">
+                            <article class="report-breakdown-item reports-operational-card">
                                 <h6 class="m-0 report-breakdown-title">Booking status</h6>
                                 {#if bookingStatusHasData}
                                     {@const maxBookingStatus = resolveTrafficMaxCount(bookingStatusBreakdownRows)}
-                                    <div class="report-bar-list">
+                                    <div class="report-bar-list reports-pulse-list">
                                         {#each bookingStatusBreakdownRows as statusRow}
-                                            <div class="report-bar-item">
+                                            <div class="report-bar-item reports-pulse-item">
                                                 <div class="report-bar-head">
                                                     <span class="report-bar-label">{statusRow.label}</span>
                                                     <strong class="report-bar-value">{formatMetricNumber(statusRow.count)}</strong>
@@ -2880,13 +3577,13 @@
                                 {/if}
                             </article>
 
-                            <article class="report-breakdown-item">
+                            <article class="report-breakdown-item reports-operational-card">
                                 <h6 class="m-0 report-breakdown-title">Top services</h6>
                                 {#if bookingServicesHasData}
                                     {@const maxBookingServices = resolveTrafficMaxCount(bookingServiceBreakdownRows)}
-                                    <div class="report-bar-list">
+                                    <div class="report-bar-list reports-pulse-list">
                                         {#each bookingServiceBreakdownRows as serviceRow}
-                                            <div class="report-bar-item">
+                                            <div class="report-bar-item reports-pulse-item">
                                                 <div class="report-bar-head">
                                                     <span class="report-bar-label">{truncate(serviceRow.label, 56)}</span>
                                                     <strong class="report-bar-value">{formatMetricNumber(serviceRow.count)}</strong>
@@ -2905,13 +3602,13 @@
                         </div>
                     </section>
 
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Operational attention</h5>
                             <p class="txt-sm txt-hint m-b-0">Pending booking requests and upcoming appointments.</p>
                         </div>
-                        <div class="reports-grid-two">
-                            <article class="report-breakdown-item">
+                        <div class="reports-grid-two reports-operational-grid">
+                            <article class="report-breakdown-item reports-operational-card">
                                 <div class="report-breakdown-head">
                                     <h6 class="m-0 report-breakdown-title">Pending bookings</h6>
                                     <span class={`label label-sm ${bookingSummary.pendingCount > 0 ? "label-warning" : "label-success"}`}>
@@ -2920,12 +3617,20 @@
                                 </div>
                                 <div class="report-metric-grid report-metric-grid--compact">
                                     <div class="report-metric-row">
+                                        <span>Total requests</span>
+                                        <strong>{formatMetricNumber(bookingSummary.total)}</strong>
+                                    </div>
+                                    <div class="report-metric-row">
                                         <span>Pending requests</span>
                                         <strong>{formatMetricNumber(bookingSummary.pendingCount)}</strong>
                                     </div>
                                     <div class="report-metric-row">
                                         <span>Upcoming appointments</span>
                                         <strong>{formatMetricNumber(bookingSummary.upcomingCount)}</strong>
+                                    </div>
+                                    <div class="report-metric-row">
+                                        <span>Confirmed bookings</span>
+                                        <strong>{formatMetricNumber(bookingSummary.confirmedCount)}</strong>
                                     </div>
                                 </div>
                                 {#if bookingSummary.pendingCount > 0}
@@ -2939,24 +3644,27 @@
                                 {/if}
                             </article>
 
-                            <article class="report-breakdown-item">
+                            <article class="report-breakdown-item reports-operational-card">
                                 <h6 class="m-0 report-breakdown-title">Upcoming appointments</h6>
                                 {#if !upcomingAppointments.length}
                                     <div class="report-empty-state">No upcoming appointments right now.</div>
                                 {:else}
-                                    <div class="reports-list">
+                                    <div class="reports-list reports-operational-list">
                                         {#each upcomingAppointments as appointment (appointment.id)}
-                                            <div class="reports-list-item">
-                                                <div class="reports-list-main">
+                                            <div class="reports-list-item reports-operational-row">
+                                                <div class="reports-list-main reports-operational-main">
                                                     <div class="reports-list-title">{appointment.name}</div>
-                                                    <div class="txt-sm txt-hint">
-                                                        {appointment.serviceLabel} - {resolveAppointmentStatusLabel(appointment.statusKey)}
+                                                    <div class="reports-operational-chip-row">
+                                                        <span class="label label-sm">{appointment.serviceLabel}</span>
+                                                        <span class={`label label-sm ${resolveAppointmentStatusPillClass(appointment.statusKey)}`}>
+                                                            {resolveAppointmentStatusLabel(appointment.statusKey)}
+                                                        </span>
                                                         {#if appointment.email || appointment.phone}
-                                                            - {appointment.email || appointment.phone}
+                                                            <span class="txt-xs txt-hint">{appointment.email || appointment.phone}</span>
                                                         {/if}
                                                     </div>
                                                 </div>
-                                                <div class="txt-xs txt-hint reports-list-meta">{formatAppointmentDateTime(appointment.date, appointment.time)}</div>
+                                                <div class="txt-xs txt-hint reports-list-meta reports-operational-time">{formatAppointmentDateTime(appointment.date, appointment.time)}</div>
                                             </div>
                                         {/each}
                                     </div>
@@ -2967,52 +3675,48 @@
                 </div>
             {:else if activeTab === "newsletter"}
                 <div class="reports-traffic-layout">
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
-                            <h5 class="m-0">Audience summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">{selectedPeriodLabel}</p>
+                    <section class="panel reports-overview-section reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
+                            <h5 class="m-0">Audience and campaign summary</h5>
+                            <p class="txt-sm txt-hint m-b-0">Newsletter growth and campaign output for {selectedPeriodLabel.toLowerCase()}.</p>
                         </div>
-                        <div class="report-metric-grid">
-                            {#each newsletterAudienceMetricRows as metricRow (metricRow.label)}
-                                <div class="report-metric-row">
-                                    <span>{metricRow.label}</span>
-                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
-                                </div>
+                        <div class="reports-kpi-grid reports-kpi-grid--hero reports-tab-kpi-grid">
+                            {#each newsletterHeroCards as metric (metric.key)}
+                                <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                    <div class="reports-kpi-top">
+                                        <span class="reports-kpi-icon" aria-hidden="true">
+                                            <i class={metric.icon} />
+                                        </span>
+                                        {#if metric.badgeLabel}
+                                            <span class={`label label-sm ${metric.badgeClass || ""}`}>{metric.badgeLabel}</span>
+                                        {/if}
+                                    </div>
+                                    <span class="txt-xs txt-hint reports-kpi-title">{metric.label}</span>
+                                    <div class="reports-kpi-value">{metric.value}</div>
+                                    <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">{metric.hint}</p>
+                                    {#if metric.meta}
+                                        <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{metric.meta}</p>
+                                    {/if}
+                                </article>
                             {/each}
                         </div>
-                        {#if !newsletterHasSubscribers}
+                        {#if !newsletterHasSubscribers && !newsletterHasAnyCampaigns}
                             <div class="report-empty-state">No newsletter subscribers recorded for this period.</div>
                         {/if}
                     </section>
 
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Campaign output</h5>
                             <p class="txt-sm txt-hint m-b-0">Submission activity and provider-accepted recipients for this period.</p>
                         </div>
                         <div class="reports-grid-two">
-                            <article class="report-breakdown-item">
-                                <h6 class="m-0 report-breakdown-title">Campaign metrics</h6>
-                                <div class="report-metric-grid report-metric-grid--compact">
-                                    {#each newsletterCampaignMetricRows as metricRow (metricRow.label)}
-                                        <div class="report-metric-row">
-                                            <span>{metricRow.label}</span>
-                                            <strong>{formatMetricNumber(metricRow.count)}</strong>
-                                        </div>
-                                    {/each}
-                                </div>
-                                {#if !newsletterHasCampaignOutput}
-                                    <div class="report-empty-state">No campaigns submitted for this period.</div>
-                                {/if}
-                            </article>
-
-                            <article class="report-breakdown-item">
-                                <h6 class="m-0 report-breakdown-title">Campaign status mix</h6>
-                                {#if newsletterCampaignStatusHasData}
-                                    {@const maxNewsletterStatus = resolveTrafficMaxCount(newsletterCampaignStatusRows)}
-                                    <div class="report-bar-list">
-                                        {#each newsletterCampaignStatusRows as statusRow}
-                                            <div class="report-bar-item">
+                            <article class="report-breakdown-item reports-operational-card">
+                                <h6 class="m-0 report-breakdown-title">Subscriber status</h6>
+                                {#if newsletterSubscriberStatusHasData}
+                                    <div class="report-bar-list reports-pulse-list">
+                                        {#each newsletterSubscriberStatusRows as statusRow}
+                                            <div class="report-bar-item reports-pulse-item">
                                                 <div class="report-bar-head">
                                                     <span class="report-bar-label">{statusRow.label}</span>
                                                     <strong class="report-bar-value">{formatMetricNumber(statusRow.count)}</strong>
@@ -3020,10 +3724,34 @@
                                                 {#if statusRow.meta}
                                                     <div class="txt-xs txt-hint report-bar-meta">{statusRow.meta}</div>
                                                 {/if}
-                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(statusRow.count, maxNewsletterStatus)}%;`} /></div>
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(statusRow.count, maxNewsletterSubscriberStatus)}%;`} /></div>
                                             </div>
                                         {/each}
                                     </div>
+                                {:else}
+                                    <div class="report-empty-state">No newsletter subscribers recorded for this period.</div>
+                                {/if}
+                            </article>
+
+                            <article class="report-breakdown-item reports-operational-card">
+                                <h6 class="m-0 report-breakdown-title">Campaign status mix</h6>
+                                {#if newsletterCampaignStatusHasData}
+                                    <div class="report-bar-list reports-pulse-list">
+                                        {#each newsletterCampaignStatusRows as statusRow}
+                                            <div class="report-bar-item reports-pulse-item">
+                                                <div class="report-bar-head">
+                                                    <span class="report-bar-label">{statusRow.label}</span>
+                                                    <strong class="report-bar-value">{formatMetricNumber(statusRow.count)}</strong>
+                                                </div>
+                                                {#if statusRow.meta}
+                                                    <div class="txt-xs txt-hint report-bar-meta">{statusRow.meta}</div>
+                                                {/if}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(statusRow.count, maxNewsletterCampaignStatus)}%;`} /></div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else if newsletterHasAnyCampaigns}
+                                    <div class="report-empty-state">No campaign output in this period.</div>
                                 {:else}
                                     <div class="report-empty-state">No campaigns submitted for this period.</div>
                                 {/if}
@@ -3031,58 +3759,71 @@
                         </div>
                     </section>
 
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Operational attention</h5>
                             <p class="txt-sm txt-hint m-b-0">Pending confirmations and recent campaign activity.</p>
                         </div>
-                        <div class="reports-grid-two">
-                            <article class="report-breakdown-item">
+                        <div class="reports-grid-two reports-operational-grid">
+                            <article class="report-breakdown-item reports-operational-card">
                                 <div class="report-breakdown-head">
-                                    <h6 class="m-0 report-breakdown-title">Pending confirmations</h6>
+                                    <h6 class="m-0 report-breakdown-title">Newsletter insights</h6>
                                     <span class={`label label-sm ${pendingSubscribersCount > 0 ? "label-warning" : "label-success"}`}>
-                                        {pendingSubscribersCount > 0 ? "Action needed" : "On track"}
+                                        {pendingSubscribersCount > 0 ? "Needs follow-up" : "Stable"}
                                     </span>
                                 </div>
-                                <div class="report-metric-grid report-metric-grid--compact">
-                                    <div class="report-metric-row">
-                                        <span>Pending confirmations</span>
-                                        <strong>{formatMetricNumber(pendingSubscribersCount)}</strong>
+                                {#if newsletterOperationalInsights.length}
+                                    <div class="reports-mini-stack">
+                                        {#each newsletterOperationalInsights as insightRow (insightRow.id)}
+                                            <div class={`report-health-item reports-rail-item reports-insight-card ${insightRow.severity === "warning" ? "warning" : ""}`}>
+                                                <div class="report-health-item-headline">
+                                                    <span class={`label label-sm report-health-pill ${
+                                                        insightRow.severity === "warning"
+                                                            ? "label-warning"
+                                                            : insightRow.severity === "success"
+                                                                ? "label-success"
+                                                                : ""
+                                                    }`}
+                                                    >
+                                                        {insightRow.severity === "warning"
+                                                            ? "Attention"
+                                                            : insightRow.severity === "success"
+                                                                ? "Healthy"
+                                                                : "Info"}
+                                                    </span>
+                                                </div>
+                                                <div class="report-health-item-body">
+                                                    <span class="report-health-item-title">{insightRow.title}</span>
+                                                    <span class="txt-xs txt-hint reports-rail-evidence">{insightRow.detail}</span>
+                                                </div>
+                                            </div>
+                                        {/each}
                                     </div>
-                                    <div class="report-metric-row">
-                                        <span>Campaigns submitted</span>
-                                        <strong>{formatMetricNumber(newsletterSummary.sentCampaignsPeriod)}</strong>
-                                    </div>
-                                </div>
-                                {#if pendingSubscribersCount > 0}
-                                    <p class="txt-xs txt-hint m-b-0">
-                                        {formatMetricNumber(pendingSubscribersCount)} subscriber confirmation{pendingSubscribersCount === 1 ? "" : "s"} still pending.
-                                    </p>
-                                {:else if newsletterHasSubscribers}
-                                    <p class="txt-xs txt-hint m-b-0">No pending confirmations right now.</p>
                                 {:else}
-                                    <div class="report-empty-state">No newsletter subscribers recorded for this period.</div>
-                                {/if}
-
-                                {#if newsletterSummary.sentCampaignsPeriod < 1}
-                                    <div class="report-empty-state">No campaigns submitted for this period.</div>
+                                    <div class="report-empty-state">No newsletter operations insights for this period.</div>
                                 {/if}
                             </article>
 
-                            <article class="report-breakdown-item">
-                                <h6 class="m-0 report-breakdown-title">Recent submitted campaigns</h6>
-                                {#if !recentSentCampaigns.length}
+                            <article class="report-breakdown-item reports-operational-card">
+                                <h6 class="m-0 report-breakdown-title">Recent campaigns</h6>
+                                {#if !recentNewsletterCampaigns.length}
                                     <div class="report-empty-state">No campaigns submitted for this period.</div>
                                 {:else}
-                                    <div class="reports-list">
-                                        {#each recentSentCampaigns as campaign}
-                                            <div class="reports-list-item">
-                                                <div class="reports-list-main">
+                                    <div class="reports-list reports-operational-list">
+                                        {#each recentNewsletterCampaigns as campaign (campaign.id)}
+                                            <div class="reports-list-item reports-operational-row">
+                                                <div class="reports-list-main reports-operational-main">
                                                     <div class="reports-list-title">{truncate(campaign.subject, 80)}</div>
-                                                    <div class="txt-sm txt-hint">
-                                                        {formatMetricNumber(campaign.recipientsCount)} recipients submitted - {formatDateTime(campaign.sentTs || campaign.updatedTs || campaign.createdTs)}
+                                                    <div class="reports-operational-chip-row">
+                                                        <span class={`label label-sm ${resolveCampaignStatusPillClass(campaign.statusKey)}`}>
+                                                            {resolveCampaignStatusLabel(campaign.statusKey)}
+                                                        </span>
+                                                        {#if Number(campaign.recipientsCount || 0) > 0}
+                                                            <span class="txt-xs txt-hint">{formatMetricNumber(campaign.recipientsCount)} recipients submitted</span>
+                                                        {/if}
                                                     </div>
                                                 </div>
+                                                <div class="txt-xs txt-hint reports-list-meta reports-operational-time">{formatDateTime(campaign.sentTs || campaign.updatedTs || campaign.createdTs)}</div>
                                             </div>
                                         {/each}
                                     </div>
@@ -3093,49 +3834,111 @@
                 </div>
             {:else if activeTab === "seo"}
                 <div class="reports-traffic-layout">
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-overview-section reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">SEO summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">Search visibility basics across this website.</p>
+                            <p class="txt-sm txt-hint m-b-0">Search visibility health across this website.</p>
                         </div>
-                        <div class="report-metric-grid">
-                            {#each seoSummaryMetricRows as metricRow (metricRow.label)}
-                                <div class="report-metric-row">
-                                    <span>{metricRow.label}</span>
-                                    <strong>{formatMetricNumber(metricRow.count)}</strong>
-                                </div>
+                        <div class="reports-kpi-grid reports-kpi-grid--hero reports-tab-kpi-grid">
+                            {#each seoHeroCards as metric (metric.key)}
+                                <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                    <div class="reports-kpi-top">
+                                        <span class="reports-kpi-icon" aria-hidden="true">
+                                            <i class={metric.icon} />
+                                        </span>
+                                        {#if metric.badgeLabel}
+                                            <span class={`label label-sm ${metric.badgeClass || ""}`}>{metric.badgeLabel}</span>
+                                        {/if}
+                                    </div>
+                                    <span class="txt-xs txt-hint reports-kpi-title">{metric.label}</span>
+                                    <div class="reports-kpi-value">{metric.value}</div>
+                                    <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">{metric.hint}</p>
+                                    {#if metric.meta}
+                                        <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{metric.meta}</p>
+                                    {/if}
+                                </article>
                             {/each}
                         </div>
-                    </section>
-
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
-                            <h5 class="m-0">Quick SEO fixes</h5>
-                            <p class="txt-sm txt-hint m-b-0">Most common page issues affecting search visibility basics.</p>
-                        </div>
-                        {#if seoIssueBreakdownHasData}
-                            {@const maxSeoIssueCount = resolveTrafficMaxCount(seoIssueBreakdownRows)}
-                            <div class="report-bar-list">
-                                {#each seoIssueBreakdownRows as issueRow}
-                                    <div class="report-bar-item">
-                                        <div class="report-bar-head">
-                                            <span class="report-bar-label">{issueRow.label}</span>
-                                            <strong class="report-bar-value">{formatMetricNumber(issueRow.count)}</strong>
-                                        </div>
-                                        {#if issueRow.meta}
-                                            <div class="txt-xs txt-hint report-bar-meta">{issueRow.meta}</div>
-                                        {/if}
-                                        <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(issueRow.count, maxSeoIssueCount)}%;`} /></div>
-                                    </div>
-                                {/each}
-                            </div>
-                        {:else}
-                            <div class="report-empty-state">No SEO issues detected for this website.</div>
+                        {#if seoSummary.totalPages < 1}
+                            <div class="report-empty-state">No pages available for SEO analysis yet.</div>
                         {/if}
                     </section>
 
-                    <section class="panel reports-breakdown-card">
-                        <div class="section-head m-b-sm">
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
+                            <h5 class="m-0">Quick SEO fixes</h5>
+                            <p class="txt-sm txt-hint m-b-0">Most common page issues affecting search visibility basics.</p>
+                        </div>
+                        <div class="reports-grid-two reports-operational-grid">
+                            <article class="report-breakdown-item reports-operational-card">
+                                <h6 class="m-0 report-breakdown-title">Issue distribution</h6>
+                                {#if seoIssueBreakdownHasData}
+                                    <div class="report-bar-list reports-pulse-list">
+                                        {#each seoIssueAuditRows as issueRow}
+                                            <div class="report-bar-item reports-pulse-item">
+                                                <div class="report-bar-head">
+                                                    <span class="report-bar-label">{issueRow.label}</span>
+                                                    <strong class="report-bar-value">{formatMetricNumber(issueRow.count)}</strong>
+                                                </div>
+                                                <div class="reports-operational-chip-row">
+                                                    <span class={`label label-sm ${issueRow.severityClass}`}>{issueRow.severityLabel}</span>
+                                                </div>
+                                                <div class="txt-xs txt-hint report-bar-meta">{issueRow.description}</div>
+                                                {#if issueRow.meta}
+                                                    <div class="txt-xs txt-hint report-bar-meta">{issueRow.meta}</div>
+                                                {/if}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(issueRow.count, maxSeoIssueCount)}%;`} /></div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    <div class="report-empty-state">No SEO issues detected for this website.</div>
+                                {/if}
+                            </article>
+
+                            <article class="report-breakdown-item reports-operational-card">
+                                <div class="report-breakdown-head">
+                                    <h6 class="m-0 report-breakdown-title">SEO attention</h6>
+                                    <span class={`label label-sm ${seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "label-warning" : "label-success"}`}>
+                                        {seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "Action needed" : "Healthy"}
+                                    </span>
+                                </div>
+                                {#if seoAttentionInsights.length}
+                                    <div class="reports-mini-stack">
+                                        {#each seoAttentionInsights as insightRow (insightRow.id)}
+                                            <div class={`report-health-item reports-rail-item reports-insight-card ${insightRow.severity === "warning" ? "warning" : ""}`}>
+                                                <div class="report-health-item-headline">
+                                                    <span class={`label label-sm report-health-pill ${
+                                                        insightRow.severity === "warning"
+                                                            ? "label-warning"
+                                                            : insightRow.severity === "success"
+                                                                ? "label-success"
+                                                                : ""
+                                                    }`}
+                                                    >
+                                                        {insightRow.severity === "warning"
+                                                            ? "Attention"
+                                                            : insightRow.severity === "success"
+                                                                ? "Healthy"
+                                                                : "Info"}
+                                                    </span>
+                                                </div>
+                                                <div class="report-health-item-body">
+                                                    <span class="report-health-item-title">{insightRow.title}</span>
+                                                    <span class="txt-xs txt-hint reports-rail-evidence">{insightRow.detail}</span>
+                                                </div>
+                                            </div>
+                                        {/each}
+                                    </div>
+                                {:else}
+                                    <div class="report-empty-state">No SEO insights available for this period.</div>
+                                {/if}
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Pages needing attention</h5>
                             <p class="txt-sm txt-hint m-b-0">Prioritized pages for quick SEO fixes.</p>
                         </div>
@@ -3143,12 +3946,19 @@
                         {#if !prioritizedSeoRows.length}
                             <div class="report-empty-state">No SEO issues detected for this website.</div>
                         {:else}
-                            <div class="reports-list">
+                            <div class="reports-list reports-operational-list">
                                 {#each prioritizedSeoRows as pageRow (pageRow.id)}
-                                    <div class="reports-list-item">
-                                        <div class="reports-list-main">
+                                    <div class="reports-list-item reports-operational-row">
+                                        <div class="reports-list-main reports-operational-main">
                                             <div class="reports-list-title">{pageRow.title}</div>
-                                            <div class="txt-sm txt-hint">{pageRow.reasons.join(" - ")}</div>
+                                            <div class="reports-operational-chip-row">
+                                                {#if pageRow.slug}
+                                                    <span class="txt-xs txt-hint">{pageRow.slug.startsWith("/") ? pageRow.slug : `/${pageRow.slug}`}</span>
+                                                {/if}
+                                                {#each pageRow.reasons as reason}
+                                                    <span class={`label label-sm ${resolveSeoReasonPillClass(reason)}`}>{reason}</span>
+                                                {/each}
+                                            </div>
                                         </div>
                                         <span class={`label label-sm ${pageRow.healthKey === "missing-basics" ? "label-danger" : "label-warning"}`}>
                                             {resolveSeoHealthLabel(pageRow.healthKey)}
@@ -3161,7 +3971,7 @@
                 </div>
             {:else if activeTab === "traffic"}
                 {#if isLoadingTraffic}
-                    <section class="panel reports-placeholder-panel">
+                    <section class="panel reports-breakdown-card reports-section-shell reports-placeholder-panel">
                         <div class="placeholder-section m-b-0">
                             <span class="loader loader-lg" />
                             <h1>Loading traffic analytics...</h1>
@@ -3169,19 +3979,67 @@
                     </section>
                 {:else if trafficState === "ok"}
                     <div class="reports-traffic-layout">
-                        <section class="panel reports-breakdown-card">
-                            <div class="section-head m-b-sm">
-                                <h5 class="m-0">Traffic overview</h5>
-                                <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
+                        <section class="panel reports-overview-section reports-section-shell">
+                            <div class="section-head report-section-head report-section-head--with-meta m-b-sm">
+                                <div class="report-section-main">
+                                    <h5 class="m-0">Traffic overview</h5>
+                                    <p class="txt-sm txt-hint m-b-0">{trafficPeriod?.label || selectedPeriodLabel}</p>
+                                </div>
+                                <span class={`label label-sm ${resolveMetricStatePillClass(trafficOverviewStatus)}`}>{trafficOverviewStatusLabel}</span>
+                            </div>
+                            <div class="reports-kpi-grid reports-kpi-grid--hero reports-tab-kpi-grid">
+                                {#each trafficHeroCards as metric (metric.key)}
+                                    <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                        <div class="reports-kpi-top">
+                                            <span class="reports-kpi-icon" aria-hidden="true">
+                                                <i class={metric.icon} />
+                                            </span>
+                                            {#if metric.badgeLabel}
+                                                <span class={`label label-sm ${metric.badgeClass || ""}`}>{metric.badgeLabel}</span>
+                                            {/if}
+                                        </div>
+                                        <span class="txt-xs txt-hint reports-kpi-title">{metric.label}</span>
+                                        <div class="reports-kpi-value">{metric.value}</div>
+                                        <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">{metric.hint}</p>
+                                        {#if metric.meta}
+                                            <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{metric.meta}</p>
+                                        {/if}
+                                    </article>
+                                {/each}
+                            </div>
+                            {#if trafficOverviewMessage}
+                                <p class="txt-sm txt-hint m-b-0 report-traffic-state-note">
+                                    <span class={`label label-sm ${resolveMetricStatePillClass(trafficOverviewStatus)}`}>
+                                        {trafficOverviewStatusLabel}
+                                    </span>
+                                    {trafficOverviewMessage}
+                                </p>
+                            {/if}
+                            {#if trafficNoDataYet}
+                                <div class="report-empty-state">
+                                    No traffic data yet for this period. Metrics will appear after the public website receives visits.
+                                </div>
+                                <p class="txt-xs txt-hint m-b-0">{trafficNoDataMessage}</p>
+                            {/if}
+                        </section>
+
+                        <section class="panel reports-breakdown-card reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Traffic details</h5>
+                                <p class="txt-sm txt-hint m-b-0">Core metrics for this period.</p>
                             </div>
                             <div class="report-metric-grid">
                                 <div class="report-metric-row">
                                     <span>Visitors</span>
-                                    <strong>{formatMetricNumber(trafficSummary?.visitors)}</strong>
+                                    <strong>{formatMetricNumber(trafficVisitorsCount)}</strong>
+                                </div>
+                                <div class="report-metric-row">
+                                    <span>Visits</span>
+                                    <strong>{formatMetricNumber(trafficVisitsCount)}</strong>
                                 </div>
                                 <div class="report-metric-row">
                                     <span>Pageviews</span>
-                                    <strong>{formatMetricNumber(trafficSummary?.pageviews)}</strong>
+                                    <strong>{formatMetricNumber(trafficPageviewsCount)}</strong>
                                 </div>
                                 <div class="report-metric-row">
                                     <span>Bounce / interaction rate</span>
@@ -3192,18 +4050,10 @@
                                     <strong>{formatDurationSeconds(trafficSummary?.visitDurationSeconds)}</strong>
                                 </div>
                             </div>
-                            {#if trafficOverviewMessage}
-                                <p class="txt-sm txt-hint m-b-0 report-traffic-state-note">
-                                    <span class={`label label-sm ${resolveMetricStatePillClass(trafficOverviewStatus)}`}>
-                                        {trafficOverviewStatusLabel}
-                                    </span>
-                                    {trafficOverviewMessage}
-                                </p>
-                            {/if}
                         </section>
 
-                        <section class="panel reports-breakdown-card">
-                            <div class="section-head m-b-sm">
+                        <section class="panel reports-breakdown-card reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">Content performance</h5>
                                 <p class="txt-sm txt-hint m-b-0">Top, entry, and exit pages for this period.</p>
                             </div>
@@ -3279,8 +4129,8 @@
                             </div>
                         </section>
 
-                        <section class="panel reports-breakdown-card">
-                            <div class="section-head m-b-sm">
+                        <section class="panel reports-breakdown-card reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">Acquisition</h5>
                                 <p class="txt-sm txt-hint m-b-0">Sources that drove visits in this period.</p>
                             </div>
@@ -3302,8 +4152,8 @@
                             {/if}
                         </section>
 
-                        <section class="panel reports-breakdown-card">
-                            <div class="section-head m-b-sm">
+                        <section class="panel reports-breakdown-card reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">Audience and technology</h5>
                                 <p class="txt-sm txt-hint m-b-0">Visitor locations, devices, and technology details.</p>
                             </div>
@@ -3430,8 +4280,8 @@
                             </div>
                         </section>
 
-                        <section class="panel reports-breakdown-card">
-                            <div class="section-head m-b-sm">
+                        <section class="panel reports-breakdown-card reports-section-shell">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">Tracked actions and scroll depth</h5>
                                 <p class="txt-sm txt-hint m-b-0">Conversion events and engagement depth signals.</p>
                             </div>
@@ -3616,18 +4466,26 @@
                         </section>
                     </div>
                 {:else}
-                    <section class="panel reports-placeholder-panel">
-                        <div class="section-head m-b-sm">
-                            <h5 class="m-0">Traffic</h5>
-                            <p class="txt-sm txt-hint m-b-0">Analytics status for this website.</p>
+                    <section class="panel reports-breakdown-card reports-section-shell reports-placeholder-panel">
+                        <div class="section-head report-section-head report-section-head--with-meta m-b-sm">
+                            <div class="report-section-main">
+                                <h5 class="m-0">Traffic analytics</h5>
+                                <p class="txt-sm txt-hint m-b-0">Analytics status for this website.</p>
+                            </div>
+                            <span class={`label label-sm ${resolveMetricStatePillClass(trafficDisplayState)}`}>
+                                {resolveMetricStateLabel(trafficDisplayState)}
+                            </span>
                         </div>
-                        <div class="empty-state m-b-0">
+                        <div class="report-empty-state">
                             {resolveTrafficStateMessage(trafficDisplayState, { isAdminViewer: canConfigureTrafficAnalytics })}
                         </div>
+                        {#if !canConfigureTrafficAnalytics}
+                            <p class="txt-xs txt-hint m-b-0">Traffic analytics will become available once this website is configured.</p>
+                        {/if}
                     </section>
                     {#if showTrafficAnalyticsSetup}
-                        <section class="panel reports-breakdown-card reports-analytics-setup-card">
-                            <div class="section-head m-b-sm">
+                        <section class="panel reports-breakdown-card reports-section-shell reports-analytics-setup-card">
+                            <div class="section-head report-section-head m-b-sm">
                                 <h5 class="m-0">Traffic analytics setup</h5>
                                 <p class="txt-sm txt-hint m-b-0">Configure Umami website settings for this website.</p>
                             </div>
@@ -3694,13 +4552,77 @@
                     {/if}
                 {/if}
             {:else if activeTab === "history"}
-                <section class="panel reports-placeholder-panel">
-                    <div class="section-head m-b-sm">
-                        <h5 class="m-0">History</h5>
-                        <p class="txt-sm txt-hint m-b-0">Monthly snapshots are planned for a later phase.</p>
-                    </div>
-                    <div class="empty-state m-b-0">{historyPlaceholderMessage}</div>
-                </section>
+                <div class="reports-traffic-layout">
+                    <section class="panel reports-overview-section reports-section-shell">
+                        <div class="section-head report-section-head report-section-head--with-meta m-b-sm">
+                            <div class="report-section-main">
+                                <h5 class="m-0">Report archive</h5>
+                                <p class="txt-sm txt-hint m-b-0">Snapshot history and reporting continuity.</p>
+                            </div>
+                            <span class={`label label-sm ${historyArchiveStatusClass}`}>{historyArchiveStatusLabel}</span>
+                        </div>
+                        <div class="reports-kpi-grid reports-kpi-grid--hero reports-tab-kpi-grid">
+                            <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                <div class="reports-kpi-top">
+                                    <span class="reports-kpi-icon" aria-hidden="true"><i class="ri-history-line" /></span>
+                                    <span class={`label label-sm ${historyArchiveStatusClass}`}>{historyArchiveStatusLabel}</span>
+                                </div>
+                                <span class="txt-xs txt-hint reports-kpi-title">Archive status</span>
+                                <div class="reports-kpi-value">Planned</div>
+                                <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">Scheduled report snapshots are not enabled yet.</p>
+                                <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{historyPlaceholderMessage}</p>
+                            </article>
+                            <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                <div class="reports-kpi-top">
+                                    <span class="reports-kpi-icon" aria-hidden="true"><i class="ri-calendar-event-line" /></span>
+                                    <span class="label label-sm">Current</span>
+                                </div>
+                                <span class="txt-xs txt-hint reports-kpi-title">Selected period</span>
+                                <div class="reports-kpi-value">{selectedPeriodLabel}</div>
+                                <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">Current reporting window in use.</p>
+                                <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">{resolveWebsiteLabel(selectedWebsite) || "Website selected"}</p>
+                            </article>
+                            <article class="panel reports-kpi-card reports-overview-kpi-card reports-kpi-card--hero">
+                                <div class="reports-kpi-top">
+                                    <span class="reports-kpi-icon" aria-hidden="true"><i class="ri-database-2-line" /></span>
+                                    <span class={`label label-sm ${historyReadySourcesCount > 0 ? "label-success" : ""}`}>{historyReadySourcesCount > 0 ? "Ready" : "Checking"}</span>
+                                </div>
+                                <span class="txt-xs txt-hint reports-kpi-title">Data sources ready</span>
+                                <div class="reports-kpi-value">{formatMetricNumber(historyReadySourcesCount)} / {formatMetricNumber(historyTotalSourcesCount)}</div>
+                                <p class="txt-sm txt-hint m-b-0 reports-kpi-hint">Sources currently available to build future snapshots.</p>
+                                <p class="txt-xs txt-hint m-b-0 reports-kpi-meta">Traffic state: {resolveMetricStateLabel(trafficDisplayState)}</p>
+                            </article>
+                        </div>
+                        <div class="report-empty-state">{historyPlaceholderMessage}</div>
+                    </section>
+
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
+                            <h5 class="m-0">Recent reporting activity</h5>
+                            <p class="txt-sm txt-hint m-b-0">Latest data activity across report areas.</p>
+                        </div>
+                        {#if historyHasActivityRows}
+                            <div class="reports-list reports-operational-list">
+                                {#each historyActivityRows as historyRow (historyRow.id)}
+                                    <div class="reports-list-item reports-operational-row">
+                                        <div class="reports-list-main reports-operational-main">
+                                            <div class="reports-list-title">{historyRow.title}</div>
+                                            <div class="txt-sm reports-list-snippet">{historyRow.detail}</div>
+                                            <div class="reports-operational-chip-row">
+                                                <span class={`label label-sm ${historyRow.statusClass || ""}`}>{historyRow.statusLabel}</span>
+                                            </div>
+                                        </div>
+                                        <div class="txt-xs txt-hint reports-list-meta reports-operational-time">{historyRow.timestampLabel}</div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {:else}
+                            <div class="report-empty-state">
+                                No report activity has been captured yet. Activity rows will appear once website data starts updating.
+                            </div>
+                        {/if}
+                    </section>
+                </div>
             {/if}
         </section>
     {/if}
@@ -3777,7 +4699,7 @@
 
     .reports-overview-layout {
         display: grid;
-        gap: 10px;
+        gap: 12px;
         grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
         align-items: start;
     }
@@ -3787,7 +4709,7 @@
     .reports-traffic-layout,
     .report-health-panel {
         display: grid;
-        gap: 10px;
+        gap: 12px;
     }
 
     .reports-kpi-grid {
@@ -3796,37 +4718,64 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .reports-kpi-grid--hero {
+        align-items: stretch;
+    }
+
     .reports-overview-kpi-grid {
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+    }
+
+    .reports-tab-kpi-grid {
         grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
-        gap: 8px;
     }
 
     .reports-kpi-card {
         display: grid;
-        gap: 6px;
+        gap: 8px;
     }
 
     .reports-overview-kpi-card {
         border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
-        background: color-mix(in srgb, var(--baseAlt1Color) 14%, var(--baseColor));
+        background: color-mix(in srgb, var(--baseAlt1Color) 11%, var(--baseColor));
         box-shadow: none;
-        padding: 10px;
-        gap: 5px;
+        padding: 12px;
+        gap: 7px;
     }
 
-    .reports-kpi-head {
+    .reports-kpi-card--hero {
+        align-content: start;
+        min-height: 148px;
+    }
+
+    .reports-kpi-top {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
     }
 
-    .reports-kpi-label {
+    .reports-kpi-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 20%, var(--baseColor));
+        color: var(--txtPrimaryColor);
+        font-size: 15px;
+    }
+
+    .reports-kpi-title {
         font-weight: 600;
+        line-height: 1.35;
     }
 
     .reports-kpi-value {
-        font-size: 24px;
+        font-size: 28px;
         line-height: 1.1;
         font-weight: 700;
         color: var(--txtPrimaryColor);
@@ -3836,9 +4785,88 @@
         line-height: 1.35;
     }
 
+    .reports-kpi-meta {
+        line-height: 1.35;
+    }
+
     .reports-overview-section {
         display: grid;
+        gap: 10px;
+    }
+
+    .reports-section-shell {
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        box-shadow: none;
+    }
+
+    .report-section-head {
+        display: grid;
+        gap: 4px;
+    }
+
+    .report-section-head--with-meta {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .report-section-main {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .reports-overview-pulse-grid .reports-pulse-card {
+        align-content: start;
+    }
+
+    .reports-pulse-list {
         gap: 8px;
+    }
+
+    .reports-pulse-item {
+        gap: 5px;
+        padding: 8px 9px;
+        border: 1px dashed color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
+    }
+
+    .reports-overview-traffic-card {
+        gap: 10px;
+    }
+
+    .reports-overview-traffic-metrics {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .reports-overview-traffic-highlights {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .reports-overview-traffic-highlight {
+        padding: 9px 10px;
+        border-style: dashed;
+    }
+
+    .reports-overview-traffic-highlight .reports-list-main {
+        gap: 3px;
+    }
+
+    .reports-overview-traffic-highlight .reports-list-title {
+        font-size: var(--smFontSize);
+        line-height: 1.35;
+    }
+
+    .reports-overview-traffic-card--disabled {
+        background: color-mix(in srgb, var(--baseAlt1Color) 7%, var(--baseColor));
+    }
+
+    .reports-overview-traffic-empty {
+        margin-top: -2px;
     }
 
     .reports-grid-two,
@@ -3865,6 +4893,15 @@
     .reports-rail-card {
         border-color: color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
         box-shadow: none;
+    }
+
+    .reports-operational-grid {
+        align-items: stretch;
+    }
+
+    .reports-operational-card {
+        align-content: start;
+        gap: 10px;
     }
 
     .report-breakdown-item {
@@ -4055,9 +5092,33 @@
         white-space: nowrap;
     }
 
+    .reports-operational-list {
+        gap: 10px;
+    }
+
+    .reports-operational-row {
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 82%, transparent);
+        background: color-mix(in srgb, var(--baseAlt1Color) 7%, var(--baseColor));
+    }
+
+    .reports-operational-main {
+        gap: 6px;
+    }
+
+    .reports-operational-chip-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .reports-operational-time {
+        text-align: right;
+    }
+
     .reports-rail-card {
         background: color-mix(in srgb, var(--baseAlt1Color) 10%, var(--baseColor));
-        gap: 8px;
+        gap: 10px;
     }
 
     .report-health-head {
@@ -4083,14 +5144,16 @@
     .report-health-item {
         display: grid;
         gap: 8px;
-        padding: 8px 0;
-        border-top: 1px dashed var(--baseAlt2Color);
+        padding: 9px 10px;
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 86%, transparent);
+        border-radius: var(--baseRadius);
+        background: var(--baseColor);
         color: var(--txtPrimaryColor);
     }
 
     .reports-rail-item {
         gap: 6px;
-        padding: 7px 0;
+        padding: 9px 10px;
     }
 
     .report-health-item-headline {
@@ -4115,17 +5178,12 @@
     }
 
     .reports-rail-empty {
-        padding: 2px 0 1px;
-    }
-
-    .report-health-panel .report-health-item:first-of-type {
-        border-top: 0;
-        padding-top: 0;
+        padding: 2px 0;
     }
 
     .report-health-item.warning {
         border-left: 2px solid color-mix(in srgb, var(--warningColor) 55%, var(--baseAlt2Color));
-        padding-left: 8px;
+        padding-left: 9px;
     }
 
     .report-health-pill {
@@ -4134,16 +5192,26 @@
     }
 
     .reports-confidence-list {
-        gap: 0;
+        gap: 8px;
     }
 
     .reports-confidence-list .reports-rail-item {
-        border-top: 1px dashed var(--baseAlt2Color);
+        border-top: 0;
     }
 
-    .reports-confidence-list .reports-rail-item:first-of-type {
-        border-top: 0;
-        padding-top: 0;
+    .reports-insight-card,
+    .reports-action-card,
+    .reports-confidence-row {
+        border-color: color-mix(in srgb, var(--baseAlt2Color) 84%, transparent);
+        box-shadow: none;
+    }
+
+    .reports-action-card .report-health-item-title {
+        font-weight: 600;
+    }
+
+    .reports-confidence-row {
+        background: color-mix(in srgb, var(--baseAlt1Color) 8%, var(--baseColor));
     }
 
     .reports-placeholder-panel {
@@ -4204,6 +5272,11 @@
         .reports-overview-rail {
             grid-template-columns: 1fr;
         }
+
+        .reports-overview-traffic-metrics,
+        .reports-overview-traffic-highlights {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
     }
 
     @media (max-width: 980px) {
@@ -4224,7 +5297,9 @@
         .reports-grid-three,
         .reports-kpi-grid,
         .reports-overview-rail,
-        .reports-analytics-setup-grid {
+        .reports-analytics-setup-grid,
+        .reports-overview-traffic-metrics,
+        .reports-overview-traffic-highlights {
             grid-template-columns: 1fr;
         }
 
@@ -4239,6 +5314,10 @@
 
         .reports-list-meta {
             white-space: normal;
+        }
+
+        .reports-operational-time {
+            text-align: left;
         }
     }
 

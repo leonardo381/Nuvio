@@ -251,6 +251,9 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 	// Keep compatibility with direct endpoint naming used by website integrations.
 	e.Router.POST("/api/nuvio/contact/submit", contactSubmitHandler)
 	e.Router.POST("/api/nuvio/whatsapp/interactions", whatsappInteractionHandler)
+
+	// Register scoped backoffice Leads dashboard read endpoint.
+	registerNuvioLeadsDashboardRoutes(e)
 }
 
 func loadNuvioWebsiteContactFormConfig(

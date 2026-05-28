@@ -155,6 +155,14 @@
     let sectionErrorById = {};
     let isSavingSectionById = {};
     let pagePreviewReloadToken = 0;
+    let cmsDashboardCapabilities = {
+        canEditWebsiteIdentitySeo: true,
+        canEditWebsiteSettings: true,
+        canEditPageSeo: true,
+        canEditBlocks: true,
+        canEditComponents: false,
+        canUseFileFields: false,
+    };
     let pageSeoStatusById = new Map();
     let pageSeoCoverageCounts = {
         total: 0,
@@ -291,6 +299,7 @@
 
     $: selectedWebsite = websites.find((record) => record.id === selectedWebsiteId) || null;
     $: selectedPage = pages.find((record) => record.id === selectedPageId) || null;
+    $: cmsCanUseFileFields = toBooleanValue(cmsDashboardCapabilities?.canUseFileFields);
     $: sectionEditorSettingsSource = (() => {
         if (isPlainObject(websiteSettingsFullDraft) && Object.keys(websiteSettingsFullDraft).length > 0) {
             return websiteSettingsFullDraft;
@@ -382,6 +391,13 @@
         (feature) => feature.key === activeWebsiteSettingsFeatureKey,
     ) || null;
     $: activeWebsiteSettingsFeatureField = activeWebsiteSettingsFeature?.field || null;
+    $: activeWebsiteSettingsFeatureScopedField = sanitizeSchemaFieldForFileCapability(activeWebsiteSettingsFeatureField);
+    $: activeWebsiteSettingsFeatureFormFields = activeWebsiteSettingsFeatureScopedField
+        ? [activeWebsiteSettingsFeatureScopedField]
+        : [];
+    $: activeWebsiteSettingsFeatureHasDeferredFileFields = !cmsCanUseFileFields
+        && !!activeWebsiteSettingsFeatureField
+        && !activeWebsiteSettingsFeatureFormFields.length;
     $: activeWebsiteSettingsFeatureValue = activeWebsiteSettingsFeatureField
         ? buildWebsiteSettingsFeatureFormValue(activeWebsiteSettingsFeatureField.key)
         : {};
@@ -397,7 +413,10 @@
     }
 
     $: websitePublicUrl = getWebsitePublicUrl(selectedWebsite);
-    $: selectedWebsiteSlug = normalizeString(websiteSlugField ? selectedWebsite?.[websiteSlugField] : "");
+    $: selectedWebsiteSlug = normalizeString(
+        (websiteSlugField ? selectedWebsite?.[websiteSlugField] : "")
+        || selectedWebsite?.slug,
+    );
     $: selectedPageSlug = normalizeString(pageSlugField ? selectedPage?.[pageSlugField] : "");
     $: pagePreviewUrl = buildPagePreviewUrl(
         selectedWebsiteSlug,
@@ -749,7 +768,10 @@
     }
 
     $: selectedEditingSection = blocks.find((block) => `${block?.id || ""}` === `${editingSectionId || ""}`) || null;
-    $: selectedEditingSectionFields = selectedEditingSection ? getSectionSchemaFields(selectedEditingSection) : [];
+    $: selectedEditingSectionRawFields = selectedEditingSection ? getSectionSchemaFields(selectedEditingSection) : [];
+    $: selectedEditingSectionFields = sanitizeSchemaFieldsForFileCapability(selectedEditingSectionRawFields);
+    $: selectedEditingSectionHasDeferredFileFields = !cmsCanUseFileFields
+        && selectedEditingSectionRawFields.length > selectedEditingSectionFields.length;
     $: selectedEditingSectionSchemaFieldKeys = new Set(
         selectedEditingSectionFields
             .map((field) => normalizeString(field?.key).toLowerCase())
@@ -835,7 +857,7 @@
     }
 
     $: {
-        const nextWebsiteSettingsSeedKey = `${selectedWebsite?.id || ""}|${selectedWebsite?.updated || ""}|${resolvedWebsiteSettingsField || ""}`;
+        const nextWebsiteSettingsSeedKey = `${selectedWebsite?.id || ""}|${selectedWebsite?.updated || ""}|${resolvedWebsiteSettingsField || ""}|${stableSerializeForDirtyCheck(selectedWebsite?.identitySeo || {})}|${stableSerializeForDirtyCheck(selectedWebsite?.settings || {})}`;
         if (nextWebsiteSettingsSeedKey !== lastWebsiteSettingsSeedKey) {
             lastWebsiteSettingsSeedKey = nextWebsiteSettingsSeedKey;
             initializeWebsiteSettingsDraft();
@@ -1000,6 +1022,34 @@
         return {};
     }
 
+    function inferTranslationLanguageCodesFromContent() {
+        const seen = new Set();
+
+        const collectFromTranslationsValue = (value) => {
+            const translationsObject = toTranslationsRecordObject(value);
+            for (const key of Object.keys(translationsObject)) {
+                const code = normalizeLanguageCode(key);
+                if (code) {
+                    seen.add(code);
+                }
+            }
+        };
+
+        const pageTranslationsValue = effectivePageSeoTranslationsField
+            ? selectedPage?.[effectivePageSeoTranslationsField]
+            : (hasOwnObjectKey(selectedPage, "seo_translations") ? selectedPage?.seo_translations : {});
+        collectFromTranslationsValue(pageTranslationsValue);
+
+        for (const block of blocks) {
+            const blockTranslationsValue = effectiveBlockTranslationsField
+                ? block?.[effectiveBlockTranslationsField]
+                : (hasOwnObjectKey(block, "translations") ? block?.translations : {});
+            collectFromTranslationsValue(blockTranslationsValue);
+        }
+
+        return Array.from(seen);
+    }
+
     function getSectionEditorConfiguredLanguages(settingsValue) {
         const i18nSettings = isPlainObject(settingsValue?.i18n) ? settingsValue.i18n : {};
         if (i18nSettings?.enabled !== true) {
@@ -1024,6 +1074,33 @@
             const labelSource = isPlainObject(entry) ? entry?.label : "";
             const label = normalizeString(labelSource) || code.toUpperCase();
             languages.push({ code, label });
+        }
+
+        const inferredCodes = inferTranslationLanguageCodesFromContent();
+        for (const code of inferredCodes) {
+            if (!code || seen.has(code)) {
+                continue;
+            }
+
+            seen.add(code);
+            languages.push({
+                code,
+                label: code.toUpperCase(),
+            });
+        }
+
+        const defaultLanguageCode = normalizeLanguageCode(i18nSettings?.defaultLanguage);
+        if (defaultLanguageCode) {
+            const defaultIndex = languages.findIndex((language) => language.code === defaultLanguageCode);
+            if (defaultIndex > 0) {
+                const [defaultLanguage] = languages.splice(defaultIndex, 1);
+                languages.unshift(defaultLanguage);
+            } else if (defaultIndex < 0) {
+                languages.unshift({
+                    code: defaultLanguageCode,
+                    label: defaultLanguageCode.toUpperCase(),
+                });
+            }
         }
 
         return languages;
@@ -1259,6 +1336,92 @@
         payload[fieldName] = value;
     }
 
+    function toCMSDashboardCapabilities(value) {
+        const toCapabilityFlag = (rawValue, fallback = false) => {
+            if (typeof rawValue === "undefined" || rawValue === null || rawValue === "") {
+                return fallback;
+            }
+            return toBooleanValue(rawValue);
+        };
+
+        return {
+            canEditWebsiteIdentitySeo: toCapabilityFlag(value?.canEditWebsiteIdentitySeo, true),
+            canEditWebsiteSettings: toCapabilityFlag(value?.canEditWebsiteSettings, true),
+            canEditPageSeo: toCapabilityFlag(value?.canEditPageSeo, true),
+            canEditBlocks: toCapabilityFlag(value?.canEditBlocks, true),
+            canEditComponents: toCapabilityFlag(value?.canEditComponents, false),
+            canUseFileFields: toCapabilityFlag(value?.canUseFileFields, false),
+        };
+    }
+
+    function isSchemaFileField(field) {
+        return normalizeString(field?.type).toLowerCase() === "file";
+    }
+
+    function sanitizeSchemaFieldForFileCapability(field) {
+        if (!isPlainObject(field)) {
+            return null;
+        }
+
+        if (cmsCanUseFileFields || !isSchemaFileField(field)) {
+            const cloned = structuredClone(field);
+            if (Array.isArray(cloned.fields)) {
+                cloned.fields = sanitizeSchemaFieldsForFileCapability(cloned.fields);
+            }
+            if (isPlainObject(cloned.items) && Array.isArray(cloned.items.fields)) {
+                cloned.items = {
+                    ...cloned.items,
+                    fields: sanitizeSchemaFieldsForFileCapability(cloned.items.fields),
+                };
+            }
+            return cloned;
+        }
+
+        return null;
+    }
+
+    function sanitizeSchemaFieldsForFileCapability(fields = []) {
+        return (Array.isArray(fields) ? fields : [])
+            .map((field) => sanitizeSchemaFieldForFileCapability(field))
+            .filter(Boolean);
+    }
+
+    function isFileLikePayloadObject(value) {
+        if (!isPlainObject(value)) {
+            return false;
+        }
+
+        const normalizeKey = (key) => normalizeString(key).toLowerCase().replaceAll("_", "");
+        const keySet = new Set(Object.keys(value).map((key) => normalizeKey(key)));
+        const hasName = keySet.has("name");
+        const hasSize = keySet.has("size");
+        const hasType = keySet.has("type");
+
+        return keySet.has("lastmodified")
+            || keySet.has("webkitrelativepath")
+            || keySet.has("originfileobj")
+            || keySet.has("rawfile")
+            || keySet.has("tempfile")
+            || keySet.has("arraybuffer")
+            || keySet.has("blob")
+            || (hasName && (hasSize || hasType));
+    }
+
+    function containsFileLikePayload(value) {
+        if (Array.isArray(value)) {
+            return value.some((entry) => containsFileLikePayload(entry));
+        }
+
+        if (isPlainObject(value)) {
+            if (isFileLikePayloadObject(value)) {
+                return true;
+            }
+            return Object.values(value).some((entry) => containsFileLikePayload(entry));
+        }
+
+        return false;
+    }
+
     function getWebsiteLabel(record) {
         return CommonHelper.websiteDisplayLabel(record, {
             preferredFields: [websiteNameField],
@@ -1268,7 +1431,12 @@
     }
 
     function getWebsiteNameText(record) {
-        return normalizeString(websiteNameField ? record?.[websiteNameField] : "");
+        return normalizeString(
+            (websiteNameField ? record?.[websiteNameField] : "")
+            || record?.name
+            || record?.title
+            || record?.displayName,
+        );
     }
 
     function getPageLabel(record) {
@@ -1421,7 +1589,7 @@
     }
 
     function getWebsitePublicUrl(record) {
-        const domain = normalizeString(websiteDomainField ? record?.[websiteDomainField] : "");
+        const domain = normalizeString((websiteDomainField ? record?.[websiteDomainField] : "") || record?.domain);
         if (!domain) {
             return "";
         }
@@ -2230,11 +2398,8 @@
     }
 
     function getExpandedComponent(block) {
-        if (!blockComponentRelationField) {
-            return null;
-        }
-
-        const expanded = block?.expand?.[blockComponentRelationField];
+        const relationField = blockComponentRelationField || "component";
+        const expanded = block?.expand?.[relationField];
         if (Array.isArray(expanded)) {
             return expanded[0] || null;
         }
@@ -2242,11 +2407,7 @@
     }
 
     function getBlockComponentId(block) {
-        if (!blockComponentRelationField) {
-            return "";
-        }
-
-        const relationValue = block?.[blockComponentRelationField];
+        const relationValue = block?.[blockComponentRelationField || "component"] ?? block?.component;
         if (Array.isArray(relationValue)) {
             return normalizeString(relationValue[0]);
         }
@@ -2259,24 +2420,37 @@
     }
 
     function getBlockComponentKey(block) {
-        if (blockComponentKeyField) {
-            const rawKey = normalizeString(block?.[blockComponentKeyField]);
+        if (blockComponentKeyField || hasOwnObjectKey(block, "component_key") || hasOwnObjectKey(block, "componentKey")) {
+            const rawKey = normalizeString(
+                block?.[blockComponentKeyField]
+                ?? block?.component_key
+                ?? block?.componentKey,
+            );
             if (rawKey) {
                 return rawKey;
             }
         }
 
         const expanded = getExpandedComponent(block);
-        if (expanded && componentKeyField) {
-            const expandedKey = normalizeString(expanded?.[componentKeyField]);
+        if (expanded && (componentKeyField || hasOwnObjectKey(expanded, "key") || hasOwnObjectKey(expanded, "component_key"))) {
+            const expandedKey = normalizeString(
+                expanded?.[componentKeyField]
+                ?? expanded?.key
+                ?? expanded?.component_key,
+            );
             if (expandedKey) {
                 return expandedKey;
             }
         }
 
         const componentId = getBlockComponentId(block);
-        if (componentId && componentsById.has(componentId) && componentKeyField) {
-            return normalizeString(componentsById.get(componentId)?.[componentKeyField]);
+        if (componentId && componentsById.has(componentId)) {
+            const componentRecord = componentsById.get(componentId);
+            return normalizeString(
+                componentRecord?.[componentKeyField]
+                ?? componentRecord?.key
+                ?? componentRecord?.component_key,
+            );
         }
 
         return "";
@@ -2298,10 +2472,13 @@
 
     function getSectionSchemaFields(block) {
         const component = getComponentForBlock(block);
-        if (!component || !componentSchemaField) {
+        if (!component) {
             return [];
         }
-        return parseSchemaFields(component?.[componentSchemaField]);
+        const schemaValue = component?.[componentSchemaField]
+            ?? component?.schema
+            ?? component?.Schema;
+        return parseSchemaFields(schemaValue);
     }
 
     function sanitizeSectionDraftPropsForForm(draftValue, schemaFieldKeys = new Set()) {
@@ -3015,6 +3192,14 @@
     }
 
     function handleWebsiteSeoFileChange(type, event) {
+        if (!cmsCanUseFileFields) {
+            websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
+            if (event.currentTarget) {
+                event.currentTarget.value = "";
+            }
+            return;
+        }
+
         const file = event.currentTarget?.files?.[0] || null;
 
         if (type === "logo") {
@@ -3039,6 +3224,14 @@
     }
 
     function handlePageSeoFileChange(event) {
+        if (!cmsCanUseFileFields) {
+            pageError = "File uploads are managed by an administrator for now.";
+            if (event.currentTarget) {
+                event.currentTarget.value = "";
+            }
+            return;
+        }
+
         const file = event.currentTarget?.files?.[0] || null;
         replacePageSeoSocialImageObjectUrl(file);
 
@@ -3054,6 +3247,11 @@
     }
 
     function markPageSeoSocialImageForRemoval() {
+        if (!cmsCanUseFileFields) {
+            pageError = "File uploads are managed by an administrator for now.";
+            return;
+        }
+
         revokePageSeoSocialImageObjectUrl();
         pageEditForm = {
             ...pageEditForm,
@@ -3064,6 +3262,11 @@
     }
 
     function undoPageSeoSocialImageRemoval() {
+        if (!cmsCanUseFileFields) {
+            pageError = "File uploads are managed by an administrator for now.";
+            return;
+        }
+
         pageEditForm = {
             ...pageEditForm,
             seoSocialImageCurrent: pageSeoSocialImageField ? toSingleFileName(selectedPage?.[pageSeoSocialImageField]) : "",
@@ -3073,6 +3276,11 @@
     }
 
     function markWebsiteSeoImageForRemoval(type) {
+        if (!cmsCanUseFileFields) {
+            websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
+            return;
+        }
+
         if (type === "logo") {
             revokeWebsiteLogoObjectUrl();
             websiteIdentitySeoDraft = {
@@ -3096,6 +3304,11 @@
     }
 
     function undoWebsiteSeoImageRemoval(type) {
+        if (!cmsCanUseFileFields) {
+            websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
+            return;
+        }
+
         if (type === "logo") {
             websiteIdentitySeoDraft = {
                 ...websiteIdentitySeoDraft,
@@ -3246,14 +3459,124 @@
         }
 
         await loadWebsites();
-        await loadComponents();
-        await loadPages();
-        await loadBlocks();
+        await loadCMSDashboard();
+    }
+
+    function resetCMSDashboardState() {
+        pages = [];
+        blocks = [];
+        components = [];
+        selectedPageId = "";
+        editingSectionId = "";
+        cmsDashboardCapabilities = toCMSDashboardCapabilities(null);
+    }
+
+    // Save flows should patch local state + refresh preview, not force a full dashboard reload.
+    function mergeWebsiteFromCMSResponse(rawWebsite) {
+        if (!isPlainObject(rawWebsite)) {
+            return null;
+        }
+
+        const websiteId = normalizeString(rawWebsite?.id);
+        if (!websiteId) {
+            return null;
+        }
+
+        let mergedWebsite = null;
+        let foundWebsite = false;
+        websites = websites.map((record) => {
+            if (`${record?.id || ""}` !== websiteId) {
+                return record;
+            }
+
+            foundWebsite = true;
+            mergedWebsite = {
+                ...record,
+                ...rawWebsite,
+            };
+            return mergedWebsite;
+        });
+
+        if (!foundWebsite) {
+            mergedWebsite = null;
+        }
+
+        return mergedWebsite;
+    }
+
+    function mergePageFromCMSResponse(rawPage) {
+        if (!isPlainObject(rawPage)) {
+            return null;
+        }
+
+        const pageId = normalizeString(rawPage?.id);
+        if (!pageId) {
+            return null;
+        }
+
+        let mergedPage = null;
+        let foundPage = false;
+        pages = pages.map((record) => {
+            if (`${record?.id || ""}` !== pageId) {
+                return record;
+            }
+
+            foundPage = true;
+            mergedPage = {
+                ...record,
+                ...rawPage,
+            };
+            return mergedPage;
+        });
+
+        if (!foundPage && `${selectedPageId || ""}` === pageId) {
+            mergedPage = { ...rawPage };
+            pages = [...pages, mergedPage];
+        }
+
+        if (mergedPage?.id) {
+            selectedPageId = `${mergedPage.id}`;
+        }
+
+        return mergedPage;
+    }
+
+    function mergeBlockFromCMSResponse(rawBlock) {
+        if (!isPlainObject(rawBlock)) {
+            return null;
+        }
+
+        const blockId = normalizeString(rawBlock?.id);
+        if (!blockId) {
+            return null;
+        }
+
+        let mergedBlock = null;
+        let foundBlock = false;
+        blocks = blocks.map((record) => {
+            if (`${record?.id || ""}` !== blockId) {
+                return record;
+            }
+
+            foundBlock = true;
+            mergedBlock = {
+                ...record,
+                ...rawBlock,
+            };
+            return mergedBlock;
+        });
+
+        if (!foundBlock) {
+            mergedBlock = null;
+        }
+
+        return mergedBlock;
     }
 
     async function loadWebsites() {
         if (!websitesCollection?.id) {
             websites = [];
+            resetCMSDashboardState();
             selectedWebsiteId = "";
             return;
         }
@@ -3261,109 +3584,109 @@
         isLoadingWebsites = true;
 
         try {
-            websites = await ApiClient.collection(websitesCollection.id).getFullList({
-                sort: resolveSort(websitesCollection, ["name", "title", "slug", "domain"]),
+            websites = await ApiClient.getBackofficeWebsites({
                 requestKey: "nuvio_cms_websites",
             });
 
             if (!websites.length) {
                 selectedWebsiteId = "";
-                selectedPageId = "";
+                resetCMSDashboardState();
             } else if (!websites.some((record) => record.id === selectedWebsiteId)) {
                 selectedWebsiteId = websites[0].id;
-                selectedPageId = "";
+                resetCMSDashboardState();
             }
         } catch (err) {
             websites = [];
             selectedWebsiteId = "";
-            selectedPageId = "";
+            resetCMSDashboardState();
             ApiClient.error(err);
         }
 
         isLoadingWebsites = false;
     }
 
-    async function loadComponents() {
-        if (!componentsCollection?.id) {
-            components = [];
+    async function loadCMSDashboard(pageId = "") {
+        if (!selectedWebsiteId) {
+            resetCMSDashboardState();
             return;
         }
+
+        const normalizedWebsiteId = normalizeString(selectedWebsiteId);
+        const requestedPageId = normalizeString(pageId || selectedPageId);
+        const requestKeyBase = `nuvio_cms_dashboard_${normalizedWebsiteId || "unknown"}`;
 
         isLoadingComponents = true;
-
-        try {
-            components = await ApiClient.collection(componentsCollection.id).getFullList({
-                sort: resolveSort(componentsCollection, ["name", "title", "key"]),
-                requestKey: "nuvio_cms_components",
-            });
-        } catch (err) {
-            components = [];
-            ApiClient.error(err);
-        }
-
-        isLoadingComponents = false;
-    }
-
-    async function loadPages() {
-        if (!pagesCollection?.id || !selectedWebsiteId || !pageWebsiteRelationField) {
-            pages = [];
-            selectedPageId = "";
-            return;
-        }
-
         isLoadingPages = true;
-
-        try {
-            pages = await ApiClient.collection(pagesCollection.id).getFullList({
-                filter: `${pageWebsiteRelationField}="${selectedWebsiteId}"`,
-                sort: resolveSort(pagesCollection, ["title", "name", "slug"]),
-                requestKey: "nuvio_cms_pages_" + selectedWebsiteId,
-            });
-
-            if (!pages.length) {
-                selectedPageId = "";
-            } else if (!pages.some((record) => record.id === selectedPageId)) {
-                selectedPageId = pages[0].id;
-            }
-        } catch (err) {
-            pages = [];
-            selectedPageId = "";
-            ApiClient.error(err);
-        }
-
-        isLoadingPages = false;
-    }
-
-    async function loadBlocks() {
-        if (!blocksCollection?.id || !selectedPageId || !blockPageRelationField) {
-            blocks = [];
-            editingSectionId = "";
-            return;
-        }
-
         isLoadingBlocks = true;
 
         try {
-            const query = {
-                filter: `${blockPageRelationField}="${selectedPageId}"`,
-                sort: resolveSort(blocksCollection, ["title", "slot", "variant"]),
-                requestKey: "nuvio_cms_blocks_" + selectedPageId,
-            };
+            let dashboardResponse = null;
+            let shouldRetryWithoutPage = false;
 
-            if (blockComponentRelationField) {
-                query.expand = blockComponentRelationField;
+            try {
+                dashboardResponse = await ApiClient.getCMSDashboard({
+                    websiteId: normalizedWebsiteId,
+                    pageId: requestedPageId,
+                    requestKey: requestedPageId
+                        ? `${requestKeyBase}_${requestedPageId}`
+                        : requestKeyBase,
+                });
+            } catch (err) {
+                const statusCode = (err?.status << 0) || 0;
+                if (requestedPageId && statusCode === 404) {
+                    shouldRetryWithoutPage = true;
+                } else {
+                    throw err;
+                }
             }
 
-            blocks = await ApiClient.collection(blocksCollection.id).getFullList(query);
+            if (shouldRetryWithoutPage) {
+                selectedPageId = "";
+                dashboardResponse = await ApiClient.getCMSDashboard({
+                    websiteId: normalizedWebsiteId,
+                    requestKey: `${requestKeyBase}_fallback`,
+                });
+            }
+
+            const dashboardWebsite = isPlainObject(dashboardResponse?.website)
+                ? dashboardResponse.website
+                : null;
+
+            if (dashboardWebsite?.id && websites.some((website) => website?.id === dashboardWebsite.id)) {
+                websites = websites.map((website) => (
+                    website?.id === dashboardWebsite.id
+                        ? {
+                            ...website,
+                            ...dashboardWebsite,
+                        }
+                        : website
+                ));
+            }
+
+            pages = Array.isArray(dashboardResponse?.pages) ? dashboardResponse.pages : [];
+            blocks = Array.isArray(dashboardResponse?.blocks) ? dashboardResponse.blocks : [];
+            components = Array.isArray(dashboardResponse?.components) ? dashboardResponse.components : [];
+            cmsDashboardCapabilities = toCMSDashboardCapabilities(dashboardResponse?.capabilities);
+
+            const responsePageId = normalizeString(dashboardResponse?.page?.id);
+            if (responsePageId) {
+                selectedPageId = responsePageId;
+            } else if (pages.some((record) => `${record?.id || ""}` === requestedPageId)) {
+                selectedPageId = requestedPageId;
+            } else {
+                selectedPageId = pages[0]?.id || "";
+            }
+
             if (editingSectionId && !blocks.some((block) => block.id === editingSectionId)) {
                 editingSectionId = "";
             }
         } catch (err) {
-            blocks = [];
-            editingSectionId = "";
+            resetCMSDashboardState();
             ApiClient.error(err);
         }
 
+        isLoadingComponents = false;
+        isLoadingPages = false;
         isLoadingBlocks = false;
     }
 
@@ -3382,8 +3705,7 @@
         editingSectionId = "";
         activePageEditorTab = pageEditorTabContentKey;
 
-        await loadPages();
-        await loadBlocks();
+        await loadCMSDashboard();
     }
 
     async function selectPage(pageId) {
@@ -3397,7 +3719,7 @@
         activePageEditorTab = pageEditorTabContentKey;
         activePageSeoTab = pageSeoTabBasicKey;
 
-        await loadBlocks();
+        await loadCMSDashboard(selectedPageId);
     }
 
     function setActivePageEditorTab(nextTab) {
@@ -3511,10 +3833,28 @@
         };
     }
 
+    function buildWebsiteSettingsPatchPayload() {
+        const patch = {};
+        const patchableKeys = new Set([
+            ...websiteSettingsFeatureOrder,
+            ...websiteSettingsLeadsChannelKeys,
+        ]);
+
+        for (const key of patchableKeys) {
+            if (!hasOwnObjectKey(websiteSettingsDraft, key)) {
+                continue;
+            }
+
+            patch[key] = structuredClone(websiteSettingsDraft?.[key] ?? {});
+        }
+
+        return patch;
+    }
+
     async function savePageSeo() {
         pageError = "";
 
-        if (!selectedPage?.id || !pagesCollection?.id) {
+        if (!selectedPage?.id) {
             pageError = "Select a page first.";
             return;
         }
@@ -3565,9 +3905,9 @@
             if (pageSeoFocusKeywordField) {
                 setPayloadField(payload, pageSeoFocusKeywordField, normalizeString(pageEditForm.seoFocusKeyword));
             }
-            if (pageSeoSocialImageField && pageEditForm.seoSocialImageFile) {
+            if (cmsCanUseFileFields && pageSeoSocialImageField && pageEditForm.seoSocialImageFile) {
                 setPayloadField(payload, pageSeoSocialImageField, pageEditForm.seoSocialImageFile);
-            } else if (pageSeoSocialImageField && pageEditForm.seoSocialImageRemove) {
+            } else if (cmsCanUseFileFields && pageSeoSocialImageField && pageEditForm.seoSocialImageRemove) {
                 setPayloadField(payload, pageSeoSocialImageField, "");
             }
         }
@@ -3580,15 +3920,46 @@
         isSavingPage = true;
 
         try {
-            await ApiClient.collection(pagesCollection.id).update(selectedPage.id, payload);
+            const response = await ApiClient.updateCMSPageSEO(selectedPage.id, payload, {
+                requestKey: `nuvio_cms_page_seo_${selectedPage.id}`,
+            });
+
+            const updatedPage = mergePageFromCMSResponse(response?.page);
+            if (!updatedPage) {
+                await loadCMSDashboard(selectedPage.id);
+            }
+
+            const pageAfterSave = updatedPage || selectedPage;
+            if (pageAfterSave && effectivePageSeoTranslationsField) {
+                pageSeoTranslationsDraftByLanguage = toPageSeoTranslationsDraftByLanguage(
+                    pageAfterSave?.[effectivePageSeoTranslationsField],
+                );
+            }
+
             addSuccessToast("Page SEO updated.");
-            await loadPages();
-            const refreshedPage = pages.find((record) => `${record?.id || ""}` === `${selectedPage?.id || ""}`) || null;
             pageEditForm = {
                 ...pageEditForm,
+                seoTitle: !activePageSeoTranslationLanguageCode && pageSeoTitleField
+                    ? `${pageAfterSave?.[pageSeoTitleField] || ""}`
+                    : pageEditForm.seoTitle,
+                seoDescription: !activePageSeoTranslationLanguageCode && pageSeoDescriptionField
+                    ? `${pageAfterSave?.[pageSeoDescriptionField] || ""}`
+                    : pageEditForm.seoDescription,
                 seoSocialImageCurrent: pageSeoSocialImageField
-                    ? toSingleFileName(refreshedPage?.[pageSeoSocialImageField])
+                    ? toSingleFileName(pageAfterSave?.[pageSeoSocialImageField])
                     : pageEditForm.seoSocialImageCurrent,
+                seoCanonicalUrl: pageSeoCanonicalUrlField
+                    ? `${pageAfterSave?.[pageSeoCanonicalUrlField] || ""}`
+                    : pageEditForm.seoCanonicalUrl,
+                seoNoindex: pageSeoNoindexField
+                    ? toBooleanValue(pageAfterSave?.[pageSeoNoindexField])
+                    : pageEditForm.seoNoindex,
+                seoExcludeFromSitemap: pageSeoExcludeFromSitemapField
+                    ? toBooleanValue(pageAfterSave?.[pageSeoExcludeFromSitemapField])
+                    : pageEditForm.seoExcludeFromSitemap,
+                seoFocusKeyword: pageSeoFocusKeywordField
+                    ? `${pageAfterSave?.[pageSeoFocusKeywordField] || ""}`
+                    : pageEditForm.seoFocusKeyword,
                 seoSocialImageFile: null,
                 seoSocialImageRemove: false,
             };
@@ -3610,7 +3981,7 @@
     async function saveWebsiteIdentitySeo() {
         websiteIdentitySeoError = "";
 
-        if (!selectedWebsite?.id || !websitesCollection?.id || !hasWebsiteIdentitySeoFields) {
+        if (!selectedWebsite?.id || !hasWebsiteIdentitySeoFields) {
             websiteIdentitySeoError = "Could not save identity and global SEO.";
             return;
         }
@@ -3693,18 +4064,6 @@
             setPayloadField(payload, websiteBusinessPriceRangeField, normalizeString(websiteIdentitySeoDraft.businessPriceRange));
         }
 
-        if (websiteLogoField && websiteIdentitySeoDraft.logoFile) {
-            setPayloadField(payload, websiteLogoField, websiteIdentitySeoDraft.logoFile);
-        } else if (websiteLogoField && websiteIdentitySeoDraft.logoRemove) {
-            setPayloadField(payload, websiteLogoField, "");
-        }
-
-        if (websiteSeoImageField && websiteIdentitySeoDraft.seoImageFile) {
-            setPayloadField(payload, websiteSeoImageField, websiteIdentitySeoDraft.seoImageFile);
-        } else if (websiteSeoImageField && websiteIdentitySeoDraft.seoImageRemove) {
-            setPayloadField(payload, websiteSeoImageField, "");
-        }
-
         if (!Object.keys(payload).length) {
             websiteIdentitySeoError = "There are no available fields to save.";
             return;
@@ -3713,9 +4072,16 @@
         isSavingWebsiteIdentitySeo = true;
 
         try {
-            await ApiClient.collection(websitesCollection.id).update(selectedWebsite.id, payload);
+            const response = await ApiClient.updateCMSWebsiteIdentity(selectedWebsite.id, payload, {
+                requestKey: `nuvio_cms_website_identity_${selectedWebsite.id}`,
+            });
+
+            if (!mergeWebsiteFromCMSResponse(response?.website)) {
+                await loadCMSDashboard(selectedPageId);
+            }
+
             addSuccessToast("Identity and global SEO updated.");
-            await loadWebsites();
+            refreshPagePreview();
         } catch (err) {
             ApiClient.error(err);
             websiteIdentitySeoError = err?.response?.message || err?.message || "Failed to save identity and global SEO.";
@@ -3727,7 +4093,7 @@
     async function saveWebsiteSettings() {
         websiteSettingsError = "";
 
-        if (!selectedWebsite?.id || !websitesCollection?.id || !hasWebsiteSettingsField) {
+        if (!selectedWebsite?.id || !hasWebsiteSettingsField) {
             websiteSettingsError = "Could not save this website settings.";
             return;
         }
@@ -3735,11 +4101,25 @@
         isSavingWebsiteSettings = true;
 
         try {
-            const payload = {};
-            setPayloadField(payload, resolvedWebsiteSettingsField, structuredClone(websiteSettingsFullDraft));
-            await ApiClient.collection(websitesCollection.id).update(selectedWebsite.id, payload);
+            const settingsPatch = buildWebsiteSettingsPatchPayload();
+            if (!Object.keys(settingsPatch).length) {
+                websiteSettingsError = "There are no available settings to save.";
+                isSavingWebsiteSettings = false;
+                return;
+            }
+
+            const response = await ApiClient.updateCMSWebsiteSettings(selectedWebsite.id, {
+                settings: settingsPatch,
+            }, {
+                requestKey: `nuvio_cms_website_settings_${selectedWebsite.id}`,
+            });
+
+            if (!mergeWebsiteFromCMSResponse(response?.website)) {
+                await loadCMSDashboard(selectedPageId);
+            }
+
             addSuccessToast("Website settings updated.");
-            await loadWebsites();
+            refreshPagePreview();
         } catch (err) {
             ApiClient.error(err);
             websiteSettingsError = err?.response?.message || err?.message || "Failed to save website settings.";
@@ -3755,14 +4135,6 @@
         }
 
         sectionErrorById = { ...sectionErrorById, [blockId]: "" };
-
-        if (!blocksCollection?.id) {
-            sectionErrorById = {
-                ...sectionErrorById,
-                [blockId]: "Section cannot be saved because blocks collection is missing.",
-            };
-            return;
-        }
 
         const payload = {};
         if (activeSectionTranslationLanguageCode) {
@@ -3784,7 +4156,7 @@
                 currentTranslations[activeSectionTranslationLanguageCode] = toPropsObject(draftTranslationValue);
             }
 
-            setPayloadField(payload, effectiveBlockTranslationsField, currentTranslations);
+            payload.translations = currentTranslations;
         } else {
             if (!blockPropsField) {
                 sectionErrorById = {
@@ -3794,7 +4166,15 @@
                 return;
             }
 
-            setPayloadField(payload, blockPropsField, toPropsObject(sectionPropsDraftById?.[blockId]));
+            payload.props = toPropsObject(sectionPropsDraftById?.[blockId]);
+        }
+
+        if (!cmsCanUseFileFields && containsFileLikePayload(payload)) {
+            sectionErrorById = {
+                ...sectionErrorById,
+                [blockId]: "File uploads are managed by an administrator for now.",
+            };
+            return;
         }
 
         isSavingSectionById = {
@@ -3803,9 +4183,27 @@
         };
 
         try {
-            await ApiClient.collection(blocksCollection.id).update(blockId, payload);
+            const response = await ApiClient.updateCMSBlock(blockId, payload, {
+                requestKey: `nuvio_cms_block_${blockId}`,
+            });
+
+            const updatedBlock = mergeBlockFromCMSResponse(response?.block);
+            if (!updatedBlock) {
+                await loadCMSDashboard(selectedPageId);
+            } else {
+                sectionPropsDraftById = {
+                    ...sectionPropsDraftById,
+                    [blockId]: toPropsObject(blockPropsField ? updatedBlock?.[blockPropsField] : {}),
+                };
+                sectionTranslationsDraftById = {
+                    ...sectionTranslationsDraftById,
+                    [blockId]: toTranslationsDraftByLanguage(
+                        effectiveBlockTranslationsField ? updatedBlock?.[effectiveBlockTranslationsField] : {},
+                    ),
+                };
+            }
+
             addSuccessToast("Section updated.");
-            await loadBlocks();
             refreshPagePreview();
         } catch (err) {
             ApiClient.error(err);
@@ -4321,37 +4719,43 @@
                                                                 </div>
 
                                                                 <div class="page-seo-image-controls">
-                                                                    <div class="page-seo-image-input-row">
-                                                                        <div class="settings-file-row page-seo-image-upload-row">
-                                                                            <input
-                                                                                id="cms-page-seo-social-image-file"
-                                                                                class="input form-input file-input page-seo-file-input"
-                                                                                type="file"
-                                                                                on:change={handlePageSeoFileChange}
-                                                                            />
-                                                                        </div>
-                                                                        {#if pageEditForm.seoSocialImageRemove || pageEditForm.seoSocialImageCurrent || pageEditForm.seoSocialImageFile}
-                                                                            <div class="page-seo-image-action-row">
-                                                                                {#if pageEditForm.seoSocialImageRemove}
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                        on:click={undoPageSeoSocialImageRemoval}
-                                                                                    >
-                                                                                        Undo remove
-                                                                                    </button>
-                                                                                {:else}
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                        on:click={markPageSeoSocialImageForRemoval}
-                                                                                    >
-                                                                                        Remove image
-                                                                                    </button>
-                                                                                {/if}
+                                                                    {#if cmsCanUseFileFields}
+                                                                        <div class="page-seo-image-input-row">
+                                                                            <div class="settings-file-row page-seo-image-upload-row">
+                                                                                <input
+                                                                                    id="cms-page-seo-social-image-file"
+                                                                                    class="input form-input file-input page-seo-file-input"
+                                                                                    type="file"
+                                                                                    on:change={handlePageSeoFileChange}
+                                                                                />
                                                                             </div>
-                                                                        {/if}
-                                                                    </div>
+                                                                            {#if pageEditForm.seoSocialImageRemove || pageEditForm.seoSocialImageCurrent || pageEditForm.seoSocialImageFile}
+                                                                                <div class="page-seo-image-action-row">
+                                                                                    {#if pageEditForm.seoSocialImageRemove}
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            class="btn btn-sm btn-outline page-seo-image-action-btn"
+                                                                                            on:click={undoPageSeoSocialImageRemoval}
+                                                                                        >
+                                                                                            Undo remove
+                                                                                        </button>
+                                                                                    {:else}
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            class="btn btn-sm btn-outline page-seo-image-action-btn"
+                                                                                            on:click={markPageSeoSocialImageForRemoval}
+                                                                                        >
+                                                                                            Remove image
+                                                                                        </button>
+                                                                                    {/if}
+                                                                                </div>
+                                                                            {/if}
+                                                                        </div>
+                                                                    {:else}
+                                                                        <div class="help-block m-b-6">
+                                                                            File uploads are managed by an administrator for now.
+                                                                        </div>
+                                                                    {/if}
 
                                                                     <div class="help-block file-field-hint">
                                                                         {#if pageEditForm.seoSocialImageRemove}
@@ -4701,37 +5105,43 @@
                                                                     </div>
 
                                                                     <div class="page-seo-image-controls">
-                                                                        <div class="page-seo-image-input-row">
-                                                                            <div class="settings-file-row page-seo-image-upload-row">
-                                                                                <input
-                                                                                    id="cms-website-logo-file"
-                                                                                    class="input form-input file-input page-seo-file-input"
-                                                                                    type="file"
-                                                                                    on:change={(event) => handleWebsiteSeoFileChange("logo", event)}
-                                                                                />
-                                                                            </div>
-                                                                            {#if websiteIdentitySeoDraft.logoRemove || websiteIdentitySeoDraft.logoCurrent || websiteIdentitySeoDraft.logoFile}
-                                                                                <div class="page-seo-image-action-row">
-                                                                                    {#if websiteIdentitySeoDraft.logoRemove}
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                            on:click={() => undoWebsiteSeoImageRemoval("logo")}
-                                                                                        >
-                                                                                            Undo remove
-                                                                                        </button>
-                                                                                    {:else}
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                            on:click={() => markWebsiteSeoImageForRemoval("logo")}
-                                                                                        >
-                                                                                            Remove image
-                                                                                        </button>
-                                                                                    {/if}
+                                                                        {#if cmsCanUseFileFields}
+                                                                            <div class="page-seo-image-input-row">
+                                                                                <div class="settings-file-row page-seo-image-upload-row">
+                                                                                    <input
+                                                                                        id="cms-website-logo-file"
+                                                                                        class="input form-input file-input page-seo-file-input"
+                                                                                        type="file"
+                                                                                        on:change={(event) => handleWebsiteSeoFileChange("logo", event)}
+                                                                                    />
                                                                                 </div>
-                                                                            {/if}
-                                                                        </div>
+                                                                                {#if websiteIdentitySeoDraft.logoRemove || websiteIdentitySeoDraft.logoCurrent || websiteIdentitySeoDraft.logoFile}
+                                                                                    <div class="page-seo-image-action-row">
+                                                                                        {#if websiteIdentitySeoDraft.logoRemove}
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                class="btn btn-sm btn-outline page-seo-image-action-btn"
+                                                                                                on:click={() => undoWebsiteSeoImageRemoval("logo")}
+                                                                                            >
+                                                                                                Undo remove
+                                                                                            </button>
+                                                                                        {:else}
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                class="btn btn-sm btn-outline page-seo-image-action-btn"
+                                                                                                on:click={() => markWebsiteSeoImageForRemoval("logo")}
+                                                                                            >
+                                                                                                Remove image
+                                                                                            </button>
+                                                                                        {/if}
+                                                                                    </div>
+                                                                                {/if}
+                                                                            </div>
+                                                                        {:else}
+                                                                            <div class="help-block m-b-6">
+                                                                                File uploads are managed by an administrator for now.
+                                                                            </div>
+                                                                        {/if}
 
                                                                         <div class="help-block file-field-hint">
                                                                             {#if websiteIdentitySeoDraft.logoRemove}
@@ -4815,37 +5225,43 @@
                                                                     </div>
 
                                                                     <div class="page-seo-image-controls">
-                                                                        <div class="page-seo-image-input-row">
-                                                                            <div class="settings-file-row page-seo-image-upload-row">
-                                                                                <input
-                                                                                    id="cms-website-seo-image-file"
-                                                                                    class="input form-input file-input page-seo-file-input"
-                                                                                    type="file"
-                                                                                    on:change={(event) => handleWebsiteSeoFileChange("seoImage", event)}
-                                                                                />
-                                                                            </div>
-                                                                            {#if websiteIdentitySeoDraft.seoImageRemove || websiteIdentitySeoDraft.seoImageCurrent || websiteIdentitySeoDraft.seoImageFile}
-                                                                                <div class="page-seo-image-action-row">
-                                                                                    {#if websiteIdentitySeoDraft.seoImageRemove}
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                            on:click={() => undoWebsiteSeoImageRemoval("seoImage")}
-                                                                                        >
-                                                                                            Undo remove
-                                                                                        </button>
-                                                                                    {:else}
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                            on:click={() => markWebsiteSeoImageForRemoval("seoImage")}
-                                                                                        >
-                                                                                            Remove image
-                                                                                        </button>
-                                                                                    {/if}
+                                                                        {#if cmsCanUseFileFields}
+                                                                            <div class="page-seo-image-input-row">
+                                                                                <div class="settings-file-row page-seo-image-upload-row">
+                                                                                    <input
+                                                                                        id="cms-website-seo-image-file"
+                                                                                        class="input form-input file-input page-seo-file-input"
+                                                                                        type="file"
+                                                                                        on:change={(event) => handleWebsiteSeoFileChange("seoImage", event)}
+                                                                                    />
                                                                                 </div>
-                                                                            {/if}
-                                                                        </div>
+                                                                                {#if websiteIdentitySeoDraft.seoImageRemove || websiteIdentitySeoDraft.seoImageCurrent || websiteIdentitySeoDraft.seoImageFile}
+                                                                                    <div class="page-seo-image-action-row">
+                                                                                        {#if websiteIdentitySeoDraft.seoImageRemove}
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                class="btn btn-sm btn-outline page-seo-image-action-btn"
+                                                                                                on:click={() => undoWebsiteSeoImageRemoval("seoImage")}
+                                                                                            >
+                                                                                                Undo remove
+                                                                                            </button>
+                                                                                        {:else}
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                class="btn btn-sm btn-outline page-seo-image-action-btn"
+                                                                                                on:click={() => markWebsiteSeoImageForRemoval("seoImage")}
+                                                                                            >
+                                                                                                Remove image
+                                                                                            </button>
+                                                                                        {/if}
+                                                                                    </div>
+                                                                                {/if}
+                                                                            </div>
+                                                                        {:else}
+                                                                            <div class="help-block m-b-6">
+                                                                                File uploads are managed by an administrator for now.
+                                                                            </div>
+                                                                        {/if}
 
                                                                         <div class="help-block file-field-hint">
                                                                             {#if websiteIdentitySeoDraft.seoImageRemove}
@@ -5368,13 +5784,20 @@
                                                                 </div>
 
                                                                 {#if leadChannel.field}
-                                                                    <SchemaForm
-                                                                        fields={[leadChannel.field]}
-                                                                        value={buildWebsiteSettingsFeatureFormValue(leadChannel.field.key)}
-                                                                        showImport={false}
-                                                                        path={`websites.${selectedWebsiteId}.settings.${leadChannel.field.key}`}
-                                                                        on:change={(event) => handleWebsiteSettingsFeatureGroupChange(leadChannel.field.key, event)}
-                                                                    />
+                                                                    {@const leadChannelFormFields = sanitizeSchemaFieldsForFileCapability([leadChannel.field])}
+                                                                    {#if leadChannelFormFields.length}
+                                                                        <SchemaForm
+                                                                            fields={leadChannelFormFields}
+                                                                            value={buildWebsiteSettingsFeatureFormValue(leadChannel.field.key)}
+                                                                            showImport={false}
+                                                                            path={`websites.${selectedWebsiteId}.settings.${leadChannel.field.key}`}
+                                                                            on:change={(event) => handleWebsiteSettingsFeatureGroupChange(leadChannel.field.key, event)}
+                                                                        />
+                                                                    {:else if !cmsCanUseFileFields}
+                                                                        <p class="txt-sm txt-hint m-b-0">File uploads are managed by an administrator for now.</p>
+                                                                    {:else}
+                                                                        <p class="txt-sm txt-hint m-b-0">No client-configurable settings are available for this channel yet.</p>
+                                                                    {/if}
                                                                 {:else}
                                                                     <p class="txt-sm txt-hint m-b-0">No client-configurable settings are available for this channel yet.</p>
                                                                 {/if}
@@ -5387,13 +5810,19 @@
                                             </div>
                                         {:else if activeWebsiteSettingsFeatureField}
                                             <div class="settings-form-wrap m-t-sm">
-                                                <SchemaForm
-                                                    fields={[activeWebsiteSettingsFeatureField]}
-                                                    value={activeWebsiteSettingsFeatureValue}
-                                                    showImport={false}
-                                                    path={`websites.${selectedWebsiteId}.settings.${activeWebsiteSettingsFeatureField.key}`}
-                                                    on:change={(event) => handleWebsiteSettingsFeatureGroupChange(activeWebsiteSettingsFeatureField.key, event)}
-                                                />
+                                                {#if activeWebsiteSettingsFeatureFormFields.length}
+                                                    <SchemaForm
+                                                        fields={activeWebsiteSettingsFeatureFormFields}
+                                                        value={activeWebsiteSettingsFeatureValue}
+                                                        showImport={false}
+                                                        path={`websites.${selectedWebsiteId}.settings.${activeWebsiteSettingsFeatureField.key}`}
+                                                        on:change={(event) => handleWebsiteSettingsFeatureGroupChange(activeWebsiteSettingsFeatureField.key, event)}
+                                                    />
+                                                {:else if activeWebsiteSettingsFeatureHasDeferredFileFields}
+                                                    <p class="txt-sm txt-hint m-b-0">File uploads are managed by an administrator for now.</p>
+                                                {:else}
+                                                    <p class="txt-sm txt-hint m-b-0">No client-configurable settings are available for this feature yet.</p>
+                                                {/if}
                                             </div>
                                         {:else if activeWebsiteSettingsFeature}
                                             <div class="settings-form-wrap m-t-sm">
@@ -5453,6 +5882,10 @@
                 </svelte:fragment>
 
                 <div class="section-drawer-body">
+                    {#if selectedEditingSectionHasDeferredFileFields}
+                        <p class="txt-sm txt-hint m-b-8">File uploads are managed by an administrator for now.</p>
+                    {/if}
+
                     {#if sectionEditorSupportsTranslations}
                         <div class="section-language-switcher">
                             <div class="tabs-header compact combined left operations-tabs operations-tabs--nested section-language-tabs">
