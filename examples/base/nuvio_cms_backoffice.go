@@ -2431,6 +2431,14 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 		if languages := sanitizeNuvioCMSDashboardLanguages(i18nRaw["languages"]); len(languages) > 0 {
 			i18n["languages"] = languages
 		}
+		if defaultLanguage := sanitizeNuvioCMSDashboardLanguageCode(i18nRaw["defaultLanguage"]); defaultLanguage != "" {
+			i18n["defaultLanguage"] = defaultLanguage
+		}
+		if defaultLanguage := sanitizeNuvioCMSDashboardLanguageCode(i18nRaw["default_language"]); defaultLanguage != "" {
+			if _, hasDefaultLanguage := i18n["defaultLanguage"]; !hasDefaultLanguage {
+				i18n["defaultLanguage"] = defaultLanguage
+			}
+		}
 		if len(i18n) > 0 {
 			dto["i18n"] = i18n
 		}
@@ -2543,27 +2551,36 @@ func sanitizeNuvioCMSDashboardTemplateObject(raw any, includeLeadDetails bool) m
 }
 
 func sanitizeNuvioCMSDashboardLanguages(raw any) []map[string]string {
-	rawItems := normalizeNuvioPublicAnySlice(raw)
+	rawItems := normalizeNuvioCMSDashboardAnySlice(raw)
 	if len(rawItems) == 0 {
 		return []map[string]string{}
 	}
 
+	seenByCode := map[string]struct{}{}
 	result := make([]map[string]string, 0, len(rawItems))
 	for _, rawItem := range rawItems {
-		entry, ok := toStringAnyMap(rawItem)
-		if !ok {
-			continue
+		code := sanitizeNuvioCMSDashboardLanguageCodeFromEntry(rawItem)
+		label := ""
+
+		if entry, ok := toStringAnyMap(rawItem); ok {
+			label = strings.TrimSpace(parseStringValue(entry["label"]))
+			if label == "" {
+				label = strings.TrimSpace(parseStringValue(entry["name"]))
+			}
 		}
 
-		code := strings.TrimSpace(parseStringValue(entry["code"]))
 		if code == "" {
 			continue
 		}
+		if _, exists := seenByCode[code]; exists {
+			continue
+		}
+		seenByCode[code] = struct{}{}
 
 		language := map[string]string{
 			"code": code,
 		}
-		if label := strings.TrimSpace(parseStringValue(entry["label"])); label != "" {
+		if label != "" {
 			language["label"] = label
 		}
 
@@ -2571,6 +2588,79 @@ func sanitizeNuvioCMSDashboardLanguages(raw any) []map[string]string {
 	}
 
 	return result
+}
+
+func sanitizeNuvioCMSDashboardLanguageCodeFromEntry(raw any) string {
+	if code := sanitizeNuvioCMSDashboardLanguageCode(raw); code != "" {
+		return code
+	}
+
+	entry, ok := toStringAnyMap(raw)
+	if !ok {
+		return ""
+	}
+
+	for _, candidate := range []string{"code", "language", "lang", "locale", "value", "id", "key"} {
+		if code := sanitizeNuvioCMSDashboardLanguageCode(entry[candidate]); code != "" {
+			return code
+		}
+		if nestedEntry, ok := toStringAnyMap(entry[candidate]); ok {
+			for _, nestedCandidate := range []string{"code", "language", "lang", "locale", "value", "id", "key"} {
+				if code := sanitizeNuvioCMSDashboardLanguageCode(nestedEntry[nestedCandidate]); code != "" {
+					return code
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+func normalizeNuvioCMSDashboardAnySlice(value any) []any {
+	switch typed := value.(type) {
+	case []any:
+		return typed
+	case []string:
+		result := make([]any, 0, len(typed))
+		for _, item := range typed {
+			result = append(result, item)
+		}
+		return result
+	case []map[string]any:
+		result := make([]any, 0, len(typed))
+		for _, item := range typed {
+			result = append(result, item)
+		}
+		return result
+	case []map[string]string:
+		result := make([]any, 0, len(typed))
+		for _, item := range typed {
+			next := map[string]any{}
+			for key, value := range item {
+				next[key] = value
+			}
+			result = append(result, next)
+		}
+		return result
+	default:
+		return []any{}
+	}
+}
+
+func sanitizeNuvioCMSDashboardLanguageCode(raw any) string {
+	normalized := strings.ToLower(strings.TrimSpace(parseStringValue(raw)))
+	if normalized == "" {
+		return ""
+	}
+
+	for _, char := range normalized {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '-' {
+			continue
+		}
+		return ""
+	}
+
+	return normalized
 }
 
 func parseNuvioCMSDashboardStringByAliases(record *core.Record, aliases []string) string {

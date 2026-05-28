@@ -170,7 +170,6 @@
         needsAttention: 0,
         missingBasics: 0,
     };
-
     let lastCollectionsKey = "";
     let lastPersistedContextKey = "";
     let lastPageSeedId = "";
@@ -300,18 +299,16 @@
     $: selectedWebsite = websites.find((record) => record.id === selectedWebsiteId) || null;
     $: selectedPage = pages.find((record) => record.id === selectedPageId) || null;
     $: cmsCanUseFileFields = toBooleanValue(cmsDashboardCapabilities?.canUseFileFields);
-    $: sectionEditorSettingsSource = (() => {
-        if (isPlainObject(websiteSettingsFullDraft) && Object.keys(websiteSettingsFullDraft).length > 0) {
-            return websiteSettingsFullDraft;
-        }
-
-        const fallbackSettingsValue = resolvedWebsiteSettingsField
-            ? selectedWebsite?.[resolvedWebsiteSettingsField]
-            : (hasOwnObjectKey(selectedWebsite, "settings") ? selectedWebsite?.settings : {});
-
-        return normalizeWebsiteSettingsValue(fallbackSettingsValue);
-    })();
-    $: sectionEditorConfiguredLanguages = getSectionEditorConfiguredLanguages(sectionEditorSettingsSource);
+    $: sectionEditorPersistedSettingsSource = getWebsiteSettingsFromRecord(selectedWebsite);
+    $: sectionEditorLanguageSettingsSource = getSectionEditorLanguageSettingsSource(
+        sectionEditorPersistedSettingsSource,
+        websiteSettingsFullDraft,
+        websiteSettingsDraft,
+    );
+    $: sectionEditorConfiguredLanguages = getSectionEditorConfiguredLanguages(
+        sectionEditorLanguageSettingsSource,
+        sectionEditorPersistedSettingsSource,
+    );
     $: sectionEditorDefaultLanguage = sectionEditorConfiguredLanguages[0] || null;
     $: sectionEditorDefaultLanguageLabel = sectionEditorDefaultLanguage?.label
         || (sectionEditorDefaultLanguage?.code ? sectionEditorDefaultLanguage.code.toUpperCase() : "Primary");
@@ -321,9 +318,11 @@
     $: pageSeoDefaultLanguageLabel = pageSeoDefaultLanguage?.label
         || (pageSeoDefaultLanguage?.code ? pageSeoDefaultLanguage.code.toUpperCase() : "Primary");
     $: pageSeoTranslationLanguages = pageSeoConfiguredLanguages.slice(1);
-    $: pageSeoSupportsTranslations = !!effectivePageSeoTranslationsField && pageSeoTranslationLanguages.length > 0;
+    // Tabs visibility should follow configured languages, not whether current records already
+    // expose translation payload fields.
+    $: pageSeoSupportsTranslations = pageSeoTranslationLanguages.length > 0;
     $: effectiveBlockTranslationsField = resolvedBlockTranslationsField;
-    $: sectionEditorSupportsTranslations = !!effectiveBlockTranslationsField && sectionEditorTranslationLanguages.length > 0;
+    $: sectionEditorSupportsTranslations = sectionEditorTranslationLanguages.length > 0;
     $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
     $: clientWebsiteSettingsFields = filterClientWebsiteSettingsFields(roleScopedSettingsFields);
     $: websiteSettingsFieldsByKey = new Map(
@@ -990,6 +989,45 @@
         return {};
     }
 
+    function toSettingsObject(value) {
+        if (isPlainObject(value)) {
+            return structuredClone(value);
+        }
+
+        if (typeof value === "string" && value.trim()) {
+            try {
+                const parsed = JSON.parse(value);
+                if (isPlainObject(parsed)) {
+                    return parsed;
+                }
+            } catch (_) {
+                return {};
+            }
+        }
+
+        return {};
+    }
+
+    function getWebsiteSettingsFromRecord(websiteRecord) {
+        const record = isPlainObject(websiteRecord) ? websiteRecord : {};
+        const settingsFromScopedDashboard = hasOwnObjectKey(record, "settings")
+            ? toSettingsObject(record?.settings)
+            : {};
+        const settingsFromResolvedField = resolvedWebsiteSettingsField
+            ? toSettingsObject(record?.[resolvedWebsiteSettingsField])
+            : {};
+
+        if (!Object.keys(settingsFromScopedDashboard).length) {
+            return settingsFromResolvedField;
+        }
+        if (!Object.keys(settingsFromResolvedField).length) {
+            return settingsFromScopedDashboard;
+        }
+
+        // Prefer scoped dashboard settings while preserving additional keys from collection-mapped settings.
+        return mergeSettingsObjects(settingsFromResolvedField, settingsFromScopedDashboard);
+    }
+
     function normalizeLanguageCode(value) {
         const normalized = normalizeString(value).toLowerCase();
         if (!normalized) {
@@ -1050,20 +1088,75 @@
         return Array.from(seen);
     }
 
-    function getSectionEditorConfiguredLanguages(settingsValue) {
+    function hasConfiguredI18nLanguages(settingsValue) {
         const i18nSettings = isPlainObject(settingsValue?.i18n) ? settingsValue.i18n : {};
-        if (i18nSettings?.enabled !== true) {
+        const sourceLanguages = Array.isArray(i18nSettings?.languages) ? i18nSettings.languages : [];
+
+        for (const entry of sourceLanguages) {
+            const code = normalizeLanguageCode(
+                isPlainObject(entry)
+                    ? (entry?.code ?? entry?.language ?? entry?.lang ?? entry?.value)
+                    : entry,
+            );
+            if (code) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function getSectionEditorLanguageSettingsSource(
+        persistedSettingsValue,
+        fullDraftSettingsValue,
+        scopedDraftSettingsValue,
+    ) {
+        if (hasConfiguredI18nLanguages(persistedSettingsValue)) {
+            return persistedSettingsValue;
+        }
+        if (hasConfiguredI18nLanguages(fullDraftSettingsValue)) {
+            return fullDraftSettingsValue;
+        }
+        if (hasConfiguredI18nLanguages(scopedDraftSettingsValue)) {
+            return scopedDraftSettingsValue;
+        }
+
+        return persistedSettingsValue;
+    }
+
+    function getSectionEditorConfiguredLanguages(settingsValue, persistedSettingsValue = null) {
+        const draftI18nSettings = isPlainObject(settingsValue?.i18n) ? settingsValue.i18n : {};
+        const persistedI18nSettings = isPlainObject(persistedSettingsValue?.i18n)
+            ? persistedSettingsValue.i18n
+            : {};
+        const draftLanguages = Array.isArray(draftI18nSettings?.languages) ? draftI18nSettings.languages : [];
+        const persistedLanguages = Array.isArray(persistedI18nSettings?.languages)
+            ? persistedI18nSettings.languages
+            : [];
+        const shouldUsePersistedI18n = hasOwnObjectKey(draftI18nSettings, "enabled")
+            && toBooleanValue(draftI18nSettings?.enabled) === false
+            && draftLanguages.length === 0
+            && persistedLanguages.length > 0
+            && !hasOwnObjectKey(persistedI18nSettings, "enabled");
+        const i18nSettings = shouldUsePersistedI18n ? persistedI18nSettings : draftI18nSettings;
+        const sourceLanguages = Array.isArray(i18nSettings?.languages) ? i18nSettings.languages : [];
+        const hasConfiguredLanguages = sourceLanguages.length > 0;
+        const hasExplicitEnabledValue = hasOwnObjectKey(i18nSettings, "enabled");
+        const isI18nEnabled = hasExplicitEnabledValue
+            ? toBooleanValue(i18nSettings?.enabled)
+            : hasConfiguredLanguages;
+
+        if (!isI18nEnabled) {
             return [];
         }
 
-        const sourceLanguages = Array.isArray(i18nSettings?.languages) ? i18nSettings.languages : [];
         const seen = new Set();
         const languages = [];
 
         for (const entry of sourceLanguages) {
             const code = normalizeLanguageCode(
                 isPlainObject(entry)
-                    ? entry?.code
+                    ? (entry?.code ?? entry?.language ?? entry?.lang ?? entry?.value)
                     : entry,
             );
             if (!code || seen.has(code)) {
@@ -1071,7 +1164,7 @@
             }
 
             seen.add(code);
-            const labelSource = isPlainObject(entry) ? entry?.label : "";
+            const labelSource = isPlainObject(entry) ? (entry?.label ?? entry?.name) : "";
             const label = normalizeString(labelSource) || code.toUpperCase();
             languages.push({ code, label });
         }
@@ -1089,7 +1182,9 @@
             });
         }
 
-        const defaultLanguageCode = normalizeLanguageCode(i18nSettings?.defaultLanguage);
+        const defaultLanguageCode = normalizeLanguageCode(
+            i18nSettings?.defaultLanguage ?? i18nSettings?.default_language,
+        );
         if (defaultLanguageCode) {
             const defaultIndex = languages.findIndex((language) => language.code === defaultLanguageCode);
             if (defaultIndex > 0) {
@@ -3101,7 +3196,8 @@
             return;
         }
 
-        const normalizedFullSettings = normalizeWebsiteSettingsValue(selectedWebsite?.[resolvedWebsiteSettingsField]);
+        const selectedWebsiteSettings = getWebsiteSettingsFromRecord(selectedWebsite);
+        const normalizedFullSettings = normalizeWebsiteSettingsValue(selectedWebsiteSettings);
         const roleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, normalizedFullSettings).fields;
         const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
 
@@ -3177,10 +3273,21 @@
             return;
         }
 
-        const nextValue = event.detail?.value ?? event.detail ?? {};
+        const nextValue = toSettingsObject(event.detail?.value ?? event.detail ?? {});
+        const nextValueKeys = new Set(Object.keys(nextValue).map((key) => normalizeString(key)).filter(Boolean));
+        if (!nextValueKeys.size) {
+            return;
+        }
+
         const roleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
         const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
-        const normalizedScopedChanges = normalizeWebsiteSettingsValue(nextValue, visibleFields);
+        const scopedPatchFields = visibleFields.filter((field) => nextValueKeys.has(normalizeString(field?.key)));
+        if (!scopedPatchFields.length) {
+            return;
+        }
+
+        // Normalize only changed feature groups so defaults from unrelated groups don't overwrite i18n/settings state.
+        const normalizedScopedChanges = normalizeWebsiteSettingsValue(nextValue, scopedPatchFields);
         const normalizedFullSettings = normalizeWebsiteSettingsValue(
             mergeSettingsObjects(websiteSettingsFullDraft, normalizedScopedChanges),
         );
@@ -3489,10 +3596,21 @@
                 return record;
             }
 
+            const currentSettings = isPlainObject(record?.settings) ? record.settings : {};
+            const nextSettings = isPlainObject(rawWebsite?.settings)
+                ? mergeSettingsObjects(currentSettings, rawWebsite.settings)
+                : currentSettings;
+            const currentIdentitySeo = isPlainObject(record?.identitySeo) ? record.identitySeo : {};
+            const nextIdentitySeo = isPlainObject(rawWebsite?.identitySeo)
+                ? mergeSettingsObjects(currentIdentitySeo, rawWebsite.identitySeo)
+                : currentIdentitySeo;
+
             foundWebsite = true;
             mergedWebsite = {
                 ...record,
                 ...rawWebsite,
+                settings: nextSettings,
+                identitySeo: nextIdentitySeo,
             };
             return mergedWebsite;
         });

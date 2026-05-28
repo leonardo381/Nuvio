@@ -1584,6 +1584,11 @@ func seedNuvioCMSBackofficeDashboardData(t testing.TB, app *tests.TestApp) {
 				},
 			},
 		},
+		"i18n": map[string]any{
+			"enabled":         true,
+			"defaultLanguage": "pt",
+			"languages":       []any{"pt", "en"},
+		},
 		"providerInternals": map[string]any{
 			"smsGatewayToken": "should-not-leak",
 		},
