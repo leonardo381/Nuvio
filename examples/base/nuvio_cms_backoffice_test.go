@@ -72,7 +72,6 @@ func TestNuvioCMSBackofficeDashboardEndpoint(t *testing.T) {
 				`"id":"` + nuvioCMSDashboardBetaBlockID + `"`,
 				`"id":"` + nuvioCMSDashboardAlphaOtherBlockID + `"`,
 				`"apiUrl"`,
-				`"owner-alpha@example.test"`,
 				`"smsGatewayToken"`,
 				`"secret component metadata"`,
 				`"providerConfig"`,
@@ -108,7 +107,6 @@ func TestNuvioCMSBackofficeDashboardEndpoint(t *testing.T) {
 				`"siteId":"alpha-umami-site"`,
 				`"scriptUrl"`,
 				`"apiUrl"`,
-				`"owner-alpha@example.test"`,
 			},
 		},
 		{
@@ -273,7 +271,6 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 			},
 			NotExpectedContent: []string{
 				`"apiUrl"`,
-				`"owner-alpha@example.test"`,
 			},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
 				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
@@ -410,7 +407,7 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 				"settings":{
 					"featureFlags":{"booking":false},
 					"contactForm":{"enabled":false,"confirmationMessage":"Updated confirmation"},
-					"reports":{"analytics":{"enabled":true,"provider":"umami","scriptEnabled":false,"siteId":"updated-site","events":{"scrollDepth":false}}},
+					"reports":{"analytics":{"enabled":true,"provider":"umami","scriptEnabled":false,"siteId":"updated-site","scriptUrl":"https://analytics.updated.example/script.js","events":{"scrollDepth":false}}},
 					"booking":{"rules":{"minNoticeHours":4}}
 				}
 			}`),
@@ -426,10 +423,10 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 				`"websiteId":"` + nuvioCMSDashboardAlphaWebsiteID + `"`,
 				`"minNoticeHours":4`,
 				`"siteId":"updated-site"`,
+				`"scriptUrl":"https://analytics.updated.example/script.js"`,
 			},
 			NotExpectedContent: []string{
 				`"apiUrl"`,
-				`"owner-alpha@example.test"`,
 			},
 			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
 				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
@@ -490,6 +487,9 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 				}
 				if strings.TrimSpace(parseStringValue(analytics["apiUrl"])) != "https://analytics.alpha.example/api" {
 					t.Fatalf("expected reports.analytics.apiUrl to be preserved")
+				}
+				if strings.TrimSpace(parseStringValue(analytics["scriptUrl"])) != "https://analytics.updated.example/script.js" {
+					t.Fatalf("expected reports.analytics.scriptUrl to be updated")
 				}
 			},
 		},
@@ -627,19 +627,356 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 			},
 		},
 		{
-			Name:   "settings endpoint rejects notification recipients update",
+			Name:   "admin can update notification recipients",
 			Method: http.MethodPatch,
 			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
 			Headers: map[string]string{
 				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
 			},
 			Body: strings.NewReader(`{
-				"contactForm":{"emailNotifications":{"to":["hijack@example.test"]}}
+				"contactForm":{"emailNotifications":{"to":["hijack@example.test"],"cc":["cc-hijack@example.test"]}}
 			}`),
 			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
 				seedNuvioCMSBackofficeDashboardData(t, app)
 				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"hijack@example.test"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
+				if err != nil {
+					t.Fatalf("expected website to exist: %v", err)
+				}
+
+				settings := parseNuvioSettingsObject(website.Get("settings"))
+				contactForm, ok := toStringAnyMap(settings["contactForm"])
+				if !ok {
+					t.Fatalf("expected contactForm settings")
+				}
+				emailNotifications, ok := toStringAnyMap(contactForm["emailNotifications"])
+				if !ok {
+					t.Fatalf("expected contactForm.emailNotifications settings")
+				}
+				toRecipients := parseNuvioRecipientIDs(emailNotifications["to"])
+				if len(toRecipients) != 1 || toRecipients[0] != "hijack@example.test" {
+					t.Fatalf("expected contactForm.emailNotifications.to to be updated")
+				}
+				ccRecipients := parseNuvioRecipientIDs(emailNotifications["cc"])
+				if len(ccRecipients) != 1 || ccRecipients[0] != "cc-hijack@example.test" {
+					t.Fatalf("expected contactForm.emailNotifications.cc to be updated")
+				}
+			},
+		},
+		{
+			Name:   "admin can update settings using flat compatibility payloads",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"contactForm":{
+					"to":["flat-contact@example.test"],
+					"cc":["flat-contact-cc@example.test"],
+					"template":{"subject":"Flat contact template subject"}
+				},
+				"whatsapp":{
+					"to":["flat-whatsapp@example.test"],
+					"cc":["flat-whatsapp-cc@example.test"],
+					"template":{"subject":"Flat whatsapp template subject"}
+				},
+				"newsletter":{
+					"confirmationTemplate":{"enabled":true,"subject":"Flat newsletter template subject"}
+				},
+				"booking":{
+					"to":["flat-booking@example.test"],
+					"cc":["flat-booking-cc@example.test"],
+					"businessTemplate":{"subject":"Flat booking business template subject"},
+					"requestTemplate":{"subject":"Flat request template subject"},
+					"confirmationTemplate":{"subject":"Flat confirmation template subject"},
+					"rescheduleTemplate":{"subject":"Flat reschedule template subject"},
+					"minNoticeHours":7,
+					"bookingWindowDays":21,
+					"bufferMinutes":10,
+					"calendarBlockingMode":"website"
+				}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
+				if err != nil {
+					t.Fatalf("expected website to exist: %v", err)
+				}
+
+				settings := parseNuvioSettingsObject(website.Get("settings"))
+
+				contactForm, ok := toStringAnyMap(settings["contactForm"])
+				if !ok {
+					t.Fatalf("expected contactForm settings")
+				}
+				contactNotifications, ok := toStringAnyMap(contactForm["emailNotifications"])
+				if !ok {
+					t.Fatalf("expected contactForm.emailNotifications settings")
+				}
+				contactTo := parseNuvioRecipientIDs(contactNotifications["to"])
+				if len(contactTo) != 1 || contactTo[0] != "flat-contact@example.test" {
+					t.Fatalf("expected contactForm flat to recipient to be mapped")
+				}
+
+				whatsapp, ok := toStringAnyMap(settings["whatsapp"])
+				if !ok {
+					t.Fatalf("expected whatsapp settings")
+				}
+				whatsappNotifications, ok := toStringAnyMap(whatsapp["emailNotifications"])
+				if !ok {
+					t.Fatalf("expected whatsapp.emailNotifications settings")
+				}
+				whatsappTo := parseNuvioRecipientIDs(whatsappNotifications["to"])
+				if len(whatsappTo) != 1 || whatsappTo[0] != "flat-whatsapp@example.test" {
+					t.Fatalf("expected whatsapp flat to recipient to be mapped")
+				}
+
+				newsletter, ok := toStringAnyMap(settings["newsletter"])
+				if !ok {
+					t.Fatalf("expected newsletter settings")
+				}
+				lifecycle, ok := toStringAnyMap(newsletter["lifecycle"])
+				if !ok {
+					t.Fatalf("expected newsletter.lifecycle settings")
+				}
+				confirmationTemplate, ok := toStringAnyMap(lifecycle["confirmationTemplate"])
+				if !ok {
+					t.Fatalf("expected newsletter.lifecycle.confirmationTemplate settings")
+				}
+				if strings.TrimSpace(parseStringValue(confirmationTemplate["subject"])) != "Flat newsletter template subject" {
+					t.Fatalf("expected newsletter flat confirmationTemplate to be mapped")
+				}
+
+				booking, ok := toStringAnyMap(settings["booking"])
+				if !ok {
+					t.Fatalf("expected booking settings")
+				}
+				bookingNotifications, ok := toStringAnyMap(booking["emailNotifications"])
+				if !ok {
+					t.Fatalf("expected booking.emailNotifications settings")
+				}
+				bookingTo := parseNuvioRecipientIDs(bookingNotifications["to"])
+				if len(bookingTo) != 1 || bookingTo[0] != "flat-booking@example.test" {
+					t.Fatalf("expected booking flat to recipient to be mapped")
+				}
+				businessTemplate, ok := toStringAnyMap(bookingNotifications["businessTemplate"])
+				if !ok {
+					t.Fatalf("expected booking email businessTemplate settings")
+				}
+				if strings.TrimSpace(parseStringValue(businessTemplate["subject"])) != "Flat booking business template subject" {
+					t.Fatalf("expected booking flat businessTemplate to be mapped")
+				}
+
+				visitorEmails, ok := toStringAnyMap(booking["visitorEmails"])
+				if !ok {
+					t.Fatalf("expected booking.visitorEmails settings")
+				}
+				requestTemplate, ok := toStringAnyMap(visitorEmails["requestTemplate"])
+				if !ok || strings.TrimSpace(parseStringValue(requestTemplate["subject"])) != "Flat request template subject" {
+					t.Fatalf("expected booking flat requestTemplate to be mapped")
+				}
+				confirmationVisitorTemplate, ok := toStringAnyMap(visitorEmails["confirmationTemplate"])
+				if !ok || strings.TrimSpace(parseStringValue(confirmationVisitorTemplate["subject"])) != "Flat confirmation template subject" {
+					t.Fatalf("expected booking flat confirmationTemplate to be mapped")
+				}
+				rescheduleTemplate, ok := toStringAnyMap(visitorEmails["rescheduleTemplate"])
+				if !ok || strings.TrimSpace(parseStringValue(rescheduleTemplate["subject"])) != "Flat reschedule template subject" {
+					t.Fatalf("expected booking flat rescheduleTemplate to be mapped")
+				}
+
+				rules, ok := toStringAnyMap(booking["rules"])
+				if !ok {
+					t.Fatalf("expected booking.rules settings")
+				}
+				if parseNuvioNonNegativeInt(rules["minNoticeHours"], 0) != 7 {
+					t.Fatalf("expected booking flat minNoticeHours to be mapped")
+				}
+				if parseNuvioNonNegativeInt(rules["bookingWindowDays"], 0) != 21 {
+					t.Fatalf("expected booking flat bookingWindowDays to be mapped")
+				}
+				if parseNuvioNonNegativeInt(rules["bufferMinutes"], 0) != 10 {
+					t.Fatalf("expected booking flat bufferMinutes to be mapped")
+				}
+				if strings.TrimSpace(parseStringValue(rules["calendarBlockingMode"])) != "website" {
+					t.Fatalf("expected booking flat calendarBlockingMode to be mapped")
+				}
+			},
+		},
+		{
+			Name:   "client can update contact form notification recipients and preserve hidden keys",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"contactForm":{"emailNotifications":{"to":["client-contact@example.test"],"cc":["client-contact-cc@example.test"]}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				injectNuvioCMSBackofficeHiddenSettings(t, app, nuvioCMSDashboardAlphaWebsiteID)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"client-contact@example.test"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
+				if err != nil {
+					t.Fatalf("expected website to exist: %v", err)
+				}
+
+				settings := parseNuvioSettingsObject(website.Get("settings"))
+				contactForm, ok := toStringAnyMap(settings["contactForm"])
+				if !ok {
+					t.Fatalf("expected contactForm settings")
+				}
+				emailNotifications, ok := toStringAnyMap(contactForm["emailNotifications"])
+				if !ok {
+					t.Fatalf("expected contactForm.emailNotifications settings")
+				}
+				toRecipients := parseNuvioRecipientIDs(emailNotifications["to"])
+				if len(toRecipients) != 1 || toRecipients[0] != "client-contact@example.test" {
+					t.Fatalf("expected contactForm.emailNotifications.to to be updated for client")
+				}
+				ccRecipients := parseNuvioRecipientIDs(emailNotifications["cc"])
+				if len(ccRecipients) != 1 || ccRecipients[0] != "client-contact-cc@example.test" {
+					t.Fatalf("expected contactForm.emailNotifications.cc to be updated for client")
+				}
+
+				booking, ok := toStringAnyMap(settings["booking"])
+				if !ok {
+					t.Fatalf("expected booking settings")
+				}
+				if strings.TrimSpace(parseStringValue(booking["privateKey"])) != "keep-hidden" {
+					t.Fatalf("expected hidden booking.privateKey to be preserved")
+				}
+			},
+		},
+		{
+			Name:   "client can update whatsapp notification recipients",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"whatsapp":{"emailNotifications":{"to":["client-whatsapp@example.test"],"cc":["client-whatsapp-cc@example.test"]}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"client-whatsapp@example.test"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
+				if err != nil {
+					t.Fatalf("expected website to exist: %v", err)
+				}
+
+				settings := parseNuvioSettingsObject(website.Get("settings"))
+				whatsapp, ok := toStringAnyMap(settings["whatsapp"])
+				if !ok {
+					t.Fatalf("expected whatsapp settings")
+				}
+				emailNotifications, ok := toStringAnyMap(whatsapp["emailNotifications"])
+				if !ok {
+					t.Fatalf("expected whatsapp.emailNotifications settings")
+				}
+				toRecipients := parseNuvioRecipientIDs(emailNotifications["to"])
+				if len(toRecipients) != 1 || toRecipients[0] != "client-whatsapp@example.test" {
+					t.Fatalf("expected whatsapp.emailNotifications.to to be updated for client")
+				}
+				ccRecipients := parseNuvioRecipientIDs(emailNotifications["cc"])
+				if len(ccRecipients) != 1 || ccRecipients[0] != "client-whatsapp-cc@example.test" {
+					t.Fatalf("expected whatsapp.emailNotifications.cc to be updated for client")
+				}
+			},
+		},
+		{
+			Name:   "client can update booking notification recipients",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"booking":{"emailNotifications":{"to":["client-booking@example.test"],"cc":["client-booking-cc@example.test"]}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"client-booking@example.test"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
+				if err != nil {
+					t.Fatalf("expected website to exist: %v", err)
+				}
+
+				settings := parseNuvioSettingsObject(website.Get("settings"))
+				booking, ok := toStringAnyMap(settings["booking"])
+				if !ok {
+					t.Fatalf("expected booking settings")
+				}
+				emailNotifications, ok := toStringAnyMap(booking["emailNotifications"])
+				if !ok {
+					t.Fatalf("expected booking.emailNotifications settings")
+				}
+				toRecipients := parseNuvioRecipientIDs(emailNotifications["to"])
+				if len(toRecipients) != 1 || toRecipients[0] != "client-booking@example.test" {
+					t.Fatalf("expected booking.emailNotifications.to to be updated for client")
+				}
+				ccRecipients := parseNuvioRecipientIDs(emailNotifications["cc"])
+				if len(ccRecipients) != 1 || ccRecipients[0] != "client-booking-cc@example.test" {
+					t.Fatalf("expected booking.emailNotifications.cc to be updated for client")
+				}
+			},
+		},
+		{
+			Name:   "settings endpoint rejects invalid notification recipients payload shape",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"contactForm":{"emailNotifications":{"to":"invalid-shape@example.test"}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioCMSDashboardAlphaWebsiteID})
 			},
 			ExpectedStatus: 400,
 			ExpectedContent: []string{

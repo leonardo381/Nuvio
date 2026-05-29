@@ -37,8 +37,8 @@
     const sectionDefaultLanguageKey = "default";
     const sectionDiscardIntentCloseKey = "close";
     const sectionDiscardIntentSwitchLanguageKey = "switch-language";
-    const clientSettingsRole = "client";
     const visibleClientSettingsKeys = new Set(["whatsapp", "contactForm", "newsletter", "booking", "reports", "i18n"]);
+    const cmsClientDeniedWebsiteSettingsFieldPaths = new Set();
     const websiteSettingsAreaIdentitySeoKey = "identity-seo";
     const websiteSettingsAreaFeaturesKey = "features";
     const websiteSettingsFeatureOrder = ["whatsapp", "contactForm", "newsletter", "booking", "reports", "i18n"];
@@ -113,6 +113,7 @@
     let pageSeoSocialImageObjectUrl = "";
     let websiteLogoObjectUrl = "";
     let websiteSeoImageObjectUrl = "";
+    let websiteSettingsRole = "client";
 
     let websiteSettingsFullDraft = {};
     let websiteSettingsDraft = {};
@@ -175,6 +176,7 @@
     let lastPageSeedId = "";
     let lastSectionsSeedKey = "";
     let lastWebsiteSettingsSeedKey = "";
+    let lastWebsiteSettingsWebsiteId = "";
 
     const seoTitleLongThreshold = 65;
     const seoDescriptionLongThreshold = 170;
@@ -299,6 +301,7 @@
     $: selectedWebsite = websites.find((record) => record.id === selectedWebsiteId) || null;
     $: selectedPage = pages.find((record) => record.id === selectedPageId) || null;
     $: cmsCanUseFileFields = toBooleanValue(cmsDashboardCapabilities?.canUseFileFields);
+    $: cmsFileFieldsEnabledForCurrentUser = cmsCanUseFileFields || ApiClient.isAdminSuperuser();
     $: sectionEditorPersistedSettingsSource = getWebsiteSettingsFromRecord(selectedWebsite);
     $: sectionEditorLanguageSettingsSource = getSectionEditorLanguageSettingsSource(
         sectionEditorPersistedSettingsSource,
@@ -323,7 +326,8 @@
     $: pageSeoSupportsTranslations = pageSeoTranslationLanguages.length > 0;
     $: effectiveBlockTranslationsField = resolvedBlockTranslationsField;
     $: sectionEditorSupportsTranslations = sectionEditorTranslationLanguages.length > 0;
-    $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
+    $: websiteSettingsRole = ApiClient.isClientSuperuser() ? "client" : "admin";
+    $: roleScopedSettingsFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, websiteSettingsFullDraft).fields;
     $: clientWebsiteSettingsFields = filterClientWebsiteSettingsFields(roleScopedSettingsFields);
     $: websiteSettingsFieldsByKey = new Map(
         (clientWebsiteSettingsFields || []).map((field) => [normalizeString(field?.key), field]),
@@ -394,7 +398,7 @@
     $: activeWebsiteSettingsFeatureFormFields = activeWebsiteSettingsFeatureScopedField
         ? [activeWebsiteSettingsFeatureScopedField]
         : [];
-    $: activeWebsiteSettingsFeatureHasDeferredFileFields = !cmsCanUseFileFields
+    $: activeWebsiteSettingsFeatureHasDeferredFileFields = !cmsFileFieldsEnabledForCurrentUser
         && !!activeWebsiteSettingsFeatureField
         && !activeWebsiteSettingsFeatureFormFields.length;
     $: activeWebsiteSettingsFeatureValue = activeWebsiteSettingsFeatureField
@@ -769,7 +773,7 @@
     $: selectedEditingSection = blocks.find((block) => `${block?.id || ""}` === `${editingSectionId || ""}`) || null;
     $: selectedEditingSectionRawFields = selectedEditingSection ? getSectionSchemaFields(selectedEditingSection) : [];
     $: selectedEditingSectionFields = sanitizeSchemaFieldsForFileCapability(selectedEditingSectionRawFields);
-    $: selectedEditingSectionHasDeferredFileFields = !cmsCanUseFileFields
+    $: selectedEditingSectionHasDeferredFileFields = !cmsFileFieldsEnabledForCurrentUser
         && selectedEditingSectionRawFields.length > selectedEditingSectionFields.length;
     $: selectedEditingSectionSchemaFieldKeys = new Set(
         selectedEditingSectionFields
@@ -858,11 +862,16 @@
     $: {
         const nextWebsiteSettingsSeedKey = `${selectedWebsite?.id || ""}|${selectedWebsite?.updated || ""}|${resolvedWebsiteSettingsField || ""}|${stableSerializeForDirtyCheck(selectedWebsite?.identitySeo || {})}|${stableSerializeForDirtyCheck(selectedWebsite?.settings || {})}`;
         if (nextWebsiteSettingsSeedKey !== lastWebsiteSettingsSeedKey) {
+            const nextWebsiteSettingsWebsiteId = `${selectedWebsite?.id || ""}`;
+            const hasWebsiteChanged = nextWebsiteSettingsWebsiteId !== lastWebsiteSettingsWebsiteId;
             lastWebsiteSettingsSeedKey = nextWebsiteSettingsSeedKey;
+            lastWebsiteSettingsWebsiteId = nextWebsiteSettingsWebsiteId;
             initializeWebsiteSettingsDraft();
             initializeWebsiteIdentitySeoDraft();
-            activeWebsiteSettingsArea = websiteSettingsAreaIdentitySeoKey;
-            activeWebsiteSettingsFeatureKey = "";
+            if (hasWebsiteChanged) {
+                activeWebsiteSettingsArea = websiteSettingsAreaIdentitySeoKey;
+                activeWebsiteSettingsFeatureKey = "";
+            }
         }
     }
 
@@ -1458,7 +1467,7 @@
             return null;
         }
 
-        if (cmsCanUseFileFields || !isSchemaFileField(field)) {
+        if (cmsFileFieldsEnabledForCurrentUser || !isSchemaFileField(field)) {
             const cloned = structuredClone(field);
             if (Array.isArray(cloned.fields)) {
                 cloned.fields = sanitizeSchemaFieldsForFileCapability(cloned.fields);
@@ -3195,7 +3204,59 @@
     }
 
     function filterClientWebsiteSettingsFields(fields = []) {
-        return (fields || []).filter((field) => visibleClientSettingsKeys.has(field?.key));
+        const topLevelVisibleFields = (fields || []).filter((field) => visibleClientSettingsKeys.has(field?.key));
+        if (websiteSettingsRole !== "client") {
+            return topLevelVisibleFields;
+        }
+        return sanitizeWebsiteSettingsFieldsForClient(topLevelVisibleFields);
+    }
+
+    function sanitizeWebsiteSettingsFieldsForClient(fields = [], parentPath = "") {
+        const sanitized = [];
+
+        for (const field of fields || []) {
+            if (!isPlainObject(field)) {
+                continue;
+            }
+
+            const normalizedFieldKey = normalizeString(field?.key).toLowerCase();
+            if (!normalizedFieldKey) {
+                continue;
+            }
+
+            const normalizedPath = parentPath
+                ? `${parentPath}.${normalizedFieldKey}`
+                : normalizedFieldKey;
+            if (cmsClientDeniedWebsiteSettingsFieldPaths.has(normalizedPath)) {
+                continue;
+            }
+
+            const nextField = structuredClone(field);
+            if (Array.isArray(nextField.fields)) {
+                nextField.fields = sanitizeWebsiteSettingsFieldsForClient(nextField.fields, normalizedPath);
+                if (!nextField.fields.length) {
+                    continue;
+                }
+            }
+
+            if (isPlainObject(nextField.item) && Array.isArray(nextField.item.fields)) {
+                const sanitizedItemFields = sanitizeWebsiteSettingsFieldsForClient(
+                    nextField.item.fields,
+                    normalizedPath,
+                );
+                if (!sanitizedItemFields.length) {
+                    continue;
+                }
+                nextField.item = {
+                    ...nextField.item,
+                    fields: sanitizedItemFields,
+                };
+            }
+
+            sanitized.push(nextField);
+        }
+
+        return sanitized;
     }
 
     function buildWebsiteSettingsScopedDraft(settingsValue, scopedFields = []) {
@@ -3250,7 +3311,7 @@
 
         const selectedWebsiteSettings = getWebsiteSettingsFromRecord(selectedWebsite);
         const normalizedFullSettings = normalizeWebsiteSettingsValue(selectedWebsiteSettings);
-        const roleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, normalizedFullSettings).fields;
+        const roleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, normalizedFullSettings).fields;
         const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
 
         websiteSettingsFullDraft = normalizedFullSettings;
@@ -3331,7 +3392,7 @@
             return;
         }
 
-        const roleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, websiteSettingsFullDraft).fields;
+        const roleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, websiteSettingsFullDraft).fields;
         const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
         const scopedPatchFields = visibleFields.filter((field) => nextValueKeys.has(normalizeString(field?.key)));
         if (!scopedPatchFields.length) {
@@ -3343,7 +3404,7 @@
         const normalizedFullSettings = normalizeWebsiteSettingsValue(
             mergeSettingsObjects(websiteSettingsFullDraft, normalizedScopedChanges),
         );
-        const nextRoleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, normalizedFullSettings).fields;
+        const nextRoleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, normalizedFullSettings).fields;
         const nextVisibleFields = filterClientWebsiteSettingsFields(nextRoleScopedFields);
 
         websiteSettingsFullDraft = normalizedFullSettings;
@@ -3351,7 +3412,7 @@
     }
 
     function handleWebsiteSeoFileChange(type, event) {
-        if (!cmsCanUseFileFields) {
+        if (!cmsFileFieldsEnabledForCurrentUser) {
             websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
             if (event.currentTarget) {
                 event.currentTarget.value = "";
@@ -3383,7 +3444,7 @@
     }
 
     function handlePageSeoFileChange(event) {
-        if (!cmsCanUseFileFields) {
+        if (!cmsFileFieldsEnabledForCurrentUser) {
             pageError = "File uploads are managed by an administrator for now.";
             if (event.currentTarget) {
                 event.currentTarget.value = "";
@@ -3406,7 +3467,7 @@
     }
 
     function markPageSeoSocialImageForRemoval() {
-        if (!cmsCanUseFileFields) {
+        if (!cmsFileFieldsEnabledForCurrentUser) {
             pageError = "File uploads are managed by an administrator for now.";
             return;
         }
@@ -3421,7 +3482,7 @@
     }
 
     function undoPageSeoSocialImageRemoval() {
-        if (!cmsCanUseFileFields) {
+        if (!cmsFileFieldsEnabledForCurrentUser) {
             pageError = "File uploads are managed by an administrator for now.";
             return;
         }
@@ -3435,7 +3496,7 @@
     }
 
     function markWebsiteSeoImageForRemoval(type) {
-        if (!cmsCanUseFileFields) {
+        if (!cmsFileFieldsEnabledForCurrentUser) {
             websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
             return;
         }
@@ -3463,7 +3524,7 @@
     }
 
     function undoWebsiteSeoImageRemoval(type) {
-        if (!cmsCanUseFileFields) {
+        if (!cmsFileFieldsEnabledForCurrentUser) {
             websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
             return;
         }
@@ -4006,7 +4067,7 @@
     function buildWebsiteSettingsPatchPayload() {
         const persistedSettings = getWebsiteSettingsFromRecord(selectedWebsite);
         const normalizedPersistedFull = normalizeWebsiteSettingsValue(persistedSettings);
-        const roleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, normalizedPersistedFull).fields;
+        const roleScopedFields = getWebsiteSettingsSchemaForRole(websiteSettingsRole, normalizedPersistedFull).fields;
         const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
         const persistedScopedDraft = buildWebsiteSettingsScopedDraft(normalizedPersistedFull, visibleFields);
         const currentScopedDraft = buildWebsiteSettingsScopedDraft(websiteSettingsDraft, visibleFields);
@@ -4092,9 +4153,9 @@
             if (pageSeoFocusKeywordField) {
                 setPayloadField(payload, pageSeoFocusKeywordField, normalizeString(pageEditForm.seoFocusKeyword));
             }
-            if (cmsCanUseFileFields && pageSeoSocialImageField && pageEditForm.seoSocialImageFile) {
+            if (cmsFileFieldsEnabledForCurrentUser && pageSeoSocialImageField && pageEditForm.seoSocialImageFile) {
                 setPayloadField(payload, pageSeoSocialImageField, pageEditForm.seoSocialImageFile);
-            } else if (cmsCanUseFileFields && pageSeoSocialImageField && pageEditForm.seoSocialImageRemove) {
+            } else if (cmsFileFieldsEnabledForCurrentUser && pageSeoSocialImageField && pageEditForm.seoSocialImageRemove) {
                 setPayloadField(payload, pageSeoSocialImageField, "");
             }
         }
@@ -4356,7 +4417,7 @@
             payload.props = toPropsObject(sectionPropsDraftById?.[blockId]);
         }
 
-        if (!cmsCanUseFileFields && containsFileLikePayload(payload)) {
+        if (!cmsFileFieldsEnabledForCurrentUser && containsFileLikePayload(payload)) {
             sectionErrorById = {
                 ...sectionErrorById,
                 [blockId]: "File uploads are managed by an administrator for now.",
@@ -4906,7 +4967,7 @@
                                                                 </div>
 
                                                                 <div class="page-seo-image-controls">
-                                                                    {#if cmsCanUseFileFields}
+                                                                    {#if cmsFileFieldsEnabledForCurrentUser}
                                                                         <div class="page-seo-image-input-row">
                                                                             <div class="settings-file-row page-seo-image-upload-row">
                                                                                 <input
@@ -5292,7 +5353,7 @@
                                                                     </div>
 
                                                                     <div class="page-seo-image-controls">
-                                                                        {#if cmsCanUseFileFields}
+                                                                        {#if cmsFileFieldsEnabledForCurrentUser}
                                                                             <div class="page-seo-image-input-row">
                                                                                 <div class="settings-file-row page-seo-image-upload-row">
                                                                                     <input
@@ -5412,7 +5473,7 @@
                                                                     </div>
 
                                                                     <div class="page-seo-image-controls">
-                                                                        {#if cmsCanUseFileFields}
+                                                                        {#if cmsFileFieldsEnabledForCurrentUser}
                                                                             <div class="page-seo-image-input-row">
                                                                                 <div class="settings-file-row page-seo-image-upload-row">
                                                                                     <input
@@ -5980,7 +6041,7 @@
                                                                             path={`websites.${selectedWebsiteId}.settings.${leadChannel.field.key}`}
                                                                             on:change={(event) => handleWebsiteSettingsFeatureGroupChange(leadChannel.field.key, event)}
                                                                         />
-                                                                    {:else if !cmsCanUseFileFields}
+                                                                    {:else if !cmsFileFieldsEnabledForCurrentUser}
                                                                         <p class="txt-sm txt-hint m-b-0">File uploads are managed by an administrator for now.</p>
                                                                     {:else}
                                                                         <p class="txt-sm txt-hint m-b-0">No client-configurable settings are available for this channel yet.</p>

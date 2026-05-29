@@ -1185,11 +1185,11 @@ func mergeNuvioCMSBackofficeSettingsPatch(
 				return nil, err
 			}
 		case "contactform":
-			if err := applyNuvioCMSBackofficeContactFormSettingsPatch(currentSettings, rawValue); err != nil {
+			if err := applyNuvioCMSBackofficeContactFormSettingsPatch(currentSettings, rawValue, isAdmin); err != nil {
 				return nil, err
 			}
 		case "whatsapp":
-			if err := applyNuvioCMSBackofficeWhatsAppSettingsPatch(currentSettings, rawValue); err != nil {
+			if err := applyNuvioCMSBackofficeWhatsAppSettingsPatch(currentSettings, rawValue, isAdmin); err != nil {
 				return nil, err
 			}
 		case "newsletter":
@@ -1197,7 +1197,7 @@ func mergeNuvioCMSBackofficeSettingsPatch(
 				return nil, err
 			}
 		case "booking":
-			if err := applyNuvioCMSBackofficeBookingSettingsPatch(currentSettings, rawValue); err != nil {
+			if err := applyNuvioCMSBackofficeBookingSettingsPatch(currentSettings, rawValue, isAdmin); err != nil {
 				return nil, err
 			}
 		case "i18n":
@@ -1253,7 +1253,7 @@ func applyNuvioCMSBackofficeFeatureFlagsPatch(settings map[string]any, rawPatch 
 	return nil
 }
 
-func applyNuvioCMSBackofficeContactFormSettingsPatch(settings map[string]any, rawPatch any) error {
+func applyNuvioCMSBackofficeContactFormSettingsPatch(settings map[string]any, rawPatch any, isAdmin bool) error {
 	contactFormPatch, ok := toStringAnyMap(rawPatch)
 	if !ok {
 		return fmt.Errorf("contactForm must be an object")
@@ -1278,7 +1278,12 @@ func applyNuvioCMSBackofficeContactFormSettingsPatch(settings map[string]any, ra
 				return err
 			}
 		case "emailnotifications":
-			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(contactFormSettings, rawValue, "template", true); err != nil {
+			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(contactFormSettings, rawValue, "template", true, isAdmin); err != nil {
+				return err
+			}
+		case "to", "cc", "template":
+			// Backward-compatible flat payload support (maps to contactForm.emailNotifications.*).
+			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(contactFormSettings, map[string]any{rawKey: rawValue}, "template", true, isAdmin); err != nil {
 				return err
 			}
 		default:
@@ -1314,7 +1319,7 @@ func applyNuvioCMSBackofficeContactFormFieldsPatch(contactFormSettings map[strin
 	return nil
 }
 
-func applyNuvioCMSBackofficeWhatsAppSettingsPatch(settings map[string]any, rawPatch any) error {
+func applyNuvioCMSBackofficeWhatsAppSettingsPatch(settings map[string]any, rawPatch any, isAdmin bool) error {
 	whatsAppPatch, ok := toStringAnyMap(rawPatch)
 	if !ok {
 		return fmt.Errorf("whatsapp must be an object")
@@ -1343,7 +1348,12 @@ func applyNuvioCMSBackofficeWhatsAppSettingsPatch(settings map[string]any, rawPa
 			}
 			whatsAppSettings["showFloatingButton"] = value
 		case "emailnotifications":
-			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(whatsAppSettings, rawValue, "template", true); err != nil {
+			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(whatsAppSettings, rawValue, "template", true, isAdmin); err != nil {
+				return err
+			}
+		case "to", "cc", "template":
+			// Backward-compatible flat payload support (maps to whatsapp.emailNotifications.*).
+			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(whatsAppSettings, map[string]any{rawKey: rawValue}, "template", true, isAdmin); err != nil {
 				return err
 			}
 		default:
@@ -1393,6 +1403,15 @@ func applyNuvioCMSBackofficeNewsletterSettingsPatch(settings map[string]any, raw
 				}
 			}
 			newsletterSettings["lifecycle"] = lifecycleSettings
+		case "confirmationtemplate":
+			// Backward-compatible flat payload support (maps to newsletter.lifecycle.confirmationTemplate).
+			lifecycleSettings := ensureNuvioCMSBackofficeChildMap(newsletterSettings, "lifecycle")
+			templateSettings := ensureNuvioCMSBackofficeChildMap(lifecycleSettings, "confirmationTemplate")
+			if err := applyNuvioCMSBackofficeTemplatePatch(templateSettings, rawValue, false); err != nil {
+				return fmt.Errorf("newsletter.lifecycle.confirmationTemplate: %w", err)
+			}
+			lifecycleSettings["confirmationTemplate"] = templateSettings
+			newsletterSettings["lifecycle"] = lifecycleSettings
 		default:
 			return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
 		}
@@ -1402,7 +1421,7 @@ func applyNuvioCMSBackofficeNewsletterSettingsPatch(settings map[string]any, raw
 	return nil
 }
 
-func applyNuvioCMSBackofficeBookingSettingsPatch(settings map[string]any, rawPatch any) error {
+func applyNuvioCMSBackofficeBookingSettingsPatch(settings map[string]any, rawPatch any, isAdmin bool) error {
 	bookingPatch, ok := toStringAnyMap(rawPatch)
 	if !ok {
 		return fmt.Errorf("booking must be an object")
@@ -1427,7 +1446,12 @@ func applyNuvioCMSBackofficeBookingSettingsPatch(settings map[string]any, rawPat
 			}
 			bookingSettings["confirmationMode"] = confirmationMode
 		case "emailnotifications":
-			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(bookingSettings, rawValue, "businessTemplate", true); err != nil {
+			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(bookingSettings, rawValue, "businessTemplate", true, isAdmin); err != nil {
+				return err
+			}
+		case "to", "cc", "businesstemplate":
+			// Backward-compatible flat payload support (maps to booking.emailNotifications.*).
+			if err := applyNuvioCMSBackofficeEmailNotificationsPatch(bookingSettings, map[string]any{rawKey: rawValue}, "businessTemplate", true, isAdmin); err != nil {
 				return err
 			}
 		case "visitoremails":
@@ -1457,8 +1481,31 @@ func applyNuvioCMSBackofficeBookingSettingsPatch(settings map[string]any, rawPat
 				visitorEmailsSettings[templateName] = templateSettings
 			}
 			bookingSettings["visitorEmails"] = visitorEmailsSettings
+		case "requesttemplate", "confirmationtemplate", "rescheduletemplate":
+			// Backward-compatible flat payload support (maps to booking.visitorEmails.*Template).
+			visitorEmailsSettings := ensureNuvioCMSBackofficeChildMap(bookingSettings, "visitorEmails")
+			var templateName string
+			switch normalizeNuvioCMSBackofficePayloadKey(rawKey) {
+			case "requesttemplate":
+				templateName = "requestTemplate"
+			case "confirmationtemplate":
+				templateName = "confirmationTemplate"
+			case "rescheduletemplate":
+				templateName = "rescheduleTemplate"
+			}
+			templateSettings := ensureNuvioCMSBackofficeChildMap(visitorEmailsSettings, templateName)
+			if err := applyNuvioCMSBackofficeTemplatePatch(templateSettings, rawValue, false); err != nil {
+				return fmt.Errorf("booking.visitorEmails.%s: %w", templateName, err)
+			}
+			visitorEmailsSettings[templateName] = templateSettings
+			bookingSettings["visitorEmails"] = visitorEmailsSettings
 		case "rules":
 			if err := applyNuvioCMSBackofficeBookingRulesPatch(bookingSettings, rawValue); err != nil {
+				return err
+			}
+		case "minnoticehours", "bookingwindowdays", "bufferminutes", "calendarblockingmode":
+			// Backward-compatible flat payload support (maps to booking.rules.*).
+			if err := applyNuvioCMSBackofficeBookingRulesPatch(bookingSettings, map[string]any{rawKey: rawValue}); err != nil {
 				return err
 			}
 		default:
@@ -1597,8 +1644,8 @@ func applyNuvioCMSBackofficeReportsAnalyticsPatch(reportsSettings map[string]any
 				return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
 			}
 			provider := strings.ToLower(strings.TrimSpace(parseStringValue(rawValue)))
-			if provider != "umami" {
-				return fmt.Errorf("reports.analytics.provider must be umami")
+			if provider != "" && provider != "umami" {
+				return fmt.Errorf("reports.analytics.provider must be umami or empty")
 			}
 			analyticsSettings["provider"] = provider
 		case "scriptenabled":
@@ -1639,8 +1686,24 @@ func applyNuvioCMSBackofficeReportsAnalyticsPatch(reportsSettings map[string]any
 				}
 			}
 			analyticsSettings["events"] = eventsSettings
-		case "apiurl", "scripturl":
+		case "apiurl":
 			return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
+		case "scripturl":
+			if !isAdmin {
+				return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
+			}
+
+			scriptURLValue := strings.TrimSpace(parseStringValue(rawValue))
+			if scriptURLValue == "" {
+				analyticsSettings["scriptUrl"] = ""
+				continue
+			}
+
+			normalizedURL, err := normalizeNuvioAnalyticsURL(scriptURLValue)
+			if err != nil {
+				return fmt.Errorf("reports.analytics.scriptUrl must be a valid http(s) URL")
+			}
+			analyticsSettings["scriptUrl"] = normalizedURL
 		default:
 			return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
 		}
@@ -1655,6 +1718,7 @@ func applyNuvioCMSBackofficeEmailNotificationsPatch(
 	rawPatch any,
 	templateKey string,
 	allowDetailsFields bool,
+	isAdmin bool,
 ) error {
 	notificationsPatch, ok := toStringAnyMap(rawPatch)
 	if !ok {
@@ -1676,6 +1740,12 @@ func applyNuvioCMSBackofficeEmailNotificationsPatch(
 				return fmt.Errorf("emailNotifications.%s: %w", templateKey, err)
 			}
 			emailNotifications[templateKey] = templateSettings
+		case "to", "cc":
+			recipients, err := parseNuvioCMSBackofficeEmailRecipients(rawValue, "emailNotifications."+normalizeNuvioCMSBackofficePayloadKey(rawKey))
+			if err != nil {
+				return err
+			}
+			emailNotifications[normalizeNuvioCMSBackofficePayloadKey(rawKey)] = recipients
 		default:
 			return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
 		}
@@ -1683,6 +1753,42 @@ func applyNuvioCMSBackofficeEmailNotificationsPatch(
 
 	parentSettings["emailNotifications"] = emailNotifications
 	return nil
+}
+
+func parseNuvioCMSBackofficeEmailRecipients(raw any, fieldPath string) ([]string, error) {
+	rawItems := []any{}
+	switch typed := raw.(type) {
+	case []any:
+		rawItems = typed
+	case []string:
+		for _, value := range typed {
+			rawItems = append(rawItems, value)
+		}
+	default:
+		return nil, fmt.Errorf("%s must be an array", fieldPath)
+	}
+
+	recipients := []string{}
+	seen := map[string]struct{}{}
+	for _, rawItem := range rawItems {
+		rawRecipient := strings.TrimSpace(parseStringValue(rawItem))
+		if rawRecipient == "" {
+			continue
+		}
+
+		normalizedEmail, ok := normalizeNuvioEmail(rawRecipient)
+		if !ok {
+			return nil, fmt.Errorf("%s must contain valid email addresses", fieldPath)
+		}
+
+		if _, exists := seen[normalizedEmail]; exists {
+			continue
+		}
+		seen[normalizedEmail] = struct{}{}
+		recipients = append(recipients, normalizedEmail)
+	}
+
+	return recipients, nil
 }
 
 func applyNuvioCMSBackofficeTemplatePatch(
@@ -2330,7 +2436,7 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 				contactForm["fields"] = fields
 			}
 		}
-		if notifications := sanitizeNuvioCMSDashboardEmailNotifications(contactFormRaw["emailNotifications"]); len(notifications) > 0 {
+		if notifications := sanitizeNuvioCMSDashboardEmailNotifications(contactFormRaw["emailNotifications"], true); len(notifications) > 0 {
 			contactForm["emailNotifications"] = notifications
 		}
 		if len(contactForm) > 0 {
@@ -2352,7 +2458,7 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 		if value, ok := parseBoolValue(whatsappRaw["showFloatingButton"]); ok {
 			whatsapp["showFloatingButton"] = value
 		}
-		if notifications := sanitizeNuvioCMSDashboardEmailNotifications(whatsappRaw["emailNotifications"]); len(notifications) > 0 {
+		if notifications := sanitizeNuvioCMSDashboardEmailNotifications(whatsappRaw["emailNotifications"], true); len(notifications) > 0 {
 			whatsapp["emailNotifications"] = notifications
 		}
 		if len(whatsapp) > 0 {
@@ -2391,7 +2497,7 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 		if confirmationMode != "" {
 			booking["confirmationMode"] = confirmationMode
 		}
-		if notifications := sanitizeNuvioCMSDashboardBookingEmailNotifications(bookingRaw["emailNotifications"]); len(notifications) > 0 {
+		if notifications := sanitizeNuvioCMSDashboardBookingEmailNotifications(bookingRaw["emailNotifications"], true); len(notifications) > 0 {
 			booking["emailNotifications"] = notifications
 		}
 		if visitorEmailsRaw, ok := toStringAnyMap(bookingRaw["visitorEmails"]); ok {
@@ -2461,6 +2567,11 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 				if siteID := strings.TrimSpace(parseStringValue(analyticsRaw["siteId"])); siteID != "" {
 					analytics["siteId"] = siteID
 				}
+				if scriptURL := strings.TrimSpace(parseStringValue(analyticsRaw["scriptUrl"])); scriptURL != "" {
+					if normalizedURL, err := normalizeNuvioAnalyticsURL(scriptURL); err == nil {
+						analytics["scriptUrl"] = normalizedURL
+					}
+				}
 				if eventsRaw, ok := toStringAnyMap(analyticsRaw["events"]); ok {
 					events := map[string]any{}
 					if value, ok := parseBoolValue(eventsRaw["scrollDepth"]); ok {
@@ -2483,7 +2594,7 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 	return dto
 }
 
-func sanitizeNuvioCMSDashboardEmailNotifications(raw any) map[string]any {
+func sanitizeNuvioCMSDashboardEmailNotifications(raw any, includeRecipients bool) map[string]any {
 	notificationsRaw, ok := toStringAnyMap(raw)
 	if !ok {
 		return map[string]any{}
@@ -2497,11 +2608,19 @@ func sanitizeNuvioCMSDashboardEmailNotifications(raw any) map[string]any {
 	if template := sanitizeNuvioCMSDashboardTemplateObject(notificationsRaw["template"], true); len(template) > 0 {
 		notifications["template"] = template
 	}
+	if includeRecipients {
+		if recipients := sanitizeNuvioCMSDashboardEmailRecipients(notificationsRaw["to"]); len(recipients) > 0 {
+			notifications["to"] = recipients
+		}
+		if recipients := sanitizeNuvioCMSDashboardEmailRecipients(notificationsRaw["cc"]); len(recipients) > 0 {
+			notifications["cc"] = recipients
+		}
+	}
 
 	return notifications
 }
 
-func sanitizeNuvioCMSDashboardBookingEmailNotifications(raw any) map[string]any {
+func sanitizeNuvioCMSDashboardBookingEmailNotifications(raw any, includeRecipients bool) map[string]any {
 	notificationsRaw, ok := toStringAnyMap(raw)
 	if !ok {
 		return map[string]any{}
@@ -2515,8 +2634,48 @@ func sanitizeNuvioCMSDashboardBookingEmailNotifications(raw any) map[string]any 
 	if template := sanitizeNuvioCMSDashboardTemplateObject(notificationsRaw["businessTemplate"], true); len(template) > 0 {
 		notifications["businessTemplate"] = template
 	}
+	if includeRecipients {
+		if recipients := sanitizeNuvioCMSDashboardEmailRecipients(notificationsRaw["to"]); len(recipients) > 0 {
+			notifications["to"] = recipients
+		}
+		if recipients := sanitizeNuvioCMSDashboardEmailRecipients(notificationsRaw["cc"]); len(recipients) > 0 {
+			notifications["cc"] = recipients
+		}
+	}
 
 	return notifications
+}
+
+func sanitizeNuvioCMSDashboardEmailRecipients(raw any) []string {
+	var rawItems []any
+	switch typed := raw.(type) {
+	case []any:
+		rawItems = typed
+	case []string:
+		rawItems = make([]any, 0, len(typed))
+		for _, value := range typed {
+			rawItems = append(rawItems, value)
+		}
+	default:
+		return []string{}
+	}
+
+	recipients := make([]string, 0, len(rawItems))
+	seen := map[string]struct{}{}
+	for _, rawItem := range rawItems {
+		normalizedEmail, ok := normalizeNuvioEmail(parseStringValue(rawItem))
+		if !ok {
+			continue
+		}
+		if _, exists := seen[normalizedEmail]; exists {
+			continue
+		}
+
+		seen[normalizedEmail] = struct{}{}
+		recipients = append(recipients, normalizedEmail)
+	}
+
+	return recipients
 }
 
 func sanitizeNuvioCMSDashboardTemplateObject(raw any, includeLeadDetails bool) map[string]any {
