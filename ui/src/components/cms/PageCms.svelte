@@ -1458,8 +1458,11 @@
         };
     }
 
+    const cmsFileFieldDeferredHint = "File uploads are managed by an administrator for now.";
+
     function isSchemaFileField(field) {
-        return normalizeString(field?.type).toLowerCase() === "file";
+        const normalizedType = normalizeString(field?.type).toLowerCase();
+        return normalizedType === "file" || normalizedType === "image";
     }
 
     function sanitizeSchemaFieldForFileCapability(field) {
@@ -1467,21 +1470,32 @@
             return null;
         }
 
-        if (cmsFileFieldsEnabledForCurrentUser || !isSchemaFileField(field)) {
-            const cloned = structuredClone(field);
-            if (Array.isArray(cloned.fields)) {
-                cloned.fields = sanitizeSchemaFieldsForFileCapability(cloned.fields);
-            }
-            if (isPlainObject(cloned.items) && Array.isArray(cloned.items.fields)) {
-                cloned.items = {
-                    ...cloned.items,
-                    fields: sanitizeSchemaFieldsForFileCapability(cloned.items.fields),
-                };
-            }
-            return cloned;
+        const cloned = structuredClone(field);
+
+        if (Array.isArray(cloned.fields)) {
+            cloned.fields = sanitizeSchemaFieldsForFileCapability(cloned.fields);
+        }
+        if (isPlainObject(cloned.item) && Array.isArray(cloned.item.fields)) {
+            cloned.item = {
+                ...cloned.item,
+                fields: sanitizeSchemaFieldsForFileCapability(cloned.item.fields),
+            };
+        }
+        if (isPlainObject(cloned.items) && Array.isArray(cloned.items.fields)) {
+            cloned.items = {
+                ...cloned.items,
+                fields: sanitizeSchemaFieldsForFileCapability(cloned.items.fields),
+            };
         }
 
-        return null;
+        if (!cmsFileFieldsEnabledForCurrentUser && isSchemaFileField(cloned)) {
+            cloned.disabled = true;
+            cloned.readonly = true;
+            cloned.nuvioDisableAssetActions = true;
+            cloned.hint = cloned.hint || cmsFileFieldDeferredHint;
+        }
+
+        return cloned;
     }
 
     function sanitizeSchemaFieldsForFileCapability(fields = []) {

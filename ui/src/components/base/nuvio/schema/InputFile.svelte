@@ -15,6 +15,9 @@
   const ASSET_COLLECTION = "Assets";
 
   $: id = `schema-${(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  $: assetActionsDeferred = !!field?.nuvioDisableAssetActions;
+  $: fieldDisabled = disabled || !!field?.disabled || !!field?.readonly;
+  $: assetActionsDisabled = fieldDisabled || assetActionsDeferred;
 
   let isUploading = false;
   let localError = "";
@@ -43,6 +46,13 @@
   }
 
   async function handleFileChange(e) {
+    if (assetActionsDisabled) {
+      if (e?.currentTarget) {
+        e.currentTarget.value = "";
+      }
+      return;
+    }
+
     const file = e.currentTarget.files?.[0];
     if (!file) return;
 
@@ -93,11 +103,19 @@
   }
 
   function clearFile() {
+    if (assetActionsDisabled) {
+      return;
+    }
+
     value = null;
     dispatch("change", null);
   }
 
   async function openPicker() {
+    if (assetActionsDisabled) {
+      return;
+    }
+
     showPicker = true;
     await loadAssets();
   }
@@ -163,34 +181,36 @@
         type="button"
         class="btn btn-sm btn-outline file-remove-btn"
         on:click={clearFile}
-        disabled={disabled || isUploading}
+        disabled={assetActionsDisabled || isUploading}
       >
         Remove
       </button>
     </div>
   {/if}
 
-  <div class="file-actions">
-    <div class="file-input-wrap">
-      <input
-        id={id}
-        name={path || field?.key}
-        class="form-input file-native-input"
-        type="file"
-        disabled={disabled || isUploading}
-        on:change={handleFileChange}
-      />
-    </div>
+  {#if !assetActionsDeferred}
+    <div class="file-actions">
+      <div class="file-input-wrap">
+        <input
+          id={id}
+          name={path || field?.key}
+          class="form-input file-native-input"
+          type="file"
+          disabled={fieldDisabled || isUploading}
+          on:change={handleFileChange}
+        />
+      </div>
 
-    <button
-      type="button"
-      class="btn btn-sm btn-outline"
-      on:click={openPicker}
-      disabled={disabled || isUploading}
-    >
-      Choose existing
-    </button>
-  </div>
+      <button
+        type="button"
+        class="btn btn-sm btn-outline"
+        on:click={openPicker}
+        disabled={fieldDisabled || isUploading}
+      >
+        Choose existing
+      </button>
+    </div>
+  {/if}
 
   {#if showPicker}
     <OverlayPanel
@@ -251,11 +271,6 @@
         </div>
       {/if}
 
-      <svelte:fragment slot="footer">
-        <button type="button" class="btn btn-sm btn-outline" on:click={closePicker}>
-          Close
-        </button>
-      </svelte:fragment>
     </OverlayPanel>
   {/if}
 </FieldShell>
