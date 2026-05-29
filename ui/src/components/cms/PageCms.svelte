@@ -3036,6 +3036,37 @@
         }
     }
 
+    function buildWebsiteSettingsPatchDiff(currentValue, persistedValue) {
+        if (stableSerializeForDirtyCheck(currentValue) === stableSerializeForDirtyCheck(persistedValue)) {
+            return undefined;
+        }
+
+        if (isPlainObject(currentValue)) {
+            if (!isPlainObject(persistedValue)) {
+                return structuredClone(currentValue);
+            }
+
+            const nextPatch = {};
+            for (const rawKey of Object.keys(currentValue)) {
+                const key = normalizeString(rawKey);
+                if (!key) {
+                    continue;
+                }
+
+                const nestedDiff = buildWebsiteSettingsPatchDiff(currentValue?.[rawKey], persistedValue?.[rawKey]);
+                if (typeof nestedDiff === "undefined") {
+                    continue;
+                }
+
+                nextPatch[rawKey] = nestedDiff;
+            }
+
+            return Object.keys(nextPatch).length ? nextPatch : undefined;
+        }
+
+        return structuredClone(currentValue);
+    }
+
     function clearFocusedPreview() {
         if (!focusedBlockId) {
             return;
@@ -3167,6 +3198,27 @@
         return (fields || []).filter((field) => visibleClientSettingsKeys.has(field?.key));
     }
 
+    function buildWebsiteSettingsScopedDraft(settingsValue, scopedFields = []) {
+        const normalized = normalizeWebsiteSettingsValue(settingsValue, scopedFields);
+        const allowedKeys = new Set(
+            (scopedFields || [])
+                .map((field) => normalizeString(field?.key))
+                .filter(Boolean),
+        );
+        const scopedDraft = {};
+
+        for (const [rawKey, rawValue] of Object.entries(normalized || {})) {
+            const normalizedKey = normalizeString(rawKey);
+            if (!allowedKeys.has(normalizedKey)) {
+                continue;
+            }
+
+            scopedDraft[rawKey] = structuredClone(rawValue);
+        }
+
+        return scopedDraft;
+    }
+
     function toSingleFileName(value) {
         if (Array.isArray(value)) {
             return normalizeString(value[0]);
@@ -3202,7 +3254,7 @@
         const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
 
         websiteSettingsFullDraft = normalizedFullSettings;
-        websiteSettingsDraft = normalizeWebsiteSettingsValue(websiteSettingsFullDraft, visibleFields);
+        websiteSettingsDraft = buildWebsiteSettingsScopedDraft(websiteSettingsFullDraft, visibleFields);
     }
 
     function initializeWebsiteIdentitySeoDraft() {
@@ -3295,7 +3347,7 @@
         const nextVisibleFields = filterClientWebsiteSettingsFields(nextRoleScopedFields);
 
         websiteSettingsFullDraft = normalizedFullSettings;
-        websiteSettingsDraft = normalizeWebsiteSettingsValue(websiteSettingsFullDraft, nextVisibleFields);
+        websiteSettingsDraft = buildWebsiteSettingsScopedDraft(websiteSettingsFullDraft, nextVisibleFields);
     }
 
     function handleWebsiteSeoFileChange(type, event) {
@@ -3952,18 +4004,35 @@
     }
 
     function buildWebsiteSettingsPatchPayload() {
+        const persistedSettings = getWebsiteSettingsFromRecord(selectedWebsite);
+        const normalizedPersistedFull = normalizeWebsiteSettingsValue(persistedSettings);
+        const roleScopedFields = getWebsiteSettingsSchemaForRole(clientSettingsRole, normalizedPersistedFull).fields;
+        const visibleFields = filterClientWebsiteSettingsFields(roleScopedFields);
+        const persistedScopedDraft = buildWebsiteSettingsScopedDraft(normalizedPersistedFull, visibleFields);
+        const currentScopedDraft = buildWebsiteSettingsScopedDraft(websiteSettingsDraft, visibleFields);
         const patch = {};
-        const patchableKeys = new Set([
-            ...websiteSettingsFeatureOrder,
-            ...websiteSettingsLeadsChannelKeys,
-        ]);
 
-        for (const key of patchableKeys) {
-            if (!hasOwnObjectKey(websiteSettingsDraft, key)) {
+        for (const field of visibleFields) {
+            const key = normalizeString(field?.key);
+            if (!key) {
+                continue;
+            }
+            if (!hasOwnObjectKey(currentScopedDraft, key)) {
                 continue;
             }
 
-            patch[key] = structuredClone(websiteSettingsDraft?.[key] ?? {});
+            const currentValue = currentScopedDraft?.[key];
+            const persistedValue = persistedScopedDraft?.[key];
+            if (stableSerializeForDirtyCheck(currentValue) === stableSerializeForDirtyCheck(persistedValue)) {
+                continue;
+            }
+
+            const nextValuePatch = buildWebsiteSettingsPatchDiff(currentValue, persistedValue);
+            if (typeof nextValuePatch === "undefined") {
+                continue;
+            }
+
+            patch[key] = nextValuePatch;
         }
 
         return patch;
