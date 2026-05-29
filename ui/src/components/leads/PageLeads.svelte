@@ -215,16 +215,12 @@
     $: selectedLeadNewsletterInviteEmail = normalizeString(selectedLead?.email);
     $: selectedLeadHasValidInviteEmail = isValidEmailAddress(selectedLeadNewsletterInviteEmail);
     $: selectedLeadNewsletterInviteWebsiteId = normalizeString(selectedLead?.websiteId);
-    $: selectedLeadInviteRequiresAdmin = !ApiClient.isAdminSuperuser();
     $: selectedLeadCanInviteToNewsletter = !!selectedLead?.recordId
         && selectedLeadHasValidInviteEmail
         && !!selectedLeadNewsletterInviteWebsiteId
-        && !selectedLeadInviteRequiresAdmin
         && !isInvitingLeadToNewsletter;
     $: selectedLeadInviteUnavailableMessage = !selectedLead
         ? ""
-        : selectedLeadInviteRequiresAdmin
-            ? "Newsletter invites are available to administrators only."
         : !selectedLeadHasValidInviteEmail
             ? "This lead does not have a valid email address."
             : !selectedLeadNewsletterInviteWebsiteId
@@ -1511,11 +1507,6 @@
             return;
         }
 
-        if (selectedLeadInviteRequiresAdmin) {
-            addErrorToast("Newsletter invites are available to administrators only.");
-            return;
-        }
-
         if (!selectedLeadHasValidInviteEmail) {
             addErrorToast("This lead does not have a valid email address.");
             return;
@@ -1529,7 +1520,7 @@
         isInvitingLeadToNewsletter = true;
 
         try {
-            const response = await ApiClient.send("/api/nuvio/newsletter/invite", {
+            const response = await ApiClient.send("/api/nuvio/newsletter/backoffice/invite", {
                 method: "POST",
                 body: {
                     websiteId: selectedLeadNewsletterInviteWebsiteId,

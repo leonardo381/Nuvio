@@ -336,6 +336,9 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	newsletterBackofficeGroup.PATCH("/subscribers/{id}", handleNuvioNewsletterBackofficeSubscriberUpdate)
 	newsletterBackofficeGroup.DELETE("/subscribers/{id}", handleNuvioNewsletterBackofficeSubscriberDelete)
 	newsletterBackofficeGroup.POST("/groups", handleNuvioNewsletterBackofficeGroupCreate)
+	newsletterBackofficeGroup.POST("/invite", func(e *core.RequestEvent) error {
+		return handleNuvioNewsletterInvite(e, true)
+	})
 	newsletterBackofficeGroup.POST("/campaigns", handleNuvioNewsletterBackofficeCampaignCreate)
 	newsletterBackofficeGroup.PATCH("/campaigns/{id}", handleNuvioNewsletterBackofficeCampaignUpdate)
 	newsletterBackofficeGroup.DELETE("/campaigns/{id}", handleNuvioNewsletterBackofficeCampaignDelete)
@@ -733,147 +736,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	})
 
 	newsletterAdminGroup.POST("/invite", func(e *core.RequestEvent) error {
-		payload := nuvioNewsletterInvitePayload{}
-		if err := e.BindBody(&payload); err != nil {
-			return e.BadRequestError("Invalid newsletter invite payload.", nil)
-		}
-
-		websiteID := strings.TrimSpace(payload.WebsiteID)
-		if websiteID == "" {
-			return e.BadRequestError("Missing websiteId.", nil)
-		}
-
-		website, config, err := loadNuvioWebsiteNewsletterConfig(e.App, websiteID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return e.NotFoundError("Website not found.", nil)
-			}
-
-			return e.BadRequestError("Failed to load Newsletter settings.", nil)
-		}
-
-		if !config.FeatureAvailable {
-			return e.BadRequestError("Newsletter is unavailable for this website.", nil)
-		}
-
-		email, ok := normalizeNuvioEmail(payload.Email)
-		if !ok {
-			return e.BadRequestError("A valid email is required.", nil)
-		}
-
-		name := sanitizeNuvioNewsletterName(payload.Name)
-		source := sanitizeNuvioNewsletterName(payload.Source)
-
-		subscribersCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioSubscribersCollectionID)
-		if err != nil {
-			return e.InternalServerError("Newsletter subscribers collection is missing.", nil)
-		}
-
-		subscriber, err := findNuvioSubscriberByWebsiteEmail(
-			e.App,
-			subscribersCollection,
-			websiteID,
-			email,
-		)
-		isNewSubscriber := false
-		if err != nil {
-			if !errors.Is(err, sql.ErrNoRows) {
-				return e.InternalServerError("Failed to load newsletter subscriber.", nil)
-			}
-
-			subscriber = core.NewRecord(subscribersCollection)
-			isNewSubscriber = true
-		}
-
-		subscriber.Set("website", websiteID)
-		subscriber.Set("email", email)
-		if name != "" || isNewSubscriber {
-			subscriber.Set("name", name)
-		}
-
-		currentStatus := normalizeNuvioSubscriberStatus(subscriber.GetString("status"))
-		if currentStatus == nuvioNewsletterStatusActive {
-			return e.JSON(http.StatusOK, map[string]any{
-				"ok":      true,
-				"result":  "already_active",
-				"status":  nuvioNewsletterStatusActive,
-				"message": "This contact is already subscribed.",
-			})
-		}
-
-		if currentStatus == nuvioNewsletterStatusUnsubscribed {
-			return e.JSON(http.StatusOK, map[string]any{
-				"ok":      true,
-				"result":  "unsubscribed",
-				"status":  nuvioNewsletterStatusUnsubscribed,
-				"message": "This contact has unsubscribed and was not invited.",
-			})
-		}
-
-		if err := ensureNuvioSubscriberUnsubscribeTokenHash(subscriber); err != nil {
-			return e.InternalServerError("Failed to prepare subscriber lifecycle token.", nil)
-		}
-
-		now := time.Now().UTC()
-		rawToken, tokenHash, err := generateNuvioNewsletterTokenPair()
-		if err != nil {
-			return e.InternalServerError("Failed to generate confirmation token.", nil)
-		}
-
-		expiresAt := now.Add(nuvioNewsletterConfirmationTTL).UTC()
-		subscriber.Set("status", nuvioNewsletterStatusPending)
-		subscriber.Set("confirmedAt", "")
-		subscriber.Set("confirmationTokenHash", tokenHash)
-		subscriber.Set("confirmationTokenExpiresAt", expiresAt.Format(time.RFC3339))
-		subscriber.Set("unsubscribedAt", "")
-
-		if err := e.App.Save(subscriber); err != nil {
-			return e.InternalServerError("Failed to save newsletter subscriber.", nil)
-		}
-
-		logNuvioNewsletterPublicBaseURLMissing(e.App, website, "confirm")
-		confirmPath, err := buildNuvioNewsletterConfirmPath(website)
-		if err != nil {
-			return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
-		}
-		baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
-		confirmURL, err := buildNuvioNewsletterLifecycleURL(baseURL, confirmPath, rawToken)
-		if err != nil {
-			return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
-		}
-
-		if err := sendNuvioNewsletterConfirmationEmail(
-			e.Request.Context(),
-			website,
-			email,
-			confirmURL,
-			config.ConfirmationTemplate,
-		); err != nil {
-			e.App.Logger().Error(
-				"NUVIO newsletter manual invite confirmation send failed",
-				"websiteId",
-				websiteID,
-				"source",
-				source,
-				"error",
-				err.Error(),
-			)
-			return e.InternalServerError("Unable to send confirmation email right now. Please try again.", nil)
-		}
-
-		result := "invited"
-		message := "Newsletter invitation sent."
-		if !isNewSubscriber && currentStatus == nuvioNewsletterStatusPending {
-			result = "resent"
-			message = "Confirmation email sent again."
-		}
-
-		return e.JSON(http.StatusOK, map[string]any{
-			"ok":      true,
-			"result":  result,
-			"status":  nuvioNewsletterStatusPending,
-			"message": message,
-		})
+		return handleNuvioNewsletterInvite(e, false)
 	})
 
 	newsletterAdminGroup.POST("/campaigns/send", func(e *core.RequestEvent) error {
@@ -903,6 +766,156 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 		}
 
 		return e.JSON(http.StatusOK, result)
+	})
+}
+
+func handleNuvioNewsletterInvite(e *core.RequestEvent, enforceWebsiteAccess bool) error {
+	payload := nuvioNewsletterInvitePayload{}
+	if err := e.BindBody(&payload); err != nil {
+		return e.BadRequestError("Invalid newsletter invite payload.", nil)
+	}
+
+	websiteID := strings.TrimSpace(payload.WebsiteID)
+	if websiteID == "" {
+		return e.BadRequestError("Missing websiteId.", nil)
+	}
+
+	if enforceWebsiteAccess {
+		if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+			return err
+		}
+	}
+
+	website, config, err := loadNuvioWebsiteNewsletterConfig(e.App, websiteID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return e.NotFoundError("Website not found.", nil)
+		}
+
+		return e.BadRequestError("Failed to load Newsletter settings.", nil)
+	}
+
+	if !config.FeatureAvailable {
+		return e.BadRequestError("Newsletter is unavailable for this website.", nil)
+	}
+
+	email, ok := normalizeNuvioEmail(payload.Email)
+	if !ok {
+		return e.BadRequestError("A valid email is required.", nil)
+	}
+
+	name := sanitizeNuvioNewsletterName(payload.Name)
+	source := sanitizeNuvioNewsletterName(payload.Source)
+
+	subscribersCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioSubscribersCollectionID)
+	if err != nil {
+		return e.InternalServerError("Newsletter subscribers collection is missing.", nil)
+	}
+
+	subscriber, err := findNuvioSubscriberByWebsiteEmail(
+		e.App,
+		subscribersCollection,
+		websiteID,
+		email,
+	)
+	isNewSubscriber := false
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return e.InternalServerError("Failed to load newsletter subscriber.", nil)
+		}
+
+		subscriber = core.NewRecord(subscribersCollection)
+		isNewSubscriber = true
+	}
+
+	subscriber.Set("website", websiteID)
+	subscriber.Set("email", email)
+	if name != "" || isNewSubscriber {
+		subscriber.Set("name", name)
+	}
+
+	currentStatus := normalizeNuvioSubscriberStatus(subscriber.GetString("status"))
+	if currentStatus == nuvioNewsletterStatusActive {
+		return e.JSON(http.StatusOK, map[string]any{
+			"ok":      true,
+			"result":  "already_active",
+			"status":  nuvioNewsletterStatusActive,
+			"message": "This contact is already subscribed.",
+		})
+	}
+
+	if currentStatus == nuvioNewsletterStatusUnsubscribed {
+		return e.JSON(http.StatusOK, map[string]any{
+			"ok":      true,
+			"result":  "unsubscribed",
+			"status":  nuvioNewsletterStatusUnsubscribed,
+			"message": "This contact has unsubscribed and was not invited.",
+		})
+	}
+
+	if err := ensureNuvioSubscriberUnsubscribeTokenHash(subscriber); err != nil {
+		return e.InternalServerError("Failed to prepare subscriber lifecycle token.", nil)
+	}
+
+	now := time.Now().UTC()
+	rawToken, tokenHash, err := generateNuvioNewsletterTokenPair()
+	if err != nil {
+		return e.InternalServerError("Failed to generate confirmation token.", nil)
+	}
+
+	expiresAt := now.Add(nuvioNewsletterConfirmationTTL).UTC()
+	subscriber.Set("status", nuvioNewsletterStatusPending)
+	subscriber.Set("confirmedAt", "")
+	subscriber.Set("confirmationTokenHash", tokenHash)
+	subscriber.Set("confirmationTokenExpiresAt", expiresAt.Format(time.RFC3339))
+	subscriber.Set("unsubscribedAt", "")
+
+	if err := e.App.Save(subscriber); err != nil {
+		return e.InternalServerError("Failed to save newsletter subscriber.", nil)
+	}
+
+	logNuvioNewsletterPublicBaseURLMissing(e.App, website, "confirm")
+	confirmPath, err := buildNuvioNewsletterConfirmPath(website)
+	if err != nil {
+		return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
+	}
+	baseURL := resolveNuvioNewsletterPublicBaseURL(e.Request)
+	confirmURL, err := buildNuvioNewsletterLifecycleURL(baseURL, confirmPath, rawToken)
+	if err != nil {
+		return e.InternalServerError("Unable to prepare confirmation link right now.", nil)
+	}
+
+	if err := sendNuvioNewsletterConfirmationEmail(
+		e.Request.Context(),
+		website,
+		email,
+		confirmURL,
+		config.ConfirmationTemplate,
+	); err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter manual invite confirmation send failed",
+			"websiteId",
+			websiteID,
+			"source",
+			source,
+			"error",
+			err.Error(),
+		)
+		return e.InternalServerError("Unable to send confirmation email right now. Please try again.", nil)
+	}
+
+	result := "invited"
+	message := "Newsletter invitation sent."
+	if !isNewSubscriber && currentStatus == nuvioNewsletterStatusPending {
+		result = "resent"
+		message = "Confirmation email sent again."
+	}
+
+	return e.JSON(http.StatusOK, map[string]any{
+		"ok":      true,
+		"result":  result,
+		"status":  nuvioNewsletterStatusPending,
+		"message": message,
 	})
 }
 

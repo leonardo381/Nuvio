@@ -307,6 +307,57 @@ func TestNuvioNewsletterBackofficeWriteEndpoints(t *testing.T) {
 			},
 		},
 		{
+			Name:   "client assigned can invite subscriber from leads flow",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/invite",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"websiteId":"` + nuvioNewsletterBackofficeBetaWebsiteID + `",
+				"email":"beta-subscriber@example.test",
+				"name":"Beta Subscriber",
+				"source":"whatsapp"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{
+					nuvioNewsletterBackofficeBetaWebsiteID,
+				})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"result":"already_active"`,
+				`"status":"active"`,
+			},
+		},
+		{
+			Name:   "client unassigned cannot invite subscriber",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/invite",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"websiteId":"` + nuvioNewsletterBackofficeBetaWebsiteID + `",
+				"email":"beta-subscriber@example.test",
+				"name":"Beta Subscriber",
+				"source":"contact"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{
+					nuvioNewsletterBackofficeAlphaWebsiteID,
+				})
+			},
+			ExpectedStatus: 403,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
 			Name:   "invalid subscriber email rejected",
 			Method: http.MethodPost,
 			URL:    "/api/nuvio/newsletter/backoffice/subscribers",
