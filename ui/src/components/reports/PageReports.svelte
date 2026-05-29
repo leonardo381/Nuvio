@@ -25,12 +25,19 @@
         { key: "last30Days", label: "Last 30 days" },
         { key: "allTime", label: "All time" },
     ];
+    const defaultReportsTab = reportsTabs[0]?.key || "overview";
+    const defaultReportsPeriod = periodOptions[0]?.key || "thisMonth";
+    const fallbackWebsitesCollection = {
+        id: "websites",
+        name: "websites",
+        fields: [{ name: "settings", type: "json" }],
+    };
 
     const archivedStatusAliases = ["archived", "archive"];
     const clientTrafficUnavailableMessage = "Traffic analytics are not configured for this website yet.";
 
-    let activeTab = "overview";
-    let selectedPeriod = "thisMonth";
+    let activeTab = defaultReportsTab;
+    let selectedPeriod = defaultReportsPeriod;
 
     let websites = [];
     let selectedWebsiteId = "";
@@ -71,8 +78,25 @@
 
     loadCollections();
 
-    $: websitesCollection = resolveCollectionByAliases(["websites"]);
+    $: resolvedWebsitesCollection = resolveCollectionByAliases(["websites", "Websites"]);
+    $: websitesCollection = resolvedWebsitesCollection || fallbackWebsitesCollection;
     $: websiteSettingsField = resolveWebsiteSettingsField(websitesCollection);
+    $: reportTabKeys = new Set(reportsTabs.map((tab) => tab?.key).filter(Boolean));
+    $: periodOptionKeys = new Set(periodOptions.map((option) => option?.key).filter(Boolean));
+    $: if (!reportTabKeys.has(activeTab)) {
+        activeTab = defaultReportsTab;
+    }
+    $: if (!periodOptionKeys.has(selectedPeriod)) {
+        selectedPeriod = defaultReportsPeriod;
+    }
+    $: websiteOptionMap = new Map(
+        websites.map((website) => [normalizeString(website?.id), resolveWebsiteLabel(website)]),
+    );
+    $: if (!websites.length) {
+        selectedWebsiteId = "";
+    } else if (!websiteOptionMap.has(normalizeString(selectedWebsiteId))) {
+        selectedWebsiteId = websites[0].id;
+    }
 
     $: selectedWebsite = websites.find((website) => website.id === selectedWebsiteId) || null;
     $: selectedWebsiteHydrationKey = `${websitesCollection?.id || ""}:${selectedWebsiteId || ""}`;
@@ -387,33 +411,26 @@
     ];
 
     $: dataKey = [
-        selectedWebsiteId,
+        selectedWebsite?.id || "",
     ].join(":");
     $: trafficKey = [
-        selectedWebsiteId,
+        selectedWebsite?.id || "",
         selectedTrafficPeriod,
     ].join(":");
 
-    $: if (!websitesCollection?.id) {
-        websites = [];
-        selectedWebsiteId = "";
-        clearDataRecords();
-        clearTrafficRecords();
-        reportsLoadError = "";
-        lastWebsitesCollectionId = "";
-        lastDataKey = "";
-        lastTrafficKey = "";
-    } else if (websitesCollection.id !== lastWebsitesCollectionId) {
+    $: if (websitesCollection?.id !== lastWebsitesCollectionId) {
         lastWebsitesCollectionId = websitesCollection.id;
         loadWebsites();
     }
 
-    $: if (selectedWebsiteId && dataKey !== lastDataKey) {
+    $: if (!selectedWebsite?.id || isLoadingWebsites) {
+        lastDataKey = "";
+    } else if (dataKey !== lastDataKey) {
         lastDataKey = dataKey;
         loadDashboardData();
     }
 
-    $: if (!selectedWebsiteId || !reportsFeatureAvailable) {
+    $: if (!selectedWebsite?.id || !reportsFeatureAvailable) {
         clearTrafficRecords();
         lastTrafficKey = "";
     } else if (trafficKey !== lastTrafficKey) {
@@ -1763,7 +1780,7 @@
     async function hydrateSelectedWebsiteRecord() {
         if (
             !ApiClient.isAdminSuperuser()
-            || !websitesCollection?.id
+            || !resolvedWebsitesCollection?.id
             || !selectedWebsiteId
             || !websites.some((website) => website?.id === selectedWebsiteId)
         ) {
@@ -1771,7 +1788,7 @@
         }
 
         try {
-            const fullWebsiteRecord = await ApiClient.collection(websitesCollection.id).getOne(selectedWebsiteId, {
+            const fullWebsiteRecord = await ApiClient.collection(resolvedWebsitesCollection.id).getOne(selectedWebsiteId, {
                 requestKey: `nuvio_reports_website_${selectedWebsiteId}`,
             });
 
@@ -1790,12 +1807,6 @@
     }
 
     async function loadWebsites() {
-        if (!websitesCollection?.id) {
-            websites = [];
-            selectedWebsiteId = "";
-            return;
-        }
-
         isLoadingWebsites = true;
 
         try {
@@ -1807,28 +1818,28 @@
                 selectedWebsiteId = "";
                 clearDataRecords();
                 clearTrafficRecords();
-                return;
-            }
+            } else {
+                if (!websites.find((website) => website.id === selectedWebsiteId)) {
+                    selectedWebsiteId = websites[0].id;
+                }
 
-            if (!websites.find((website) => website.id === selectedWebsiteId)) {
-                selectedWebsiteId = websites[0].id;
+                await hydrateSelectedWebsiteRecord();
             }
-
-            await hydrateSelectedWebsiteRecord();
         } catch (err) {
             websites = [];
             selectedWebsiteId = "";
             clearDataRecords();
             clearTrafficRecords();
             reportsLoadError = "Unable to load reports right now.";
-            ApiClient.error(err);
+            ApiClient.error(err, false);
+        } finally {
+            isLoadingWebsites = false;
         }
-
-        isLoadingWebsites = false;
     }
 
     async function loadDashboardData() {
-        if (!selectedWebsiteId) {
+        const websiteId = normalizeString(selectedWebsite?.id || selectedWebsiteId);
+        if (!websiteId || !websiteOptionMap.has(websiteId)) {
             clearDataRecords();
             reportsLoadError = "";
             return;
@@ -1840,9 +1851,9 @@
 
         try {
             const response = await ApiClient.getReportsDashboard({
-                websiteId: selectedWebsiteId,
+                websiteId,
                 period: selectedPeriod,
-                requestKey: `nuvio_reports_dashboard_${selectedWebsiteId}`,
+                requestKey: `nuvio_reports_dashboard_${websiteId}`,
             });
 
             if (currentToken !== dataLoadToken) {
@@ -1870,7 +1881,7 @@
 
             dashboardResponse = null;
             reportsLoadError = "Unable to load reports right now.";
-            ApiClient.error(err);
+            ApiClient.error(err, false);
         } finally {
             if (currentToken === dataLoadToken) {
                 isLoadingData = false;
@@ -1879,7 +1890,8 @@
     }
 
     async function loadTrafficData() {
-        if (!selectedWebsiteId || !reportsFeatureAvailable) {
+        const websiteId = normalizeString(selectedWebsite?.id || selectedWebsiteId);
+        if (!websiteId || !websiteOptionMap.has(websiteId) || !reportsFeatureAvailable) {
             clearTrafficRecords();
             return;
         }
@@ -1891,10 +1903,10 @@
             const response = await ApiClient.send("/api/nuvio/reports/traffic", {
                 method: "GET",
                 query: {
-                    websiteId: selectedWebsiteId,
+                    websiteId,
                     period: selectedTrafficPeriod,
                 },
-                requestKey: `nuvio_reports_traffic_${selectedWebsiteId}_${selectedTrafficPeriod}`,
+                requestKey: `nuvio_reports_traffic_${websiteId}_${selectedTrafficPeriod}`,
             });
 
             if (currentToken !== trafficLoadToken) {
@@ -1934,7 +1946,7 @@
         trafficAnalyticsSetupError = "";
         trafficAnalyticsSetupSuccess = "";
 
-        if (!selectedWebsite?.id || !websitesCollection?.id || !websiteSettingsField) {
+        if (!selectedWebsite?.id || !resolvedWebsitesCollection?.id || !websiteSettingsField) {
             trafficAnalyticsSetupError = "Unable to save traffic analytics settings for this website.";
             return;
         }
@@ -1978,7 +1990,7 @@
                 },
             });
 
-            await ApiClient.collection(websitesCollection.id).update(selectedWebsite.id, {
+            await ApiClient.collection(resolvedWebsitesCollection.id).update(selectedWebsite.id, {
                 [websiteSettingsField]: structuredClone(nextSettings),
             });
 
