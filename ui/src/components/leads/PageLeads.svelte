@@ -215,12 +215,16 @@
     $: selectedLeadNewsletterInviteEmail = normalizeString(selectedLead?.email);
     $: selectedLeadHasValidInviteEmail = isValidEmailAddress(selectedLeadNewsletterInviteEmail);
     $: selectedLeadNewsletterInviteWebsiteId = normalizeString(selectedLead?.websiteId);
+    $: selectedLeadInviteRequiresAdmin = !ApiClient.isAdminSuperuser();
     $: selectedLeadCanInviteToNewsletter = !!selectedLead?.recordId
         && selectedLeadHasValidInviteEmail
         && !!selectedLeadNewsletterInviteWebsiteId
+        && !selectedLeadInviteRequiresAdmin
         && !isInvitingLeadToNewsletter;
     $: selectedLeadInviteUnavailableMessage = !selectedLead
         ? ""
+        : selectedLeadInviteRequiresAdmin
+            ? "Newsletter invites are available to administrators only."
         : !selectedLeadHasValidInviteEmail
             ? "This lead does not have a valid email address."
             : !selectedLeadNewsletterInviteWebsiteId
@@ -1507,6 +1511,11 @@
             return;
         }
 
+        if (selectedLeadInviteRequiresAdmin) {
+            addErrorToast("Newsletter invites are available to administrators only.");
+            return;
+        }
+
         if (!selectedLeadHasValidInviteEmail) {
             addErrorToast("This lead does not have a valid email address.");
             return;
@@ -1549,9 +1558,12 @@
 
             addSuccessToast("Newsletter invitation sent.");
         } catch (err) {
-            ApiClient.error(err, false);
-
+            const statusCode = Number(err?.status) || 0;
             const backendMessage = normalizeLower(err?.data?.message || err?.message);
+            if (statusCode === 403) {
+                addErrorToast("You do not have permission to invite contacts to the newsletter.");
+                return;
+            }
             if (backendMessage.includes("valid email")) {
                 addErrorToast("This lead does not have a valid email address.");
                 return;
@@ -1701,7 +1713,6 @@
             })
             .filter(Boolean);
 
-        const skippedCount = Math.max(0, selectedSnapshot.length - operations.length);
         if (!operations.length) {
             addErrorToast("Selected leads do not support this action.");
             return;
@@ -1753,7 +1764,7 @@
                 dispatchSidebarBadgeRefresh();
             }
 
-            if (failureCount || skippedCount) {
+            if (failureCount) {
                 addErrorToast("Some selected leads could not be updated.");
             }
         } finally {
