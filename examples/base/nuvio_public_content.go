@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -20,6 +21,24 @@ const (
 )
 
 var nuvioPublicSlugPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+var (
+	nuvioPublicContentAllowedQueryKeys = map[string]struct{}{
+		"websiteslug": {},
+		"pageslug":    {},
+		"cmspreview":  {},
+		"_cmspreview": {},
+	}
+	nuvioPublicSitemapAllowedQueryKeys = map[string]struct{}{}
+	nuvioPublicSitemapExcludedStatuses = map[string]struct{}{
+		"draft":       {},
+		"disabled":    {},
+		"inactive":    {},
+		"archived":    {},
+		"private":     {},
+		"unpublished": {},
+	}
+)
 
 type nuvioPublicContentResponse struct {
 	Website map[string]any   `json:"website,omitempty"`
@@ -37,6 +56,10 @@ func registerNuvioPublicContentRoutes(e *core.ServeEvent) {
 	publicGroup := e.Router.Group("/api/nuvio/public")
 
 	publicGroup.GET("/content", func(e *core.RequestEvent) error {
+		if err := validateNuvioPublicAllowedQueryKeys(e.Request.URL.Query(), nuvioPublicContentAllowedQueryKeys); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
 		websiteSlug := strings.TrimSpace(e.Request.URL.Query().Get("websiteSlug"))
 		pageSlug := strings.TrimSpace(e.Request.URL.Query().Get("pageSlug"))
 
@@ -84,6 +107,10 @@ func registerNuvioPublicContentRoutes(e *core.ServeEvent) {
 	})
 
 	publicGroup.GET("/sitemap-data", func(e *core.RequestEvent) error {
+		if err := validateNuvioPublicAllowedQueryKeys(e.Request.URL.Query(), nuvioPublicSitemapAllowedQueryKeys); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
 		websitesCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioWebsitesCollectionID)
 		if err != nil {
 			return e.InternalServerError("Failed to load sitemap data.", nil)
@@ -123,16 +150,55 @@ func registerNuvioPublicContentRoutes(e *core.ServeEvent) {
 			Pages:    make([]map[string]any, 0, len(pageRecords)),
 		}
 
+		websiteSlugByID := make(map[string]string, len(websiteRecords))
 		for _, website := range websiteRecords {
+			if !isNuvioPublicSitemapRecordIndexable(website) {
+				continue
+			}
+
+			websiteSlug := strings.TrimSpace(website.GetString("slug"))
+			if !isValidNuvioPublicSlug(websiteSlug) {
+				continue
+			}
+
+			websiteSlugByID[strings.TrimSpace(website.Id)] = websiteSlug
 			response.Websites = append(response.Websites, buildNuvioPublicWebsiteSitemapDTO(website))
 		}
 
 		for _, page := range pageRecords {
-			response.Pages = append(response.Pages, buildNuvioPublicSitemapPageDTO(page))
+			if !isNuvioPublicSitemapRecordIndexable(page) || isNuvioPublicSitemapPageExcluded(page) {
+				continue
+			}
+
+			pageSlug := strings.TrimSpace(page.GetString("slug"))
+			if !isValidNuvioPublicSlug(pageSlug) {
+				continue
+			}
+
+			websiteSlug := resolveNuvioPublicSitemapPageWebsiteSlug(page, websiteSlugByID)
+			if websiteSlug == "" {
+				continue
+			}
+
+			response.Pages = append(response.Pages, buildNuvioPublicSitemapPageDTO(page, websiteSlug))
 		}
 
 		return e.JSON(http.StatusOK, response)
 	})
+}
+
+func validateNuvioPublicAllowedQueryKeys(values url.Values, allowed map[string]struct{}) error {
+	for key := range values {
+		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+		if normalizedKey == "" {
+			return errors.New("Invalid query parameter.")
+		}
+		if _, ok := allowed[normalizedKey]; !ok {
+			return errors.New("Query parameter \"" + strings.TrimSpace(key) + "\" is not allowed.")
+		}
+	}
+
+	return nil
 }
 
 func isValidNuvioPublicSlug(raw string) bool {
@@ -234,10 +300,19 @@ func findNuvioPublicBlocksByPageID(app core.App, pageID string) ([]*core.Record,
 		return []*core.Record{}, nil
 	}
 
+	sortExpr := ""
+	if hasNuvioPublicCollectionField(blocksCollection, "displayOrder") {
+		sortExpr = "displayOrder"
+	} else if hasNuvioPublicCollectionField(blocksCollection, "order") {
+		sortExpr = "order"
+	} else if hasNuvioPublicCollectionField(blocksCollection, "created") {
+		sortExpr = "created"
+	}
+
 	blockRecords, err := app.FindRecordsByFilter(
 		blocksCollection,
 		filter,
-		"created",
+		sortExpr,
 		500,
 		0,
 		filterParams,
@@ -373,7 +448,6 @@ func buildNuvioPublicWebsiteSitemapDTO(record *core.Record) map[string]any {
 	}
 
 	return map[string]any{
-		"id":                   strings.TrimSpace(record.Id),
 		"slug":                 strings.TrimSpace(record.GetString("slug")),
 		"domain":               strings.TrimSpace(record.GetString("domain")),
 		"public_url":           strings.TrimSpace(record.GetString("public_url")),
@@ -382,10 +456,6 @@ func buildNuvioPublicWebsiteSitemapDTO(record *core.Record) map[string]any {
 		"site_url":             strings.TrimSpace(record.GetString("site_url")),
 		"website_url":          strings.TrimSpace(record.GetString("website_url")),
 		"seo_canonical_domain": strings.TrimSpace(record.GetString("seo_canonical_domain")),
-		"enabled":              record.GetBool("enabled"),
-		"active":               record.GetBool("active"),
-		"published":            record.GetBool("published"),
-		"status":               strings.TrimSpace(record.GetString("status")),
 	}
 }
 
@@ -419,32 +489,76 @@ func buildNuvioPublicPageDTO(record *core.Record) map[string]any {
 	}
 }
 
-func buildNuvioPublicSitemapPageDTO(record *core.Record) map[string]any {
+func buildNuvioPublicSitemapPageDTO(record *core.Record, websiteSlug string) map[string]any {
 	if record == nil {
 		return map[string]any{}
 	}
 
-	websiteRelation := resolveNuvioPublicRelationID(record, "website", "site")
-
 	return map[string]any{
-		"id":                       strings.TrimSpace(record.Id),
-		"slug":                     strings.TrimSpace(record.GetString("slug")),
-		"website":                  websiteRelation,
-		"websiteId":                websiteRelation,
-		"seo_noindex":              record.GetBool("seo_noindex"),
-		"seo_exclude_from_sitemap": record.GetBool("seo_exclude_from_sitemap"),
-		"enabled":                  record.GetBool("enabled"),
-		"active":                   record.GetBool("active"),
-		"published":                record.GetBool("published"),
-		"status":                   strings.TrimSpace(record.GetString("status")),
-		"created":                  strings.TrimSpace(record.GetString("created")),
-		"updated":                  strings.TrimSpace(record.GetString("updated")),
-		"updatedAt":                strings.TrimSpace(record.GetString("updatedAt")),
-		"updated_at":               strings.TrimSpace(record.GetString("updated_at")),
-		"modified":                 strings.TrimSpace(record.GetString("modified")),
-		"lastModified":             strings.TrimSpace(record.GetString("lastModified")),
-		"last_modified":            strings.TrimSpace(record.GetString("last_modified")),
+		"websiteSlug":   strings.TrimSpace(websiteSlug),
+		"slug":          strings.TrimSpace(record.GetString("slug")),
+		"updated":       strings.TrimSpace(record.GetString("updated")),
+		"updatedAt":     strings.TrimSpace(record.GetString("updatedAt")),
+		"updated_at":    strings.TrimSpace(record.GetString("updated_at")),
+		"modified":      strings.TrimSpace(record.GetString("modified")),
+		"lastModified":  strings.TrimSpace(record.GetString("lastModified")),
+		"last_modified": strings.TrimSpace(record.GetString("last_modified")),
 	}
+}
+
+func isNuvioPublicSitemapRecordIndexable(record *core.Record) bool {
+	if record == nil {
+		return false
+	}
+
+	booleanFlags := []string{"enabled", "active", "published", "is_published", "isPublished"}
+	for _, fieldName := range booleanFlags {
+		if hasNuvioPublicCollectionField(record.Collection(), fieldName) && !record.GetBool(fieldName) {
+			return false
+		}
+	}
+
+	statusCandidates := []string{"status", "publication_status", "publishStatus"}
+	for _, fieldName := range statusCandidates {
+		if !hasNuvioPublicCollectionField(record.Collection(), fieldName) {
+			continue
+		}
+
+		status := strings.ToLower(strings.TrimSpace(record.GetString(fieldName)))
+		if _, isExcluded := nuvioPublicSitemapExcludedStatuses[status]; isExcluded {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isNuvioPublicSitemapPageExcluded(record *core.Record) bool {
+	if record == nil {
+		return true
+	}
+
+	if hasNuvioPublicCollectionField(record.Collection(), "seo_noindex") && record.GetBool("seo_noindex") {
+		return true
+	}
+	if hasNuvioPublicCollectionField(record.Collection(), "seo_exclude_from_sitemap") && record.GetBool("seo_exclude_from_sitemap") {
+		return true
+	}
+
+	return false
+}
+
+func resolveNuvioPublicSitemapPageWebsiteSlug(record *core.Record, websiteSlugByID map[string]string) string {
+	if record == nil || len(websiteSlugByID) == 0 {
+		return ""
+	}
+
+	websiteID := strings.TrimSpace(resolveNuvioPublicRelationID(record, "website", "site"))
+	if websiteID == "" {
+		return ""
+	}
+
+	return strings.TrimSpace(websiteSlugByID[websiteID])
 }
 
 func buildNuvioPublicBlocksDTO(records []*core.Record) []map[string]any {
