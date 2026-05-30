@@ -22,6 +22,7 @@ import (
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/types"
+	nethtml "golang.org/x/net/html"
 )
 
 const (
@@ -2236,11 +2237,12 @@ func buildNuvioCampaignRecipientMessage(
 	}
 
 	if strings.Contains(trimmedBody, "<") && strings.Contains(trimmedBody, ">") {
+		sanitizedBodyHTML := sanitizeNuvioNewsletterCampaignEmailHTML(trimmedBody)
 		htmlFooter := buildNuvioCampaignUnsubscribeFooterHTML(websiteName, unsubscribeURL)
-		if trimmedBody == "" {
+		if sanitizedBodyHTML == "" {
 			message.HTML = htmlFooter
 		} else {
-			message.HTML = trimmedBody + "\n\n" + htmlFooter
+			message.HTML = sanitizedBodyHTML + "\n\n" + htmlFooter
 		}
 		return message
 	}
@@ -2279,8 +2281,235 @@ func buildNuvioCampaignUnsubscribeFooterHTML(websiteName string, unsubscribeURL 
 	return strings.Join([]string{
 		"<hr>",
 		"<p>You are receiving this email because you subscribed to updates from " + escapedWebsiteName + ".</p>",
-		`<p>Unsubscribe: <a href="` + escapedURL + `">` + escapedURL + "</a></p>",
+		`<p>Unsubscribe: <a href="` + escapedURL + `" target="_blank" rel="noopener noreferrer">` + escapedURL + "</a></p>",
 	}, "")
+}
+
+func sanitizeNuvioNewsletterCampaignEmailHTML(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	nodes, err := nethtml.ParseFragment(strings.NewReader(trimmed), nil)
+	if err != nil {
+		return html.EscapeString(trimmed)
+	}
+
+	var builder strings.Builder
+	for _, node := range nodes {
+		writeNuvioNewsletterSanitizedHTMLNode(&builder, node)
+	}
+
+	return strings.TrimSpace(builder.String())
+}
+
+func writeNuvioNewsletterSanitizedHTMLNode(builder *strings.Builder, node *nethtml.Node) {
+	if builder == nil || node == nil {
+		return
+	}
+
+	switch node.Type {
+	case nethtml.TextNode:
+		builder.WriteString(html.EscapeString(node.Data))
+		return
+	case nethtml.ElementNode:
+		tag := strings.ToLower(strings.TrimSpace(node.Data))
+		if tag == "" {
+			return
+		}
+
+		if shouldDropNuvioNewsletterSanitizedHTMLSubtree(tag) {
+			return
+		}
+
+		if !isAllowedNuvioNewsletterSanitizedHTMLTag(tag) {
+			for child := node.FirstChild; child != nil; child = child.NextSibling {
+				writeNuvioNewsletterSanitizedHTMLNode(builder, child)
+			}
+			return
+		}
+
+		builder.WriteString("<")
+		builder.WriteString(tag)
+
+		for _, attribute := range sanitizeNuvioNewsletterSanitizedHTMLAttributes(tag, node.Attr) {
+			builder.WriteString(" ")
+			builder.WriteString(attribute.Key)
+			builder.WriteString(`="`)
+			builder.WriteString(html.EscapeString(attribute.Val))
+			builder.WriteString(`"`)
+		}
+
+		builder.WriteString(">")
+		if tag == "br" {
+			return
+		}
+
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			writeNuvioNewsletterSanitizedHTMLNode(builder, child)
+		}
+
+		builder.WriteString("</")
+		builder.WriteString(tag)
+		builder.WriteString(">")
+	}
+}
+
+func isAllowedNuvioNewsletterSanitizedHTMLTag(tag string) bool {
+	switch tag {
+	case "p", "br", "strong", "em", "b", "i", "ul", "ol", "li", "blockquote", "code", "pre", "a", "h2", "h3", "h4":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldDropNuvioNewsletterSanitizedHTMLSubtree(tag string) bool {
+	switch tag {
+	case "script", "style", "iframe", "object", "embed", "form", "input", "button", "svg", "math":
+		return true
+	default:
+		return false
+	}
+}
+
+func sanitizeNuvioNewsletterSanitizedHTMLAttributes(tag string, attrs []nethtml.Attribute) []nethtml.Attribute {
+	if tag != "a" {
+		return []nethtml.Attribute{}
+	}
+
+	href := ""
+	title := ""
+	target := ""
+	rel := ""
+
+	for _, attr := range attrs {
+		key := strings.ToLower(strings.TrimSpace(attr.Key))
+		value := strings.TrimSpace(attr.Val)
+		switch key {
+		case "href":
+			href = sanitizeNuvioNewsletterSanitizedHTMLHref(value)
+		case "title":
+			title = truncateNuvioNewsletterStringByRunes(value, nuvioNewsletterTemplateSubjectMax)
+		case "target":
+			target = sanitizeNuvioNewsletterSanitizedHTMLTarget(value)
+		case "rel":
+			rel = sanitizeNuvioNewsletterSanitizedHTMLRel(value)
+		}
+	}
+
+	if href == "" {
+		return []nethtml.Attribute{}
+	}
+
+	if target == "_blank" {
+		rel = ensureNuvioNewsletterBlankTargetRel(rel)
+	}
+
+	result := []nethtml.Attribute{
+		{Key: "href", Val: href},
+	}
+
+	if title != "" {
+		result = append(result, nethtml.Attribute{Key: "title", Val: title})
+	}
+	if target != "" {
+		result = append(result, nethtml.Attribute{Key: "target", Val: target})
+	}
+	if rel != "" {
+		result = append(result, nethtml.Attribute{Key: "rel", Val: rel})
+	}
+
+	return result
+}
+
+func sanitizeNuvioNewsletterSanitizedHTMLHref(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmed, "//") {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "?") {
+		return trimmed
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return ""
+	}
+
+	if parsed.Scheme == "" {
+		return trimmed
+	}
+
+	switch strings.ToLower(strings.TrimSpace(parsed.Scheme)) {
+	case "http", "https", "mailto", "tel":
+		return trimmed
+	default:
+		return ""
+	}
+}
+
+func sanitizeNuvioNewsletterSanitizedHTMLTarget(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "_blank", "_self", "_parent", "_top":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return ""
+	}
+}
+
+func sanitizeNuvioNewsletterSanitizedHTMLRel(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+
+	seen := map[string]struct{}{}
+	result := make([]string, 0, 4)
+	for _, token := range strings.Fields(strings.ToLower(raw)) {
+		normalized := strings.TrimSpace(token)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+
+	return strings.Join(result, " ")
+}
+
+func ensureNuvioNewsletterBlankTargetRel(raw string) string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, 4)
+
+	for _, token := range strings.Fields(strings.ToLower(raw)) {
+		normalized := strings.TrimSpace(token)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+
+	for _, required := range []string{"noopener", "noreferrer"} {
+		if _, exists := seen[required]; exists {
+			continue
+		}
+		result = append(result, required)
+	}
+
+	return strings.Join(result, " ")
 }
 
 func loadNuvioNewsletterBackofficeDashboard(

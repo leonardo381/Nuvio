@@ -2,9 +2,13 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/pocketbase/dbx"
@@ -15,6 +19,7 @@ import (
 const (
 	nuvioComponentsCollectionID     = "pbc_184785686"
 	nuvioCMSDashboardMaxScanRecords = 5000
+	nuvioCMSBackofficeURLMaxLen     = 2048
 )
 
 var (
@@ -116,6 +121,38 @@ var (
 		"props":        {},
 		"translations": {},
 	}
+	nuvioCMSBackofficeIdentityTextMaxByKey = map[string]int{
+		"name":                    160,
+		"title":                   160,
+		"displayname":             160,
+		"slug":                    160,
+		"domain":                  255,
+		"seotitle":                300,
+		"seodescription":          1000,
+		"seotitletemplate":        300,
+		"seotitleseparator":       20,
+		"seocanonicaldomain":      nuvioCMSBackofficeURLMaxLen,
+		"businessname":            200,
+		"businesstype":            120,
+		"businessprimarycategory": 180,
+		"businessphone":           40,
+		"businessemail":           320,
+		"businessaddress":         255,
+		"businesscity":            120,
+		"businesspostalcode":      40,
+		"businesscountry":         120,
+		"businessservicearea":     1500,
+		"businessopeninghours":    2000,
+		"businessgoogleplaceid":   255,
+		"businesssocialprofiles":  4096,
+		"businesspricerange":      80,
+	}
+	nuvioCMSBackofficePageSEOTextMaxByKey = map[string]int{
+		"seotitle":        300,
+		"seodescription":  1000,
+		"seofocuskeyword": 255,
+	}
+	nuvioCMSBackofficePhoneValuePattern = regexp.MustCompile(`^[0-9+()./\-\s]+$`)
 )
 
 type nuvioCMSDashboardWebsiteDTO struct {
@@ -835,12 +872,20 @@ func applyNuvioCMSBackofficePageSEOPatch(
 
 		switch normalizedKey {
 		case "seotitle":
-			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_title", "seoTitle"}, strings.TrimSpace(parseStringValue(rawValue))); err != nil {
+			stringValue := strings.TrimSpace(parseStringValue(rawValue))
+			if err := validateNuvioCMSBackofficeLimitedTextField("seo_title", stringValue, nuvioCMSBackofficePageSEOTextMaxByKey["seotitle"]); err != nil {
+				return err
+			}
+			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_title", "seoTitle"}, stringValue); err != nil {
 				return err
 			}
 			updatedFields++
 		case "seodescription":
-			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_description", "seoDescription"}, parseStringValue(rawValue)); err != nil {
+			stringValue := strings.TrimSpace(parseStringValue(rawValue))
+			if err := validateNuvioCMSBackofficeLimitedTextField("seo_description", stringValue, nuvioCMSBackofficePageSEOTextMaxByKey["seodescription"]); err != nil {
+				return err
+			}
+			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_description", "seoDescription"}, stringValue); err != nil {
 				return err
 			}
 			updatedFields++
@@ -850,7 +895,11 @@ func applyNuvioCMSBackofficePageSEOPatch(
 			}
 			updatedFields++
 		case "seocanonicalurl":
-			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_canonical_url", "seoCanonicalUrl"}, strings.TrimSpace(parseStringValue(rawValue))); err != nil {
+			stringValue := strings.TrimSpace(parseStringValue(rawValue))
+			if err := validateNuvioCMSBackofficePageCanonicalURL(stringValue); err != nil {
+				return err
+			}
+			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_canonical_url", "seoCanonicalUrl"}, stringValue); err != nil {
 				return err
 			}
 			updatedFields++
@@ -873,13 +922,20 @@ func applyNuvioCMSBackofficePageSEOPatch(
 			}
 			updatedFields++
 		case "seofocuskeyword":
-			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_focus_keyword", "seoFocusKeyword"}, strings.TrimSpace(parseStringValue(rawValue))); err != nil {
+			stringValue := strings.TrimSpace(parseStringValue(rawValue))
+			if err := validateNuvioCMSBackofficeLimitedTextField("seo_focus_keyword", stringValue, nuvioCMSBackofficePageSEOTextMaxByKey["seofocuskeyword"]); err != nil {
+				return err
+			}
+			if err := setNuvioCMSBackofficePageSEOStringField(pageRecord, pagesCollection, []string{"seo_focus_keyword", "seoFocusKeyword"}, stringValue); err != nil {
 				return err
 			}
 			updatedFields++
 		case "seotranslations":
 			normalizedTranslations, err := normalizeNuvioCMSBackofficeSEOTranslationsValue(rawValue)
 			if err != nil {
+				return err
+			}
+			if err := validateNuvioCMSBackofficeSEOTranslationsTextLimits(normalizedTranslations); err != nil {
 				return err
 			}
 			if err := setNuvioCMSBackofficePageSEOValueField(pageRecord, pagesCollection, []string{"seo_translations", "seoTranslations"}, normalizedTranslations); err != nil {
@@ -949,6 +1005,9 @@ func setNuvioCMSBackofficePageSEOSocialImageField(
 	default:
 		return fmt.Errorf("seo_social_image expects a string value")
 	}
+	if err := validateNuvioCMSBackofficePageSEOSocialImage(stringValue); err != nil {
+		return err
+	}
 
 	pageRecord.Set(fieldName, stringValue)
 	return nil
@@ -976,6 +1035,355 @@ func normalizeNuvioCMSBackofficeSEOTranslationsValue(rawValue any) (any, error) 
 	}
 }
 
+func validateNuvioCMSBackofficeIdentityFieldValue(normalizedKey string, rawValue any) (string, error) {
+	stringValue := strings.TrimSpace(parseStringValue(rawValue))
+
+	if maxLen, exists := nuvioCMSBackofficeIdentityTextMaxByKey[normalizedKey]; exists {
+		if err := validateNuvioCMSBackofficeLimitedTextField(normalizedKey, stringValue, maxLen); err != nil {
+			return "", err
+		}
+	}
+
+	switch normalizedKey {
+	case "seocanonicaldomain":
+		if err := validateNuvioCMSBackofficeCanonicalDomainValue(stringValue); err != nil {
+			return "", err
+		}
+	case "businesssocialprofiles":
+		if err := validateNuvioCMSBackofficeBusinessSocialProfilesValue(stringValue); err != nil {
+			return "", err
+		}
+	case "businessemail":
+		if err := validateNuvioCMSBackofficeBusinessEmailValue(stringValue); err != nil {
+			return "", err
+		}
+	case "businessphone":
+		if err := validateNuvioCMSBackofficeBusinessPhoneValue(stringValue); err != nil {
+			return "", err
+		}
+	}
+
+	return stringValue, nil
+}
+
+func validateNuvioCMSBackofficeLimitedTextField(fieldName string, value string, maxLen int) error {
+	if maxLen <= 0 {
+		return nil
+	}
+
+	if len([]rune(value)) > maxLen {
+		return fmt.Errorf("%s exceeds the maximum length of %d characters", fieldName, maxLen)
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficeBusinessEmailValue(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+
+	if _, ok := normalizeNuvioEmail(value); !ok {
+		return fmt.Errorf("business_email must be a valid email")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficeBusinessPhoneValue(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	if !nuvioCMSBackofficePhoneValuePattern.MatchString(trimmed) {
+		return fmt.Errorf("business_phone contains invalid characters")
+	}
+
+	hasDigit := false
+	for _, char := range trimmed {
+		if char >= '0' && char <= '9' {
+			hasDigit = true
+			break
+		}
+	}
+	if !hasDigit {
+		return fmt.Errorf("business_phone must contain at least one digit")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficeBusinessSocialProfilesValue(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	entries := parseNuvioCMSBackofficeStringList(trimmed)
+	for _, entry := range entries {
+		if err := validateNuvioCMSBackofficeAbsoluteHTTPURL(entry); err != nil {
+			return fmt.Errorf("business_social_profiles contains an invalid URL")
+		}
+	}
+
+	return nil
+}
+
+func parseNuvioCMSBackofficeStringList(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return []string{}
+	}
+
+	if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		parsed := []any{}
+		if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+			values := make([]string, 0, len(parsed))
+			for _, rawValue := range parsed {
+				parsedValue := strings.TrimSpace(parseStringValue(rawValue))
+				if parsedValue != "" {
+					values = append(values, parsedValue)
+				}
+			}
+			if len(values) > 0 {
+				return values
+			}
+		}
+	}
+
+	pieces := strings.FieldsFunc(trimmed, func(char rune) bool {
+		return char == '\n' || char == '\r' || char == ',' || char == ';'
+	})
+	values := make([]string, 0, len(pieces))
+	for _, rawValue := range pieces {
+		parsedValue := strings.TrimSpace(rawValue)
+		if parsedValue != "" {
+			values = append(values, parsedValue)
+		}
+	}
+	if len(values) > 0 {
+		return values
+	}
+
+	return []string{trimmed}
+}
+
+func validateNuvioCMSBackofficeCanonicalDomainValue(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	if len(trimmed) > nuvioCMSBackofficeURLMaxLen {
+		return fmt.Errorf("seo_canonical_domain exceeds the maximum length of %d characters", nuvioCMSBackofficeURLMaxLen)
+	}
+
+	if hasNuvioCMSBackofficeBlockedURLScheme(trimmed) {
+		return fmt.Errorf("seo_canonical_domain must be a valid http(s) URL or domain")
+	}
+	if strings.HasPrefix(trimmed, "//") {
+		return fmt.Errorf("seo_canonical_domain must be a valid http(s) URL or domain")
+	}
+	if hasNuvioCMSBackofficeUnsafeURLChars(trimmed) {
+		return fmt.Errorf("seo_canonical_domain must be a valid http(s) URL or domain")
+	}
+
+	if strings.Contains(trimmed, "://") {
+		if err := validateNuvioCMSBackofficeAbsoluteHTTPURL(trimmed); err != nil {
+			return fmt.Errorf("seo_canonical_domain must be a valid http(s) URL or domain")
+		}
+		return nil
+	}
+
+	if err := validateNuvioCMSBackofficeDomainBaseValue(trimmed); err != nil {
+		return fmt.Errorf("seo_canonical_domain must be a valid http(s) URL or domain")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficePageCanonicalURL(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	if len(trimmed) > nuvioCMSBackofficeURLMaxLen {
+		return fmt.Errorf("seo_canonical_url exceeds the maximum length of %d characters", nuvioCMSBackofficeURLMaxLen)
+	}
+	if hasNuvioCMSBackofficeBlockedURLScheme(trimmed) {
+		return fmt.Errorf("seo_canonical_url must be a valid http(s) URL or site-relative path")
+	}
+	if strings.HasPrefix(trimmed, "//") {
+		return fmt.Errorf("seo_canonical_url must be a valid http(s) URL or site-relative path")
+	}
+	if hasNuvioCMSBackofficeUnsafeURLChars(trimmed) {
+		return fmt.Errorf("seo_canonical_url must be a valid http(s) URL or site-relative path")
+	}
+
+	if strings.HasPrefix(trimmed, "/") {
+		return nil
+	}
+
+	if err := validateNuvioCMSBackofficeAbsoluteHTTPURL(trimmed); err != nil {
+		return fmt.Errorf("seo_canonical_url must be a valid http(s) URL or site-relative path")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficePageSEOSocialImage(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+
+	if len(trimmed) > nuvioCMSBackofficeURLMaxLen {
+		return fmt.Errorf("seo_social_image exceeds the maximum length of %d characters", nuvioCMSBackofficeURLMaxLen)
+	}
+	if hasNuvioCMSBackofficeBlockedURLScheme(trimmed) {
+		return fmt.Errorf("seo_social_image must be a safe URL, relative path, or file reference")
+	}
+	if strings.HasPrefix(trimmed, "//") {
+		return fmt.Errorf("seo_social_image must be a safe URL, relative path, or file reference")
+	}
+	if hasNuvioCMSBackofficeUnsafeURLChars(trimmed) {
+		return fmt.Errorf("seo_social_image must be a safe URL, relative path, or file reference")
+	}
+
+	if strings.HasPrefix(trimmed, "/") {
+		return nil
+	}
+
+	if strings.Contains(trimmed, "://") {
+		if err := validateNuvioCMSBackofficeAbsoluteHTTPURL(trimmed); err != nil {
+			return fmt.Errorf("seo_social_image must be a safe URL, relative path, or file reference")
+		}
+		return nil
+	}
+
+	if strings.Contains(trimmed, "\\") || strings.Contains(trimmed, "..") || strings.Contains(trimmed, ":") {
+		return fmt.Errorf("seo_social_image must be a safe URL, relative path, or file reference")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficeSEOTranslationsTextLimits(value any) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		for rawKey, rawValue := range typed {
+			normalizedKey := normalizeNuvioCMSBackofficePayloadKey(rawKey)
+			switch normalizedKey {
+			case "title", "seotitle":
+				stringValue := strings.TrimSpace(parseStringValue(rawValue))
+				if err := validateNuvioCMSBackofficeLimitedTextField("seo_translations.title", stringValue, nuvioCMSBackofficePageSEOTextMaxByKey["seotitle"]); err != nil {
+					return err
+				}
+			case "description", "seodescription":
+				stringValue := strings.TrimSpace(parseStringValue(rawValue))
+				if err := validateNuvioCMSBackofficeLimitedTextField("seo_translations.description", stringValue, nuvioCMSBackofficePageSEOTextMaxByKey["seodescription"]); err != nil {
+					return err
+				}
+			case "focuskeyword", "seofocuskeyword":
+				stringValue := strings.TrimSpace(parseStringValue(rawValue))
+				if err := validateNuvioCMSBackofficeLimitedTextField("seo_translations.focusKeyword", stringValue, nuvioCMSBackofficePageSEOTextMaxByKey["seofocuskeyword"]); err != nil {
+					return err
+				}
+			}
+
+			if err := validateNuvioCMSBackofficeSEOTranslationsTextLimits(rawValue); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if err := validateNuvioCMSBackofficeSEOTranslationsTextLimits(item); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func hasNuvioCMSBackofficeBlockedURLScheme(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return false
+	}
+
+	return strings.HasPrefix(normalized, "javascript:") ||
+		strings.HasPrefix(normalized, "data:") ||
+		strings.HasPrefix(normalized, "vbscript:") ||
+		strings.HasPrefix(normalized, "file:") ||
+		strings.HasPrefix(normalized, "blob:")
+}
+
+func hasNuvioCMSBackofficeUnsafeURLChars(value string) bool {
+	return strings.ContainsAny(value, " \t\r\n<>\"'`")
+}
+
+func validateNuvioCMSBackofficeAbsoluteHTTPURL(value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		return fmt.Errorf("invalid URL")
+	}
+
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("invalid URL scheme")
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return fmt.Errorf("invalid URL host")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("invalid URL user info")
+	}
+	if hasNuvioCMSBackofficeUnsafeURLChars(parsed.Host) {
+		return fmt.Errorf("invalid URL host")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficeDomainBaseValue(value string) error {
+	if value == "" {
+		return nil
+	}
+
+	if strings.HasPrefix(value, "/") || strings.HasPrefix(value, "?") || strings.HasPrefix(value, "#") {
+		return fmt.Errorf("invalid domain value")
+	}
+	if strings.Contains(value, "\\") {
+		return fmt.Errorf("invalid domain value")
+	}
+
+	parsed, err := url.Parse("https://" + value)
+	if err != nil {
+		return err
+	}
+	if parsed == nil || strings.TrimSpace(parsed.Host) == "" {
+		return fmt.Errorf("invalid domain value")
+	}
+
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return fmt.Errorf("invalid domain value")
+	}
+
+	normalizedHost := strings.ToLower(host)
+	if normalizedHost != "localhost" && net.ParseIP(host) == nil && !strings.Contains(host, ".") {
+		return fmt.Errorf("invalid domain value")
+	}
+
+	return nil
+}
+
 func applyNuvioCMSBackofficeIdentityPatch(record *core.Record, payload map[string]any, isAdmin bool) error {
 	if record == nil {
 		return fmt.Errorf("Website not found")
@@ -1001,7 +1409,10 @@ func applyNuvioCMSBackofficeIdentityPatch(record *core.Record, payload map[strin
 			return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
 		}
 
-		stringValue := strings.TrimSpace(parseStringValue(rawValue))
+		stringValue, err := validateNuvioCMSBackofficeIdentityFieldValue(normalizedKey, rawValue)
+		if err != nil {
+			return err
+		}
 		switch normalizedKey {
 		case "name":
 			if setNuvioCMSBackofficeWebsiteStringField(record, []string{"name"}, stringValue) {

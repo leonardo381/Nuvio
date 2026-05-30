@@ -318,6 +318,157 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 			},
 		},
 		{
+			Name:   "identity endpoint accepts valid canonical domain",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_canonical_domain":"https://alpha.example/base"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"seo_canonical_domain":"https://alpha.example/base"`,
+			},
+		},
+		{
+			Name:   "identity endpoint rejects javascript canonical domain",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_canonical_domain":"javascript:alert(1)"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "identity endpoint accepts valid business social profiles",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"business_social_profiles":"https://facebook.com/alpha,https://instagram.com/alpha"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
+				if err != nil {
+					t.Fatalf("expected website to exist: %v", err)
+				}
+				if strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(website, []string{"business_social_profiles", "businessSocialProfiles"})) == "" {
+					t.Fatalf("expected business_social_profiles to be updated")
+				}
+			},
+		},
+		{
+			Name:   "identity endpoint rejects invalid business social profile entry",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"business_social_profiles":"https://facebook.com/alpha,javascript:alert(1)"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "identity endpoint accepts valid business email",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"business_email":"seo-team@alpha.example"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"business_email":"seo-team@alpha.example"`,
+			},
+		},
+		{
+			Name:   "identity endpoint rejects invalid business email",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"business_email":"not-an-email"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "identity endpoint rejects overlong seo title",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seoTitle":"` + strings.Repeat("x", 301) + `"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
 			Name:   "client unassigned denied for identity endpoint",
 			Method: http.MethodPatch,
 			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
@@ -1166,6 +1317,148 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 				`"seo_description":"Client updated contact description"`,
 				`"seo_canonical_url":"https://alpha.example/contact-updated"`,
 				`"seo_focus_keyword":"client keyword"`,
+			},
+		},
+		{
+			Name:   "page seo endpoint accepts site relative canonical url",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_canonical_url":"/site/alpha/home"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"seo_canonical_url":"/site/alpha/home"`,
+			},
+		},
+		{
+			Name:   "page seo endpoint rejects javascript canonical url",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_canonical_url":"javascript:alert(1)"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "page seo endpoint accepts absolute social image url",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_social_image":"https://cdn.alpha.example/seo/home.webp"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"seo_social_image":"https://cdn.alpha.example/seo/home.webp"`,
+			},
+		},
+		{
+			Name:   "page seo endpoint rejects unsafe social image string",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_social_image":"javascript:alert(1)"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "page seo endpoint rejects overlong seo title",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_title":"` + strings.Repeat("t", 301) + `"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "page seo endpoint rejects overlong seo description",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_description":"` + strings.Repeat("d", 1001) + `"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "page seo endpoint rejects overlong seo focus keyword",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_focus_keyword":"` + strings.Repeat("k", 256) + `"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
 			},
 		},
 		{

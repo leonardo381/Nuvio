@@ -777,10 +777,201 @@
             .replace(/'/g, "&#39;");
     }
 
+    function sanitizePreviewAnchorHref(rawHref) {
+        const value = `${rawHref || ""}`.trim();
+        if (!value) {
+            return "";
+        }
+
+        const lower = value.toLowerCase();
+        if (
+            lower.startsWith("javascript:")
+            || lower.startsWith("data:")
+            || lower.startsWith("vbscript:")
+            || lower.startsWith("file:")
+            || lower.startsWith("blob:")
+            || value.startsWith("//")
+        ) {
+            return "";
+        }
+
+        if (value.startsWith("#") || value.startsWith("/") || value.startsWith("?")) {
+            return value;
+        }
+
+        try {
+            const parsed = new URL(value, window?.location?.href || "http://localhost/");
+            if (!parsed.protocol) {
+                return value;
+            }
+
+            const protocol = parsed.protocol.toLowerCase();
+            if (protocol === "http:" || protocol === "https:" || protocol === "mailto:" || protocol === "tel:") {
+                return value;
+            }
+        } catch (_) {
+            if (!value.includes(":")) {
+                return value;
+            }
+        }
+
+        return "";
+    }
+
+    function sanitizePreviewAnchorTarget(rawTarget) {
+        const normalized = `${rawTarget || ""}`.trim().toLowerCase();
+        if (["_blank", "_self", "_parent", "_top"].includes(normalized)) {
+            return normalized;
+        }
+        return "";
+    }
+
+    function sanitizePreviewAnchorRel(rawRel) {
+        const tokens = `${rawRel || ""}`
+            .toLowerCase()
+            .split(/\s+/)
+            .map((token) => token.trim())
+            .filter(Boolean);
+        return [...new Set(tokens)].join(" ");
+    }
+
+    function ensurePreviewBlankTargetRel(rawRel) {
+        const tokens = sanitizePreviewAnchorRel(rawRel)
+            .split(/\s+/)
+            .map((token) => token.trim())
+            .filter(Boolean);
+        const unique = new Set(tokens);
+        unique.add("noopener");
+        unique.add("noreferrer");
+        return [...unique].join(" ");
+    }
+
+    function sanitizeCampaignPreviewElementAttributes(element, tagName) {
+        const allowedAnchorAttributes = new Set(["href", "title", "target", "rel"]);
+        const attrs = Array.from(element.attributes || []);
+
+        for (const attr of attrs) {
+            const attrName = `${attr?.name || ""}`.toLowerCase();
+            if (attrName.startsWith("on")) {
+                element.removeAttribute(attr.name);
+                continue;
+            }
+
+            if (tagName !== "a" || !allowedAnchorAttributes.has(attrName)) {
+                element.removeAttribute(attr.name);
+            }
+        }
+
+        if (tagName !== "a") {
+            return;
+        }
+
+        const safeHref = sanitizePreviewAnchorHref(element.getAttribute("href"));
+        if (safeHref) {
+            element.setAttribute("href", safeHref);
+        } else {
+            element.removeAttribute("href");
+            element.removeAttribute("target");
+            element.removeAttribute("rel");
+        }
+
+        const safeTarget = sanitizePreviewAnchorTarget(element.getAttribute("target"));
+        if (safeTarget) {
+            element.setAttribute("target", safeTarget);
+        } else {
+            element.removeAttribute("target");
+        }
+
+        const safeRel = safeTarget === "_blank"
+            ? ensurePreviewBlankTargetRel(element.getAttribute("rel"))
+            : sanitizePreviewAnchorRel(element.getAttribute("rel"));
+        if (safeRel) {
+            element.setAttribute("rel", safeRel);
+        } else {
+            element.removeAttribute("rel");
+        }
+
+        const safeTitle = `${element.getAttribute("title") || ""}`.trim();
+        if (safeTitle) {
+            element.setAttribute("title", safeTitle);
+        } else {
+            element.removeAttribute("title");
+        }
+    }
+
+    function sanitizeCampaignPreviewNodeTree(node) {
+        const allowedTags = new Set([
+            "p", "br", "strong", "em", "b", "i", "ul", "ol", "li",
+            "blockquote", "code", "pre", "a", "h2", "h3", "h4",
+        ]);
+        const dropSubtreeTags = new Set([
+            "script", "style", "iframe", "object", "embed", "form",
+            "input", "button", "svg", "math",
+        ]);
+
+        const children = Array.from(node?.childNodes || []);
+        for (const child of children) {
+            if (child.nodeType === 8) {
+                child.remove();
+                continue;
+            }
+
+            if (child.nodeType !== 1) {
+                continue;
+            }
+
+            const tagName = `${child.tagName || ""}`.toLowerCase();
+            if (!tagName) {
+                child.remove();
+                continue;
+            }
+
+            if (dropSubtreeTags.has(tagName)) {
+                child.remove();
+                continue;
+            }
+
+            if (!allowedTags.has(tagName)) {
+                const nestedChildren = Array.from(child.childNodes || []);
+                for (const nestedChild of nestedChildren) {
+                    child.parentNode?.insertBefore(nestedChild, child);
+                }
+                child.remove();
+                continue;
+            }
+
+            sanitizeCampaignPreviewElementAttributes(child, tagName);
+            sanitizeCampaignPreviewNodeTree(child);
+        }
+    }
+
     function sanitizePreviewBodyHtml(value) {
-        return `${value || ""}`
-            .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-            .trim();
+        const raw = `${value || ""}`.trim();
+        if (!raw) {
+            return "";
+        }
+
+        if (typeof window === "undefined" || typeof DOMParser === "undefined") {
+            return raw
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+                .trim();
+        }
+
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(`<div id="campaign-preview-root">${raw}</div>`, "text/html");
+            const root = doc.getElementById("campaign-preview-root");
+            if (!root) {
+                return "";
+            }
+
+            sanitizeCampaignPreviewNodeTree(root);
+            return root.innerHTML.trim();
+        } catch (_) {
+            return raw
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+                .trim();
+        }
     }
 
     function resolveCampaignPreviewBaseHref() {
@@ -802,64 +993,9 @@
         }
     }
 
-    function normalizeCampaignPreviewMediaUrl(rawUrl, previewBaseHref) {
-        const source = `${rawUrl || ""}`.trim();
-        if (!source) {
-            return source;
-        }
-
-        // Keep explicit non-http resource schemes unchanged.
-        if (/^(data:|blob:|cid:|mailto:|tel:|javascript:)/i.test(source)) {
-            return source;
-        }
-
-        try {
-            const resolved = new URL(source, previewBaseHref);
-            if (typeof window !== "undefined") {
-                const currentUrl = new URL(window.location.href);
-                const isLoopback = (hostname) => hostname === "localhost" || hostname === "127.0.0.1";
-                if (
-                    isLoopback(resolved.hostname)
-                    && isLoopback(currentUrl.hostname)
-                    && resolved.protocol === currentUrl.protocol
-                    && resolved.port === currentUrl.port
-                ) {
-                    resolved.hostname = currentUrl.hostname;
-                }
-            }
-            return resolved.toString();
-        } catch (_) {
-            return source;
-        }
-    }
-
     function normalizeCampaignPreviewBodyHtml(body, previewBaseHref) {
-        const sanitizedBody = sanitizePreviewBodyHtml(body);
-        if (!sanitizedBody || typeof window === "undefined" || typeof DOMParser === "undefined") {
-            return sanitizedBody;
-        }
-
-        try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(`<div id="campaign-preview-root">${sanitizedBody}</div>`, "text/html");
-            const root = doc.getElementById("campaign-preview-root");
-
-            if (!root) {
-                return sanitizedBody;
-            }
-
-            root.querySelectorAll("img[src], source[src], video[src], audio[src]").forEach((node) => {
-                const rawSrc = node.getAttribute("src");
-                if (!rawSrc) {
-                    return;
-                }
-                node.setAttribute("src", normalizeCampaignPreviewMediaUrl(rawSrc, previewBaseHref));
-            });
-
-            return root.innerHTML.trim();
-        } catch (_) {
-            return sanitizedBody;
-        }
+        void previewBaseHref;
+        return sanitizePreviewBodyHtml(body);
     }
 
     function buildCampaignPreviewDocument(subject, body) {
