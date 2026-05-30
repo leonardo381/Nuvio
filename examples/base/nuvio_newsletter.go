@@ -41,6 +41,8 @@ const (
 	nuvioNewsletterCampaignBatchSize  = 100
 	nuvioNewsletterBackofficeNameMax  = 200
 	nuvioNewsletterBackofficeSlugMax  = 120
+	nuvioNewsletterPublicEmailMaxLen  = 320
+	nuvioNewsletterPublicTokenMaxLen  = 512
 )
 
 var (
@@ -347,17 +349,28 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	newsletterBackofficeGroup.POST("/campaigns/{id}/send", handleNuvioNewsletterBackofficeCampaignSend)
 
 	newsletterPublicGroup.POST("/subscribe", func(e *core.RequestEvent) error {
-		payload := nuvioNewsletterSubscribePayload{}
+		payload := map[string]any{}
 		if err := e.BindBody(&payload); err != nil {
 			return e.BadRequestError("Invalid newsletter subscribe payload.", nil)
 		}
 
-		websiteID := strings.TrimSpace(payload.WebsiteID)
-		if websiteID == "" {
-			websiteID = strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
+		if err := validateNuvioPublicPayloadKeys(
+			payload,
+			map[string]struct{}{
+				"websiteId":   {},
+				"website":     {},
+				"websiteSlug": {},
+				"slug":        {},
+				"email":       {},
+				"name":        {},
+			},
+		); err != nil {
+			return e.BadRequestError(err.Error(), nil)
 		}
-		if websiteID == "" {
-			return e.BadRequestError("Missing websiteId.", nil)
+
+		_, websiteID, err := resolveNuvioPublicWebsiteFromPayload(e.App, payload, e.Request.URL.Query())
+		if err != nil {
+			return handleNuvioPublicWebsiteResolveError(e, err)
 		}
 
 		website, config, err := loadNuvioWebsiteNewsletterConfig(e.App, websiteID)
@@ -373,12 +386,21 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("Newsletter is unavailable for this website.", nil)
 		}
 
-		email, ok := normalizeNuvioEmail(payload.Email)
+		emailRaw, err := validateNuvioPublicRequiredField(payload["email"], "Email", nuvioNewsletterPublicEmailMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		email, ok := normalizeNuvioEmail(emailRaw)
 		if !ok {
 			return e.BadRequestError("A valid email is required.", nil)
 		}
 
-		name := sanitizeNuvioNewsletterName(payload.Name)
+		name, err := validateNuvioPublicOptionalField(payload["name"], "Name", nuvioNewsletterMaxNameLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		name = sanitizeNuvioNewsletterName(name)
 		subscribersCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioSubscribersCollectionID)
 		if err != nil {
 			return e.InternalServerError("Newsletter subscribers collection is missing.", nil)
@@ -493,7 +515,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	})
 
 	newsletterPublicGroup.GET("/confirm", func(e *core.RequestEvent) error {
-		rawToken := strings.TrimSpace(e.Request.URL.Query().Get("token"))
+		rawToken := normalizeNuvioNewsletterPublicToken(e.Request.URL.Query().Get("token"))
 		if rawToken == "" {
 			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
 				return renderNuvioNewsletterLifecycleHTML(
@@ -618,7 +640,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	})
 
 	newsletterPublicGroup.GET("/unsubscribe", func(e *core.RequestEvent) error {
-		rawToken := strings.TrimSpace(e.Request.URL.Query().Get("token"))
+		rawToken := normalizeNuvioNewsletterPublicToken(e.Request.URL.Query().Get("token"))
 		if rawToken == "" {
 			if shouldRenderNuvioNewsletterLifecycleHTML(e.Request) {
 				return renderNuvioNewsletterLifecycleHTML(
@@ -1261,7 +1283,7 @@ func findNuvioSubscriberByWebsiteEmail(
 	records, err := app.FindRecordsByFilter(
 		subscribersCollection,
 		"website={:website}",
-		"-created",
+		"",
 		nuvioNewsletterMaxSubscriberScan,
 		0,
 		dbx.Params{
@@ -1332,6 +1354,17 @@ func hashNuvioNewsletterToken(rawToken string) string {
 
 	sum := sha256.Sum256([]byte(trimmed))
 	return hex.EncodeToString(sum[:])
+}
+
+func normalizeNuvioNewsletterPublicToken(rawToken string) string {
+	trimmed := strings.TrimSpace(rawToken)
+	if trimmed == "" {
+		return ""
+	}
+	if len([]rune(trimmed)) > nuvioNewsletterPublicTokenMaxLen {
+		return ""
+	}
+	return trimmed
 }
 
 func ensureNuvioSubscriberUnsubscribeTokenHash(subscriber *core.Record) error {

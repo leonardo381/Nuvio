@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
 )
+
+var errNuvioPublicWebsiteContextMissing = errors.New("missing_public_website_context")
 
 const (
 	nuvioContactsCollectionID  = "pbc_1661203100"
@@ -16,6 +21,16 @@ const (
 	nuvioDefaultReplyToMaxSize = 1
 	nuvioTemplateSubjectMaxLen = 160
 	nuvioTemplateTextMaxLen    = 4000
+
+	nuvioPublicContactNameMaxLen    = 160
+	nuvioPublicContactPhoneMaxLen   = 80
+	nuvioPublicContactSubjectMaxLen = 200
+	nuvioPublicContactMessageMaxLen = 4000
+	nuvioPublicContactSourceMaxLen  = 120
+	nuvioPublicContactPageMaxLen    = 200
+
+	nuvioPublicWhatsappSourceMaxLen = 120
+	nuvioPublicWhatsappPageMaxLen   = 200
 )
 
 type nuvioEmailNotificationsConfig struct {
@@ -52,39 +67,69 @@ type nuvioWebsiteWhatsappConfig struct {
 }
 
 type nuvioContactSubmissionPayload struct {
-	WebsiteID string `json:"websiteId"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
-	Subject   string `json:"subject"`
-	Message   string `json:"message"`
+	WebsiteID   string `json:"websiteId"`
+	WebsiteSlug string `json:"websiteSlug"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	Subject     string `json:"subject"`
+	Message     string `json:"message"`
+	Source      string `json:"source"`
+	Page        string `json:"page"`
 }
 
 type nuvioWhatsappInteractionPayload struct {
-	WebsiteID string `json:"websiteId"`
-	Source    string `json:"source"`
-	Page      string `json:"page"`
+	WebsiteID   string `json:"websiteId"`
+	WebsiteSlug string `json:"websiteSlug"`
+	Source      string `json:"source"`
+	Page        string `json:"page"`
 }
 
 // NUVIO CUSTOM START: Contact form + WhatsApp interaction endpoints with independent email notifications.
 func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 	contactSubmitHandler := func(e *core.RequestEvent) error {
-		payload := nuvioContactSubmissionPayload{}
+		payload := map[string]any{}
 		if err := e.BindBody(&payload); err != nil {
-			return e.BadRequestError("Invalid contact form payload.", err)
+			return e.BadRequestError("Invalid contact form payload.", nil)
 		}
 
-		websiteID := strings.TrimSpace(payload.WebsiteID)
-		if websiteID == "" {
-			websiteID = strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
-		}
-		if websiteID == "" {
-			return e.BadRequestError("Missing websiteId.", nil)
+		if err := validateNuvioPublicPayloadKeys(
+			payload,
+			map[string]struct{}{
+				"websiteId":   {},
+				"website":     {},
+				"websiteSlug": {},
+				"slug":        {},
+				"name":        {},
+				"email":       {},
+				"phone":       {},
+				"subject":     {},
+				"message":     {},
+				"source":      {},
+				"page":        {},
+			},
+		); err != nil {
+			return e.BadRequestError(err.Error(), nil)
 		}
 
-		website, config, err := loadNuvioWebsiteContactFormConfig(e.App, websiteID)
+		websiteRecord, websiteID, err := resolveNuvioPublicWebsiteFromPayload(e.App, payload, e.Request.URL.Query())
 		if err != nil {
-			return e.BadRequestError("Failed to load website Contact Form settings.", err)
+			return handleNuvioPublicWebsiteResolveError(e, err)
+		}
+
+		_, config, err := loadNuvioWebsiteContactFormConfig(e.App, websiteID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Website not found.", nil)
+			}
+			e.App.Logger().Error(
+				"NUVIO contact settings load failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.BadRequestError("Failed to load website Contact Form settings.", nil)
 		}
 
 		if !config.FeatureAvailable {
@@ -95,31 +140,53 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("Contact Form is disabled for this website.", nil)
 		}
 
-		name := strings.TrimSpace(payload.Name)
-		if name == "" {
-			return e.BadRequestError("Name is required.", nil)
+		name, err := validateNuvioPublicRequiredField(payload["name"], "Name", nuvioPublicContactNameMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
 		}
 
-		email, ok := normalizeNuvioEmail(payload.Email)
+		emailRaw, err := validateNuvioPublicRequiredField(payload["email"], "Email", 320)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		email, ok := normalizeNuvioEmail(emailRaw)
 		if !ok {
 			return e.BadRequestError("A valid email is required.", nil)
 		}
 
-		message := strings.TrimSpace(payload.Message)
-		if message == "" {
-			return e.BadRequestError("Message is required.", nil)
+		message, err := validateNuvioPublicRequiredField(payload["message"], "Message", nuvioPublicContactMessageMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
 		}
 
-		phone := strings.TrimSpace(payload.Phone)
+		phone, err := validateNuvioPublicOptionalField(payload["phone"], "Phone", nuvioPublicContactPhoneMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 		if !config.PhoneFieldEnabled {
 			phone = ""
 		}
 
-		subject := strings.TrimSpace(payload.Subject)
+		subject, err := validateNuvioPublicOptionalField(payload["subject"], "Subject", nuvioPublicContactSubjectMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		source, err := validateNuvioPublicOptionalField(payload["source"], "Source", nuvioPublicContactSourceMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		page, err := validateNuvioPublicOptionalField(payload["page"], "Page", nuvioPublicContactPageMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 
 		contactsCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioContactsCollectionID)
 		if err != nil {
-			return e.BadRequestError("Contacts collection is missing.", err)
+			e.App.Logger().Error("NUVIO contact collection resolve failed", "error", err.Error())
+			return e.BadRequestError("Contacts collection is missing.", nil)
 		}
 
 		contactRecord := core.NewRecord(contactsCollection)
@@ -130,23 +197,39 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 		contactRecord.Set("phone", phone)
 		contactRecord.Set("subject", subject)
 		contactRecord.Set("message", message)
+		if sourceFieldName := resolveNuvioCollectionFieldNameByAliases(contactsCollection, []string{"source"}); sourceFieldName != "" {
+			contactRecord.Set(sourceFieldName, source)
+		}
+		if pageFieldName := resolveNuvioCollectionFieldNameByAliases(contactsCollection, []string{"page"}); pageFieldName != "" {
+			contactRecord.Set(pageFieldName, page)
+		}
 		contactRecord.Set("status", "new")
 
 		if err := e.App.Save(contactRecord); err != nil {
-			return e.BadRequestError("Failed to save contact submission.", err)
+			e.App.Logger().Error(
+				"NUVIO contact submission save failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.BadRequestError("Failed to save contact submission.", nil)
 		}
 
 		if notificationErr := maybeSendNuvioContactNotificationEmail(
 			e.Request.Context(),
-			website,
+			websiteRecord,
 			config,
 			nuvioContactSubmissionPayload{
-				WebsiteID: websiteID,
-				Name:      name,
-				Email:     email,
-				Phone:     phone,
-				Subject:   subject,
-				Message:   message,
+				WebsiteID:   websiteID,
+				WebsiteSlug: strings.TrimSpace(websiteRecord.GetString("slug")),
+				Name:        name,
+				Email:       email,
+				Phone:       phone,
+				Subject:     subject,
+				Message:     message,
+				Source:      source,
+				Page:        page,
 			},
 		); notificationErr != nil {
 			e.App.Logger().Error(
@@ -172,22 +255,43 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 	}
 
 	whatsappInteractionHandler := func(e *core.RequestEvent) error {
-		payload := nuvioWhatsappInteractionPayload{}
+		payload := map[string]any{}
 		if err := e.BindBody(&payload); err != nil {
-			return e.BadRequestError("Invalid WhatsApp interaction payload.", err)
+			return e.BadRequestError("Invalid WhatsApp interaction payload.", nil)
 		}
 
-		websiteID := strings.TrimSpace(payload.WebsiteID)
-		if websiteID == "" {
-			websiteID = strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
-		}
-		if websiteID == "" {
-			return e.BadRequestError("Missing websiteId.", nil)
+		if err := validateNuvioPublicPayloadKeys(
+			payload,
+			map[string]struct{}{
+				"websiteId":   {},
+				"website":     {},
+				"websiteSlug": {},
+				"slug":        {},
+				"source":      {},
+				"page":        {},
+			},
+		); err != nil {
+			return e.BadRequestError(err.Error(), nil)
 		}
 
-		website, config, err := loadNuvioWebsiteWhatsappConfig(e.App, websiteID)
+		websiteRecord, websiteID, err := resolveNuvioPublicWebsiteFromPayload(e.App, payload, e.Request.URL.Query())
 		if err != nil {
-			return e.BadRequestError("Failed to load website WhatsApp settings.", err)
+			return handleNuvioPublicWebsiteResolveError(e, err)
+		}
+
+		_, config, err := loadNuvioWebsiteWhatsappConfig(e.App, websiteID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return e.NotFoundError("Website not found.", nil)
+			}
+			e.App.Logger().Error(
+				"NUVIO whatsapp settings load failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.BadRequestError("Failed to load website WhatsApp settings.", nil)
 		}
 
 		if !config.FeatureAvailable {
@@ -200,11 +304,23 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 
 		whatsappCollection, err := e.App.FindCachedCollectionByNameOrId(nuvioWhatsappCollectionID)
 		if err != nil {
-			return e.BadRequestError("Whatsapp collection is missing.", err)
+			e.App.Logger().Error("NUVIO whatsapp collection resolve failed", "error", err.Error())
+			return e.BadRequestError("Whatsapp collection is missing.", nil)
 		}
 
-		source := strings.TrimSpace(payload.Source)
-		page := strings.TrimSpace(payload.Page)
+		source, err := validateNuvioPublicOptionalField(payload["source"], "Source", nuvioPublicWhatsappSourceMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		page, err := validateNuvioPublicOptionalField(payload["page"], "Page", nuvioPublicWhatsappPageMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		if source == "" && page == "" {
+			return e.BadRequestError("At least source or page is required.", nil)
+		}
 
 		interactionRecord := core.NewRecord(whatsappCollection)
 		interactionRecord.Set("website", websiteID)
@@ -215,17 +331,25 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 		}
 
 		if err := e.App.Save(interactionRecord); err != nil {
-			return e.BadRequestError("Failed to save WhatsApp interaction.", err)
+			e.App.Logger().Error(
+				"NUVIO whatsapp interaction save failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.BadRequestError("Failed to save WhatsApp interaction.", nil)
 		}
 
 		if notificationErr := maybeSendNuvioWhatsappNotificationEmail(
 			e.Request.Context(),
-			website,
+			websiteRecord,
 			config,
 			nuvioWhatsappInteractionPayload{
-				WebsiteID: websiteID,
-				Source:    source,
-				Page:      page,
+				WebsiteID:   websiteID,
+				WebsiteSlug: strings.TrimSpace(websiteRecord.GetString("slug")),
+				Source:      source,
+				Page:        page,
 			},
 		); notificationErr != nil {
 			e.App.Logger().Error(
@@ -254,6 +378,121 @@ func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 
 	// Register scoped backoffice Leads dashboard read endpoint.
 	registerNuvioLeadsDashboardRoutes(e)
+}
+
+func validateNuvioPublicPayloadKeys(payload map[string]any, allowed map[string]struct{}) error {
+	for rawKey := range payload {
+		key := strings.TrimSpace(rawKey)
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("Field %q is not allowed in this endpoint.", key)
+		}
+	}
+
+	return nil
+}
+
+func validateNuvioPublicRequiredField(raw any, fieldLabel string, maxLen int) (string, error) {
+	normalized, err := validateNuvioPublicOptionalField(raw, fieldLabel, maxLen)
+	if err != nil {
+		return "", err
+	}
+	if normalized == "" {
+		return "", fmt.Errorf("%s is required.", fieldLabel)
+	}
+
+	return normalized, nil
+}
+
+func validateNuvioPublicOptionalField(raw any, fieldLabel string, maxLen int) (string, error) {
+	normalized, err := normalizeNuvioPublicFieldString(raw, fieldLabel)
+	if err != nil {
+		return "", err
+	}
+	if normalized == "" {
+		return "", nil
+	}
+
+	if maxLen > 0 && len([]rune(normalized)) > maxLen {
+		return "", fmt.Errorf("%s is too long. Maximum %d characters.", fieldLabel, maxLen)
+	}
+
+	return normalized, nil
+}
+
+func normalizeNuvioPublicFieldString(raw any, fieldLabel string) (string, error) {
+	switch typed := raw.(type) {
+	case nil:
+		return "", nil
+	case string:
+		return strings.TrimSpace(typed), nil
+	default:
+		return "", fmt.Errorf("%s must be a string.", fieldLabel)
+	}
+}
+
+func resolveNuvioPublicWebsiteFromPayload(
+	app core.App,
+	payload map[string]any,
+	queryValues url.Values,
+) (*core.Record, string, error) {
+	websiteSlug, err := normalizeNuvioPublicFieldString(payload["websiteSlug"], "websiteSlug")
+	if err != nil {
+		return nil, "", err
+	}
+	if websiteSlug == "" {
+		websiteSlug, err = normalizeNuvioPublicFieldString(payload["slug"], "slug")
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	if websiteSlug == "" {
+		websiteSlug = strings.TrimSpace(queryValues.Get("websiteSlug"))
+	}
+
+	if websiteSlug != "" {
+		website, err := findNuvioPublicWebsiteBySlugOrDomain(app, websiteSlug)
+		if err != nil {
+			return nil, "", err
+		}
+
+		return website, strings.TrimSpace(website.Id), nil
+	}
+
+	websiteID, err := normalizeNuvioPublicFieldString(payload["websiteId"], "websiteId")
+	if err != nil {
+		return nil, "", err
+	}
+	if websiteID == "" {
+		websiteID, err = normalizeNuvioPublicFieldString(payload["website"], "website")
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	if websiteID == "" {
+		websiteID = strings.TrimSpace(queryValues.Get("websiteId"))
+	}
+	if websiteID == "" {
+		return nil, "", errNuvioPublicWebsiteContextMissing
+	}
+
+	website, err := app.FindRecordById(nuvioWebsitesCollectionID, websiteID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return website, websiteID, nil
+}
+
+func handleNuvioPublicWebsiteResolveError(e *core.RequestEvent, err error) error {
+	if errors.Is(err, errNuvioPublicWebsiteContextMissing) {
+		return e.BadRequestError("Missing website context.", nil)
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return e.NotFoundError("Website not found.", nil)
+	}
+
+	e.App.Logger().Error("NUVIO public website resolve failed", "error", err.Error())
+	return e.BadRequestError("Failed to resolve website context.", nil)
 }
 
 func loadNuvioWebsiteContactFormConfig(

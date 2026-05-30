@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -25,6 +26,13 @@ const (
 	nuvioAppointmentsCollectionID          = "pbc_1661203900"
 	nuvioBookingBackofficeDashboardMaxScan = 5000
 	nuvioBookingBackofficeInternalNotesMax = 4000
+	nuvioBookingPublicNameMaxLen           = 160
+	nuvioBookingPublicEmailMaxLen          = 320
+	nuvioBookingPublicPhoneMaxLen          = 80
+	nuvioBookingPublicNotesMaxLen          = 4000
+	nuvioBookingPublicSourceMaxLen         = 120
+	nuvioBookingPublicPageMaxLen           = 200
+	nuvioBookingPublicServiceIDMaxLen      = 120
 	nuvioBookingConfirmationModeRequest    = "request"
 	nuvioBookingConfirmationModeAuto       = "autoConfirm"
 	nuvioBookingBlockingModeService        = "service"
@@ -198,6 +206,7 @@ var (
 	errNuvioBookingAppointmentNotFound  = errors.New("nuvio booking appointment not found")
 	errNuvioBookingServiceNotFound      = errors.New("nuvio booking service not found")
 	errNuvioBookingAppointmentCancelled = errors.New("nuvio booking appointment cancelled")
+	errNuvioBookingDuplicateSubmission  = errors.New("nuvio booking duplicate submission")
 )
 
 type nuvioWebsiteBookingConfig struct {
@@ -2042,9 +2051,31 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 	})
 
 	bookingGroup.GET("/services", func(e *core.RequestEvent) error {
-		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
-		if websiteID == "" {
-			return e.BadRequestError("Missing websiteId.", nil)
+		queryValues := e.Request.URL.Query()
+		if err := validateNuvioBookingPublicQueryKeys(
+			queryValues,
+			map[string]struct{}{
+				"websiteId":   {},
+				"website":     {},
+				"websiteSlug": {},
+				"slug":        {},
+			},
+		); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		_, websiteID, err := resolveNuvioPublicWebsiteFromPayload(
+			e.App,
+			map[string]any{
+				"websiteId":   strings.TrimSpace(queryValues.Get("websiteId")),
+				"website":     strings.TrimSpace(queryValues.Get("website")),
+				"websiteSlug": strings.TrimSpace(queryValues.Get("websiteSlug")),
+				"slug":        strings.TrimSpace(queryValues.Get("slug")),
+			},
+			queryValues,
+		)
+		if err != nil {
+			return handleNuvioPublicWebsiteResolveError(e, err)
 		}
 
 		_, config, err := loadNuvioWebsiteBookingConfig(e.App, websiteID)
@@ -2082,15 +2113,50 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 	})
 
 	bookingGroup.GET("/slots", func(e *core.RequestEvent) error {
-		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
-		serviceID := strings.TrimSpace(e.Request.URL.Query().Get("serviceId"))
-		dateValue := strings.TrimSpace(e.Request.URL.Query().Get("date"))
-
-		if websiteID == "" {
-			return e.BadRequestError("Missing websiteId.", nil)
+		queryValues := e.Request.URL.Query()
+		if err := validateNuvioBookingPublicQueryKeys(
+			queryValues,
+			map[string]struct{}{
+				"websiteId":   {},
+				"website":     {},
+				"websiteSlug": {},
+				"slug":        {},
+				"serviceId":   {},
+				"service":     {},
+				"date":        {},
+			},
+		); err != nil {
+			return e.BadRequestError(err.Error(), nil)
 		}
+
+		_, websiteID, err := resolveNuvioPublicWebsiteFromPayload(
+			e.App,
+			map[string]any{
+				"websiteId":   strings.TrimSpace(queryValues.Get("websiteId")),
+				"website":     strings.TrimSpace(queryValues.Get("website")),
+				"websiteSlug": strings.TrimSpace(queryValues.Get("websiteSlug")),
+				"slug":        strings.TrimSpace(queryValues.Get("slug")),
+			},
+			queryValues,
+		)
+		if err != nil {
+			return handleNuvioPublicWebsiteResolveError(e, err)
+		}
+
+		serviceID := strings.TrimSpace(queryValues.Get("serviceId"))
+		if serviceID == "" {
+			serviceID = strings.TrimSpace(queryValues.Get("service"))
+		}
+		dateValue := strings.TrimSpace(queryValues.Get("date"))
+
 		if serviceID == "" {
 			return e.BadRequestError("Missing serviceId.", nil)
+		}
+		if len([]rune(serviceID)) > nuvioBookingPublicServiceIDMaxLen {
+			return e.BadRequestError(
+				fmt.Sprintf("serviceId is too long. Maximum %d characters.", nuvioBookingPublicServiceIDMaxLen),
+				nil,
+			)
 		}
 		if !nuvioBookingDatePattern.MatchString(dateValue) {
 			return e.BadRequestError("Date must use YYYY-MM-DD format.", nil)
@@ -2110,6 +2176,16 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 
 		if !config.Enabled {
 			return e.BadRequestError("Booking is disabled for this website.", nil)
+		}
+
+		if err := validateNuvioBookingPublicDateWindow(dateValue, config.Rules); err != nil {
+			if errors.Is(err, errNuvioBookingDateOutsideWindow) {
+				return e.BadRequestError("This date is outside the booking window.", nil)
+			}
+			if errors.Is(err, errNuvioBookingTimeTooSoon) {
+				return e.BadRequestError("Date cannot be in the past.", nil)
+			}
+			return e.BadRequestError("Date must use YYYY-MM-DD format.", nil)
 		}
 
 		serviceRecord, err := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
@@ -2161,46 +2237,106 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 	})
 
 	bookingGroup.POST("/appointments", func(e *core.RequestEvent) error {
-		payload := nuvioBookingCreateAppointmentPayload{}
+		payload := map[string]any{}
 		if err := e.BindBody(&payload); err != nil {
 			return e.BadRequestError("Invalid booking appointment payload.", nil)
 		}
 
-		websiteID := strings.TrimSpace(payload.WebsiteID)
-		if websiteID == "" {
-			websiteID = strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
-		}
-		if websiteID == "" {
-			return e.BadRequestError("Missing websiteId.", nil)
+		if err := validateNuvioPublicPayloadKeys(
+			payload,
+			map[string]struct{}{
+				"websiteId":   {},
+				"website":     {},
+				"websiteSlug": {},
+				"slug":        {},
+				"serviceId":   {},
+				"service":     {},
+				"date":        {},
+				"time":        {},
+				"name":        {},
+				"email":       {},
+				"phone":       {},
+				"notes":       {},
+				"message":     {},
+				"source":      {},
+				"page":        {},
+			},
+		); err != nil {
+			return e.BadRequestError(err.Error(), nil)
 		}
 
-		serviceID := strings.TrimSpace(payload.ServiceID)
+		website, websiteID, err := resolveNuvioPublicWebsiteFromPayload(e.App, payload, e.Request.URL.Query())
+		if err != nil {
+			return handleNuvioPublicWebsiteResolveError(e, err)
+		}
+
+		rawServiceID := parseStringValue(payload["serviceId"])
+		if strings.TrimSpace(rawServiceID) == "" {
+			rawServiceID = parseStringValue(payload["service"])
+		}
+		serviceID, err := validateNuvioPublicRequiredField(rawServiceID, "serviceId", nuvioBookingPublicServiceIDMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 		if serviceID == "" {
 			return e.BadRequestError("Missing serviceId.", nil)
 		}
 
-		dateValue := strings.TrimSpace(payload.Date)
+		dateValue, err := validateNuvioPublicRequiredField(payload["date"], "Date", 10)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 		if !nuvioBookingDatePattern.MatchString(dateValue) {
 			return e.BadRequestError("Date must use YYYY-MM-DD format.", nil)
 		}
 
-		timeValue := strings.TrimSpace(payload.Time)
+		timeValue, err := validateNuvioPublicRequiredField(payload["time"], "Time", 5)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 		if !nuvioBookingTimePattern.MatchString(timeValue) {
 			return e.BadRequestError("Time must use HH:mm format.", nil)
 		}
 
-		name := strings.TrimSpace(payload.Name)
+		name, err := validateNuvioPublicRequiredField(payload["name"], "Name", nuvioBookingPublicNameMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 		if name == "" {
 			return e.BadRequestError("Name is required.", nil)
 		}
 
-		email, ok := normalizeNuvioEmail(payload.Email)
+		emailRaw, err := validateNuvioPublicRequiredField(payload["email"], "Email", nuvioBookingPublicEmailMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		email, ok := normalizeNuvioEmail(emailRaw)
 		if !ok {
 			return e.BadRequestError("A valid email is required.", nil)
 		}
 
-		phone := strings.TrimSpace(payload.Phone)
-		notes := strings.TrimSpace(payload.Notes)
+		phone, err := validateNuvioPublicOptionalField(payload["phone"], "Phone", nuvioBookingPublicPhoneMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		notes, err := validateNuvioPublicOptionalField(payload["notes"], "Notes", nuvioBookingPublicNotesMaxLen)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		if notes == "" {
+			notes, err = validateNuvioPublicOptionalField(payload["message"], "Message", nuvioBookingPublicNotesMaxLen)
+			if err != nil {
+				return e.BadRequestError(err.Error(), nil)
+			}
+		}
+
+		if _, err := validateNuvioPublicOptionalField(payload["source"], "Source", nuvioBookingPublicSourceMaxLen); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+		if _, err := validateNuvioPublicOptionalField(payload["page"], "Page", nuvioBookingPublicPageMaxLen); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
 
 		website, config, err := loadNuvioWebsiteBookingConfig(e.App, websiteID)
 		if err != nil {
@@ -2216,6 +2352,16 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 
 		if !config.Enabled {
 			return e.BadRequestError("Booking is disabled for this website.", nil)
+		}
+
+		if err := validateNuvioBookingPublicDateWindow(dateValue, config.Rules); err != nil {
+			if errors.Is(err, errNuvioBookingDateOutsideWindow) {
+				return e.BadRequestError("This date is outside the booking window.", nil)
+			}
+			if errors.Is(err, errNuvioBookingTimeTooSoon) {
+				return e.BadRequestError("Date cannot be in the past.", nil)
+			}
+			return e.BadRequestError("Date must use YYYY-MM-DD format.", nil)
 		}
 
 		serviceRecord, err := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
@@ -2267,6 +2413,27 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 				return sql.ErrNoRows
 			}
 
+			appointmentsCollection, err := txApp.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
+			if err != nil {
+				return err
+			}
+
+			isDuplicate, duplicateErr := hasNuvioBookingRecentDuplicateSubmission(
+				txApp,
+				appointmentsCollection,
+				websiteID,
+				serviceID,
+				dateValue,
+				timeValue,
+				email,
+			)
+			if duplicateErr != nil {
+				return duplicateErr
+			}
+			if isDuplicate {
+				return errNuvioBookingDuplicateSubmission
+			}
+
 			slots, err := computeNuvioAvailableSlots(txApp, websiteID, txServiceRecord, dateValue, config.Rules)
 			if err != nil {
 				return err
@@ -2276,11 +2443,6 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 					return timingErr
 				}
 				return errNuvioBookingSlotUnavailable
-			}
-
-			appointmentsCollection, err := txApp.FindCachedCollectionByNameOrId(nuvioAppointmentsCollectionID)
-			if err != nil {
-				return err
 			}
 
 			appointmentRecord := core.NewRecord(appointmentsCollection)
@@ -2355,6 +2517,13 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 				return e.JSON(http.StatusConflict, map[string]any{
 					"ok":    false,
 					"error": "This time is no longer available.",
+				})
+			}
+
+			if errors.Is(transactionErr, errNuvioBookingDuplicateSubmission) {
+				return e.JSON(http.StatusConflict, map[string]any{
+					"ok":    false,
+					"error": "A booking request for this slot was already submitted recently.",
 				})
 			}
 
@@ -5842,6 +6011,44 @@ func parseNuvioBookingDateInLocation(dateValue string, location *time.Location) 
 	return date, nil
 }
 
+func validateNuvioBookingPublicQueryKeys(queryValues url.Values, allowed map[string]struct{}) error {
+	for rawKey := range queryValues {
+		key := strings.TrimSpace(rawKey)
+		if key == "" {
+			continue
+		}
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("Field %q is not allowed in this endpoint.", key)
+		}
+	}
+
+	return nil
+}
+
+func validateNuvioBookingPublicDateWindow(
+	dateValue string,
+	rules nuvioBookingRulesConfig,
+) error {
+	location := getNuvioBookingLocation()
+	bookingDate, err := parseNuvioBookingDateInLocation(dateValue, location)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().In(location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	requestedDate := time.Date(bookingDate.Year(), bookingDate.Month(), bookingDate.Day(), 0, 0, 0, 0, location)
+	if requestedDate.Before(today) {
+		return errNuvioBookingTimeTooSoon
+	}
+
+	if isNuvioBookingDateOutsideWindow(bookingDate, now, rules.BookingWindowDays) {
+		return errNuvioBookingDateOutsideWindow
+	}
+
+	return nil
+}
+
 func isNuvioBookingDateOutsideWindow(
 	bookingDate time.Time,
 	now time.Time,
@@ -5902,6 +6109,77 @@ func validateNuvioBookingSlotTiming(
 	}
 
 	return nil
+}
+
+func hasNuvioBookingRecentDuplicateSubmission(
+	app core.App,
+	appointmentsCollection *core.Collection,
+	websiteID string,
+	serviceID string,
+	dateValue string,
+	timeValue string,
+	email string,
+) (bool, error) {
+	if appointmentsCollection == nil {
+		return false, nil
+	}
+
+	filter := "website={:website} && service={:service} && date={:date} && time={:time} && email={:email}"
+	params := dbx.Params{
+		"website": websiteID,
+		"service": serviceID,
+		"date":    dateValue,
+		"time":    timeValue,
+		"email":   email,
+	}
+	duplicateWindowStart := time.Now().UTC().Add(-90 * time.Second)
+
+	records, err := app.FindRecordsByFilter(
+		appointmentsCollection,
+		filter,
+		"-created",
+		10,
+		0,
+		params,
+	)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "invalid sort field") {
+			records, err = app.FindRecordsByFilter(
+				appointmentsCollection,
+				filter,
+				"",
+				10,
+				0,
+				params,
+			)
+			if err != nil {
+				return false, err
+			}
+		} else {
+			return false, err
+		}
+	}
+
+	for _, record := range records {
+		status := strings.ToLower(strings.TrimSpace(record.GetString("status")))
+		if status != "pending" && status != "confirmed" {
+			continue
+		}
+
+		createdRaw := strings.TrimSpace(record.GetString("created"))
+		if createdRaw != "" {
+			createdAt, parseErr := time.Parse(time.RFC3339Nano, createdRaw)
+			if parseErr != nil {
+				createdAt, parseErr = time.Parse(time.RFC3339, createdRaw)
+			}
+			if parseErr == nil && createdAt.Before(duplicateWindowStart) {
+				continue
+			}
+		}
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func dateToNuvioBookingDayOfWeek(dateValue string) (string, error) {
