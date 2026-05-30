@@ -401,6 +401,23 @@ PocketBase.prototype.updateBookingBackofficeAppointmentStatus = async function (
 };
 
 /**
+ * Triggers appointment calendar action through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} payload
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.triggerBookingBackofficeAppointmentCalendar = async function (id, payload = {}, options = {}) {
+    const appointmentId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/booking/backoffice/appointments/${encodeURIComponent(appointmentId)}/calendar`, {
+        method: "POST",
+        body: payload,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_booking_backoffice_appointment_calendar_${appointmentId || "unknown"}`,
+    });
+};
+
+/**
  * Reschedules an appointment through scoped backoffice endpoint.
  *
  * @param {String} id

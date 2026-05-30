@@ -225,6 +225,39 @@ func TestNuvioBookingBackofficeAppointmentEndpoints(t *testing.T) {
 			},
 		},
 		{
+			Name:   "client assigned can request status confirmation email",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/status",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"status":"confirmed","sendEmail":true}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				appointmentsCollection := ensureNuvioBookingBackofficeDashboardCollection(
+					t,
+					app,
+					"Appointments",
+					nuvioAppointmentsCollectionID,
+					[]core.Field{
+						&core.TextField{Name: "website"},
+					},
+				)
+				upsertNuvioBookingBackofficeAppointmentRecord(t, app, appointmentsCollection, nuvioBookingBackofficeAlphaAppointmentID, map[string]any{
+					"status":      "pending",
+					"confirmedAt": "",
+					"email":       "",
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioBookingDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"status":"confirmed"`,
+				`"warning":"Appointment confirmed, but customer email is missing."`,
+			},
+		},
+		{
 			Name:   "client unassigned cannot update appointment status",
 			Method: http.MethodPost,
 			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/status",
@@ -284,6 +317,196 @@ func TestNuvioBookingBackofficeAppointmentEndpoints(t *testing.T) {
 			},
 		},
 		{
+			Name:   "status endpoint accepts sendEmail and warns when email is missing",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/status",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"status":"confirmed","sendEmail":true}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				appointmentsCollection := ensureNuvioBookingBackofficeDashboardCollection(
+					t,
+					app,
+					"Appointments",
+					nuvioAppointmentsCollectionID,
+					[]core.Field{
+						&core.TextField{Name: "website"},
+					},
+				)
+				upsertNuvioBookingBackofficeAppointmentRecord(t, app, appointmentsCollection, nuvioBookingBackofficeAlphaAppointmentID, map[string]any{
+					"status":      "pending",
+					"confirmedAt": "",
+					"email":       "",
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioBookingDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"status":"confirmed"`,
+				`"warning":"Appointment confirmed, but customer email is missing."`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				record := mustFindNuvioBookingBackofficeAppointmentRecord(t, app, nuvioBookingBackofficeAlphaAppointmentID)
+				assertNuvioBookingBackofficeRecordFieldString(t, record, "status", "confirmed")
+			},
+		},
+		{
+			Name:   "admin can trigger calendar action with sendEmail",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/calendar",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"sendEmail":true}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				appointmentsCollection := ensureNuvioBookingBackofficeDashboardCollection(
+					t,
+					app,
+					"Appointments",
+					nuvioAppointmentsCollectionID,
+					[]core.Field{
+						&core.TextField{Name: "website"},
+					},
+				)
+				upsertNuvioBookingBackofficeAppointmentRecord(t, app, appointmentsCollection, nuvioBookingBackofficeAlphaAppointmentID, map[string]any{
+					"status": "confirmed",
+					"email":  "",
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioBookingDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"emailSent":false`,
+				`"warning":"Appointment confirmed, but customer email is missing."`,
+			},
+		},
+		{
+			Name:   "client assigned can trigger calendar action with sendEmail",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/calendar",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"sendEmail":true}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				appointmentsCollection := ensureNuvioBookingBackofficeDashboardCollection(
+					t,
+					app,
+					"Appointments",
+					nuvioAppointmentsCollectionID,
+					[]core.Field{
+						&core.TextField{Name: "website"},
+					},
+				)
+				upsertNuvioBookingBackofficeAppointmentRecord(t, app, appointmentsCollection, nuvioBookingBackofficeAlphaAppointmentID, map[string]any{
+					"status": "confirmed",
+					"email":  "",
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioBookingDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"emailSent":false`,
+				`"warning":"Appointment confirmed, but customer email is missing."`,
+			},
+		},
+		{
+			Name:   "calendar action defaults sendEmail to true when omitted",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/calendar",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				appointmentsCollection := ensureNuvioBookingBackofficeDashboardCollection(
+					t,
+					app,
+					"Appointments",
+					nuvioAppointmentsCollectionID,
+					[]core.Field{
+						&core.TextField{Name: "website"},
+					},
+				)
+				upsertNuvioBookingBackofficeAppointmentRecord(t, app, appointmentsCollection, nuvioBookingBackofficeAlphaAppointmentID, map[string]any{
+					"status": "confirmed",
+					"email":  "",
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioBookingDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"emailSent":false`,
+				`"warning":"Appointment confirmed, but customer email is missing."`,
+			},
+		},
+		{
+			Name:   "calendar action skips email when sendEmail is false",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/calendar",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"sendEmail":false}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				appointmentsCollection := ensureNuvioBookingBackofficeDashboardCollection(
+					t,
+					app,
+					"Appointments",
+					nuvioAppointmentsCollectionID,
+					[]core.Field{
+						&core.TextField{Name: "website"},
+					},
+				)
+				upsertNuvioBookingBackofficeAppointmentRecord(t, app, appointmentsCollection, nuvioBookingBackofficeAlphaAppointmentID, map[string]any{
+					"status": "confirmed",
+					"email":  "",
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioBookingDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"emailSent":false`,
+			},
+			NotExpectedContent: []string{
+				`"warning":"Appointment confirmed, but customer email is missing."`,
+			},
+		},
+		{
+			Name:   "client unassigned cannot trigger calendar action",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/calendar",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"sendEmail":true}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioBookingDashboardBetaWebsiteID})
+			},
+			ExpectedStatus: 403,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
 			Name:   "admin can reschedule appointment",
 			Method: http.MethodPost,
 			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/reschedule",
@@ -335,6 +558,49 @@ func TestNuvioBookingBackofficeAppointmentEndpoints(t *testing.T) {
 			ExpectedContent: []string{
 				`"date":"` + nuvioBookingBackofficeFutureDateB + `"`,
 				`"time":"10:30"`,
+			},
+		},
+		{
+			Name:   "reschedule defaults sendEmail to true when omitted",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/booking/backoffice/appointments/" + nuvioBookingBackofficeAlphaAppointmentID + "/reschedule",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"serviceId":"` + nuvioBookingBackofficeAlphaServiceID + `",
+				"date":"` + nuvioBookingBackofficeFutureDateB + `",
+				"time":"11:15"
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioBookingBackofficeAppointmentRoutes(t, app, e)
+				seedNuvioBookingBackofficeDashboardData(t, app)
+				extendNuvioBookingDashboardWebsiteWindowForTest(t, app, nuvioBookingDashboardAlphaWebsiteID)
+				appointmentsCollection := ensureNuvioBookingBackofficeDashboardCollection(
+					t,
+					app,
+					"Appointments",
+					nuvioAppointmentsCollectionID,
+					[]core.Field{
+						&core.TextField{Name: "website"},
+					},
+				)
+				upsertNuvioBookingBackofficeAppointmentRecord(t, app, appointmentsCollection, nuvioBookingBackofficeAlphaAppointmentID, map[string]any{
+					"email": "",
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioBookingDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"date":"` + nuvioBookingBackofficeFutureDateB + `"`,
+				`"time":"11:15"`,
+				`"warning":"Appointment rescheduled, but customer email is missing."`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				record := mustFindNuvioBookingBackofficeAppointmentRecord(t, app, nuvioBookingBackofficeAlphaAppointmentID)
+				assertNuvioBookingBackofficeRecordFieldString(t, record, "date", nuvioBookingBackofficeFutureDateB)
+				assertNuvioBookingBackofficeRecordFieldString(t, record, "time", "11:15")
 			},
 		},
 		{

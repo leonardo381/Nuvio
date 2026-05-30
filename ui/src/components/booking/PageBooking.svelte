@@ -10,7 +10,7 @@
         hasCollectionsLoaded,
         isCollectionsLoading,
     } from "@/stores/collections";
-    import { addErrorToast, addSuccessToast } from "@/stores/toasts";
+    import { addErrorToast, addSuccessToast, addWarningToast } from "@/stores/toasts";
     import ApiClient from "@/utils/ApiClient";
     import CommonHelper from "@/utils/CommonHelper";
 
@@ -137,6 +137,7 @@
     let isUpdatingAppointmentStatus = false;
     let isUpdatingAppointmentArchive = false;
     let isBulkUpdatingAppointments = false;
+    let isSendingCalendarInvite = false;
     let isAppointmentActionsOpen = false;
     let isAppointmentNotesOpen = false;
     let updatingAppointmentId = "";
@@ -1394,7 +1395,7 @@
             serviceId: "",
             date: "",
             time: "",
-            sendEmail: false,
+            sendEmail: true,
         };
     }
 
@@ -1497,7 +1498,7 @@
             serviceId: initialServiceId,
             date: normalizeString(selectedAppointment.date),
             time: "",
-            sendEmail: false,
+            sendEmail: true,
         };
         isReschedulePanelOpen = true;
     }
@@ -2142,8 +2143,8 @@
             selectedAppointmentId = appointmentId;
             closeReschedulePanel();
             addSuccessToast("Appointment rescheduled.");
-            if (payload.sendEmail) {
-                addSuccessToast("Reschedule saved. Confirmation email sending is now handled outside this scoped action.");
+            if (payload.sendEmail && response?.emailSent === true) {
+                addSuccessToast("Reschedule email sent.");
             }
 
             if (normalizeString(response?.warning)) {
@@ -2428,15 +2429,53 @@
         };
     }
 
-    function openGoogleCalendarForSelectedAppointment() {
+    async function openGoogleCalendarForSelectedAppointment() {
         const targetUrl = normalizeString(selectedAppointmentGoogleCalendar?.href);
-        if (!targetUrl || !selectedAppointmentGoogleCalendar?.available) {
+        const appointmentId = normalizeString(selectedAppointment?.id);
+        if (
+            !selectedAppointmentGoogleCalendar?.available
+            || !appointmentId
+            || isSendingCalendarInvite
+        ) {
             return;
         }
 
-        const openedWindow = window.open(targetUrl, "_blank", "noopener,noreferrer");
+        if (!targetUrl) {
+            addErrorToast("Google Calendar link is unavailable for this appointment.");
+            return;
+        }
+
+        const openedWindow = window.open("", "_blank");
         if (openedWindow) {
-            openedWindow.opener = null;
+            if (typeof openedWindow.opener !== "undefined") {
+                openedWindow.opener = null;
+            }
+            openedWindow.location.href = targetUrl;
+        } else {
+            window.open(targetUrl, "_blank", "noopener,noreferrer");
+        }
+
+        isSendingCalendarInvite = true;
+
+        try {
+            const response = await ApiClient.triggerBookingBackofficeAppointmentCalendar(appointmentId, {
+                sendEmail: true,
+            }, {
+                requestKey: `nuvio_booking_calendar_${selectedWebsiteId}_${appointmentId}`,
+            });
+
+            addSuccessToast("Google Calendar opened.");
+            if (response?.emailSent === true) {
+                addSuccessToast("Confirmation email sent.");
+            }
+            if (normalizeString(response?.warning)) {
+                addWarningToast(normalizeString(response.warning));
+            }
+        } catch (err) {
+            ApiClient.error(err, false);
+            addWarningToast("Google Calendar opened, but the confirmation email could not be sent.");
+        } finally {
+            isSendingCalendarInvite = false;
         }
     }
 
@@ -2849,14 +2888,18 @@
 
         const statusValue = normalizeStatus(nextStatus);
         const sendEmail = statusValue === "confirmed" ? !!options?.sendEmail : false;
+        const statusPayload = {
+            status: statusValue,
+        };
+        if (statusValue === "confirmed") {
+            statusPayload.sendEmail = sendEmail;
+        }
 
         isUpdatingAppointmentStatus = true;
         updatingAppointmentId = selectedAppointment.id;
 
         try {
-            const response = await ApiClient.updateBookingBackofficeAppointmentStatus(selectedAppointment.id, {
-                status: statusValue,
-            }, {
+            const response = await ApiClient.updateBookingBackofficeAppointmentStatus(selectedAppointment.id, statusPayload, {
                 requestKey: `nuvio_booking_status_${selectedWebsiteId}_${selectedAppointment.id}`,
             });
 
@@ -2890,8 +2933,8 @@
             dispatchSidebarBadgeRefresh();
 
             addSuccessToast(`Appointment marked as ${resolvedStatus}.`);
-            if (sendEmail) {
-                addSuccessToast("Status updated. Confirmation email sending is now handled outside this scoped action.");
+            if (sendEmail && response?.emailSent === true) {
+                addSuccessToast("Confirmation email sent.");
             }
             if (normalizeString(response?.warning)) {
                 addErrorToast(normalizeString(response.warning));
@@ -4890,7 +4933,8 @@
                                                     <button
                                                         type="button"
                                                         class="btn btn-outline btn-sm"
-                                                        disabled={!selectedAppointmentGoogleCalendar.available}
+                                                        class:btn-loading={isSendingCalendarInvite}
+                                                        disabled={!selectedAppointmentGoogleCalendar.available || isSendingCalendarInvite}
                                                         on:click={openGoogleCalendarForSelectedAppointment}
                                                     >
                                                         <span class="txt">Add to Google Calendar</span>

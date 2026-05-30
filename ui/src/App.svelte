@@ -261,12 +261,98 @@
         return countCollectionRecords(appointmentsCollectionName, filter, "nuvio_sidebar_booking_badge");
     }
 
+    function countScopedNewLeadsFromResponse(response) {
+        const datasets = response && typeof response === "object" ? response.datasets : null;
+        const contacts = Array.isArray(datasets?.contacts) ? datasets.contacts : [];
+        const whatsapp = Array.isArray(datasets?.whatsapp) ? datasets.whatsapp : [];
+
+        const countByStatus = (records) => records.filter((record) =>
+            normalizeLookupKey(record?.status) === "new").length;
+
+        return Math.max(0, countByStatus(contacts) + countByStatus(whatsapp));
+    }
+
+    function countScopedPendingBookingsFromResponse(response) {
+        const datasets = response && typeof response === "object" ? response.datasets : null;
+        const appointments = Array.isArray(datasets?.appointments) ? datasets.appointments : [];
+
+        const count = appointments.filter((record) => {
+            const statusKey = normalizeLookupKey(record?.status);
+            const archivedAt = `${record?.archivedAt || ""}`.trim();
+            return statusKey === "pending" && !archivedAt;
+        }).length;
+
+        return Math.max(0, count);
+    }
+
+    async function countScopedClientSidebarBadges() {
+        let websites = [];
+        try {
+            websites = await ApiClient.getBackofficeWebsites({
+                requestKey: "nuvio_sidebar_client_websites",
+            });
+        } catch (err) {
+            if ((err?.status << 0) !== 403) {
+                console.warn("Failed to load client website selector for sidebar badges.", err);
+            }
+            return {
+                leads: 0,
+                booking: 0,
+            };
+        }
+
+        const websiteIds = (Array.isArray(websites) ? websites : [])
+            .map((website) => `${website?.id || ""}`.trim())
+            .filter(Boolean);
+
+        if (!websiteIds.length) {
+            return {
+                leads: 0,
+                booking: 0,
+            };
+        }
+
+        const perWebsiteCounts = await Promise.all(
+            websiteIds.map(async (websiteId) => {
+                const [leadsResult, bookingResult] = await Promise.allSettled([
+                    ApiClient.getLeadsDashboard({
+                        websiteId,
+                        requestKey: `nuvio_sidebar_client_leads_${websiteId}`,
+                    }),
+                    ApiClient.getBookingBackofficeDashboard({
+                        websiteId,
+                        requestKey: `nuvio_sidebar_client_booking_${websiteId}`,
+                    }),
+                ]);
+
+                const leadsCount = leadsResult.status === "fulfilled"
+                    ? countScopedNewLeadsFromResponse(leadsResult.value)
+                    : 0;
+                const bookingCount = bookingResult.status === "fulfilled"
+                    ? countScopedPendingBookingsFromResponse(bookingResult.value)
+                    : 0;
+
+                return {
+                    leads: leadsCount,
+                    booking: bookingCount,
+                };
+            }),
+        );
+
+        return perWebsiteCounts.reduce((totals, item) => ({
+            leads: totals.leads + Math.max(0, Number(item?.leads || 0)),
+            booking: totals.booking + Math.max(0, Number(item?.booking || 0)),
+        }), {
+            leads: 0,
+            booking: 0,
+        });
+    }
+
     async function refreshSidebarNavBadges() {
         if (
             !$superuser?.id
             || !showAppSidebar
             || !ApiClient.isSuperuserAuth()
-            || !canAccessAdminAreas
         ) {
             leadsSidebarBadgeCount = 0;
             bookingSidebarBadgeCount = 0;
@@ -275,27 +361,44 @@
 
         const requestRunId = ++sidebarBadgeRequestRunId;
 
-        try {
-            const collectionList = await ensureCollectionsLoadedForBadges();
-            const [nextLeadsCount, nextBookingCount] = await Promise.all([
-                countNewLeadsAcrossCollections(collectionList),
-                countPendingBookingAcrossCollections(collectionList),
-            ]);
+        if (canAccessAdminAreas) {
+            try {
+                const collectionList = await ensureCollectionsLoadedForBadges();
+                const [nextLeadsCount, nextBookingCount] = await Promise.all([
+                    countNewLeadsAcrossCollections(collectionList),
+                    countPendingBookingAcrossCollections(collectionList),
+                ]);
 
+                if (requestRunId !== sidebarBadgeRequestRunId) {
+                    return;
+                }
+
+                if (Number.isFinite(nextLeadsCount)) {
+                    leadsSidebarBadgeCount = Math.max(0, nextLeadsCount);
+                }
+
+                if (Number.isFinite(nextBookingCount)) {
+                    bookingSidebarBadgeCount = Math.max(0, nextBookingCount);
+                }
+            } catch (err) {
+                ApiClient.error(err, false);
+            }
+            return;
+        }
+
+        if (isClientSuperuser) {
+            const scopedCounts = await countScopedClientSidebarBadges();
             if (requestRunId !== sidebarBadgeRequestRunId) {
                 return;
             }
 
-            if (Number.isFinite(nextLeadsCount)) {
-                leadsSidebarBadgeCount = Math.max(0, nextLeadsCount);
-            }
-
-            if (Number.isFinite(nextBookingCount)) {
-                bookingSidebarBadgeCount = Math.max(0, nextBookingCount);
-            }
-        } catch (err) {
-            ApiClient.error(err, false);
+            leadsSidebarBadgeCount = Math.max(0, Number(scopedCounts?.leads || 0));
+            bookingSidebarBadgeCount = Math.max(0, Number(scopedCounts?.booking || 0));
+            return;
         }
+
+        leadsSidebarBadgeCount = 0;
+        bookingSidebarBadgeCount = 0;
     }
 
     function formatSidebarBadgeCount(count) {
@@ -321,7 +424,7 @@
 
     onMount(() => {
         window.addEventListener(sidebarBadgeRefreshEventName, handleSidebarBadgeRefreshEvent);
-        if (ApiClient.isSuperuserAuth() && ApiClient.isAdminSuperuser()) {
+        if (ApiClient.isSuperuserAuth()) {
             refreshSidebarNavBadges();
         }
     });

@@ -337,6 +337,10 @@ type nuvioBookingBackofficeArchivePayload struct {
 	Archived *bool `json:"archived"`
 }
 
+type nuvioBookingBackofficeCalendarPayload struct {
+	SendEmail *bool `json:"sendEmail"`
+}
+
 type nuvioBookingBackofficeDashboardWebsiteRulesDTO struct {
 	MinNoticeHours       int    `json:"minNoticeHours"`
 	BookingWindowDays    int    `json:"bookingWindowDays"`
@@ -816,7 +820,7 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 	})
 
 	bookingBackofficeGroup.POST("/appointments/{id}/status", func(e *core.RequestEvent) error {
-		appointmentsCollection, appointmentRecord, _, err := resolveNuvioBookingBackofficeAppointmentWriteTarget(e)
+		appointmentsCollection, appointmentRecord, websiteID, err := resolveNuvioBookingBackofficeAppointmentWriteTarget(e)
 		if err != nil {
 			return err
 		}
@@ -829,16 +833,38 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		if len(payload) == 0 {
 			return e.BadRequestError("Status is required.", nil)
 		}
+
+		sendEmail := false
 		for key := range payload {
-			if strings.TrimSpace(key) != "status" {
-				return e.BadRequestError("Only status can be updated in this endpoint.", nil)
+			normalizedKey := strings.ToLower(strings.TrimSpace(key))
+			if normalizedKey != "status" && normalizedKey != "sendemail" {
+				return e.BadRequestError("Only status and sendEmail can be updated in this endpoint.", nil)
 			}
 		}
+		if rawSendEmail, hasSendEmail := readNuvioBookingBackofficePayloadValue(payload, "sendEmail"); hasSendEmail {
+			value, ok := parseBoolValue(rawSendEmail)
+			if !ok {
+				return e.BadRequestError("sendEmail must be true or false.", nil)
+			}
+			sendEmail = value
+		}
 
-		nextStatus := strings.ToLower(strings.TrimSpace(parseStringValue(payload["status"])))
+		rawStatus, hasStatus := readNuvioBookingBackofficePayloadValue(payload, "status")
+		if !hasStatus {
+			return e.BadRequestError("Status is required.", nil)
+		}
+		nextStatus := strings.ToLower(strings.TrimSpace(parseStringValue(rawStatus)))
 		if nextStatus != "pending" && nextStatus != "confirmed" && nextStatus != "cancelled" {
 			return e.BadRequestError("Status must be pending, confirmed, or cancelled.", nil)
 		}
+
+		serviceID := strings.TrimSpace(appointmentRecord.GetString("service"))
+		dateValue := strings.TrimSpace(appointmentRecord.GetString("date"))
+		timeValue := strings.TrimSpace(appointmentRecord.GetString("time"))
+		visitorName := strings.TrimSpace(appointmentRecord.GetString("name"))
+		visitorPhone := strings.TrimSpace(appointmentRecord.GetString("phone"))
+		visitorNotes := strings.TrimSpace(appointmentRecord.GetString("notes"))
+		visitorEmail, hasVisitorEmail := normalizeNuvioEmail(appointmentRecord.GetString("email"))
 
 		appointmentID := strings.TrimSpace(appointmentRecord.Id)
 		transactionErr := e.App.RunInTransaction(func(txApp core.App) error {
@@ -888,10 +914,356 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			return e.InternalServerError("Unable to load appointment right now.", nil)
 		}
 
-		return e.JSON(http.StatusOK, map[string]any{
+		responsePayload := map[string]any{
 			"state":       "ok",
 			"appointment": buildNuvioBookingBackofficeDashboardAppointmentDTO(updatedAppointment, nil),
-		})
+			"emailSent":   false,
+		}
+
+		if nextStatus == "confirmed" && sendEmail {
+			if !hasVisitorEmail {
+				responsePayload["warning"] = "Appointment confirmed, but customer email is missing."
+			} else {
+				website := (*core.Record)(nil)
+				bookingConfig := nuvioWebsiteBookingConfig{}
+				resolvedWebsite, resolvedConfig, configErr := loadNuvioWebsiteBookingConfig(e.App, websiteID)
+				if configErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking settings load failed during backoffice status email",
+						"appointmentId",
+						appointmentID,
+						"websiteId",
+						websiteID,
+						"error",
+						configErr.Error(),
+					)
+					if fallbackWebsite, websiteErr := e.App.FindRecordById(nuvioWebsitesCollectionID, websiteID); websiteErr == nil {
+						website = fallbackWebsite
+					} else {
+						e.App.Logger().Error(
+							"NUVIO booking website lookup failed during backoffice status email",
+							"appointmentId",
+							appointmentID,
+							"websiteId",
+							websiteID,
+							"error",
+							websiteErr.Error(),
+						)
+					}
+				} else {
+					website = resolvedWebsite
+					bookingConfig = resolvedConfig
+				}
+
+				var serviceRecord *core.Record
+				if serviceID != "" {
+					resolvedServiceRecord, serviceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+					if serviceErr != nil {
+						e.App.Logger().Error(
+							"NUVIO booking service lookup failed during backoffice status email",
+							"appointmentId",
+							appointmentID,
+							"websiteId",
+							websiteID,
+							"serviceId",
+							serviceID,
+							"error",
+							serviceErr.Error(),
+						)
+					} else {
+						serviceRecord = resolvedServiceRecord
+					}
+				}
+
+				serviceSnapshot := resolveNuvioBookingAppointmentServiceSnapshot(updatedAppointment, serviceRecord)
+				serviceName := strings.TrimSpace(serviceSnapshot.Name)
+				if serviceName == "" {
+					serviceName = "Booking service"
+				}
+
+				attachments := []nuvioTransactionalEmailAttachment{}
+				durationMinutes := serviceSnapshot.DurationMinutes
+				if durationMinutes <= 0 && serviceRecord != nil {
+					durationMinutes, _ = parseNuvioBookingServiceDuration(serviceRecord)
+				}
+				serviceDuration := formatNuvioBookingTemplateServiceDuration(durationMinutes)
+
+				if durationMinutes <= 0 {
+					e.App.Logger().Error(
+						"NUVIO booking calendar duration parse failed",
+						"websiteId",
+						websiteID,
+						"appointmentId",
+						appointmentID,
+						"serviceId",
+						serviceID,
+					)
+				} else {
+					attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+						WebsiteName:        resolveWebsiteDisplayName(website),
+						ServiceName:        serviceName,
+						ServiceDescription: serviceSnapshot.Description,
+						CustomerName:       visitorName,
+						CustomerEmail:      visitorEmail,
+						CustomerPhone:      visitorPhone,
+						Date:               dateValue,
+						Time:               timeValue,
+						DurationMinutes:    durationMinutes,
+						Notes:              visitorNotes,
+						Location:           resolveNuvioBookingCalendarLocation(website),
+						AppointmentID:      appointmentID,
+					})
+					if calendarErr != nil {
+						e.App.Logger().Error(
+							"NUVIO booking calendar attachment build failed",
+							"websiteId",
+							websiteID,
+							"appointmentId",
+							appointmentID,
+							"error",
+							calendarErr.Error(),
+						)
+					} else if attachment != nil {
+						attachments = append(attachments, *attachment)
+					}
+				}
+
+				if emailErr := sendNuvioBookingConfirmedVisitorEmail(
+					e.Request.Context(),
+					website,
+					bookingConfig,
+					serviceName,
+					serviceDuration,
+					nuvioBookingCreateAppointmentPayload{
+						WebsiteID: websiteID,
+						ServiceID: serviceID,
+						Date:      dateValue,
+						Time:      timeValue,
+						Name:      visitorName,
+						Email:     visitorEmail,
+						Phone:     visitorPhone,
+						Notes:     visitorNotes,
+					},
+					attachments,
+				); emailErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking confirmation email failed during backoffice status update",
+						"appointmentId",
+						appointmentID,
+						"websiteId",
+						websiteID,
+						"error",
+						emailErr.Error(),
+					)
+					responsePayload["warning"] = "Appointment confirmed, but confirmation email could not be sent."
+				} else {
+					responsePayload["emailSent"] = true
+				}
+			}
+		}
+
+		return e.JSON(http.StatusOK, responsePayload)
+	})
+
+	bookingBackofficeGroup.POST("/appointments/{id}/calendar", func(e *core.RequestEvent) error {
+		_, appointmentRecord, websiteID, err := resolveNuvioBookingBackofficeAppointmentWriteTarget(e)
+		if err != nil {
+			return err
+		}
+
+		payload := map[string]any{}
+		if err := e.BindBody(&payload); err != nil {
+			return e.BadRequestError("Invalid calendar payload.", nil)
+		}
+
+		sendEmail := true
+		for key := range payload {
+			normalizedKey := strings.ToLower(strings.TrimSpace(key))
+			if normalizedKey != "sendemail" {
+				return e.BadRequestError("Only sendEmail can be updated in this endpoint.", nil)
+			}
+		}
+		if rawSendEmail, hasSendEmail := readNuvioBookingBackofficePayloadValue(payload, "sendEmail"); hasSendEmail {
+			value, ok := parseBoolValue(rawSendEmail)
+			if !ok {
+				return e.BadRequestError("sendEmail must be true or false.", nil)
+			}
+			sendEmail = value
+		}
+
+		appointmentID := strings.TrimSpace(appointmentRecord.Id)
+		currentStatus := strings.ToLower(strings.TrimSpace(appointmentRecord.GetString("status")))
+		if currentStatus == "" {
+			currentStatus = "pending"
+		}
+		if currentStatus != "pending" && currentStatus != "confirmed" && currentStatus != "cancelled" {
+			currentStatus = "pending"
+		}
+
+		serviceID := strings.TrimSpace(appointmentRecord.GetString("service"))
+		dateValue := strings.TrimSpace(appointmentRecord.GetString("date"))
+		timeValue := strings.TrimSpace(appointmentRecord.GetString("time"))
+		visitorName := strings.TrimSpace(appointmentRecord.GetString("name"))
+		visitorPhone := strings.TrimSpace(appointmentRecord.GetString("phone"))
+		visitorNotes := strings.TrimSpace(appointmentRecord.GetString("notes"))
+		visitorEmail, hasVisitorEmail := normalizeNuvioEmail(appointmentRecord.GetString("email"))
+
+		var serviceRecord *core.Record
+		if serviceID != "" {
+			resolvedServiceRecord, serviceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, serviceID)
+			if serviceErr == nil {
+				serviceRecord = resolvedServiceRecord
+			} else {
+				e.App.Logger().Error(
+					"NUVIO booking service lookup failed during backoffice calendar action",
+					"appointmentId",
+					appointmentID,
+					"websiteId",
+					websiteID,
+					"serviceId",
+					serviceID,
+					"error",
+					serviceErr.Error(),
+				)
+			}
+		}
+
+		responsePayload := map[string]any{
+			"state":       "ok",
+			"appointment": buildNuvioBookingBackofficeDashboardAppointmentDTO(appointmentRecord, serviceRecord),
+			"emailSent":   false,
+		}
+
+		if !sendEmail {
+			return e.JSON(http.StatusOK, responsePayload)
+		}
+
+		if currentStatus != "confirmed" {
+			responsePayload["warning"] = "Appointment is not confirmed. Calendar email invite was not sent."
+			return e.JSON(http.StatusOK, responsePayload)
+		}
+
+		if !hasVisitorEmail {
+			responsePayload["warning"] = "Appointment confirmed, but customer email is missing."
+			return e.JSON(http.StatusOK, responsePayload)
+		}
+
+		website := (*core.Record)(nil)
+		bookingConfig := nuvioWebsiteBookingConfig{}
+		resolvedWebsite, resolvedConfig, configErr := loadNuvioWebsiteBookingConfig(e.App, websiteID)
+		if configErr != nil {
+			e.App.Logger().Error(
+				"NUVIO booking settings load failed during backoffice calendar email",
+				"appointmentId",
+				appointmentID,
+				"websiteId",
+				websiteID,
+				"error",
+				configErr.Error(),
+			)
+			if fallbackWebsite, websiteErr := e.App.FindRecordById(nuvioWebsitesCollectionID, websiteID); websiteErr == nil {
+				website = fallbackWebsite
+			} else {
+				e.App.Logger().Error(
+					"NUVIO booking website lookup failed during backoffice calendar email",
+					"appointmentId",
+					appointmentID,
+					"websiteId",
+					websiteID,
+					"error",
+					websiteErr.Error(),
+				)
+			}
+		} else {
+			website = resolvedWebsite
+			bookingConfig = resolvedConfig
+		}
+
+		serviceSnapshot := resolveNuvioBookingAppointmentServiceSnapshot(appointmentRecord, serviceRecord)
+		serviceName := strings.TrimSpace(serviceSnapshot.Name)
+		if serviceName == "" {
+			serviceName = "Booking service"
+		}
+
+		attachments := []nuvioTransactionalEmailAttachment{}
+		durationMinutes := serviceSnapshot.DurationMinutes
+		if durationMinutes <= 0 && serviceRecord != nil {
+			durationMinutes, _ = parseNuvioBookingServiceDuration(serviceRecord)
+		}
+		serviceDuration := formatNuvioBookingTemplateServiceDuration(durationMinutes)
+		if durationMinutes <= 0 {
+			e.App.Logger().Error(
+				"NUVIO booking calendar duration parse failed",
+				"websiteId",
+				websiteID,
+				"appointmentId",
+				appointmentID,
+				"serviceId",
+				serviceID,
+			)
+		} else {
+			attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+				WebsiteName:        resolveWebsiteDisplayName(website),
+				ServiceName:        serviceName,
+				ServiceDescription: serviceSnapshot.Description,
+				CustomerName:       visitorName,
+				CustomerEmail:      visitorEmail,
+				CustomerPhone:      visitorPhone,
+				Date:               dateValue,
+				Time:               timeValue,
+				DurationMinutes:    durationMinutes,
+				Notes:              visitorNotes,
+				Location:           resolveNuvioBookingCalendarLocation(website),
+				AppointmentID:      appointmentID,
+			})
+			if calendarErr != nil {
+				e.App.Logger().Error(
+					"NUVIO booking calendar attachment build failed",
+					"websiteId",
+					websiteID,
+					"appointmentId",
+					appointmentID,
+					"error",
+					calendarErr.Error(),
+				)
+			} else if attachment != nil {
+				attachments = append(attachments, *attachment)
+			}
+		}
+
+		if emailErr := sendNuvioBookingConfirmedVisitorEmail(
+			e.Request.Context(),
+			website,
+			bookingConfig,
+			serviceName,
+			serviceDuration,
+			nuvioBookingCreateAppointmentPayload{
+				WebsiteID: websiteID,
+				ServiceID: serviceID,
+				Date:      dateValue,
+				Time:      timeValue,
+				Name:      visitorName,
+				Email:     visitorEmail,
+				Phone:     visitorPhone,
+				Notes:     visitorNotes,
+			},
+			attachments,
+		); emailErr != nil {
+			e.App.Logger().Error(
+				"NUVIO booking confirmation email failed during backoffice calendar action",
+				"appointmentId",
+				appointmentID,
+				"websiteId",
+				websiteID,
+				"error",
+				emailErr.Error(),
+			)
+			responsePayload["warning"] = "Calendar action completed, but confirmation email could not be sent."
+		} else {
+			responsePayload["emailSent"] = true
+		}
+
+		return e.JSON(http.StatusOK, responsePayload)
 	})
 
 	bookingBackofficeGroup.POST("/appointments/{id}/reschedule", func(e *core.RequestEvent) error {
@@ -912,6 +1284,11 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		timeValue := strings.TrimSpace(payload.Time)
 		if !nuvioBookingTimePattern.MatchString(timeValue) {
 			return e.BadRequestError("Time must use HH:mm format.", nil)
+		}
+
+		sendEmail := true
+		if payload.SendEmail != nil {
+			sendEmail = *payload.SendEmail
 		}
 
 		currentStatus := strings.ToLower(strings.TrimSpace(appointmentRecord.GetString("status")))
@@ -936,7 +1313,7 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("Missing serviceId.", nil)
 		}
 
-		_, config, err := loadNuvioWebsiteBookingConfig(e.App, websiteID)
+		website, config, err := loadNuvioWebsiteBookingConfig(e.App, websiteID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return e.NotFoundError("Website not found.", nil)
@@ -957,6 +1334,35 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 		if !isNuvioBookingServiceActive(serviceRecord) {
 			return e.BadRequestError("Service is not available.", nil)
 		}
+
+		newServiceSnapshot := buildNuvioBookingServiceSnapshot(serviceRecord)
+		newServiceName := strings.TrimSpace(newServiceSnapshot.Name)
+		if newServiceName == "" {
+			newServiceName = "Booking service"
+		}
+
+		oldServiceID := strings.TrimSpace(appointmentRecord.GetString("service"))
+		var oldServiceRecord *core.Record
+		if oldServiceID != "" {
+			if resolvedOldServiceRecord, oldServiceErr := e.App.FindRecordById(nuvioBookingServicesCollectionID, oldServiceID); oldServiceErr == nil {
+				oldServiceRecord = resolvedOldServiceRecord
+			}
+		}
+		oldServiceSnapshot := resolveNuvioBookingAppointmentServiceSnapshot(appointmentRecord, oldServiceRecord)
+		oldServiceName := strings.TrimSpace(oldServiceSnapshot.Name)
+		if oldServiceName == "" {
+			oldServiceName = newServiceName
+		}
+		if oldServiceName == "" {
+			oldServiceName = "Booking service"
+		}
+
+		oldDateValue := strings.TrimSpace(appointmentRecord.GetString("date"))
+		oldTimeValue := strings.TrimSpace(appointmentRecord.GetString("time"))
+		visitorName := strings.TrimSpace(appointmentRecord.GetString("name"))
+		visitorPhone := strings.TrimSpace(appointmentRecord.GetString("phone"))
+		visitorNotes := strings.TrimSpace(appointmentRecord.GetString("notes"))
+		visitorEmail, hasVisitorEmail := normalizeNuvioEmail(appointmentRecord.GetString("email"))
 
 		appointmentID := strings.TrimSpace(appointmentRecord.Id)
 		transactionErr := e.App.RunInTransaction(func(txApp core.App) error {
@@ -1076,10 +1482,97 @@ func registerNuvioBookingRoutes(e *core.ServeEvent) {
 			return e.InternalServerError("Unable to load appointment right now.", nil)
 		}
 
-		return e.JSON(http.StatusOK, map[string]any{
+		responsePayload := map[string]any{
 			"state":       "ok",
 			"appointment": buildNuvioBookingBackofficeDashboardAppointmentDTO(updatedAppointment, serviceRecord),
-		})
+			"emailSent":   false,
+		}
+
+		if sendEmail {
+			if !hasVisitorEmail {
+				responsePayload["warning"] = "Appointment rescheduled, but customer email is missing."
+			} else {
+				attachments := []nuvioTransactionalEmailAttachment{}
+				durationMinutes := newServiceSnapshot.DurationMinutes
+				if durationMinutes <= 0 {
+					durationMinutes, _ = parseNuvioBookingServiceDuration(serviceRecord)
+				}
+				serviceDuration := formatNuvioBookingTemplateServiceDuration(durationMinutes)
+				if durationMinutes <= 0 {
+					e.App.Logger().Error(
+						"NUVIO booking calendar duration parse failed",
+						"websiteId",
+						websiteID,
+						"appointmentId",
+						appointmentID,
+						"serviceId",
+						serviceID,
+					)
+				} else {
+					attachment, calendarErr := maybeBuildNuvioBookingICSAttachment(nuvioBookingCalendarInvitePayload{
+						WebsiteName:        resolveWebsiteDisplayName(website),
+						ServiceName:        newServiceName,
+						ServiceDescription: newServiceSnapshot.Description,
+						CustomerName:       visitorName,
+						CustomerEmail:      visitorEmail,
+						CustomerPhone:      visitorPhone,
+						Date:               dateValue,
+						Time:               timeValue,
+						DurationMinutes:    durationMinutes,
+						Notes:              visitorNotes,
+						Location:           resolveNuvioBookingCalendarLocation(website),
+						AppointmentID:      appointmentID,
+					})
+					if calendarErr != nil {
+						e.App.Logger().Error(
+							"NUVIO booking calendar attachment build failed",
+							"websiteId",
+							websiteID,
+							"appointmentId",
+							appointmentID,
+							"error",
+							calendarErr.Error(),
+						)
+					} else if attachment != nil {
+						attachments = append(attachments, *attachment)
+					}
+				}
+
+				if emailErr := sendNuvioBookingRescheduleVisitorEmail(
+					e.Request.Context(),
+					website,
+					config,
+					visitorName,
+					visitorEmail,
+					visitorPhone,
+					oldServiceName,
+					oldDateValue,
+					oldTimeValue,
+					newServiceName,
+					serviceDuration,
+					dateValue,
+					timeValue,
+					currentStatus,
+					visitorNotes,
+					attachments,
+				); emailErr != nil {
+					e.App.Logger().Error(
+						"NUVIO booking backoffice reschedule email failed",
+						"appointmentId",
+						appointmentID,
+						"websiteId",
+						websiteID,
+						"error",
+						emailErr.Error(),
+					)
+					responsePayload["warning"] = "Appointment rescheduled, but confirmation email could not be sent."
+				} else {
+					responsePayload["emailSent"] = true
+				}
+			}
+		}
+
+		return e.JSON(http.StatusOK, responsePayload)
 	})
 
 	bookingBackofficeGroup.PATCH("/appointments/{id}/internal-notes", func(e *core.RequestEvent) error {
