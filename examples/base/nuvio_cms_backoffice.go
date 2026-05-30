@@ -17,10 +17,15 @@ import (
 )
 
 const (
-	nuvioComponentsCollectionID         = "pbc_184785686"
-	nuvioCMSDashboardMaxScanRecords     = 5000
-	nuvioCMSBackofficeURLMaxLen         = 2048
-	nuvioCMSBackofficeBlockStringMaxLen = 10000
+	nuvioComponentsCollectionID                     = "pbc_184785686"
+	nuvioCMSDashboardMaxScanRecords                 = 5000
+	nuvioCMSBackofficeURLMaxLen                     = 2048
+	nuvioCMSBackofficeBlockStringMaxLen             = 10000
+	nuvioCMSBackofficeSettingsMessageMaxLen         = 4000
+	nuvioCMSBackofficeSettingsTemplateSubjectMaxLen = 200
+	nuvioCMSBackofficeSettingsTemplateTextMaxLen    = 4000
+	nuvioCMSBackofficeI18NLanguageCodeMaxLen        = 20
+	nuvioCMSBackofficeI18NLanguageLabelMaxLen       = 80
 )
 
 var (
@@ -176,7 +181,8 @@ var (
 		"embedurl":  {},
 		"iframeurl": {},
 	}
-	nuvioCMSBackofficePhoneValuePattern = regexp.MustCompile(`^[0-9+()./\-\s]+$`)
+	nuvioCMSBackofficePhoneValuePattern       = regexp.MustCompile(`^[0-9+()./\-\s]+$`)
+	nuvioCMSBackofficeI18NLanguageCodePattern = regexp.MustCompile(`^[a-z]{2,3}(?:-[a-z0-9]{2,8}){0,2}$`)
 )
 
 type nuvioCMSDashboardWebsiteDTO struct {
@@ -1962,7 +1968,11 @@ func applyNuvioCMSBackofficeContactFormSettingsPatch(settings map[string]any, ra
 			}
 			contactFormSettings["enabled"] = value
 		case "confirmationmessage":
-			contactFormSettings["confirmationMessage"] = strings.TrimSpace(parseStringValue(rawValue))
+			value, err := parseNuvioCMSBackofficeOptionalSettingString(rawValue, "contactForm.confirmationMessage", nuvioCMSBackofficeSettingsMessageMaxLen)
+			if err != nil {
+				return err
+			}
+			contactFormSettings["confirmationMessage"] = value
 		case "fields":
 			if err := applyNuvioCMSBackofficeContactFormFieldsPatch(contactFormSettings, rawValue); err != nil {
 				return err
@@ -2030,7 +2040,11 @@ func applyNuvioCMSBackofficeWhatsAppSettingsPatch(settings map[string]any, rawPa
 		case "phone":
 			whatsAppSettings["phone"] = strings.TrimSpace(parseStringValue(rawValue))
 		case "defaultmessage":
-			whatsAppSettings["defaultMessage"] = strings.TrimSpace(parseStringValue(rawValue))
+			value, err := parseNuvioCMSBackofficeOptionalSettingString(rawValue, "whatsapp.defaultMessage", nuvioCMSBackofficeSettingsMessageMaxLen)
+			if err != nil {
+				return err
+			}
+			whatsAppSettings["defaultMessage"] = value
 		case "showfloatingbutton":
 			value, ok := parseBoolValue(rawValue)
 			if !ok {
@@ -2500,11 +2514,23 @@ func applyNuvioCMSBackofficeTemplatePatch(
 			}
 			templateSettings["enabled"] = value
 		case "subject":
-			templateSettings["subject"] = strings.TrimSpace(parseStringValue(rawValue))
+			value, err := parseNuvioCMSBackofficeOptionalSettingString(rawValue, "template.subject", nuvioCMSBackofficeSettingsTemplateSubjectMaxLen)
+			if err != nil {
+				return err
+			}
+			templateSettings["subject"] = value
 		case "introtext":
-			templateSettings["introText"] = strings.TrimSpace(parseStringValue(rawValue))
+			value, err := parseNuvioCMSBackofficeOptionalSettingString(rawValue, "template.introText", nuvioCMSBackofficeSettingsTemplateTextMaxLen)
+			if err != nil {
+				return err
+			}
+			templateSettings["introText"] = value
 		case "footertext":
-			templateSettings["footerText"] = strings.TrimSpace(parseStringValue(rawValue))
+			value, err := parseNuvioCMSBackofficeOptionalSettingString(rawValue, "template.footerText", nuvioCMSBackofficeSettingsTemplateTextMaxLen)
+			if err != nil {
+				return err
+			}
+			templateSettings["footerText"] = value
 		case "includeleaddetails":
 			if !allowDetailsFields {
 				return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
@@ -2575,15 +2601,26 @@ func parseNuvioCMSBackofficeLanguages(raw any) ([]map[string]string, error) {
 			return nil, fmt.Errorf("i18n.languages entries must be objects")
 		}
 
-		code := strings.TrimSpace(parseStringValue(item["code"]))
+		code, err := parseNuvioCMSBackofficeRequiredSettingString(item["code"], "i18n.languages[].code", nuvioCMSBackofficeI18NLanguageCodeMaxLen)
+		if err != nil {
+			return nil, err
+		}
 		if code == "" {
 			return nil, fmt.Errorf("i18n.languages entries require code")
 		}
+		normalizedCode := normalizeNuvioCMSBackofficeLanguageCode(code)
+		if normalizedCode == "" || !nuvioCMSBackofficeI18NLanguageCodePattern.MatchString(normalizedCode) {
+			return nil, fmt.Errorf("i18n.languages entries require a valid code")
+		}
 
 		language := map[string]string{
-			"code": code,
+			"code": normalizedCode,
 		}
-		if label := strings.TrimSpace(parseStringValue(item["label"])); label != "" {
+		label, err := parseNuvioCMSBackofficeOptionalSettingString(item["label"], "i18n.languages[].label", nuvioCMSBackofficeI18NLanguageLabelMaxLen)
+		if err != nil {
+			return nil, err
+		}
+		if label != "" {
 			language["label"] = label
 		}
 
@@ -2591,6 +2628,38 @@ func parseNuvioCMSBackofficeLanguages(raw any) ([]map[string]string, error) {
 	}
 
 	return languages, nil
+}
+
+func parseNuvioCMSBackofficeOptionalSettingString(raw any, fieldPath string, maxLen int) (string, error) {
+	switch typed := raw.(type) {
+	case nil:
+		return "", nil
+	case string:
+		value := strings.TrimSpace(typed)
+		if err := validateNuvioCMSBackofficeLimitedTextField(fieldPath, value, maxLen); err != nil {
+			return "", err
+		}
+		return value, nil
+	default:
+		return "", fmt.Errorf("%s must be a string", fieldPath)
+	}
+}
+
+func parseNuvioCMSBackofficeRequiredSettingString(raw any, fieldPath string, maxLen int) (string, error) {
+	value, err := parseNuvioCMSBackofficeOptionalSettingString(raw, fieldPath, maxLen)
+	if err != nil {
+		return "", err
+	}
+	if value == "" {
+		return "", fmt.Errorf("%s is required", fieldPath)
+	}
+	return value, nil
+}
+
+func normalizeNuvioCMSBackofficeLanguageCode(raw string) string {
+	normalized := strings.ToLower(strings.TrimSpace(raw))
+	normalized = strings.ReplaceAll(normalized, "_", "-")
+	return normalized
 }
 
 func ensureNuvioCMSBackofficeChildMap(parent map[string]any, key string) map[string]any {

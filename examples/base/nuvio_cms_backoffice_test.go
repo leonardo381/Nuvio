@@ -241,6 +241,11 @@ func TestNuvioCMSBackofficeDashboardEndpoint(t *testing.T) {
 func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 	t.Parallel()
 
+	overlongCMSSettingsMessage := strings.Repeat("m", nuvioCMSBackofficeSettingsMessageMaxLen+1)
+	overlongCMSTemplateSubject := strings.Repeat("s", nuvioCMSBackofficeSettingsTemplateSubjectMaxLen+1)
+	overlongCMSTemplateText := strings.Repeat("t", nuvioCMSBackofficeSettingsTemplateTextMaxLen+1)
+	overlongCMSI18NLabel := strings.Repeat("l", nuvioCMSBackofficeI18NLanguageLabelMaxLen+1)
+
 	scenarios := []tests.ApiScenario{
 		{
 			Name:   "admin can update website identity and global seo",
@@ -642,6 +647,218 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 				if strings.TrimSpace(parseStringValue(analytics["scriptUrl"])) != "https://analytics.updated.example/script.js" {
 					t.Fatalf("expected reports.analytics.scriptUrl to be updated")
 				}
+			},
+		},
+		{
+			Name:   "settings endpoint accepts valid contact form confirmation message",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"contactForm":{"confirmationMessage":"Thanks for reaching out. We will contact you shortly."}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"confirmationMessage":"Thanks for reaching out. We will contact you shortly."`,
+			},
+		},
+		{
+			Name:   "settings endpoint rejects overlong contact form confirmation message",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"contactForm":{"confirmationMessage":"` + overlongCMSSettingsMessage + `"}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "settings endpoint accepts valid whatsapp default message",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"whatsapp":{"defaultMessage":"Hello, I would like more information about this service."}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"defaultMessage":"Hello, I would like more information about this service."`,
+			},
+		},
+		{
+			Name:   "settings endpoint rejects overlong whatsapp default message",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"whatsapp":{"defaultMessage":"` + overlongCMSSettingsMessage + `"}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "settings endpoint accepts valid newsletter confirmation template text",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"newsletter":{"lifecycle":{"confirmationTemplate":{"subject":"Please confirm your subscription","introText":"Click the button below to confirm.","footerText":"If you did not subscribe, you can ignore this email."}}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"subject":"Please confirm your subscription"`,
+			},
+		},
+		{
+			Name:   "settings endpoint rejects overlong newsletter confirmation template subject",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"newsletter":{"lifecycle":{"confirmationTemplate":{"subject":"` + overlongCMSTemplateSubject + `"}}}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "settings endpoint rejects overlong newsletter confirmation template body",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"newsletter":{"lifecycle":{"confirmationTemplate":{"introText":"` + overlongCMSTemplateText + `"}}}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "settings endpoint accepts valid booking visitor template text",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"booking":{"visitorEmails":{"confirmationTemplate":{"subject":"Your booking is confirmed","introText":"Thank you for your booking.","footerText":"Reply to this email if you need help."}}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"subject":"Your booking is confirmed"`,
+			},
+		},
+		{
+			Name:   "settings endpoint rejects overlong booking visitor template text",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"booking":{"visitorEmails":{"requestTemplate":{"footerText":"` + overlongCMSTemplateText + `"}}}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "settings endpoint rejects invalid i18n language code",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"i18n":{"languages":[{"code":"pt<script>","label":"Portuguese"}]}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "settings endpoint rejects overlong i18n language label",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/settings",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"i18n":{"languages":[{"code":"en","label":"` + overlongCMSI18NLabel + `"}]}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
 			},
 		},
 		{
