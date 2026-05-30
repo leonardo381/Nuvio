@@ -358,6 +358,132 @@ func TestNuvioNewsletterBackofficeWriteEndpoints(t *testing.T) {
 			},
 		},
 		{
+			Name:   "admin can access scoped subscriber invite endpoint",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/subscribers/" + nuvioNewsletterBackofficeBetaSubID + "/invite",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{
+					nuvioNewsletterBackofficeBetaWebsiteID,
+				})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"result":"already_active"`,
+				`"status":"active"`,
+			},
+			NotExpectedContent: []string{
+				`"confirmationTokenHash"`,
+				`"confirmationTokenExpiresAt"`,
+				`"unsubscribeTokenHash"`,
+			},
+		},
+		{
+			Name:   "client assigned can access scoped subscriber invite endpoint",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/subscribers/" + nuvioNewsletterBackofficeBetaSubID + "/invite",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{
+					nuvioNewsletterBackofficeBetaWebsiteID,
+				})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"result":"already_active"`,
+				`"status":"active"`,
+			},
+			NotExpectedContent: []string{
+				`"confirmationTokenHash"`,
+				`"confirmationTokenExpiresAt"`,
+				`"unsubscribeTokenHash"`,
+			},
+		},
+		{
+			Name:   "client unassigned cannot resend confirmation via scoped subscriber invite endpoint",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/subscribers/" + nuvioNewsletterBackofficeBetaSubID + "/invite",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{
+					nuvioNewsletterBackofficeAlphaWebsiteID,
+				})
+			},
+			ExpectedStatus: 403,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "admin can access scoped campaign send endpoint",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/campaigns/" + nuvioNewsletterBackofficeBetaCampID + "/send",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{
+					nuvioNewsletterBackofficeBetaWebsiteID,
+				})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`Campaign is already sent`,
+			},
+		},
+		{
+			Name:   "client assigned can access scoped campaign send endpoint",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/campaigns/" + nuvioNewsletterBackofficeBetaCampID + "/send",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{
+					nuvioNewsletterBackofficeBetaWebsiteID,
+				})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`Campaign is already sent`,
+			},
+		},
+		{
+			Name:   "client unassigned cannot send campaign through scoped endpoint",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/campaigns/" + nuvioNewsletterBackofficeBetaCampID + "/send",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{
+					nuvioNewsletterBackofficeAlphaWebsiteID,
+				})
+			},
+			ExpectedStatus: 403,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
 			Name:   "invalid subscriber email rejected",
 			Method: http.MethodPost,
 			URL:    "/api/nuvio/newsletter/backoffice/subscribers",
@@ -725,6 +851,134 @@ func TestNuvioNewsletterBackofficeWriteEndpoints(t *testing.T) {
 				}
 				if !foundDraftDuplicate {
 					t.Fatalf("failed to find duplicated beta draft campaign")
+				}
+			},
+		},
+		{
+			Name:   "campaign duplicate excludes missing recipients and still succeeds",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/campaigns/" + nuvioNewsletterBackofficeBetaCampID + "/duplicate",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{
+					nuvioNewsletterBackofficeAlphaWebsiteID,
+					nuvioNewsletterBackofficeBetaWebsiteID,
+				})
+
+				sourceCampaign := mustFindNuvioNewsletterBackofficeRecordByID(t, app, nuvioCampaignsCollectionID, nuvioNewsletterBackofficeBetaCampID)
+				sourceCampaign.Set("recipientsType", "manual")
+				sourceCampaign.Set("recipientsIds", []string{nuvioNewsletterBackofficeBetaSubID, "missing-subscriber-id"})
+				sourceCampaign.Set("recipientsCount", 2)
+				if err := app.Save(sourceCampaign); err != nil {
+					t.Fatalf("failed to prepare source campaign recipients: %v", err)
+				}
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"status":"draft"`,
+				`"skippedRecipientsCount":1`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				campaignsCollection := ensureNuvioNewsletterBackofficeCampaignsCollection(t, app)
+				records, err := app.FindRecordsByFilter(
+					campaignsCollection,
+					`website={:website}`,
+					"",
+					10,
+					0,
+					dbx.Params{"website": nuvioNewsletterBackofficeBetaWebsiteID},
+				)
+				if err != nil {
+					t.Fatalf("failed to list beta campaigns: %v", err)
+				}
+
+				var duplicated *core.Record
+				for _, record := range records {
+					if record.Id == nuvioNewsletterBackofficeBetaCampID {
+						continue
+					}
+					if strings.TrimSpace(record.GetString("subject")) == "Beta Campaign" && normalizeNewsletterStatusForTest(record.GetString("status")) == "draft" {
+						duplicated = record
+						break
+					}
+				}
+
+				if duplicated == nil {
+					t.Fatalf("expected duplicated draft campaign for beta website")
+				}
+
+				recipientsIDs := dedupeNuvioNewsletterBackofficeIDs(parseNuvioRecipientIDs(duplicated.Get("recipientsIds")))
+				if len(recipientsIDs) != 1 || recipientsIDs[0] != nuvioNewsletterBackofficeBetaSubID {
+					t.Fatalf("expected duplicated campaign recipients to keep only valid recipient, got: %#v", recipientsIDs)
+				}
+			},
+		},
+		{
+			Name:   "campaign duplicate excludes foreign-website recipients and still succeeds",
+			Method: http.MethodPost,
+			URL:    "/api/nuvio/newsletter/backoffice/campaigns/" + nuvioNewsletterBackofficeBetaCampID + "/duplicate",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioNewsletterBackofficeDashboardRoute(t, app, e)
+				seedNuvioNewsletterBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{
+					nuvioNewsletterBackofficeAlphaWebsiteID,
+					nuvioNewsletterBackofficeBetaWebsiteID,
+				})
+
+				sourceCampaign := mustFindNuvioNewsletterBackofficeRecordByID(t, app, nuvioCampaignsCollectionID, nuvioNewsletterBackofficeBetaCampID)
+				sourceCampaign.Set("recipientsType", "manual")
+				sourceCampaign.Set("recipientsIds", []string{nuvioNewsletterBackofficeBetaSubID, nuvioNewsletterBackofficeAlphaSubID})
+				sourceCampaign.Set("recipientsCount", 2)
+				if err := app.Save(sourceCampaign); err != nil {
+					t.Fatalf("failed to prepare source campaign recipients: %v", err)
+				}
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"status":"draft"`,
+				`"skippedRecipientsCount":1`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				campaignsCollection := ensureNuvioNewsletterBackofficeCampaignsCollection(t, app)
+				records, err := app.FindRecordsByFilter(
+					campaignsCollection,
+					`website={:website}`,
+					"",
+					10,
+					0,
+					dbx.Params{"website": nuvioNewsletterBackofficeBetaWebsiteID},
+				)
+				if err != nil {
+					t.Fatalf("failed to list beta campaigns: %v", err)
+				}
+
+				var duplicated *core.Record
+				for _, record := range records {
+					if record.Id == nuvioNewsletterBackofficeBetaCampID {
+						continue
+					}
+					if strings.TrimSpace(record.GetString("subject")) == "Beta Campaign" && normalizeNewsletterStatusForTest(record.GetString("status")) == "draft" {
+						duplicated = record
+						break
+					}
+				}
+
+				if duplicated == nil {
+					t.Fatalf("expected duplicated draft campaign for beta website")
+				}
+
+				recipientsIDs := dedupeNuvioNewsletterBackofficeIDs(parseNuvioRecipientIDs(duplicated.Get("recipientsIds")))
+				if len(recipientsIDs) != 1 || recipientsIDs[0] != nuvioNewsletterBackofficeBetaSubID {
+					t.Fatalf("expected duplicated campaign recipients to exclude foreign website recipients, got: %#v", recipientsIDs)
 				}
 			},
 		},

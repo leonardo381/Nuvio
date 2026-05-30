@@ -335,6 +335,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	newsletterBackofficeGroup.POST("/subscribers", handleNuvioNewsletterBackofficeSubscriberCreate)
 	newsletterBackofficeGroup.PATCH("/subscribers/{id}", handleNuvioNewsletterBackofficeSubscriberUpdate)
 	newsletterBackofficeGroup.DELETE("/subscribers/{id}", handleNuvioNewsletterBackofficeSubscriberDelete)
+	newsletterBackofficeGroup.POST("/subscribers/{id}/invite", handleNuvioNewsletterBackofficeSubscriberInvite)
 	newsletterBackofficeGroup.POST("/groups", handleNuvioNewsletterBackofficeGroupCreate)
 	newsletterBackofficeGroup.POST("/invite", func(e *core.RequestEvent) error {
 		return handleNuvioNewsletterInvite(e, true)
@@ -343,6 +344,7 @@ func registerNuvioNewsletterRoutes(e *core.ServeEvent) {
 	newsletterBackofficeGroup.PATCH("/campaigns/{id}", handleNuvioNewsletterBackofficeCampaignUpdate)
 	newsletterBackofficeGroup.DELETE("/campaigns/{id}", handleNuvioNewsletterBackofficeCampaignDelete)
 	newsletterBackofficeGroup.POST("/campaigns/{id}/duplicate", handleNuvioNewsletterBackofficeCampaignDuplicate)
+	newsletterBackofficeGroup.POST("/campaigns/{id}/send", handleNuvioNewsletterBackofficeCampaignSend)
 
 	newsletterPublicGroup.POST("/subscribe", func(e *core.RequestEvent) error {
 		payload := nuvioNewsletterSubscribePayload{}
@@ -775,6 +777,14 @@ func handleNuvioNewsletterInvite(e *core.RequestEvent, enforceWebsiteAccess bool
 		return e.BadRequestError("Invalid newsletter invite payload.", nil)
 	}
 
+	return executeNuvioNewsletterInvite(e, payload, enforceWebsiteAccess)
+}
+
+func executeNuvioNewsletterInvite(
+	e *core.RequestEvent,
+	payload nuvioNewsletterInvitePayload,
+	enforceWebsiteAccess bool,
+) error {
 	websiteID := strings.TrimSpace(payload.WebsiteID)
 	if websiteID == "" {
 		return e.BadRequestError("Missing websiteId.", nil)
@@ -2751,6 +2761,49 @@ func handleNuvioNewsletterBackofficeSubscriberDelete(e *core.RequestEvent) error
 	})
 }
 
+func handleNuvioNewsletterBackofficeSubscriberInvite(e *core.RequestEvent) error {
+	subscribersCollection, _, subscriberSourceFieldName, _, err := resolveNuvioNewsletterBackofficeSubscriberCollectionsAndFields(e.App)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice subscriber invite resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to send subscriber confirmation.", nil)
+	}
+
+	record, err := resolveNuvioNewsletterBackofficeRecordWriteTarget(e, subscribersCollection, "Subscriber not found.")
+	if err != nil {
+		return err
+	}
+
+	websiteID := strings.TrimSpace(resolveNuvioPublicRelationID(record, "website", "site"))
+	if websiteID == "" {
+		return e.ForbiddenError("The authorized record is not allowed to perform this action.", nil)
+	}
+
+	email, ok := normalizeNuvioEmail(record.GetString("email"))
+	if !ok {
+		return e.BadRequestError("A valid email is required.", nil)
+	}
+
+	payload := nuvioNewsletterInvitePayload{
+		WebsiteID: websiteID,
+		Email:     email,
+		Name:      sanitizeNuvioNewsletterName(record.GetString("name")),
+		Source:    "manual_dashboard",
+	}
+
+	if subscriberSourceFieldName != "" {
+		sourceCandidate := strings.TrimSpace(record.GetString(subscriberSourceFieldName))
+		if sourceCandidate != "" {
+			payload.Source = sourceCandidate
+		}
+	}
+
+	return executeNuvioNewsletterInvite(e, payload, false)
+}
+
 func handleNuvioNewsletterBackofficeGroupCreate(e *core.RequestEvent) error {
 	groupsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(e.App, nuvioNewsletterBackofficeGroupsCollectionAliases)
 	if err != nil {
@@ -3067,7 +3120,7 @@ func handleNuvioNewsletterBackofficeCampaignDuplicate(e *core.RequestEvent) erro
 
 	recipientsType := resolveNuvioNewsletterBackofficeCampaignRecordRecipientsType(sourceRecord, recipientsTypeFieldName)
 	recipientsIDsRaw := resolveNuvioNewsletterBackofficeCampaignRecordRecipientsIDs(sourceRecord, recipientsIDsFieldName)
-	recipientsIDs, err := validateNuvioNewsletterBackofficeSubscriberIDsByWebsite(e.App, subscribersCollection, websiteID, recipientsIDsRaw, recipientsType)
+	recipientsIDs, skippedRecipientsCount, err := sanitizeNuvioNewsletterBackofficeSubscriberIDsByWebsite(e.App, subscribersCollection, websiteID, recipientsIDsRaw, recipientsType)
 	if err != nil {
 		return e.BadRequestError(err.Error(), nil)
 	}
@@ -3097,10 +3150,43 @@ func handleNuvioNewsletterBackofficeCampaignDuplicate(e *core.RequestEvent) erro
 		return e.BadRequestError("Failed to duplicate campaign.", nil)
 	}
 
-	return e.JSON(http.StatusOK, map[string]any{
+	response := map[string]any{
 		"state":    "ok",
 		"campaign": buildNuvioNewsletterBackofficeCampaignDTO(record, recipientsTypeFieldName, recipientsIDsFieldName),
-	})
+	}
+	if skippedRecipientsCount > 0 {
+		response["skippedRecipientsCount"] = skippedRecipientsCount
+	}
+
+	return e.JSON(http.StatusOK, response)
+}
+
+func handleNuvioNewsletterBackofficeCampaignSend(e *core.RequestEvent) error {
+	campaignsCollection, err := findNuvioNewsletterBackofficeCollectionByAliases(e.App, nuvioNewsletterBackofficeCampaignsCollectionAliases)
+	if err != nil {
+		e.App.Logger().Error(
+			"NUVIO newsletter backoffice campaign send collection resolve failed",
+			"error",
+			err.Error(),
+		)
+		return e.BadRequestError("Failed to send campaign.", nil)
+	}
+
+	record, err := resolveNuvioNewsletterBackofficeRecordWriteTarget(e, campaignsCollection, "Campaign not found.")
+	if err != nil {
+		return err
+	}
+
+	result, err := sendNuvioNewsletterCampaign(e.App, e.Request.Context(), record.Id, e.Request)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return e.NotFoundError("Campaign not found.", nil)
+		}
+
+		return e.BadRequestError(err.Error(), nil)
+	}
+
+	return e.JSON(http.StatusOK, result)
 }
 
 func resolveNuvioNewsletterBackofficeSubscriberCollectionsAndFields(
@@ -3355,6 +3441,51 @@ func validateNuvioNewsletterBackofficeSubscriberIDsByWebsite(
 	}
 
 	return validatedRecipientsIDs, nil
+}
+
+func sanitizeNuvioNewsletterBackofficeSubscriberIDsByWebsite(
+	app core.App,
+	subscribersCollection *core.Collection,
+	websiteID string,
+	rawRecipientsIDs any,
+	recipientsType string,
+) ([]string, int, error) {
+	if recipientsType == "all" {
+		return []string{}, 0, nil
+	}
+
+	recipientsIDs := dedupeNuvioNewsletterBackofficeIDs(parseNuvioRecipientIDs(rawRecipientsIDs))
+	if len(recipientsIDs) == 0 {
+		return []string{}, 0, nil
+	}
+
+	if subscribersCollection == nil {
+		return nil, 0, fmt.Errorf("Subscribers collection is not configured")
+	}
+
+	sanitizedRecipients := make([]string, 0, len(recipientsIDs))
+	skippedCount := 0
+
+	for _, subscriberID := range recipientsIDs {
+		subscriberRecord, err := app.FindRecordById(subscribersCollection.Id, subscriberID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				skippedCount++
+				continue
+			}
+			return nil, 0, fmt.Errorf("Failed to validate recipients")
+		}
+
+		subscriberWebsiteID := strings.TrimSpace(resolveNuvioPublicRelationID(subscriberRecord, "website", "site"))
+		if subscriberWebsiteID == "" || subscriberWebsiteID != websiteID {
+			skippedCount++
+			continue
+		}
+
+		sanitizedRecipients = append(sanitizedRecipients, subscriberID)
+	}
+
+	return sanitizedRecipients, skippedCount, nil
 }
 
 func setNuvioNewsletterBackofficeRelationField(record *core.Record, collection *core.Collection, aliases []string, value string) {

@@ -77,7 +77,7 @@
     let normalizedCampaignManualRecipientsCount = 0;
     let activeSubscriberIdsByGroupId = new Map();
     let groupSelectionMetaById = new Map();
-    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastAudienceRecipientsResetKey = "";    let lastPersistedContextKey = "";    let isNewsletterAdminSuperuser = ApiClient.isAdminSuperuser();    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
+    let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastAudienceRecipientsResetKey = "";    let lastPersistedContextKey = "";    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
     $: campaignsCollection = findCollectionByRequiredNames($collections, ["Campaigns", "campaigns"]);
     $: subscriberGroupsCollection = findCollectionByRequiredNames($collections, ["SubscriberGroups", "subscribergroups"]);
     $: missingCollectionNames = [];
@@ -607,9 +607,6 @@
         return composerRecipients.some((id) => !persistedSet.has(id));
     }
     function getSendCampaignDisabledReason(campaign) {
-        if (!isNewsletterAdminSuperuser) {
-            return "Only admin users can send campaigns.";
-        }
         if (!campaign?.id) {
             return "Invalid campaign.";
         }
@@ -1177,7 +1174,7 @@
         nextCreateGroupIds.add(groupId);
         subscriberForm = { ...subscriberForm, groupIds: [...nextCreateGroupIds] };
     }
-    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        if (!isNewsletterAdminSuperuser) {            addWarningToast("Only admin users can send campaigns.");            return;        }        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
+    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
     }
 
@@ -1260,7 +1257,7 @@
         pendingDeleteCampaign = null;
         await deleteDraftCampaign(campaign);
     }
-    async function loadWebsites() {        isNewsletterAdminSuperuser = ApiClient.isAdminSuperuser();        if (!websitesCollection?.id) {            websites = [];            selectedWebsiteId = "";            return;        }        isLoadingWebsites = true;        try {            websites = await ApiClient.getBackofficeWebsites({                requestKey: "nuvio_newsletter_websites",            });            if (!websites.length) {
+    async function loadWebsites() {        if (!websitesCollection?.id) {            websites = [];            selectedWebsiteId = "";            return;        }        isLoadingWebsites = true;        try {            websites = await ApiClient.getBackofficeWebsites({                requestKey: "nuvio_newsletter_websites",            });            if (!websites.length) {
                 selectedWebsiteId = "";
                 subscribers = [];
                 campaigns = [];
@@ -1390,11 +1387,6 @@
             return;
         }
 
-        if (!isNewsletterAdminSuperuser) {
-            addWarningToast("Only admin users can send newsletter confirmations.");
-            return;
-        }
-
         const email = normalizeEmail(subscriber?.email);
         if (!isValidEmail(email)) {
             addErrorToast("This subscriber email is invalid.");
@@ -1404,15 +1396,8 @@
         resendingSubscriberId = subscriber.id;
 
         try {
-            const response = await ApiClient.send("/api/nuvio/newsletter/invite", {
-                method: "POST",
-                body: {
-                    websiteId: selectedWebsiteId,
-                    email,
-                    name: normalizeSubscriberName(subscriber?.name || ""),
-                    source: subscriberLeadSource,
-                },
-                requestKey: "nuvio_newsletter_invite_" + subscriber.id,
+            const response = await ApiClient.inviteNewsletterSubscriber(subscriber.id, {
+                requestKey: "nuvio_newsletter_subscriber_invite_" + subscriber.id,
             });
 
             const inviteResult = `${response?.result || ""}`.trim().toLowerCase();
@@ -1425,11 +1410,17 @@
                 await loadNewsletterDashboard();
             }
         } catch (err) {
-            ApiClient.error(err, false);
-            addErrorToast("Unable to send confirmation right now. Please try again.");
+            const statusCode = Number(err?.status) || 0;
+            if (statusCode === 403) {
+                addErrorToast("You do not have access to invite this subscriber.");
+            } else if (statusCode === 401) {
+                ApiClient.error(err, false);
+            } else {
+                addErrorToast("Unable to send confirmation right now. Please try again.");
+            }
+        } finally {
+            resendingSubscriberId = "";
         }
-
-        resendingSubscriberId = "";
     }
 
     async function deleteSubscriber(subscriber) {
@@ -1505,22 +1496,13 @@
             return false;
         }
 
-        if (!isNewsletterAdminSuperuser) {
-            addWarningToast("Only admin users can send campaigns.");
-            return false;
-        }
-
         isSendingCampaign[campaign.id] = true;
         isSendingCampaign = { ...isSendingCampaign };
 
         let sent = false;
 
         try {
-            const response = await ApiClient.send("/api/nuvio/newsletter/campaigns/send", {
-                method: "POST",
-                body: {
-                    campaignId: campaign.id,
-                },
+            const response = await ApiClient.sendNewsletterCampaign(campaign.id, {
                 requestKey: "nuvio_newsletter_send_" + campaign.id,
             });
 
@@ -1554,8 +1536,14 @@
 
             await loadNewsletterDashboard();
         } catch (err) {
-            ApiClient.error(err, false);
-            addErrorToast("Campaign could not be sent. Please try again or check email configuration.");
+            const statusCode = Number(err?.status) || 0;
+            if (statusCode === 403) {
+                addErrorToast("You do not have access to send this campaign.");
+            } else if (statusCode === 401) {
+                ApiClient.error(err, false);
+            } else {
+                addErrorToast("Campaign could not be sent. Please try again or check email configuration.");
+            }
         }
 
         delete isSendingCampaign[campaign.id];
@@ -1673,7 +1661,8 @@
         if (editingCampaignId) {
             isSavingCampaign = true;
             try {
-                await ApiClient.updateNewsletterCampaign(editingCampaignId, {
+                const editingCampaignIdBeforeSave = editingCampaignId;
+                const response = await ApiClient.updateNewsletterCampaign(editingCampaignId, {
                     subject: payload.subject,
                     body: payload.body,
                     status: payload.status,
@@ -1682,12 +1671,38 @@
                 }, {
                     requestKey: "nuvio_newsletter_campaign_update_" + editingCampaignId,
                 });
-                await loadNewsletterDashboard();
+                const updatedCampaign = response?.campaign || null;
+                if (updatedCampaign?.id) {
+                    campaigns = campaigns.map((campaign) => campaign.id === updatedCampaign.id ? updatedCampaign : campaign);
+                    if (editingCampaignId === editingCampaignIdBeforeSave) {
+                        editingCampaignId = updatedCampaign.id;
+                    }
+                } else if (editingCampaignIdBeforeSave) {
+                    campaigns = campaigns.map((campaign) => {
+                        if (campaign.id !== editingCampaignIdBeforeSave) {
+                            return campaign;
+                        }
+
+                        return {
+                            ...campaign,
+                            subject: payload.subject,
+                            body: payload.body,
+                            status: payload.status,
+                            recipientsType: payload.recipientsType,
+                            recipientsIds: payload.recipientsIds,
+                        };
+                    });
+                }
                 addSuccessToast("Campaign draft updated.");
-                resetCampaignComposer();
-                campaignWorkspace = "audience";
             } catch (err) {
-                ApiClient.error(err);
+                const statusCode = Number(err?.status) || 0;
+                if (statusCode === 401) {
+                    ApiClient.error(err, false);
+                } else if (statusCode === 403) {
+                    addErrorToast("You do not have access to update this draft.");
+                } else {
+                    ApiClient.error(err);
+                }
             }
             isSavingCampaign = false;
             return;
@@ -2246,7 +2261,7 @@
                                                             >
                                                                 <span class="txt">Edit</span>
                                                             </button>
-                                                            {#if normalizeStatus(subscriber.status) === "pending" && isNewsletterAdminSuperuser}
+                                                            {#if normalizeStatus(subscriber.status) === "pending"}
                                                                 <button
                                                                     type="button"
                                                                     class="btn btn-sm btn-outline action-btn"

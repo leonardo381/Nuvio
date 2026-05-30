@@ -317,6 +317,36 @@ PocketBase.prototype.duplicateNewsletterCampaign = async function (id, options =
 };
 
 /**
+ * Resends a newsletter confirmation through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.inviteNewsletterSubscriber = async function (id, options = {}) {
+    const subscriberId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/newsletter/backoffice/subscribers/${encodeURIComponent(subscriberId)}/invite`, {
+        method: "POST",
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_subscriber_invite_${subscriberId || "unknown"}`,
+    });
+};
+
+/**
+ * Sends a newsletter campaign through scoped backoffice endpoint.
+ *
+ * @param {String} id
+ * @param {Object} [options]
+ * @returns {Promise<Object>}
+ */
+PocketBase.prototype.sendNewsletterCampaign = async function (id, options = {}) {
+    const campaignId = `${id || ""}`.trim();
+    return this.send(`/api/nuvio/newsletter/backoffice/campaigns/${encodeURIComponent(campaignId)}/send`, {
+        method: "POST",
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_newsletter_campaign_send_${campaignId || "unknown"}`,
+    });
+};
+
+/**
  * Loads scoped Booking dashboard datasets for a website.
  *
  * @param {Object} params
