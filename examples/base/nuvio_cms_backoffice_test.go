@@ -1657,6 +1657,9 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 func TestNuvioCMSBackofficeBlockEndpoint(t *testing.T) {
 	t.Parallel()
 
+	overlongBlockURLValue := "https://example.test/" + strings.Repeat("a", nuvioCMSBackofficeURLMaxLen)
+	overlongBlockTextValue := strings.Repeat("a", nuvioCMSBackofficeBlockStringMaxLen+1)
+
 	scenarios := []tests.ApiScenario{
 		{
 			Name:   "admin can update block props and translations and preserve non content fields",
@@ -1919,6 +1922,167 @@ func TestNuvioCMSBackofficeBlockEndpoint(t *testing.T) {
 			},
 			Body: strings.NewReader(`{
 				"props":{"image":{"name":"hero.png","size":12345,"type":"image/png"}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "block endpoint accepts safe nested url like props and rich text",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{
+					"description":"Contains http://example.test inside plain text.",
+					"cta":{"href":"https://example.test/book","linkUrl":"/contact","actionUrl":"mailto:hello@example.test","profileUrl":"tel:+351999000111"},
+					"hero":{"imageUrl":"hero-banner.webp","backgroundImageUrl":"/assets/bg.webp","embedUrl":"https://www.youtube.com/embed/abc123"}
+				},
+				"translations":{"en":{"buttonUrl":"https://example.test/en/book"}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+			},
+		},
+		{
+			Name:   "block endpoint rejects javascript href value",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"cta":{"href":"javascript:alert(1)"}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "block endpoint rejects data image url value",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"hero":{"imageUrl":"data:text/html;base64,SGVsbG8="}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "block endpoint rejects protocol relative url value",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"cta":{"url":"//evil.example.test/path"}}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "block endpoint rejects overlong url like value",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"props":{"ctaUrl":"` + overlongBlockURLValue + `"}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "block endpoint rejects overlong normal content string",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{"props":{"content":"` + overlongBlockTextValue + `"}}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "block endpoint accepts non url field containing http text",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"description":"Documentation is at http://example.test/docs and should remain plain text."}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+			},
+		},
+		{
+			Name:   "block endpoint rejects unsafe url like value inside translations",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"translations":{"en":{"ctaUrl":"javascript:alert(1)"}}
 			}`),
 			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 				setupNuvioCMSBackofficeDashboardRoute(t, app, e)

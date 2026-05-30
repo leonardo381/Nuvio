@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	nuvioComponentsCollectionID     = "pbc_184785686"
-	nuvioCMSDashboardMaxScanRecords = 5000
-	nuvioCMSBackofficeURLMaxLen     = 2048
+	nuvioComponentsCollectionID         = "pbc_184785686"
+	nuvioCMSDashboardMaxScanRecords     = 5000
+	nuvioCMSBackofficeURLMaxLen         = 2048
+	nuvioCMSBackofficeBlockStringMaxLen = 10000
 )
 
 var (
@@ -151,6 +152,29 @@ var (
 		"seotitle":        300,
 		"seodescription":  1000,
 		"seofocuskeyword": 255,
+	}
+	nuvioCMSBackofficeBlockHrefLikePathSegments = map[string]struct{}{
+		"url":        {},
+		"href":       {},
+		"link":       {},
+		"linkurl":    {},
+		"buttonurl":  {},
+		"ctaurl":     {},
+		"actionurl":  {},
+		"socialurl":  {},
+		"profileurl": {},
+	}
+	nuvioCMSBackofficeBlockAssetLikePathSegments = map[string]struct{}{
+		"imageurl":           {},
+		"src":                {},
+		"image":              {},
+		"backgroundimage":    {},
+		"backgroundimageurl": {},
+	}
+	nuvioCMSBackofficeBlockEmbedLikePathSegments = map[string]struct{}{
+		"videourl":  {},
+		"embedurl":  {},
+		"iframeurl": {},
 	}
 	nuvioCMSBackofficePhoneValuePattern = regexp.MustCompile(`^[0-9+()./\-\s]+$`)
 )
@@ -762,6 +786,9 @@ func normalizeNuvioCMSBackofficeBlockPropsValue(rawValue any) (map[string]any, e
 	if containsNuvioCMSBackofficeFileLikePayload(propsMap) {
 		return nil, fmt.Errorf("File upload payloads are not supported in this endpoint yet")
 	}
+	if err := validateNuvioCMSBackofficeBlockContentValue(propsMap, []string{"props"}); err != nil {
+		return nil, err
+	}
 
 	return propsMap, nil
 }
@@ -775,6 +802,9 @@ func normalizeNuvioCMSBackofficeBlockTranslationsValue(rawValue any) (any, error
 		if containsNuvioCMSBackofficeFileLikePayload(translationMap) {
 			return nil, fmt.Errorf("File upload payloads are not supported in this endpoint yet")
 		}
+		if err := validateNuvioCMSBackofficeBlockContentValue(translationMap, []string{"translations"}); err != nil {
+			return nil, err
+		}
 		return translationMap, nil
 	}
 
@@ -782,6 +812,9 @@ func normalizeNuvioCMSBackofficeBlockTranslationsValue(rawValue any) (any, error
 	case []any:
 		if containsNuvioCMSBackofficeFileLikePayload(typed) {
 			return nil, fmt.Errorf("File upload payloads are not supported in this endpoint yet")
+		}
+		if err := validateNuvioCMSBackofficeBlockContentValue(typed, []string{"translations"}); err != nil {
+			return nil, err
 		}
 		return typed, nil
 	case string:
@@ -792,6 +825,252 @@ func normalizeNuvioCMSBackofficeBlockTranslationsValue(rawValue any) (any, error
 	default:
 		return nil, fmt.Errorf("translations must be an object or array")
 	}
+}
+
+func validateNuvioCMSBackofficeBlockContentValue(value any, path []string) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		for rawKey, rawValue := range typed {
+			normalizedKey := normalizeNuvioCMSBackofficePayloadKey(rawKey)
+			if normalizedKey == "" {
+				normalizedKey = strings.ToLower(strings.TrimSpace(rawKey))
+			}
+
+			childPath := appendNuvioCMSBackofficeBlockPathSegment(path, normalizedKey)
+			if err := validateNuvioCMSBackofficeBlockContentValue(rawValue, childPath); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for index, item := range typed {
+			childPath := appendNuvioCMSBackofficeBlockPathSegment(path, fmt.Sprintf("[%d]", index))
+			if err := validateNuvioCMSBackofficeBlockContentValue(item, childPath); err != nil {
+				return err
+			}
+		}
+	case string:
+		if err := validateNuvioCMSBackofficeBlockStringValue(path, typed); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func appendNuvioCMSBackofficeBlockPathSegment(path []string, segment string) []string {
+	if segment == "" {
+		return append([]string{}, path...)
+	}
+
+	nextPath := make([]string, 0, len(path)+1)
+	nextPath = append(nextPath, path...)
+	nextPath = append(nextPath, segment)
+	return nextPath
+}
+
+func formatNuvioCMSBackofficeBlockPath(path []string) string {
+	if len(path) == 0 {
+		return "value"
+	}
+
+	var builder strings.Builder
+	for _, segment := range path {
+		if strings.TrimSpace(segment) == "" {
+			continue
+		}
+
+		if strings.HasPrefix(segment, "[") && strings.HasSuffix(segment, "]") {
+			builder.WriteString(segment)
+			continue
+		}
+
+		if builder.Len() > 0 {
+			builder.WriteString(".")
+		}
+		builder.WriteString(segment)
+	}
+
+	if builder.Len() == 0 {
+		return "value"
+	}
+	return builder.String()
+}
+
+func validateNuvioCMSBackofficeBlockStringValue(path []string, rawValue string) error {
+	if len([]rune(rawValue)) > nuvioCMSBackofficeBlockStringMaxLen {
+		return fmt.Errorf("%s exceeds the maximum length of %d characters", formatNuvioCMSBackofficeBlockPath(path), nuvioCMSBackofficeBlockStringMaxLen)
+	}
+
+	trimmed := strings.TrimSpace(rawValue)
+	if trimmed == "" {
+		return nil
+	}
+
+	if len([]rune(trimmed)) > nuvioCMSBackofficeURLMaxLen && isNuvioCMSBackofficeBlockURLLikePath(path) {
+		return fmt.Errorf("%s exceeds the maximum length of %d characters", formatNuvioCMSBackofficeBlockPath(path), nuvioCMSBackofficeURLMaxLen)
+	}
+
+	switch classifyNuvioCMSBackofficeBlockURLPath(path) {
+	case "href":
+		if err := validateNuvioCMSBackofficeBlockHrefLikeURL(trimmed); err != nil {
+			return fmt.Errorf("%s must be a safe link URL", formatNuvioCMSBackofficeBlockPath(path))
+		}
+	case "asset":
+		if err := validateNuvioCMSBackofficeBlockAssetLikeURL(trimmed); err != nil {
+			return fmt.Errorf("%s must be a safe image/source URL", formatNuvioCMSBackofficeBlockPath(path))
+		}
+	case "embed":
+		if err := validateNuvioCMSBackofficeBlockEmbedLikeURL(trimmed); err != nil {
+			return fmt.Errorf("%s must be a safe embed URL", formatNuvioCMSBackofficeBlockPath(path))
+		}
+	}
+
+	return nil
+}
+
+func isNuvioCMSBackofficeBlockURLLikePath(path []string) bool {
+	return classifyNuvioCMSBackofficeBlockURLPath(path) != ""
+}
+
+func classifyNuvioCMSBackofficeBlockURLPath(path []string) string {
+	for index := len(path) - 1; index >= 0; index-- {
+		segment := strings.TrimSpace(path[index])
+		if segment == "" || strings.HasPrefix(segment, "[") {
+			continue
+		}
+
+		normalizedSegment := normalizeNuvioCMSBackofficePayloadKey(segment)
+		if normalizedSegment == "" || normalizedSegment == "props" || normalizedSegment == "translations" {
+			continue
+		}
+
+		if _, ok := nuvioCMSBackofficeBlockEmbedLikePathSegments[normalizedSegment]; ok {
+			return "embed"
+		}
+		if _, ok := nuvioCMSBackofficeBlockAssetLikePathSegments[normalizedSegment]; ok {
+			return "asset"
+		}
+		if _, ok := nuvioCMSBackofficeBlockHrefLikePathSegments[normalizedSegment]; ok {
+			return "href"
+		}
+
+		if strings.HasSuffix(normalizedSegment, "url") {
+			switch {
+			case strings.Contains(normalizedSegment, "embed"),
+				strings.Contains(normalizedSegment, "iframe"),
+				strings.Contains(normalizedSegment, "video"):
+				return "embed"
+			case strings.Contains(normalizedSegment, "image"),
+				strings.Contains(normalizedSegment, "background"),
+				strings.Contains(normalizedSegment, "src"):
+				return "asset"
+			default:
+				return "href"
+			}
+		}
+	}
+
+	return ""
+}
+
+func validateNuvioCMSBackofficeBlockHrefLikeURL(value string) error {
+	if len(value) > nuvioCMSBackofficeURLMaxLen {
+		return fmt.Errorf("value exceeds max URL length")
+	}
+	if hasNuvioCMSBackofficeBlockedURLScheme(value) || strings.HasPrefix(value, "//") || hasNuvioCMSBackofficeUnsafeURLChars(value) {
+		return fmt.Errorf("invalid URL")
+	}
+
+	loweredValue := strings.ToLower(value)
+	switch {
+	case strings.HasPrefix(value, "/"),
+		strings.HasPrefix(value, "#"),
+		strings.HasPrefix(value, "?"):
+		return nil
+	case strings.HasPrefix(loweredValue, "mailto:"):
+		return validateNuvioCMSBackofficeMailtoURL(value)
+	case strings.HasPrefix(loweredValue, "tel:"):
+		return validateNuvioCMSBackofficeTelURL(value)
+	case strings.Contains(value, "://"):
+		return validateNuvioCMSBackofficeAbsoluteHTTPURL(value)
+	default:
+		return fmt.Errorf("invalid URL")
+	}
+}
+
+func validateNuvioCMSBackofficeMailtoURL(value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil {
+		return fmt.Errorf("invalid mailto URL")
+	}
+	if strings.ToLower(strings.TrimSpace(parsed.Scheme)) != "mailto" {
+		return fmt.Errorf("invalid mailto URL")
+	}
+
+	address := strings.TrimSpace(parsed.Opaque)
+	if address == "" {
+		address = strings.TrimSpace(parsed.Path)
+	}
+	if address == "" || strings.ContainsAny(address, " \t\r\n<>\"'`") {
+		return fmt.Errorf("invalid mailto URL")
+	}
+	return nil
+}
+
+func validateNuvioCMSBackofficeTelURL(value string) error {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil {
+		return fmt.Errorf("invalid tel URL")
+	}
+	if strings.ToLower(strings.TrimSpace(parsed.Scheme)) != "tel" {
+		return fmt.Errorf("invalid tel URL")
+	}
+
+	number := strings.TrimSpace(parsed.Opaque)
+	if number == "" {
+		number = strings.TrimSpace(parsed.Path)
+	}
+	if number == "" || !nuvioCMSBackofficePhoneValuePattern.MatchString(number) {
+		return fmt.Errorf("invalid tel URL")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficeBlockAssetLikeURL(value string) error {
+	if len(value) > nuvioCMSBackofficeURLMaxLen {
+		return fmt.Errorf("value exceeds max URL length")
+	}
+	if hasNuvioCMSBackofficeBlockedURLScheme(value) || strings.HasPrefix(value, "//") || hasNuvioCMSBackofficeUnsafeURLChars(value) {
+		return fmt.Errorf("invalid URL")
+	}
+
+	if strings.HasPrefix(value, "/") {
+		return nil
+	}
+	if strings.Contains(value, "://") {
+		return validateNuvioCMSBackofficeAbsoluteHTTPURL(value)
+	}
+
+	if strings.Contains(value, "\\") || strings.Contains(value, "..") || strings.Contains(value, ":") {
+		return fmt.Errorf("invalid URL")
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficeBlockEmbedLikeURL(value string) error {
+	if len(value) > nuvioCMSBackofficeURLMaxLen {
+		return fmt.Errorf("value exceeds max URL length")
+	}
+	if hasNuvioCMSBackofficeBlockedURLScheme(value) || strings.HasPrefix(value, "//") || hasNuvioCMSBackofficeUnsafeURLChars(value) {
+		return fmt.Errorf("invalid URL")
+	}
+	if !strings.Contains(value, "://") {
+		return fmt.Errorf("invalid URL")
+	}
+
+	return validateNuvioCMSBackofficeAbsoluteHTTPURL(value)
 }
 
 func containsNuvioCMSBackofficeFileLikePayload(value any) bool {
