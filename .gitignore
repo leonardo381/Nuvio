@@ -18,28 +18,37 @@ CHANGELOG.html
 CHANGELOG_16_22.html
 CHANGELOG_8_15.html
 LICENSE.html
-# PocketBase uploaded/generated image files only
-pb_data/storage/**/*.jpg
-pb_data/storage/**/*.jpeg
-pb_data/storage/**/*.png
-pb_data/storage/**/*.webp
-pb_data/storage/**/*.gif
-pb_data/storage/**/*.bmp
-pb_data/storage/**/*.svg
-pb_data/storage/**/*.avif
 
-# PocketBase sidecar metadata for those files
-pb_data/storage/**/*.attrs
-
-# Generated thumbnails folders
-pb_data/storage/**/thumbs_*/
-
-pb_data/auxiliary.db
+# Runtime PocketBase data/artifacts (keep local, never commit)
+pb_data/*.db
 pb_data/*.db-shm
 pb_data/*.db-wal
 pb_data/storage/
-nuvio-implementer.md
+
+# Generic runtime artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.out
+*.err
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Frontend/runtime outputs
+node_modules/
+dist/
+ui/dist/
+ui/node_modules/
 ui/.env
-pb_data/auxiliary.db
-pb_data/auxiliary.db
+ui/.env.*
+
+# Local QA and temp artifacts
 dev_qa_snapshots/
+screenshots/
+tmp_screenshots/
+.codex_backend_sync/
+nuvio-implementer.md
