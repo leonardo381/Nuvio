@@ -486,7 +486,8 @@ func logRequest(event *core.RequestEvent, err error) {
 
 	status := event.Status()
 	method := cutStr(strings.ToUpper(event.Request.Method), 50)
-	requestUri := cutStr(event.Request.URL.RequestURI(), 3000)
+	requestUri := cutStr(redactRequestURIForLogs(event.Request.URL.RequestURI()), 3000)
+	referer := cutStr(redactURLQueryForLogs(event.Request.Referer()), 2000)
 
 	// parse the request error
 	if err != nil {
@@ -521,7 +522,7 @@ func logRequest(event *core.RequestEvent, err error) {
 		slog.String("url", requestUri),
 		slog.String("method", method),
 		slog.Int("status", status),
-		slog.String("referer", cutStr(event.Request.Referer(), 2000)),
+		slog.String("referer", referer),
 		slog.String("userAgent", cutStr(event.Request.UserAgent(), 2000)),
 	)
 
@@ -566,4 +567,109 @@ func cutStr(str string, max int) string {
 		return str[:max] + "..."
 	}
 	return str
+}
+
+const redactedLogQueryValue = "[redacted]"
+
+var sensitiveLogQueryKeys = map[string]struct{}{
+	"token":              {},
+	"confirmationtoken":  {},
+	"unsubscribetoken":   {},
+	"code":               {},
+	"state":              {},
+	"password":           {},
+	"email":              {},
+	"phone":              {},
+	"message":            {},
+	"name":               {},
+	"apikey":             {},
+	"key":                {},
+	"secret":             {},
+	"access_token":       {},
+	"refresh_token":      {},
+	"accesstoken":        {},
+	"refreshtoken":       {},
+	"confirmationtokenhash": {},
+	"unsubscribetokenhash":  {},
+}
+
+func isSensitiveLogQueryKey(raw string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(raw))
+	if normalized == "" {
+		return false
+	}
+
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	if _, ok := sensitiveLogQueryKeys[normalized]; ok {
+		return true
+	}
+
+	return false
+}
+
+func redactRequestURIForLogs(requestURI string) string {
+	trimmed := strings.TrimSpace(requestURI)
+	if trimmed == "" {
+		return ""
+	}
+
+	pathPart := trimmed
+	queryPart := ""
+	if idx := strings.Index(pathPart, "?"); idx >= 0 {
+		queryPart = pathPart[idx+1:]
+		pathPart = pathPart[:idx]
+	}
+
+	if queryPart == "" {
+		return pathPart
+	}
+
+	return pathPart + "?" + redactQueryStringForLogs(queryPart)
+}
+
+func redactQueryStringForLogs(rawQuery string) string {
+	if strings.TrimSpace(rawQuery) == "" {
+		return ""
+	}
+
+	segments := strings.Split(rawQuery, "&")
+	for i, segment := range segments {
+		if segment == "" {
+			continue
+		}
+
+		keyPart := segment
+		if idx := strings.Index(segment, "="); idx >= 0 {
+			keyPart = segment[:idx]
+		}
+
+		decodedKey, decodeErr := url.QueryUnescape(keyPart)
+		if decodeErr != nil {
+			decodedKey = keyPart
+		}
+
+		if !isSensitiveLogQueryKey(decodedKey) {
+			continue
+		}
+
+		segments[i] = keyPart + "=" + redactedLogQueryValue
+	}
+
+	return strings.Join(segments, "&")
+}
+
+func redactURLQueryForLogs(rawURL string) string {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return ""
+	}
+
+	if parsed, err := url.Parse(trimmed); err == nil && parsed != nil && parsed.Scheme != "" && parsed.Host != "" {
+		if parsed.RawQuery != "" {
+			parsed.RawQuery = redactQueryStringForLogs(parsed.RawQuery)
+		}
+		return parsed.String()
+	}
+
+	return redactRequestURIForLogs(trimmed)
 }

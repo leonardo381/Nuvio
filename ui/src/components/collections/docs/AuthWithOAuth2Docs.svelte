@@ -59,7 +59,7 @@
     <p>Authenticate with an OAuth2 provider and returns a new auth token and record data.</p>
     <p>
         For more details please check the
-        <a href={import.meta.env.PB_OAUTH2_EXAMPLE} target="_blank" rel="noopener noreferrer">
+        <a href={import.meta.env.VITE_PB_OAUTH2_EXAMPLE} target="_blank" rel="noopener noreferrer">
             OAuth2 integration documentation
         </a>.
     </p>

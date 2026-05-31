@@ -42,7 +42,12 @@ type ServeConfig struct {
 	// redirect will be automatically added.
 	CertificateDomains []string
 
-	// AllowedOrigins is an optional list of CORS origins (default to "*").
+	// AllowedOrigins is an optional list of CORS origins.
+	//
+	// Resolution order:
+	//  1. explicit ServeConfig.AllowedOrigins values
+	//  2. NUVIO_CORS_ALLOWED_ORIGINS env var
+	//  3. local/dev-safe localhost defaults
 	AllowedOrigins []string
 }
 
@@ -58,8 +63,13 @@ type ServeConfig struct {
 //		ShowStartBanner: false,
 //	})
 func Serve(app core.App, config ServeConfig) error {
-	if len(config.AllowedOrigins) == 0 {
-		config.AllowedOrigins = []string{"*"}
+	envAllowedOrigins := strings.TrimSpace(os.Getenv("NUVIO_CORS_ALLOWED_ORIGINS"))
+	hasExplicitOrigins := hasExplicitCORSOrigins(config.AllowedOrigins, envAllowedOrigins)
+	config.AllowedOrigins = resolveCORSAllowedOrigins(config.AllowedOrigins, envAllowedOrigins, app.IsDev())
+	if !app.IsDev() && !hasExplicitOrigins {
+		app.Logger().Warn(
+			"CORS origins are not explicitly configured; using localhost-only fallback. Configure NUVIO_CORS_ALLOWED_ORIGINS or --origins for production.",
+		)
 	}
 
 	// ensure that the latest migrations are applied before starting the server
@@ -90,29 +100,36 @@ func Serve(app core.App, config ServeConfig) error {
 				e.Response.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http://127.0.0.1:* https://tile.openstreetmap.org data: blob:; connect-src 'self' http://127.0.0.1:* https://nominatim.openstreetmap.org; script-src 'self' 'sha256-GRUzBA7PzKYug7pqxv5rJaec5bwDCw1Vo6/IXwvD3Tc='")
 			}
 
-			// local CMS preview: allow embedding public preview app iframe in dev only.
-			if e.App.IsDev() {
+			csp := e.Response.Header().Get("Content-Security-Policy")
+			if csp != "" {
 				frameSrc := strings.TrimSpace(os.Getenv("NUVIO_CMS_PREVIEW_FRAME_SRC"))
-				if frameSrc == "" {
+				if frameSrc == "" && e.App.IsDev() {
 					frameSrc = "http://localhost:5173 http://127.0.0.1:5173"
 				}
 
-				csp := e.Response.Header().Get("Content-Security-Policy")
-				if csp != "" {
-					if strings.Contains(csp, "frame-src") {
+				// Allow CMS preview iframe targets explicitly (dev defaults or configured origins).
+				if frameSrc != "" {
+					if hasCspDirective(csp, "frame-src") {
 						csp = replaceCspDirective(csp, "frame-src", "frame-src 'self' "+frameSrc)
 					} else {
 						csp += "; frame-src 'self' " + frameSrc
 					}
 
-					if strings.Contains(csp, "child-src") {
+					if hasCspDirective(csp, "child-src") {
 						csp = replaceCspDirective(csp, "child-src", "child-src 'self' "+frameSrc)
 					} else {
 						csp += "; child-src 'self' " + frameSrc
 					}
-
-					e.Response.Header().Set("Content-Security-Policy", csp)
 				}
+
+				// Backoffice dashboard itself should not be framed cross-origin.
+				if hasCspDirective(csp, "frame-ancestors") {
+					csp = replaceCspDirective(csp, "frame-ancestors", "frame-ancestors 'self'")
+				} else {
+					csp += "; frame-ancestors 'self'"
+				}
+
+				e.Response.Header().Set("Content-Security-Policy", csp)
 			}
 
 			return e.Next()
@@ -338,6 +355,85 @@ func replaceCspDirective(csp string, directive string, replacement string) strin
 		}
 	}
 	return strings.Join(parts, ";")
+}
+
+func hasCspDirective(csp string, directive string) bool {
+	normalizedCsp := strings.ToLower(csp)
+	normalizedDirective := strings.ToLower(strings.TrimSpace(directive))
+	if normalizedDirective == "" {
+		return false
+	}
+
+	return strings.Contains(normalizedCsp, normalizedDirective)
+}
+
+func hasExplicitCORSOrigins(explicitOrigins []string, envOrigins string) bool {
+	return len(normalizeCORSOrigins(explicitOrigins)) > 0 || len(parseCORSOriginsEnv(envOrigins)) > 0
+}
+
+func resolveCORSAllowedOrigins(explicitOrigins []string, envOrigins string, isDev bool) []string {
+	normalizedExplicit := normalizeCORSOrigins(explicitOrigins)
+	if len(normalizedExplicit) > 0 {
+		return normalizedExplicit
+	}
+
+	normalizedEnv := parseCORSOriginsEnv(envOrigins)
+	if len(normalizedEnv) > 0 {
+		return normalizedEnv
+	}
+
+	// Safe fallback (dev-friendly and production-safe by denying foreign origins unless configured).
+	if isDev {
+		return []string{
+			"http://localhost:*",
+			"http://127.0.0.1:*",
+			"https://localhost:*",
+			"https://127.0.0.1:*",
+		}
+	}
+
+	return []string{
+		"http://localhost:*",
+		"http://127.0.0.1:*",
+	}
+}
+
+func parseCORSOriginsEnv(value string) []string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return nil
+	}
+
+	candidates := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+	})
+
+	return normalizeCORSOrigins(candidates)
+}
+
+func normalizeCORSOrigins(origins []string) []string {
+	if len(origins) == 0 {
+		return nil
+	}
+
+	unique := make(map[string]struct{}, len(origins))
+	normalized := make([]string, 0, len(origins))
+
+	for _, origin := range origins {
+		candidate := strings.TrimSpace(origin)
+		if candidate == "" {
+			continue
+		}
+
+		if _, exists := unique[candidate]; exists {
+			continue
+		}
+
+		unique[candidate] = struct{}{}
+		normalized = append(normalized, candidate)
+	}
+
+	return normalized
 }
 
 // serverAddrToHost loosely converts http.Server.Addr string into a host to print.

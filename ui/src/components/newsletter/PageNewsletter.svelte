@@ -980,7 +980,7 @@
         }
 
         const fallbackBase = `${window.location.origin || ""}/`;
-        const configuredBackendUrl = `${import.meta.env.PB_BACKEND_URL || ""}`.trim();
+        const configuredBackendUrl = `${import.meta.env.VITE_PB_BACKEND_URL || ""}`.trim();
 
         if (!configuredBackendUrl) {
             return fallbackBase;

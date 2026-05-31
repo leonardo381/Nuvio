@@ -1031,8 +1031,6 @@ func sendNuvioNewsletterCampaign(
 				"NUVIO newsletter campaign recipient missing subscriber record",
 				"campaignId",
 				campaignID,
-				"recipientEmail",
-				recipient.Email,
 			)
 			continue
 		}
@@ -2104,8 +2102,6 @@ func restoreNuvioCampaignChunkUnsubscribeHashesByIndexes(
 				campaignID,
 				"subscriberId",
 				prepared.SubscriberID,
-				"recipientEmail",
-				prepared.Email,
 				"error",
 				err.Error(),
 			)

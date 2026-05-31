@@ -800,7 +800,7 @@ class AppAuthStore extends LocalAuthStore {
     }
 }
 
-const pb = new PocketBase(import.meta.env.PB_BACKEND_URL, new AppAuthStore());
+const pb = new PocketBase(import.meta.env.VITE_PB_BACKEND_URL, new AppAuthStore());
 
 pb._authReadyPromise = Promise.resolve();
 

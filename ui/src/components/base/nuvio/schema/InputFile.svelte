@@ -13,11 +13,13 @@
   const dispatch = createEventDispatcher();
 
   const ASSET_COLLECTION = "Assets";
+  const DEFERRED_HINT = "File uploads are managed by an administrator for now.";
 
   $: id = `schema-${(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-  $: assetActionsDeferred = !!field?.nuvioDisableAssetActions;
+  $: assetActionsDeferred = !!field?.nuvioDisableAssetActions || ApiClient.isClientSuperuser();
   $: fieldDisabled = disabled || !!field?.disabled || !!field?.readonly;
   $: assetActionsDisabled = fieldDisabled || assetActionsDeferred;
+  $: resolvedHint = assetActionsDeferred ? DEFERRED_HINT : (field?.hint || "");
 
   let isUploading = false;
   let localError = "";
@@ -27,6 +29,15 @@
   let assetSearch = "";
   let assets = [];
   let pickerError = "";
+
+  $: if (assetActionsDeferred && showPicker) {
+    closePicker();
+  }
+
+  $: if (assetActionsDeferred) {
+    localError = "";
+    pickerError = "";
+  }
 
   async function sha256(file) {
     const buffer = await file.arrayBuffer();
@@ -121,6 +132,11 @@
   }
 
   async function loadAssets() {
+    if (assetActionsDisabled) {
+      closePicker();
+      return;
+    }
+
     isLoadingAssets = true;
     pickerError = "";
 
@@ -143,6 +159,10 @@
   }
 
   function chooseExisting(asset) {
+    if (assetActionsDisabled) {
+      return;
+    }
+
     const selectedVal = {
       collection: ASSET_COLLECTION,
       recordId: asset.id,
@@ -161,6 +181,10 @@
   }
 
   async function handleSearchInput() {
+    if (assetActionsDisabled) {
+      return;
+    }
+
     await loadAssets();
   }
 
@@ -169,7 +193,7 @@
   }
 </script>
 
-<FieldShell {field} {id} error={error || localError} required={!!field?.required} hint={field?.hint || ""}>
+<FieldShell {field} {id} error={error || localError} required={!!field?.required} hint={resolvedHint}>
   {#if value}
     <div class="file-current">
       <div class="file-current-main">
@@ -177,14 +201,16 @@
         <span class="file-current-name" title={value?.filename ?? value}>{value?.filename ?? value}</span>
       </div>
 
-      <button
-        type="button"
-        class="btn btn-sm btn-outline file-remove-btn"
-        on:click={clearFile}
-        disabled={assetActionsDisabled || isUploading}
-      >
-        Remove
-      </button>
+      {#if !assetActionsDeferred}
+        <button
+          type="button"
+          class="btn btn-sm btn-outline file-remove-btn"
+          on:click={clearFile}
+          disabled={assetActionsDisabled || isUploading}
+        >
+          Remove
+        </button>
+      {/if}
     </div>
   {/if}
 

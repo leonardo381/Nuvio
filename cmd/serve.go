@@ -55,8 +55,8 @@ func NewServeCommand(app core.App, showStartBanner bool) *cobra.Command {
 	command.PersistentFlags().StringSliceVar(
 		&allowedOrigins,
 		"origins",
-		[]string{"*"},
-		"CORS allowed domain origins list",
+		[]string{},
+		"CORS allowed domain origins list (comma-separated / repeated). If not set, falls back to NUVIO_CORS_ALLOWED_ORIGINS or localhost-only defaults.",
 	)
 
 	command.PersistentFlags().StringVar(

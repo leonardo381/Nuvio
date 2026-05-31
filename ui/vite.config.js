@@ -6,7 +6,7 @@ export default defineConfig({
     server: {
         port: 3000,
     },
-    envPrefix: ['PB', 'VITE'],
+    envPrefix: ['VITE_'],
     base: './',
     build: {
         chunkSizeWarningLimit: 1000,
