@@ -5,20 +5,25 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/filesystem"
 )
 
 const (
 	nuvioComponentsCollectionID                     = "pbc_184785686"
+	nuvioAssetsCollectionID                         = "pbc_1321337024"
 	nuvioCMSDashboardMaxScanRecords                 = 5000
+	nuvioCMSBackofficeAssetMaxFileSizeBytes         = 8 * 1024 * 1024
 	nuvioCMSBackofficeURLMaxLen                     = 2048
 	nuvioCMSBackofficeBlockStringMaxLen             = 10000
 	nuvioCMSBackofficeSettingsMessageMaxLen         = 4000
@@ -45,6 +50,17 @@ var (
 		"components",
 		"Templates",
 		"templates",
+	}
+	nuvioCMSDashboardAssetsCollectionAliases = []string{
+		nuvioAssetsCollectionID,
+		"Assets",
+		"assets",
+	}
+	nuvioCMSBackofficeAssetAllowedMimeTypes = []string{
+		"image/jpeg",
+		"image/png",
+		"image/webp",
+		"image/gif",
 	}
 	nuvioCMSDashboardWebsiteFeatureFlagKeys = []string{
 		"whatsapp",
@@ -293,9 +309,172 @@ type nuvioCMSDashboardResponse struct {
 	Capabilities nuvioCMSDashboardCapabilities   `json:"capabilities"`
 }
 
+type nuvioCMSBackofficeAssetFileRefDTO struct {
+	RecordID   string `json:"recordId"`
+	Filename   string `json:"filename"`
+	Collection string `json:"collection"`
+}
+
+type nuvioCMSBackofficeAssetDTO struct {
+	ID           string                             `json:"id"`
+	Website      string                             `json:"website,omitempty"`
+	Filename     string                             `json:"filename,omitempty"`
+	OriginalName string                             `json:"originalName,omitempty"`
+	MimeType     string                             `json:"mimeType,omitempty"`
+	Size         int64                              `json:"size,omitempty"`
+	Created      string                             `json:"created,omitempty"`
+	Updated      string                             `json:"updated,omitempty"`
+	Collection   string                             `json:"collection,omitempty"`
+	File         *nuvioCMSBackofficeAssetFileRefDTO `json:"file,omitempty"`
+}
+
 // NUVIO CUSTOM START: Scoped CMS backoffice dashboard endpoint (A3.5.8B).
 func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 	cmsGroup := e.Router.Group("/api/nuvio/cms").Bind(apis.RequireSuperuserAuth())
+
+	cmsGroup.GET("/assets", func(e *core.RequestEvent) error {
+		websiteID, err := resolveNuvioCMSBackofficeWebsiteIDFromRawInput(e, e.Request.URL.Query().Get("websiteId"))
+		if err != nil {
+			return err
+		}
+
+		assetsCollection, err := findNuvioCMSDashboardCollectionByAliases(e.App, nuvioCMSDashboardAssetsCollectionAliases)
+		if err != nil {
+			e.App.Logger().Error(
+				"NUVIO cms assets collection resolve failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Failed to load CMS assets.", nil)
+		}
+
+		records, err := findNuvioCMSDashboardRecordsByFilter(
+			e.App,
+			assetsCollection,
+			"",
+			nil,
+			[]string{"-created", "-updated"},
+		)
+		if err != nil {
+			e.App.Logger().Error(
+				"NUVIO cms assets list failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Failed to load CMS assets.", nil)
+		}
+
+		isAdmin := apis.IsAdminSuperuser(e.Auth)
+		items := make([]nuvioCMSBackofficeAssetDTO, 0, len(records))
+		for _, record := range records {
+			assetWebsiteID := resolveNuvioCMSBackofficeAssetWebsiteID(record, assetsCollection)
+			if assetWebsiteID != websiteID {
+				if !isAdmin || assetWebsiteID != "" {
+					continue
+				}
+			}
+
+			items = append(items, buildNuvioCMSBackofficeAssetDTO(record, assetsCollection))
+		}
+
+		return e.JSON(http.StatusOK, map[string]any{
+			"state":  "ok",
+			"assets": items,
+		})
+	})
+
+	cmsGroup.POST("/assets", func(e *core.RequestEvent) error {
+		websiteID, err := resolveNuvioCMSBackofficeWebsiteIDFromRawInput(e, e.Request.FormValue("websiteId"))
+		if err != nil {
+			return err
+		}
+
+		if parseErr := e.Request.ParseMultipartForm(nuvioCMSBackofficeAssetMaxFileSizeBytes + 1024*1024); parseErr != nil {
+			return e.BadRequestError("Invalid upload payload.", nil)
+		}
+		if err := validateNuvioCMSBackofficeAssetMultipartFields(e.Request.MultipartForm); err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		uploadedFiles, fileErr := e.FindUploadedFiles("file")
+		if fileErr != nil && !errors.Is(fileErr, http.ErrMissingFile) {
+			e.App.Logger().Error(
+				"NUVIO cms asset upload parse failed",
+				"websiteId",
+				websiteID,
+				"error",
+				fileErr.Error(),
+			)
+			return e.BadRequestError("Invalid upload payload.", nil)
+		}
+		if len(uploadedFiles) == 0 || uploadedFiles[0] == nil {
+			return e.BadRequestError("Missing file.", nil)
+		}
+		if len(uploadedFiles) > 1 {
+			return e.BadRequestError("Only one file is allowed per upload.", nil)
+		}
+
+		uploadedFile := uploadedFiles[0]
+		detectedMIME, err := validateNuvioCMSBackofficeAssetUpload(uploadedFile)
+		if err != nil {
+			return e.BadRequestError(err.Error(), nil)
+		}
+
+		assetsCollection, err := findNuvioCMSDashboardCollectionByAliases(e.App, nuvioCMSDashboardAssetsCollectionAliases)
+		if err != nil {
+			e.App.Logger().Error(
+				"NUVIO cms assets collection resolve failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.InternalServerError("Failed to upload CMS asset.", nil)
+		}
+
+		fileFieldName := resolveNuvioCollectionFieldNameByAliases(assetsCollection, []string{"file"})
+		if fileFieldName == "" {
+			e.App.Logger().Error(
+				"NUVIO cms assets file field missing",
+				"websiteId",
+				websiteID,
+				"collection",
+				strings.TrimSpace(assetsCollection.Name),
+			)
+			return e.InternalServerError("Failed to upload CMS asset.", nil)
+		}
+
+		assetRecord := core.NewRecord(assetsCollection)
+		assetRecord.Set(fileFieldName, uploadedFile)
+		setNuvioCMSBackofficeAssetWebsite(assetRecord, assetsCollection, websiteID)
+		setNuvioCMSBackofficeAssetMetadata(assetRecord, assetsCollection, uploadedFile, detectedMIME)
+
+		if saveErr := e.App.Save(assetRecord); saveErr != nil {
+			e.App.Logger().Error(
+				"NUVIO cms asset upload failed",
+				"websiteId",
+				websiteID,
+				"error",
+				saveErr.Error(),
+			)
+
+			loweredSaveErr := strings.ToLower(saveErr.Error())
+			if strings.Contains(loweredSaveErr, "validation") || strings.Contains(loweredSaveErr, "failed to upload") {
+				return e.BadRequestError("Invalid upload payload.", nil)
+			}
+
+			return e.InternalServerError("Failed to upload CMS asset.", nil)
+		}
+
+		return e.JSON(http.StatusOK, map[string]any{
+			"state": "ok",
+			"asset": buildNuvioCMSBackofficeAssetDTO(assetRecord, assetsCollection),
+		})
+	})
 
 	cmsGroup.GET("/dashboard", func(e *core.RequestEvent) error {
 		websiteID := strings.TrimSpace(e.Request.URL.Query().Get("websiteId"))
@@ -615,6 +794,27 @@ func resolveNuvioCMSBackofficeWebsiteWriteTarget(e *core.RequestEvent) (*core.Re
 	}
 
 	return websiteRecord, nil
+}
+
+func resolveNuvioCMSBackofficeWebsiteIDFromRawInput(e *core.RequestEvent, rawWebsiteID string) (string, error) {
+	websiteID := strings.TrimSpace(rawWebsiteID)
+	if websiteID == "" {
+		return "", e.BadRequestError("Missing websiteId.", nil)
+	}
+
+	if err := apis.RequireWebsiteAccessById(e.App, e.Auth, websiteID); err != nil {
+		return "", err
+	}
+
+	if _, err := e.App.FindRecordById(nuvioWebsitesCollectionID, websiteID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", e.NotFoundError("Website not found.", nil)
+		}
+
+		return "", e.InternalServerError("Failed to load website.", nil)
+	}
+
+	return websiteID, nil
 }
 
 func resolveNuvioCMSBackofficePageWriteTarget(e *core.RequestEvent) (*core.Collection, *core.Record, error) {
@@ -3643,6 +3843,160 @@ func toNuvioCMSDashboardSingleFileName(value any) string {
 	}
 
 	return strings.TrimSpace(parseStringValue(value))
+}
+
+func validateNuvioCMSBackofficeAssetUpload(uploadedFile *filesystem.File) (string, error) {
+	if uploadedFile == nil {
+		return "", fmt.Errorf("Missing file.")
+	}
+	if uploadedFile.Size <= 0 {
+		return "", fmt.Errorf("File is empty.")
+	}
+	if uploadedFile.Size > nuvioCMSBackofficeAssetMaxFileSizeBytes {
+		return "", fmt.Errorf("File exceeds the maximum allowed size of 8MB.")
+	}
+
+	reader, err := uploadedFile.Reader.Open()
+	if err != nil {
+		return "", fmt.Errorf("Failed to read uploaded file.")
+	}
+	defer reader.Close()
+
+	detectedMimeType, err := mimetype.DetectReader(reader)
+	if err != nil || detectedMimeType == nil {
+		return "", fmt.Errorf("Failed to detect uploaded file type.")
+	}
+
+	for _, allowedMimeType := range nuvioCMSBackofficeAssetAllowedMimeTypes {
+		if detectedMimeType.Is(allowedMimeType) {
+			return allowedMimeType, nil
+		}
+	}
+
+	return "", fmt.Errorf("Unsupported file type. Allowed types: image/jpeg, image/png, image/webp, image/gif.")
+}
+
+func validateNuvioCMSBackofficeAssetMultipartFields(form *multipart.Form) error {
+	if form == nil {
+		return nil
+	}
+
+	for key := range form.Value {
+		if strings.TrimSpace(key) == "websiteId" {
+			continue
+		}
+		return fmt.Errorf("Unsupported field %q in upload payload.", key)
+	}
+
+	for key := range form.File {
+		if strings.TrimSpace(key) == "file" {
+			continue
+		}
+		return fmt.Errorf("Unsupported field %q in upload payload.", key)
+	}
+
+	return nil
+}
+
+func resolveNuvioCMSBackofficeAssetWebsiteID(record *core.Record, collection *core.Collection) string {
+	websiteID := strings.TrimSpace(resolveNuvioPublicRelationID(record, "website", "site"))
+	if websiteID != "" {
+		return websiteID
+	}
+
+	if collection == nil {
+		return ""
+	}
+
+	fieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"website", "site"})
+	if fieldName == "" {
+		return ""
+	}
+
+	return strings.TrimSpace(parseStringValue(record.Get(fieldName)))
+}
+
+func setNuvioCMSBackofficeAssetWebsite(record *core.Record, collection *core.Collection, websiteID string) {
+	if record == nil || collection == nil {
+		return
+	}
+
+	fieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"website", "site"})
+	if fieldName == "" {
+		return
+	}
+
+	field := collection.Fields.GetByName(fieldName)
+	if field != nil && field.Type() == core.FieldTypeRelation {
+		record.Set(fieldName, []string{websiteID})
+		return
+	}
+
+	record.Set(fieldName, websiteID)
+}
+
+func setNuvioCMSBackofficeAssetMetadata(
+	record *core.Record,
+	collection *core.Collection,
+	uploadedFile *filesystem.File,
+	detectedMIME string,
+) {
+	if record == nil || collection == nil || uploadedFile == nil {
+		return
+	}
+
+	if fieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"originalName"}); fieldName != "" {
+		record.Set(fieldName, strings.TrimSpace(uploadedFile.OriginalName))
+	}
+	if fieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"mimeType", "mime_type"}); fieldName != "" {
+		record.Set(fieldName, strings.TrimSpace(detectedMIME))
+	}
+	if fieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"size"}); fieldName != "" {
+		record.Set(fieldName, uploadedFile.Size)
+	}
+}
+
+func buildNuvioCMSBackofficeAssetDTO(
+	record *core.Record,
+	assetsCollection *core.Collection,
+) nuvioCMSBackofficeAssetDTO {
+	dto := nuvioCMSBackofficeAssetDTO{}
+	if record == nil {
+		return dto
+	}
+
+	dto.ID = strings.TrimSpace(record.Id)
+	dto.Website = resolveNuvioCMSBackofficeAssetWebsiteID(record, assetsCollection)
+	dto.OriginalName = parseNuvioCMSDashboardStringByAliases(record, []string{"originalName"})
+	dto.MimeType = parseNuvioCMSDashboardStringByAliases(record, []string{"mimeType", "mime_type"})
+	dto.Size = int64(parseNuvioCMSDashboardIntByAliases(record, []string{"size"}, 0))
+	dto.Created = strings.TrimSpace(record.GetDateTime("created").String())
+	dto.Updated = strings.TrimSpace(record.GetDateTime("updated").String())
+
+	collectionName := ""
+	if assetsCollection != nil {
+		collectionName = strings.TrimSpace(assetsCollection.Name)
+	} else if collection := record.Collection(); collection != nil {
+		collectionName = strings.TrimSpace(collection.Name)
+	}
+	dto.Collection = collectionName
+
+	fileFieldName := "file"
+	if assetsCollection != nil {
+		if resolvedFileFieldName := resolveNuvioCollectionFieldNameByAliases(assetsCollection, []string{"file"}); resolvedFileFieldName != "" {
+			fileFieldName = resolvedFileFieldName
+		}
+	}
+	dto.Filename = toNuvioCMSDashboardSingleFileName(record.Get(fileFieldName))
+	if dto.Filename != "" {
+		dto.File = &nuvioCMSBackofficeAssetFileRefDTO{
+			RecordID:   dto.ID,
+			Filename:   dto.Filename,
+			Collection: collectionName,
+		}
+	}
+
+	return dto
 }
 
 // NUVIO CUSTOM END: Scoped CMS backoffice dashboard endpoint (A3.5.8B).
