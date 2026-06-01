@@ -3705,6 +3705,63 @@
         cmsDashboardCapabilities = toCMSDashboardCapabilities(null);
     }
 
+    function syncWebsiteIdentitySeoTopLevelFields(websiteRecord, identitySeoValue) {
+        if (!isPlainObject(websiteRecord) || !isPlainObject(identitySeoValue)) {
+            return websiteRecord;
+        }
+
+        const nextWebsite = { ...websiteRecord };
+
+        const syncIdentityField = (fieldName, identityKeys = [], { file = false } = {}) => {
+            const normalizedFieldName = normalizeString(fieldName);
+            if (!normalizedFieldName || !identityKeys.length) {
+                return;
+            }
+
+            for (const identityKey of identityKeys) {
+                if (!hasOwnObjectKey(identitySeoValue, identityKey)) {
+                    continue;
+                }
+
+                const rawValue = identitySeoValue[identityKey];
+                if (file) {
+                    nextWebsite[normalizedFieldName] = toSingleFileName(rawValue);
+                    return;
+                }
+
+                nextWebsite[normalizedFieldName] =
+                    rawValue === null || typeof rawValue === "undefined"
+                        ? ""
+                        : `${rawValue}`;
+                return;
+            }
+        };
+
+        syncIdentityField(websiteLogoField, ["logo"], { file: true });
+        syncIdentityField(websiteSeoTitleField, ["seoTitle", "seo_title"]);
+        syncIdentityField(websiteSeoDescriptionField, ["seoDescription", "seo_description"]);
+        syncIdentityField(websiteSeoImageField, ["seoImage", "seo_image"], { file: true });
+        syncIdentityField(websiteSeoTitleTemplateField, ["seo_title_template", "seoTitleTemplate"]);
+        syncIdentityField(websiteSeoTitleSeparatorField, ["seo_title_separator", "seoTitleSeparator"]);
+        syncIdentityField(websiteSeoCanonicalDomainField, ["seo_canonical_domain", "seoCanonicalDomain"]);
+        syncIdentityField(websiteBusinessNameField, ["business_name", "businessName"]);
+        syncIdentityField(websiteBusinessTypeField, ["business_type", "businessType"]);
+        syncIdentityField(websiteBusinessPrimaryCategoryField, ["business_primary_category", "businessPrimaryCategory"]);
+        syncIdentityField(websiteBusinessPhoneField, ["business_phone", "businessPhone"]);
+        syncIdentityField(websiteBusinessEmailField, ["business_email", "businessEmail"]);
+        syncIdentityField(websiteBusinessAddressField, ["business_address", "businessAddress"]);
+        syncIdentityField(websiteBusinessCityField, ["business_city", "businessCity"]);
+        syncIdentityField(websiteBusinessPostalCodeField, ["business_postal_code", "businessPostalCode"]);
+        syncIdentityField(websiteBusinessCountryField, ["business_country", "businessCountry"]);
+        syncIdentityField(websiteBusinessServiceAreaField, ["business_service_area", "businessServiceArea"]);
+        syncIdentityField(websiteBusinessOpeningHoursField, ["business_opening_hours", "businessOpeningHours"]);
+        syncIdentityField(websiteBusinessGooglePlaceIdField, ["business_google_place_id", "businessGooglePlaceId"]);
+        syncIdentityField(websiteBusinessSocialProfilesField, ["business_social_profiles", "businessSocialProfiles"]);
+        syncIdentityField(websiteBusinessPriceRangeField, ["business_price_range", "businessPriceRange"]);
+
+        return nextWebsite;
+    }
+
     // Save flows should patch local state + refresh preview, not force a full dashboard reload.
     function mergeWebsiteFromCMSResponse(rawWebsite) {
         if (!isPlainObject(rawWebsite)) {
@@ -3733,12 +3790,13 @@
                 : currentIdentitySeo;
 
             foundWebsite = true;
-            mergedWebsite = {
+            const nextWebsite = {
                 ...record,
                 ...rawWebsite,
                 settings: nextSettings,
                 identitySeo: nextIdentitySeo,
             };
+            mergedWebsite = syncWebsiteIdentitySeoTopLevelFields(nextWebsite, nextIdentitySeo);
             return mergedWebsite;
         });
 
@@ -5546,6 +5604,17 @@
                                                             <p class="txt-sm txt-hint m-b-0 m-t-sm">Global SEO image field is not available for this website.</p>
                                                         {/if}
                                                     </div>
+
+                                                    <div class="form-actions seo-main-actions m-t-sm">
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm"
+                                                            disabled={isSavingWebsiteIdentitySeo}
+                                                            on:click={saveWebsiteIdentitySeo}
+                                                        >
+                                                            {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 <aside class="seo-editor-side">
@@ -5804,6 +5873,17 @@
                                                             </div>
                                                         </div>
                                                     </div>
+
+                                                    <div class="form-actions seo-main-actions m-t-sm">
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm"
+                                                            disabled={isSavingWebsiteIdentitySeo}
+                                                            on:click={saveWebsiteIdentitySeo}
+                                                        >
+                                                            {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
+                                                        </button>
+                                                    </div>
                                                 </div>
 
                                                 <aside class="seo-editor-side">
@@ -5930,6 +6010,17 @@
                                                                 {/if}
                                                             </div>
                                                         </div>
+
+                                                        <div class="form-actions seo-main-actions m-t-sm">
+                                                            <button
+                                                                type="button"
+                                                                class="btn btn-sm"
+                                                                disabled={isSavingWebsiteIdentitySeo}
+                                                                on:click={saveWebsiteIdentitySeo}
+                                                            >
+                                                                {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
+                                                            </button>
+                                                        </div>
                                                     </div>
 
                                                     <aside class="seo-editor-side">
@@ -5981,17 +6072,6 @@
                                                 <p class="txt-sm txt-hint m-t-8 m-b-0">Advanced SEO fields are not available for this website collection.</p>
                                             {/if}
                                         {/if}
-
-                                        <div class="settings-section-actions m-t-sm">
-                                            <button
-                                                type="button"
-                                                class="btn btn-sm"
-                                                disabled={isSavingWebsiteIdentitySeo}
-                                                on:click={saveWebsiteIdentitySeo}
-                                            >
-                                                {isSavingWebsiteIdentitySeo ? "Saving..." : "Save identity & SEO"}
-                                            </button>
-                                        </div>
 
                                         {#if websiteIdentitySeoError}
                                             <p class="txt-danger m-t-8 m-b-0">{websiteIdentitySeoError}</p>
