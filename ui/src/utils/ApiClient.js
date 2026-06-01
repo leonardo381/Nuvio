@@ -613,6 +613,67 @@ PocketBase.prototype.getCMSDashboard = async function (params = {}) {
 };
 
 /**
+ * Loads scoped CMS assets for a website.
+ *
+ * @param {Object} params
+ * @param {String} params.websiteId
+ * @param {String} [params.requestKey]
+ * @returns {Promise<Array>}
+ */
+PocketBase.prototype.getCMSAssets = async function (params = {}) {
+    const websiteId = `${params?.websiteId || ""}`.trim();
+    const requestKey = `${params?.requestKey || ""}`.trim() || `nuvio_cms_assets_${websiteId || "unknown"}`;
+
+    const response = await this.send("/api/nuvio/cms/assets", {
+        method: "GET",
+        query: {
+            websiteId,
+        },
+        requestKey,
+    });
+
+    if (Array.isArray(response?.assets)) {
+        return response.assets;
+    }
+    if (Array.isArray(response?.data?.assets)) {
+        return response.data.assets;
+    }
+    if (Array.isArray(response)) {
+        return response;
+    }
+
+    return [];
+};
+
+/**
+ * Uploads a scoped CMS asset for a website.
+ *
+ * @param {Object} params
+ * @param {String} params.websiteId
+ * @param {File|Blob} params.file
+ * @param {Object} [options]
+ * @returns {Promise<Object|null>}
+ */
+PocketBase.prototype.uploadCMSAsset = async function (params = {}, options = {}) {
+    const websiteId = `${params?.websiteId || ""}`.trim();
+    const file = params?.file || null;
+
+    const formData = new FormData();
+    formData.append("websiteId", websiteId);
+    if (file) {
+        formData.append("file", file);
+    }
+
+    const response = await this.send("/api/nuvio/cms/assets", {
+        method: "POST",
+        body: formData,
+        requestKey: `${options?.requestKey || ""}`.trim() || `nuvio_cms_asset_upload_${websiteId || "unknown"}`,
+    });
+
+    return response?.asset || response?.data?.asset || null;
+};
+
+/**
  * Updates website identity/global SEO fields through scoped CMS endpoint.
  *
  * @param {String} id

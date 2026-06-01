@@ -14,12 +14,20 @@
 
   const ASSET_COLLECTION = "Assets";
   const DEFERRED_HINT = "File uploads are managed by an administrator for now.";
+  const SCOPED_WEBSITE_REQUIRED_HINT = "Select a website before managing files.";
+  const SCOPED_ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+  const SCOPED_MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
+  const SCOPED_MAX_FILE_SIZE_MB = 8;
 
   $: id = `schema-${(path || field?.key || "field").replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-  $: assetActionsDeferred = !!field?.nuvioDisableAssetActions || ApiClient.isClientSuperuser();
+  $: scopedAssetMode = toBooleanFlag(field?.nuvioUseScopedAssets);
+  $: scopedAssetWebsiteId = scopedAssetMode ? `${field?.nuvioAssetWebsiteId || ""}`.trim() : "";
+  $: assetActionsDeferred = !!field?.nuvioDisableAssetActions || (!scopedAssetMode && ApiClient.isClientSuperuser());
   $: fieldDisabled = disabled || !!field?.disabled || !!field?.readonly;
   $: assetActionsDisabled = fieldDisabled || assetActionsDeferred;
-  $: resolvedHint = assetActionsDeferred ? DEFERRED_HINT : (field?.hint || "");
+  $: resolvedHint = assetActionsDeferred
+    ? (field?.hint || DEFERRED_HINT)
+    : (field?.hint || "");
 
   let isUploading = false;
   let localError = "";
@@ -34,9 +42,22 @@
     closePicker();
   }
 
+  $: if (scopedAssetMode && !scopedAssetWebsiteId && showPicker) {
+    closePicker();
+  }
+
   $: if (assetActionsDeferred) {
     localError = "";
     pickerError = "";
+  }
+
+  function toBooleanFlag(value) {
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      return normalized === "true" || normalized === "1" || normalized === "yes";
+    }
+
+    return !!value;
   }
 
   async function sha256(file) {
@@ -56,8 +77,82 @@
     }
   }
 
+  function getScopedAssetFileRef(asset) {
+    const recordId = `${asset?.id || asset?.file?.recordId || ""}`.trim();
+    const filename = `${asset?.filename || asset?.file?.filename || ""}`.trim();
+    const collection = `${asset?.collection || asset?.file?.collection || ASSET_COLLECTION}`.trim() || ASSET_COLLECTION;
+
+    if (!recordId || !filename) {
+      return null;
+    }
+
+    return {
+      recordId,
+      filename,
+      collection,
+    };
+  }
+
+  function getScopedAssetDisplayName(asset) {
+    const originalName = `${asset?.originalName || ""}`.trim();
+    if (originalName) {
+      return originalName;
+    }
+
+    return getScopedAssetFileRef(asset)?.filename || "";
+  }
+
+  function getScopedAssetSearchValue(asset) {
+    const displayName = getScopedAssetDisplayName(asset).toLowerCase();
+    const filename = (getScopedAssetFileRef(asset)?.filename || "").toLowerCase();
+    return `${displayName} ${filename}`.trim();
+  }
+
+  function filterScopedAssetsBySearch(items, searchTerm) {
+    const normalizedSearch = `${searchTerm || ""}`.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return Array.isArray(items) ? items : [];
+    }
+
+    return (Array.isArray(items) ? items : []).filter((asset) => {
+      const searchValue = getScopedAssetSearchValue(asset);
+      return searchValue.includes(normalizedSearch);
+    });
+  }
+
+  function mapScopedAssetDtoToFieldValue(asset) {
+    const fileRef = getScopedAssetFileRef(asset);
+    if (!fileRef) {
+      return null;
+    }
+
+    return {
+      collection: fileRef.collection,
+      recordId: fileRef.recordId,
+      filename: fileRef.filename,
+    };
+  }
+
+  function isScopedAssetFileAllowed(file) {
+    const mimeType = `${file?.type || ""}`.trim().toLowerCase();
+    return SCOPED_ALLOWED_MIME_TYPES.has(mimeType);
+  }
+
+  function isScopedAssetFileSizeAllowed(file) {
+    const size = Number(file?.size || 0);
+    return size > 0 && size <= SCOPED_MAX_FILE_SIZE_BYTES;
+  }
+
   async function handleFileChange(e) {
     if (assetActionsDisabled) {
+      if (e?.currentTarget) {
+        e.currentTarget.value = "";
+      }
+      return;
+    }
+
+    if (scopedAssetMode && !scopedAssetWebsiteId) {
+      localError = SCOPED_WEBSITE_REQUIRED_HINT;
       if (e?.currentTarget) {
         e.currentTarget.value = "";
       }
@@ -71,42 +166,71 @@
     localError = "";
 
     try {
-      const checksum = await sha256(file);
+      if (scopedAssetMode) {
+        if (!isScopedAssetFileAllowed(file)) {
+          localError = "Unsupported file type. Allowed types: JPG, PNG, WebP, GIF.";
+          return;
+        }
+        if (!isScopedAssetFileSizeAllowed(file)) {
+          localError = `File exceeds the maximum allowed size of ${SCOPED_MAX_FILE_SIZE_MB}MB.`;
+          return;
+        }
 
-      const existing = await findExistingAssetByChecksum(checksum);
+        const asset = await ApiClient.uploadCMSAsset(
+          {
+            websiteId: scopedAssetWebsiteId,
+            file,
+          },
+          {
+            requestKey: `nuvio_cms_asset_upload_${scopedAssetWebsiteId || "unknown"}`,
+          },
+        );
 
-      if (existing) {
-        const reusedVal = {
+        const scopedValue = mapScopedAssetDtoToFieldValue(asset);
+        if (!scopedValue) {
+          throw new Error("Invalid asset response.");
+        }
+
+        value = scopedValue;
+        dispatch("change", scopedValue);
+      } else {
+        const checksum = await sha256(file);
+
+        const existing = await findExistingAssetByChecksum(checksum);
+
+        if (existing) {
+          const reusedVal = {
+            collection: ASSET_COLLECTION,
+            recordId: existing.id,
+            filename: existing.file,
+          };
+
+          value = reusedVal;
+          dispatch("change", reusedVal);
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("checksum", checksum);
+        formData.append("originalName", file.name);
+        formData.append("mimeType", file.type || "");
+        formData.append("size", String(file.size));
+
+        const rec = await ApiClient.collection(ASSET_COLLECTION).create(formData);
+
+        const newVal = {
           collection: ASSET_COLLECTION,
-          recordId: existing.id,
-          filename: existing.file,
+          recordId: rec.id,
+          filename: rec.file,
         };
 
-        value = reusedVal;
-        dispatch("change", reusedVal);
-        return;
+        value = newVal;
+        dispatch("change", newVal);
       }
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("checksum", checksum);
-      formData.append("originalName", file.name);
-      formData.append("mimeType", file.type || "");
-      formData.append("size", String(file.size));
-
-      const rec = await ApiClient.collection(ASSET_COLLECTION).create(formData);
-
-      const newVal = {
-        collection: ASSET_COLLECTION,
-        recordId: rec.id,
-        filename: rec.file,
-      };
-
-      value = newVal;
-      dispatch("change", newVal);
     } catch (err) {
       console.error("Upload failed", err);
-      localError = "Upload failed.";
+      localError = err?.response?.message || err?.data?.message || err?.message || "Upload failed.";
     } finally {
       isUploading = false;
       e.currentTarget.value = "";
@@ -127,7 +251,13 @@
       return;
     }
 
+    if (scopedAssetMode && !scopedAssetWebsiteId) {
+      localError = SCOPED_WEBSITE_REQUIRED_HINT;
+      return;
+    }
+
     showPicker = true;
+    localError = "";
     await loadAssets();
   }
 
@@ -137,21 +267,40 @@
       return;
     }
 
+    if (scopedAssetMode && !scopedAssetWebsiteId) {
+      closePicker();
+      localError = SCOPED_WEBSITE_REQUIRED_HINT;
+      return;
+    }
+
     isLoadingAssets = true;
     pickerError = "";
 
     try {
-      const filter = assetSearch?.trim()
-        ? `originalName ~ "${assetSearch.replace(/"/g, '\\"')}" || file ~ "${assetSearch.replace(/"/g, '\\"')}"`
-        : "";
+      if (scopedAssetMode) {
+        const scopedAssets = await ApiClient.getCMSAssets({
+          websiteId: scopedAssetWebsiteId,
+          requestKey: `nuvio_cms_assets_picker_${scopedAssetWebsiteId || "unknown"}`,
+        });
+        assets = filterScopedAssetsBySearch(scopedAssets, assetSearch);
+      } else {
+        const filter = assetSearch?.trim()
+          ? `originalName ~ "${assetSearch.replace(/"/g, '\\"')}" || file ~ "${assetSearch.replace(/"/g, '\\"')}"`
+          : "";
 
-      assets = await ApiClient.collection(ASSET_COLLECTION).getFullList({
-        sort: "-created",
-        filter
-      });
+        assets = await ApiClient.collection(ASSET_COLLECTION).getFullList({
+          sort: "-created",
+          filter
+        });
+      }
     } catch (err) {
       console.error("Failed to load assets", err);
-      pickerError = "Failed to load existing assets.";
+      const statusCode = Number(err?.status || err?.response?.status || 0);
+      if (scopedAssetMode && statusCode === 403) {
+        pickerError = "You do not have access to assets for this website.";
+      } else {
+        pickerError = err?.response?.message || err?.data?.message || err?.message || "Failed to load existing assets.";
+      }
       assets = [];
     } finally {
       isLoadingAssets = false;
@@ -163,11 +312,18 @@
       return;
     }
 
-    const selectedVal = {
-      collection: ASSET_COLLECTION,
-      recordId: asset.id,
-      filename: asset.file,
-    };
+    const selectedVal = scopedAssetMode
+      ? mapScopedAssetDtoToFieldValue(asset)
+      : {
+          collection: ASSET_COLLECTION,
+          recordId: asset.id,
+          filename: asset.file,
+        };
+
+    if (!selectedVal) {
+      pickerError = "Selected asset is missing a valid file reference.";
+      return;
+    }
 
     value = selectedVal;
     dispatch("change", selectedVal);
@@ -189,7 +345,32 @@
   }
 
   function assetUrl(asset) {
-    return ApiClient.files.getURL?.(asset, asset.file) ?? "";
+    const scopedFileRef = getScopedAssetFileRef(asset);
+    const filename = scopedFileRef?.filename || `${asset?.file || ""}`.trim();
+    const recordId = scopedFileRef?.recordId || `${asset?.id || ""}`.trim();
+    const collectionName = scopedFileRef?.collection || `${asset?.collection || ASSET_COLLECTION}`.trim() || ASSET_COLLECTION;
+
+    if (!filename || !recordId || !collectionName) {
+      return "";
+    }
+
+    const pbFileURL = ApiClient.files.getURL?.(
+      {
+        id: recordId,
+        collectionName,
+      },
+      filename,
+    );
+    if (pbFileURL) {
+      return pbFileURL;
+    }
+
+    const backendURL = `${import.meta.env.VITE_PB_BACKEND_URL || ""}`.trim().replace(/\/+$/, "");
+    if (!backendURL) {
+      return "";
+    }
+
+    return `${backendURL}/api/files/${encodeURIComponent(collectionName)}/${encodeURIComponent(recordId)}/${encodeURIComponent(filename)}`;
   }
 </script>
 
@@ -249,13 +430,19 @@
       on:hide={closePicker}
     >
       <svelte:fragment slot="header">
-        <div class="schema-file-picker-head">
-          <h5 class="m-0">Choose existing asset</h5>
-          <span class="txt-sm txt-hint">Select a file from Assets.</span>
+        <div class="schema-file-picker-header">
+          <div class="schema-file-picker-head">
+            <h5 class="m-0">Choose existing asset</h5>
+            <span class="txt-sm txt-hint">Select a file from Assets.</span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline schema-file-picker-close-btn"
+            on:click={closePicker}
+          >
+            Close
+          </button>
         </div>
-        <button type="button" class="btn btn-sm btn-outline" on:click={closePicker}>
-          Close
-        </button>
       </svelte:fragment>
 
       <div class="schema-file-picker-toolbar">
@@ -277,25 +464,40 @@
       {:else}
         <div class="schema-file-asset-grid">
           {#each assets as asset}
+            {@const scopedFileRef = getScopedAssetFileRef(asset)}
+            {@const displayFilename = scopedFileRef?.filename || `${asset?.file || ""}`.trim()}
+            {@const displayName = getScopedAssetDisplayName(asset) || displayFilename}
             <button
               type="button"
               class="schema-file-asset-card"
               on:click={() => chooseExisting(asset)}
             >
               <div class="schema-file-asset-thumb">
-                {#if asset.file}
-                  <img src={assetUrl(asset)} alt={asset.originalName || asset.file} />
+                {#if displayFilename}
+                  <img src={assetUrl(asset)} alt={displayName || displayFilename} />
                 {/if}
               </div>
 
               <div class="schema-file-asset-meta">
-                <div class="schema-file-asset-name">{asset.originalName || asset.file}</div>
-                <div class="schema-file-asset-file">{asset.file}</div>
+                <div class="schema-file-asset-name">{displayName}</div>
+                <div class="schema-file-asset-file">{displayFilename}</div>
               </div>
             </button>
           {/each}
         </div>
       {/if}
+
+      <svelte:fragment slot="footer">
+        <div class="schema-file-picker-footer">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline"
+            on:click={closePicker}
+          >
+            Close
+          </button>
+        </div>
+      </svelte:fragment>
 
     </OverlayPanel>
   {/if}
@@ -402,6 +604,25 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .schema-file-picker-header {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .schema-file-picker-close-btn {
+    margin-left: auto;
+    flex: 0 0 auto;
+  }
+
+  .schema-file-picker-footer {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
   }
 
   .schema-file-picker-toolbar {

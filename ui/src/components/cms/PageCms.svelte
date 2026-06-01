@@ -394,7 +394,15 @@
         (feature) => feature.key === activeWebsiteSettingsFeatureKey,
     ) || null;
     $: activeWebsiteSettingsFeatureField = activeWebsiteSettingsFeature?.field || null;
-    $: activeWebsiteSettingsFeatureScopedField = sanitizeSchemaFieldForFileCapability(activeWebsiteSettingsFeatureField);
+    $: scopedAssetWebsiteId = normalizeString(selectedWebsiteId);
+    $: canUseScopedAssetActions = (
+        ApiClient.isAdminSuperuser() || ApiClient.isClientSuperuser()
+    ) && !!scopedAssetWebsiteId;
+    $: activeWebsiteSettingsFeatureScopedField = sanitizeSchemaFieldForFileCapability(
+        activeWebsiteSettingsFeatureField,
+        scopedAssetWebsiteId,
+        canUseScopedAssetActions,
+    );
     $: activeWebsiteSettingsFeatureFormFields = activeWebsiteSettingsFeatureScopedField
         ? [activeWebsiteSettingsFeatureScopedField]
         : [];
@@ -772,7 +780,11 @@
 
     $: selectedEditingSection = blocks.find((block) => `${block?.id || ""}` === `${editingSectionId || ""}`) || null;
     $: selectedEditingSectionRawFields = selectedEditingSection ? getSectionSchemaFields(selectedEditingSection) : [];
-    $: selectedEditingSectionFields = sanitizeSchemaFieldsForFileCapability(selectedEditingSectionRawFields);
+    $: selectedEditingSectionFields = sanitizeSchemaFieldsForFileCapability(
+        selectedEditingSectionRawFields,
+        scopedAssetWebsiteId,
+        canUseScopedAssetActions,
+    );
     $: selectedEditingSectionHasDeferredFileFields = !cmsFileFieldsEnabledForCurrentUser
         && selectedEditingSectionRawFields.length > selectedEditingSectionFields.length;
     $: selectedEditingSectionSchemaFieldKeys = new Set(
@@ -1459,48 +1471,74 @@
     }
 
     const cmsFileFieldDeferredHint = "File uploads are managed by an administrator for now.";
+    const cmsFileFieldWebsiteRequiredHint = "Select a website before managing files.";
 
     function isSchemaFileField(field) {
         const normalizedType = normalizeString(field?.type).toLowerCase();
         return normalizedType === "file" || normalizedType === "image";
     }
 
-    function sanitizeSchemaFieldForFileCapability(field) {
+    function sanitizeSchemaFieldForFileCapability(field, websiteId = "", allowScopedAssetActions = false) {
         if (!isPlainObject(field)) {
             return null;
         }
 
         const cloned = structuredClone(field);
+        const isFileField = isSchemaFileField(cloned);
+        const scopedWebsiteId = normalizeString(websiteId);
+        const canUseScopedActions = !!allowScopedAssetActions && !!scopedWebsiteId;
 
         if (Array.isArray(cloned.fields)) {
-            cloned.fields = sanitizeSchemaFieldsForFileCapability(cloned.fields);
+            cloned.fields = sanitizeSchemaFieldsForFileCapability(
+                cloned.fields,
+                scopedWebsiteId,
+                canUseScopedActions,
+            );
         }
         if (isPlainObject(cloned.item) && Array.isArray(cloned.item.fields)) {
             cloned.item = {
                 ...cloned.item,
-                fields: sanitizeSchemaFieldsForFileCapability(cloned.item.fields),
+                fields: sanitizeSchemaFieldsForFileCapability(
+                    cloned.item.fields,
+                    scopedWebsiteId,
+                    canUseScopedActions,
+                ),
             };
         }
         if (isPlainObject(cloned.items) && Array.isArray(cloned.items.fields)) {
             cloned.items = {
                 ...cloned.items,
-                fields: sanitizeSchemaFieldsForFileCapability(cloned.items.fields),
+                fields: sanitizeSchemaFieldsForFileCapability(
+                    cloned.items.fields,
+                    scopedWebsiteId,
+                    canUseScopedActions,
+                ),
             };
         }
 
-        if (!cmsFileFieldsEnabledForCurrentUser && isSchemaFileField(cloned)) {
+        if (isFileField) {
+            cloned.nuvioUseScopedAssets = true;
+            cloned.nuvioAssetWebsiteId = scopedWebsiteId;
+            cloned.nuvioCanUseFileFields = canUseScopedActions;
+        }
+
+        if (isFileField && !canUseScopedActions) {
             cloned.disabled = true;
             cloned.readonly = true;
             cloned.nuvioDisableAssetActions = true;
-            cloned.hint = cloned.hint || cmsFileFieldDeferredHint;
+            cloned.hint = cloned.hint || (
+                scopedWebsiteId
+                    ? cmsFileFieldDeferredHint
+                    : cmsFileFieldWebsiteRequiredHint
+            );
         }
 
         return cloned;
     }
 
-    function sanitizeSchemaFieldsForFileCapability(fields = []) {
+    function sanitizeSchemaFieldsForFileCapability(fields = [], websiteId = "", allowScopedAssetActions = false) {
         return (Array.isArray(fields) ? fields : [])
-            .map((field) => sanitizeSchemaFieldForFileCapability(field))
+            .map((field) => sanitizeSchemaFieldForFileCapability(field, websiteId, allowScopedAssetActions))
             .filter(Boolean);
     }
 
@@ -6126,7 +6164,11 @@
                                                                 </div>
 
                                                                 {#if leadChannel.field}
-                                                                    {@const leadChannelFormFields = sanitizeSchemaFieldsForFileCapability([leadChannel.field])}
+                                                                    {@const leadChannelFormFields = sanitizeSchemaFieldsForFileCapability(
+                                                                        [leadChannel.field],
+                                                                        scopedAssetWebsiteId,
+                                                                        canUseScopedAssetActions,
+                                                                    )}
                                                                     {#if leadChannelFormFields.length}
                                                                         <SchemaForm
                                                                             fields={leadChannelFormFields}
