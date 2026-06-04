@@ -672,22 +672,27 @@
 
     $: normalizedSubscribers = normalizeSubscribers(subscribersRecords);
     $: normalizedCampaigns = normalizeCampaigns(campaignsRecords);
+    $: periodSubscribers = normalizedSubscribers.filter((subscriber) => isTimestampInPeriod(subscriber.createdTs, selectedPeriod));
+    $: subscriberGrowthRows = buildSubscriberGrowthRows(periodSubscribers, selectedPeriod);
+    $: subscriberGrowthHasData = hasPositiveTrafficRows(subscriberGrowthRows);
+    $: campaignActivityRows = buildCampaignActivityRows(normalizedCampaigns, selectedPeriod);
+    $: campaignActivityHasData = hasPositiveTrafficRows(campaignActivityRows);
 
     $: newsletterSummary = {
         activeSubscribers: normalizedSubscribers.filter((subscriber) => subscriber.statusKey === "active").length,
-        newSubscribersPeriod: normalizedSubscribers.filter((subscriber) => isTimestampInPeriod(subscriber.createdTs, selectedPeriod)).length,
+        newSubscribersPeriod: periodSubscribers.length,
         sentCampaignsPeriod: normalizedCampaigns.filter((campaign) => {
-            if (campaign.statusKey !== "sent") {
+            if (!isSubmittedCampaignStatus(campaign.statusKey)) {
                 return false;
             }
-            return isTimestampInPeriod(campaign.sentTs || campaign.updatedTs || campaign.createdTs, selectedPeriod);
+            return isTimestampInPeriod(resolveCampaignActivityTimestamp(campaign), selectedPeriod);
         }).length,
         recipientsReachedPeriod: normalizedCampaigns
             .filter((campaign) => {
-                if (campaign.statusKey !== "sent") {
+                if (!isSubmittedCampaignStatus(campaign.statusKey)) {
                     return false;
                 }
-                return isTimestampInPeriod(campaign.sentTs || campaign.updatedTs || campaign.createdTs, selectedPeriod);
+                return isTimestampInPeriod(resolveCampaignActivityTimestamp(campaign), selectedPeriod);
             })
             .reduce((sum, campaign) => sum + Number(campaign.recipientsCount || 0), 0),
         draftCampaigns: normalizedCampaigns.filter((campaign) => campaign.statusKey === "draft").length,
@@ -699,7 +704,7 @@
         if (!["failed", "error", "rejected"].includes(status)) {
             return false;
         }
-        return isTimestampInPeriod(campaign.sentTs || campaign.updatedTs || campaign.createdTs, selectedPeriod);
+        return isTimestampInPeriod(resolveCampaignActivityTimestamp(campaign), selectedPeriod);
     }).length;
     $: newsletterHeroCards = [
         {
@@ -753,38 +758,22 @@
             badgeClass: newsletterSummary.sentCampaignsPeriod > 0 ? "label-success" : "label-warning",
         },
     ];
-    $: newsletterSubscriberStatusRows = [
-        {
-            label: "Active subscribers",
-            count: newsletterSummary.activeSubscribers,
-            meta: formatShareOfTotal(newsletterSummary.activeSubscribers, normalizedSubscribers.length, "subscribers"),
-        },
-        {
-            label: "Pending confirmations",
-            count: pendingSubscribersCount,
-            meta: formatShareOfTotal(pendingSubscribersCount, normalizedSubscribers.length, "subscribers"),
-        },
-        {
-            label: "Unsubscribed",
-            count: unsubscribedSubscribersCount,
-            meta: formatShareOfTotal(unsubscribedSubscribersCount, normalizedSubscribers.length, "subscribers"),
-        },
-    ];
+    $: newsletterSubscriberStatusRows = buildAudienceHealthRows(normalizedSubscribers);
     $: newsletterCampaignStatusRows = [
         {
             label: "Campaigns submitted",
             count: newsletterSummary.sentCampaignsPeriod,
-            meta: formatShareOfTotal(newsletterSummary.sentCampaignsPeriod, newsletterSummary.sentCampaignsPeriod + newsletterSummary.draftCampaigns, "tracked campaigns"),
+            meta: formatShareOfTotal(newsletterSummary.sentCampaignsPeriod, newsletterSummary.sentCampaignsPeriod + newsletterSummary.draftCampaigns + failedCampaignSubmissionsPeriod, "tracked campaigns"),
         },
         {
             label: "Draft campaigns",
             count: newsletterSummary.draftCampaigns,
-            meta: formatShareOfTotal(newsletterSummary.draftCampaigns, newsletterSummary.sentCampaignsPeriod + newsletterSummary.draftCampaigns, "tracked campaigns"),
+            meta: formatShareOfTotal(newsletterSummary.draftCampaigns, newsletterSummary.sentCampaignsPeriod + newsletterSummary.draftCampaigns + failedCampaignSubmissionsPeriod, "tracked campaigns"),
         },
         {
             label: "Failed submissions",
             count: failedCampaignSubmissionsPeriod,
-            meta: "",
+            meta: formatShareOfTotal(failedCampaignSubmissionsPeriod, newsletterSummary.sentCampaignsPeriod + newsletterSummary.draftCampaigns + failedCampaignSubmissionsPeriod, "tracked campaigns"),
         },
     ];
     $: newsletterHasSubscribers = normalizedSubscribers.length > 0;
@@ -829,13 +818,41 @@
             : []),
     ].slice(0, 4);
     $: recentNewsletterCampaigns = [...normalizedCampaigns]
-        .filter((campaign) => isTimestampInPeriod(campaign.sentTs || campaign.updatedTs || campaign.createdTs, selectedPeriod))
-        .sort((a, b) => (b.sentTs || b.updatedTs || b.createdTs || 0) - (a.sentTs || a.updatedTs || a.createdTs || 0))
+        .filter((campaign) => isTimestampInPeriod(resolveCampaignActivityTimestamp(campaign), selectedPeriod))
+        .sort((a, b) => resolveCampaignActivityTimestamp(b) - resolveCampaignActivityTimestamp(a))
         .slice(0, 8);
 
     $: normalizedPages = normalizePages(pagesRecords, websiteLabelById);
     $: selectedWebsiteSeo = normalizeWebsiteSeo(dashboardResponse?.websiteSeoDefaults || selectedWebsite);
     $: seoSummary = buildSeoSummary(normalizedPages, selectedWebsiteSeo);
+    $: seoStateDistributionRows = [
+        {
+            key: "good",
+            label: "Good pages",
+            count: seoSummary.good,
+            meta: formatShareOfTotal(seoSummary.good, seoSummary.totalPages, "pages"),
+        },
+        {
+            key: "missingBasics",
+            label: "Missing basics",
+            count: seoSummary.missingBasics,
+            meta: formatShareOfTotal(seoSummary.missingBasics, seoSummary.totalPages, "pages"),
+        },
+        {
+            key: "needsAttention",
+            label: "Needs attention",
+            count: seoSummary.needsAttention,
+            meta: formatShareOfTotal(seoSummary.needsAttention, seoSummary.totalPages, "pages"),
+        },
+        {
+            key: "noindex",
+            label: "Noindex",
+            count: seoSummary.noindexPages,
+            meta: formatShareOfTotal(seoSummary.noindexPages, seoSummary.totalPages, "pages"),
+        },
+    ];
+    $: seoStateDistributionHasData = hasPositiveTrafficRows(seoStateDistributionRows);
+    $: recentlyUpdatedSeoPages = buildRecentlyUpdatedSeoPages(normalizedPages);
     $: seoHeroCards = [
         {
             key: "totalPages",
@@ -2517,6 +2534,8 @@
                 seoDescription: stripHtml(record?.seo_description || record?.seoDescription),
                 seoSocialImage: hasFileValue(record?.seo_social_image || record?.seoSocialImage),
                 seoNoindex: toBoolean(record?.seo_noindex ?? record?.seoNoindex),
+                updatedTs: toTimestamp(record?.updated),
+                createdTs: toTimestamp(record?.created),
             };
         });
     }
@@ -2641,6 +2660,17 @@
         summary.pageRows = summary.pageRows.slice(0, 10);
 
         return summary;
+    }
+
+    function buildRecentlyUpdatedSeoPages(pages = []) {
+        return [...(pages || [])]
+            .map((page) => ({
+                ...page,
+                recencyTs: Number(page?.updatedTs || page?.createdTs || 0),
+            }))
+            .filter((page) => page.recencyTs > 0)
+            .sort((a, b) => (b.recencyTs || 0) - (a.recencyTs || 0))
+            .slice(0, 8);
     }
 
     function buildTopServices(appointments) {
@@ -2822,6 +2852,136 @@
                     : "Needs created and scheduled dates",
             },
         ];
+    }
+
+    function buildSubscriberGrowthRows(subscribers = [], periodKey = defaultReportsPeriod) {
+        return buildNewsletterTimelineRows(subscribers, periodKey, (subscriber) => subscriber?.createdTs, "subscribers");
+    }
+
+    function buildCampaignActivityRows(campaigns = [], periodKey = defaultReportsPeriod) {
+        const campaignRows = (campaigns || [])
+            .map((campaign) => ({
+                ...campaign,
+                activityTs: resolveCampaignActivityTimestamp(campaign),
+            }))
+            .filter((campaign) => campaign.activityTs > 0 && isTimestampInPeriod(campaign.activityTs, periodKey));
+
+        return buildNewsletterTimelineRows(campaignRows, periodKey, (campaign) => campaign?.activityTs, "campaigns");
+    }
+
+    function buildNewsletterTimelineRows(records = [], periodKey = defaultReportsPeriod, timestampResolver = () => 0, noun = "items") {
+        const granularity = resolveNewsletterTrendGranularity(records, periodKey, timestampResolver);
+        const buckets = new Map();
+
+        for (const record of records || []) {
+            const timestamp = Number(timestampResolver(record) || 0);
+            if (!timestamp) {
+                continue;
+            }
+
+            const bucket = resolveLeadTrendBucket(timestamp, granularity);
+            if (!bucket?.key) {
+                continue;
+            }
+
+            const current = buckets.get(bucket.key) || {
+                key: bucket.key,
+                label: bucket.label,
+                startTs: bucket.startTs,
+                count: 0,
+            };
+            current.count += 1;
+            buckets.set(bucket.key, current);
+        }
+
+        const rows = Array.from(buckets.values())
+            .sort((a, b) => (a.startTs || 0) - (b.startTs || 0))
+            .map((row) => ({
+                ...row,
+                meta: formatShareOfTotal(row.count, records.length, noun),
+            }));
+
+        if (rows.length <= 10) {
+            return rows;
+        }
+
+        const visibleRows = rows.slice(-9);
+        const earlierRows = rows.slice(0, -9);
+        const earlierCount = earlierRows.reduce((sum, row) => sum + (Number(row?.count) || 0), 0);
+
+        return [
+            {
+                key: "earlier",
+                label: granularity === "week" ? "Earlier weeks" : "Earlier days",
+                count: earlierCount,
+                meta: `${formatMetricNumber(earlierRows.length)} earlier ${granularity === "week" ? "week" : "day"}${earlierRows.length === 1 ? "" : "s"}`,
+            },
+            ...visibleRows,
+        ];
+    }
+
+    function resolveNewsletterTrendGranularity(records = [], periodKey = defaultReportsPeriod, timestampResolver = () => 0) {
+        if (periodKey === "allTime" || periodKey === "last30Days" || periodKey === "lastMonth") {
+            return "week";
+        }
+
+        const bounds = getPeriodBounds(periodKey);
+        const endTs = bounds.end || Date.now();
+        const startTs = bounds.start || resolveMinTimestamp((records || []).map((record) => timestampResolver(record)));
+        const daySpan = startTs > 0 ? Math.ceil((endTs - startTs) / (24 * 60 * 60 * 1000)) : 0;
+        return daySpan > 14 ? "week" : "day";
+    }
+
+    function buildAudienceHealthRows(subscribers = []) {
+        const total = subscribers.length;
+        const activeCount = subscribers.filter((subscriber) => subscriber?.statusKey === "active").length;
+        const pendingCount = subscribers.filter((subscriber) => subscriber?.statusKey === "pending").length;
+        const unsubscribedCount = subscribers.filter((subscriber) => subscriber?.statusKey === "unsubscribed").length;
+        const knownCount = activeCount + pendingCount + unsubscribedCount;
+        const rows = [
+            {
+                key: "active",
+                label: "Active subscribers",
+                count: activeCount,
+                meta: formatShareOfTotal(activeCount, total, "subscribers"),
+            },
+            {
+                key: "pending",
+                label: "Pending confirmations",
+                count: pendingCount,
+                meta: formatShareOfTotal(pendingCount, total, "subscribers"),
+            },
+            {
+                key: "unsubscribed",
+                label: "Unsubscribed",
+                count: unsubscribedCount,
+                meta: formatShareOfTotal(unsubscribedCount, total, "subscribers"),
+            },
+        ];
+
+        const otherCount = Math.max(0, total - knownCount);
+        if (otherCount > 0) {
+            rows.push({
+                key: "other",
+                label: "Other or unknown",
+                count: otherCount,
+                meta: formatShareOfTotal(otherCount, total, "subscribers"),
+            });
+        }
+
+        return rows;
+    }
+
+    function resolveCampaignActivityTimestamp(campaign = {}) {
+        if (isSubmittedCampaignStatus(campaign?.statusKey) && Number(campaign?.sentTs || 0) > 0) {
+            return Number(campaign.sentTs);
+        }
+
+        return Number(campaign?.updatedTs || campaign?.createdTs || campaign?.sentTs || 0);
+    }
+
+    function isSubmittedCampaignStatus(statusKey) {
+        return ["sent", "submitted"].includes(normalizeLower(statusKey));
     }
 
     function buildReportWarnings(payload = {}) {
@@ -3352,7 +3512,7 @@
 
     function resolveCampaignStatusLabel(statusKey) {
         const normalized = normalizeLower(statusKey);
-        if (normalized === "sent") {
+        if (isSubmittedCampaignStatus(normalized)) {
             return "Submitted";
         }
         if (normalized === "draft") {
@@ -3369,7 +3529,7 @@
 
     function resolveCampaignStatusPillClass(statusKey) {
         const normalized = normalizeLower(statusKey);
-        if (normalized === "sent") {
+        if (isSubmittedCampaignStatus(normalized)) {
             return "label-success";
         }
         if (normalized === "scheduled") {
@@ -4267,17 +4427,71 @@
                         {/if}
                     </section>
 
+                    <div class="reports-grid-two reports-operational-grid">
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Subscriber growth</h5>
+                                <p class="txt-sm txt-hint m-b-0">New subscribers added during the selected period.</p>
+                            </div>
+                            {#if subscriberGrowthHasData}
+                                {@const maxSubscriberGrowth = resolveTrafficMaxCount(subscriberGrowthRows)}
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each subscriberGrowthRows as growthRow (growthRow.key)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{growthRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(growthRow.count)}</strong>
+                                            </div>
+                                            {#if growthRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{growthRow.meta}</div>
+                                            {/if}
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(growthRow.count, maxSubscriberGrowth)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No new subscribers recorded for this period.</div>
+                            {/if}
+                        </section>
+
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Campaign activity</h5>
+                                <p class="txt-sm txt-hint m-b-0">Campaigns created or submitted during the selected period.</p>
+                            </div>
+                            {#if campaignActivityHasData}
+                                {@const maxCampaignActivity = resolveTrafficMaxCount(campaignActivityRows)}
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each campaignActivityRows as activityRow (activityRow.key)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{activityRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(activityRow.count)}</strong>
+                                            </div>
+                                            {#if activityRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{activityRow.meta}</div>
+                                            {/if}
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(activityRow.count, maxCampaignActivity)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No campaign activity recorded for this period.</div>
+                            {/if}
+                        </section>
+                    </div>
+
                     <section class="panel reports-breakdown-card reports-section-shell">
                         <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Campaign output</h5>
-                            <p class="txt-sm txt-hint m-b-0">Submission activity and provider-accepted recipients for this period.</p>
+                            <p class="txt-sm txt-hint m-b-0">Audience status and draft/submitted campaign mix.</p>
                         </div>
                         <div class="reports-grid-two">
                             <article class="report-breakdown-item reports-operational-card">
-                                <h6 class="m-0 report-breakdown-title">Subscriber status</h6>
+                                <h6 class="m-0 report-breakdown-title">Audience health</h6>
                                 {#if newsletterSubscriberStatusHasData}
                                     <div class="report-bar-list reports-pulse-list">
-                                        {#each newsletterSubscriberStatusRows as statusRow}
+                                        {#each newsletterSubscriberStatusRows as statusRow (statusRow.key)}
                                             <div class="report-bar-item reports-pulse-item">
                                                 <div class="report-bar-head">
                                                     <span class="report-bar-label">{statusRow.label}</span>
@@ -4296,7 +4510,7 @@
                             </article>
 
                             <article class="report-breakdown-item reports-operational-card">
-                                <h6 class="m-0 report-breakdown-title">Campaign status mix</h6>
+                                <h6 class="m-0 report-breakdown-title">Drafts vs sent</h6>
                                 {#if newsletterCampaignStatusHasData}
                                     <div class="report-bar-list reports-pulse-list">
                                         {#each newsletterCampaignStatusRows as statusRow}
@@ -4385,7 +4599,7 @@
                                                         {/if}
                                                     </div>
                                                 </div>
-                                                <div class="txt-xs txt-hint reports-list-meta reports-operational-time">{formatDateTime(campaign.sentTs || campaign.updatedTs || campaign.createdTs)}</div>
+                                                <div class="txt-xs txt-hint reports-list-meta reports-operational-time">{formatDateTime(resolveCampaignActivityTimestamp(campaign))}</div>
                                             </div>
                                         {/each}
                                     </div>
@@ -4426,6 +4640,63 @@
                         {/if}
                     </section>
 
+                    <div class="reports-grid-two reports-operational-grid">
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">SEO state distribution</h5>
+                                <p class="txt-sm txt-hint m-b-0">How pages are currently classified from available SEO fields.</p>
+                            </div>
+                            {#if seoStateDistributionHasData}
+                                {@const maxSeoStateCount = resolveTrafficMaxCount(seoStateDistributionRows)}
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each seoStateDistributionRows as stateRow (stateRow.key)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{stateRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(stateRow.count)}</strong>
+                                            </div>
+                                            {#if stateRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{stateRow.meta}</div>
+                                            {/if}
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(stateRow.count, maxSeoStateCount)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No pages available for SEO state analysis yet.</div>
+                            {/if}
+                        </section>
+
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Recently updated pages</h5>
+                                <p class="txt-sm txt-hint m-b-0">Pages with recent updates in the selected website.</p>
+                            </div>
+                            {#if !recentlyUpdatedSeoPages.length}
+                                <div class="report-empty-state">No page update timestamps available yet.</div>
+                            {:else}
+                                <div class="reports-list reports-operational-list">
+                                    {#each recentlyUpdatedSeoPages as pageRow (pageRow.id)}
+                                        <div class="reports-list-item reports-operational-row">
+                                            <div class="reports-list-main reports-operational-main">
+                                                <div class="reports-list-title">{pageRow.title}</div>
+                                                <div class="reports-operational-chip-row">
+                                                    {#if pageRow.slug}
+                                                        <span class="txt-xs txt-hint">{pageRow.slug.startsWith("/") ? pageRow.slug : `/${pageRow.slug}`}</span>
+                                                    {/if}
+                                                    {#if pageRow.seoNoindex}
+                                                        <span class="label label-sm label-warning">Noindex</span>
+                                                    {/if}
+                                                </div>
+                                            </div>
+                                            <div class="txt-xs txt-hint reports-list-meta reports-operational-time">{formatDateTime(pageRow.recencyTs)}</div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {/if}
+                        </section>
+                    </div>
+
                     <section class="panel reports-breakdown-card reports-section-shell">
                         <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Quick SEO fixes</h5>
@@ -4433,7 +4704,7 @@
                         </div>
                         <div class="reports-grid-two reports-operational-grid">
                             <article class="report-breakdown-item reports-operational-card">
-                                <h6 class="m-0 report-breakdown-title">Issue distribution</h6>
+                                <h6 class="m-0 report-breakdown-title">Missing field breakdown</h6>
                                 {#if seoIssueBreakdownHasData}
                                     <div class="report-bar-list reports-pulse-list">
                                         {#each seoIssueAuditRows as issueRow}
