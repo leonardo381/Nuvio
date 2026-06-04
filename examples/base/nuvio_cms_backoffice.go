@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -425,6 +427,17 @@ func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 		if err != nil {
 			return e.BadRequestError(err.Error(), nil)
 		}
+		checksum, err := computeNuvioCMSBackofficeAssetChecksum(uploadedFile)
+		if err != nil {
+			e.App.Logger().Error(
+				"NUVIO cms asset checksum failed",
+				"websiteId",
+				websiteID,
+				"error",
+				err.Error(),
+			)
+			return e.BadRequestError("Invalid upload payload.", nil)
+		}
 
 		assetsCollection, err := findNuvioCMSDashboardCollectionByAliases(e.App, nuvioCMSDashboardAssetsCollectionAliases)
 		if err != nil {
@@ -453,7 +466,7 @@ func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 		assetRecord := core.NewRecord(assetsCollection)
 		assetRecord.Set(fileFieldName, uploadedFile)
 		setNuvioCMSBackofficeAssetWebsite(assetRecord, assetsCollection, websiteID)
-		setNuvioCMSBackofficeAssetMetadata(assetRecord, assetsCollection, uploadedFile, detectedMIME)
+		setNuvioCMSBackofficeAssetMetadata(assetRecord, assetsCollection, uploadedFile, detectedMIME, checksum)
 
 		if saveErr := e.App.Save(assetRecord); saveErr != nil {
 			e.App.Logger().Error(
@@ -4192,6 +4205,25 @@ func validateNuvioCMSBackofficeAssetUpload(uploadedFile *filesystem.File) (strin
 	return "", fmt.Errorf("Unsupported file type. Allowed types: image/jpeg, image/png, image/webp, image/gif.")
 }
 
+func computeNuvioCMSBackofficeAssetChecksum(uploadedFile *filesystem.File) (string, error) {
+	if uploadedFile == nil {
+		return "", fmt.Errorf("Missing file.")
+	}
+
+	reader, err := uploadedFile.Reader.Open()
+	if err != nil {
+		return "", fmt.Errorf("Failed to read uploaded file.")
+	}
+	defer reader.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, reader); err != nil {
+		return "", fmt.Errorf("Failed to read uploaded file.")
+	}
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
 func validateNuvioCMSBackofficeAssetMultipartFields(form *multipart.Form) error {
 	if form == nil {
 		return nil
@@ -4256,6 +4288,7 @@ func setNuvioCMSBackofficeAssetMetadata(
 	collection *core.Collection,
 	uploadedFile *filesystem.File,
 	detectedMIME string,
+	checksum string,
 ) {
 	if record == nil || collection == nil || uploadedFile == nil {
 		return
@@ -4269,6 +4302,9 @@ func setNuvioCMSBackofficeAssetMetadata(
 	}
 	if fieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"size"}); fieldName != "" {
 		record.Set(fieldName, uploadedFile.Size)
+	}
+	if fieldName := resolveNuvioCollectionFieldNameByAliases(collection, []string{"checksum"}); fieldName != "" {
+		record.Set(fieldName, strings.TrimSpace(checksum))
 	}
 }
 

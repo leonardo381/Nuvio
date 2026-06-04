@@ -5599,6 +5599,14 @@
         width: 100%;
     }
 
+    .reports-head.operations-head .selector-row--period {
+        gap: 6px;
+    }
+
+    .reports-head.operations-head .selector-row--period .selector-label {
+        min-width: auto;
+    }
+
     .reports-body {
         display: flex;
         flex-direction: column;

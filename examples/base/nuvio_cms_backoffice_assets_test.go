@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -32,6 +34,8 @@ func TestNuvioCMSBackofficeAssetEndpoints(t *testing.T) {
 	svgBody := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>`)
 	textBody := []byte("not-an-image")
 	oversizedBody := bytes.Repeat([]byte("a"), nuvioCMSBackofficeAssetMaxFileSizeBytes+1)
+	expectedPNGChecksum := nuvioCMSAssetSHA256Hex(pngBody)
+	expectedJPEGChecksum := nuvioCMSAssetSHA256Hex(jpegBody)
 
 	adminPNGUploadBody, adminPNGContentType := buildNuvioCMSAssetUploadBody(
 		t,
@@ -211,6 +215,9 @@ func TestNuvioCMSBackofficeAssetEndpoints(t *testing.T) {
 				if websiteID != nuvioCMSDashboardAlphaWebsiteID {
 					t.Fatalf("expected asset website %q, got %q", nuvioCMSDashboardAlphaWebsiteID, websiteID)
 				}
+				if checksum := strings.TrimSpace(record.GetString("checksum")); checksum != expectedPNGChecksum {
+					t.Fatalf("expected uploaded png checksum %q, got %q", expectedPNGChecksum, checksum)
+				}
 			},
 		},
 		{
@@ -232,6 +239,24 @@ func TestNuvioCMSBackofficeAssetEndpoints(t *testing.T) {
 				`"website":"` + nuvioCMSDashboardAlphaWebsiteID + `"`,
 				`"mimeType":"image/jpeg"`,
 				`"originalName":"client-upload.jpg"`,
+			},
+			NotExpectedContent: []string{`"checksum"`},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				assetsCollection, err := app.FindCollectionByNameOrId(nuvioAssetsCollectionID)
+				if err != nil {
+					t.Fatalf("expected assets collection: %v", err)
+				}
+				record, err := app.FindFirstRecordByFilter(
+					assetsCollection,
+					`originalName={:name}`,
+					map[string]any{"name": "client-upload.jpg"},
+				)
+				if err != nil {
+					t.Fatalf("expected uploaded client asset record: %v", err)
+				}
+				if checksum := strings.TrimSpace(record.GetString("checksum")); checksum != expectedJPEGChecksum {
+					t.Fatalf("expected uploaded jpeg checksum %q, got %q", expectedJPEGChecksum, checksum)
+				}
 			},
 		},
 		{
@@ -369,6 +394,7 @@ func seedNuvioCMSBackofficeAssetRecords(t testing.TB, app *tests.TestApp) {
 			&core.TextField{Name: "originalName"},
 			&core.TextField{Name: "mimeType"},
 			&core.NumberField{Name: "size"},
+			&core.TextField{Name: "checksum"},
 		},
 	)
 
@@ -478,4 +504,9 @@ func buildNuvioCMSAssetUploadBody(
 	}
 
 	return body.Bytes(), writer.FormDataContentType()
+}
+
+func nuvioCMSAssetSHA256Hex(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
 }
