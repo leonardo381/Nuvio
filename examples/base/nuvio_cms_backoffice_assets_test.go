@@ -76,7 +76,7 @@ func TestNuvioCMSBackofficeAssetEndpoints(t *testing.T) {
 
 	scenarios := []tests.ApiScenario{
 		{
-			Name:   "admin can list scoped assets and receives legacy unassigned assets",
+			Name:   "admin can list all instance assets after website access check",
 			Method: http.MethodGet,
 			URL:    "/api/nuvio/cms/assets?websiteId=" + nuvioCMSDashboardAlphaWebsiteID,
 			Headers: map[string]string{
@@ -95,17 +95,18 @@ func TestNuvioCMSBackofficeAssetEndpoints(t *testing.T) {
 			ExpectedContent: []string{
 				`"state":"ok"`,
 				`"id":"` + nuvioCMSAssetAlphaRecordID + `"`,
-				`"id":"` + nuvioCMSAssetLegacyRecordID + `"`,
 				`"website":"` + nuvioCMSDashboardAlphaWebsiteID + `"`,
+				`"id":"` + nuvioCMSAssetBetaRecordID + `"`,
+				`"website":"` + nuvioCMSDashboardBetaWebsiteID + `"`,
+				`"id":"` + nuvioCMSAssetLegacyRecordID + `"`,
 			},
 			NotExpectedContent: []string{
-				`"id":"` + nuvioCMSAssetBetaRecordID + `"`,
 				`"checksum"`,
 				`"data":`,
 			},
 		},
 		{
-			Name:   "client can list only assigned website assets and no legacy unassigned",
+			Name:   "client can list all instance assets after assigned website access check",
 			Method: http.MethodGet,
 			URL:    "/api/nuvio/cms/assets?websiteId=" + nuvioCMSDashboardAlphaWebsiteID,
 			Headers: map[string]string{
@@ -119,11 +120,10 @@ func TestNuvioCMSBackofficeAssetEndpoints(t *testing.T) {
 			ExpectedContent: []string{
 				`"state":"ok"`,
 				`"id":"` + nuvioCMSAssetAlphaRecordID + `"`,
-			},
-			NotExpectedContent: []string{
 				`"id":"` + nuvioCMSAssetBetaRecordID + `"`,
 				`"id":"` + nuvioCMSAssetLegacyRecordID + `"`,
 			},
+			NotExpectedContent: []string{`"checksum"`},
 		},
 		{
 			Name:   "client cannot list assets for unassigned website",
@@ -138,6 +138,16 @@ func TestNuvioCMSBackofficeAssetEndpoints(t *testing.T) {
 			},
 			ExpectedStatus:  403,
 			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "unauthenticated user cannot list assets",
+			Method: http.MethodGet,
+			URL:    "/api/nuvio/cms/assets?websiteId=" + nuvioCMSDashboardAlphaWebsiteID,
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeAssetEndpointsData(t, app, e)
+			},
+			ExpectedStatus:  401,
+			ExpectedContent: []string{`"status":401`},
 		},
 		{
 			Name:   "assets list missing websiteId returns bad request",
@@ -425,6 +435,7 @@ func makeNuvioCMSSeedAssetFile(t testing.TB, content []byte, name string) *files
 	if err != nil {
 		t.Fatalf("failed to create seed asset file %q: %v", name, err)
 	}
+	file.Name = name
 
 	return file
 }

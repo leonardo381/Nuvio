@@ -403,6 +403,7 @@
           name={path || field?.key}
           class="form-input file-native-input"
           type="file"
+          accept={scopedAssetMode ? "image/jpeg,image/png,image/webp,image/gif" : undefined}
           disabled={fieldDisabled || isUploading}
           on:change={handleFileChange}
         />
@@ -410,7 +411,7 @@
 
       <button
         type="button"
-        class="btn btn-sm btn-outline"
+        class="btn btn-sm btn-outline file-picker-btn"
         on:click={openPicker}
         disabled={fieldDisabled || isUploading}
       >
@@ -549,13 +550,15 @@
     flex-wrap: wrap;
     border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 72%, transparent);
     border-radius: var(--baseRadius);
-    background: var(--baseColor);
-    padding: 9px 10px;
+    background: color-mix(in srgb, var(--baseAlt1Color) 18%, var(--baseColor));
+    padding: 8px;
   }
 
   .file-input-wrap {
     flex: 1 1 260px;
     min-width: 0;
+    display: flex;
+    align-items: center;
   }
 
   .file-remove-btn {
@@ -573,14 +576,12 @@
 
   .file-native-input {
     width: 100%;
-    height: 44px;
-    padding: 8px 10px;
-    display: flex;
-    align-items: center;
+    min-height: 38px;
+    padding: 5px 8px;
     box-sizing: border-box;
-    line-height: 1;
-    background: var(--baseColor);
-    border-color: color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
+    line-height: 28px;
+    background: color-mix(in srgb, var(--baseColor) 70%, transparent);
+    border-color: color-mix(in srgb, var(--baseAlt2Color) 70%, transparent);
   }
 
   .file-native-input::file-selector-button {
@@ -592,6 +593,11 @@
     color: var(--txtPrimaryColor);
     font-size: var(--smFontSize);
     cursor: pointer;
+  }
+
+  .file-picker-btn {
+    margin-left: auto;
+    flex: 0 0 auto;
   }
 
   :global(.overlay-panel.schema-file-picker) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -104,8 +105,6 @@ var (
 		"domain": {},
 	}
 	nuvioCMSBackofficeIdentityDeferredFilePayloadKeys = map[string]struct{}{
-		"logo":            {},
-		"seoimage":        {},
 		"seoimagecurrent": {},
 	}
 	nuvioCMSBackofficeSettingsAllowedTopLevelKeys = map[string]struct{}{
@@ -168,6 +167,8 @@ var (
 		"businessgoogleplaceid":   255,
 		"businesssocialprofiles":  4096,
 		"businesspricerange":      80,
+		"logo":                    nuvioCMSBackofficeURLMaxLen,
+		"seoimage":                nuvioCMSBackofficeURLMaxLen,
 	}
 	nuvioCMSBackofficePageSEOTextMaxByKey = map[string]int{
 		"seotitle":        300,
@@ -208,10 +209,10 @@ type nuvioCMSDashboardWebsiteDTO struct {
 	Title                   string         `json:"title,omitempty"`
 	Slug                    string         `json:"slug,omitempty"`
 	Domain                  string         `json:"domain,omitempty"`
-	Logo                    string         `json:"logo,omitempty"`
+	Logo                    any            `json:"logo,omitempty"`
 	SEOTitle                string         `json:"seoTitle,omitempty"`
 	SEODescription          string         `json:"seoDescription,omitempty"`
-	SEOImage                string         `json:"seoImage,omitempty"`
+	SEOImage                any            `json:"seoImage,omitempty"`
 	SEOTitleTemplate        string         `json:"seo_title_template,omitempty"`
 	SEOTitleSeparator       string         `json:"seo_title_separator,omitempty"`
 	SEOCanonicalDomain      string         `json:"seo_canonical_domain,omitempty"`
@@ -246,7 +247,7 @@ type nuvioCMSDashboardPageDTO struct {
 	Visible               bool   `json:"visible"`
 	SEOTitle              string `json:"seo_title"`
 	SEODescription        string `json:"seo_description"`
-	SEOSocialImage        string `json:"seo_social_image"`
+	SEOSocialImage        any    `json:"seo_social_image"`
 	SEOCanonicalURL       string `json:"seo_canonical_url"`
 	SEONoindex            bool   `json:"seo_noindex"`
 	SEOExcludeFromSitemap bool   `json:"seo_exclude_from_sitemap"`
@@ -328,6 +329,12 @@ type nuvioCMSBackofficeAssetDTO struct {
 	File         *nuvioCMSBackofficeAssetFileRefDTO `json:"file,omitempty"`
 }
 
+type nuvioCMSBackofficeSEOAssetRef struct {
+	Collection string
+	RecordID   string
+	Filename   string
+}
+
 // NUVIO CUSTOM START: Scoped CMS backoffice dashboard endpoint (A3.5.8B).
 func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 	cmsGroup := e.Router.Group("/api/nuvio/cms").Bind(apis.RequireSuperuserAuth())
@@ -368,16 +375,11 @@ func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 			return e.InternalServerError("Failed to load CMS assets.", nil)
 		}
 
-		isAdmin := apis.IsAdminSuperuser(e.Auth)
 		items := make([]nuvioCMSBackofficeAssetDTO, 0, len(records))
 		for _, record := range records {
-			assetWebsiteID := resolveNuvioCMSBackofficeAssetWebsiteID(record, assetsCollection)
-			if assetWebsiteID != websiteID {
-				if !isAdmin || assetWebsiteID != "" {
-					continue
-				}
-			}
-
+			// Access is scoped by the requested website above. Assets are a shared
+			// media library inside a per-client Nuvio instance, so legacy/unassigned
+			// and other website-linked assets remain selectable after access passes.
 			items = append(items, buildNuvioCMSBackofficeAssetDTO(record, assetsCollection))
 		}
 
@@ -617,7 +619,7 @@ func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("At least one identity field is required.", nil)
 		}
 
-		if err := applyNuvioCMSBackofficeIdentityPatch(websiteRecord, payload, apis.IsAdminSuperuser(e.Auth)); err != nil {
+		if err := applyNuvioCMSBackofficeIdentityPatch(e.App, websiteRecord, payload, apis.IsAdminSuperuser(e.Auth)); err != nil {
 			return e.BadRequestError(err.Error(), nil)
 		}
 
@@ -701,7 +703,7 @@ func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("At least one SEO field is required.", nil)
 		}
 
-		if err := applyNuvioCMSBackofficePageSEOPatch(pageRecord, pagesCollection, payload); err != nil {
+		if err := applyNuvioCMSBackofficePageSEOPatch(e.App, pageRecord, pagesCollection, payload); err != nil {
 			return e.BadRequestError(err.Error(), nil)
 		}
 
@@ -1337,6 +1339,7 @@ func isNuvioCMSBackofficeFileLikeObject(value map[string]any) bool {
 }
 
 func applyNuvioCMSBackofficePageSEOPatch(
+	app core.App,
 	pageRecord *core.Record,
 	pagesCollection *core.Collection,
 	payload map[string]any,
@@ -1375,7 +1378,7 @@ func applyNuvioCMSBackofficePageSEOPatch(
 			}
 			updatedFields++
 		case "seosocialimage":
-			if err := setNuvioCMSBackofficePageSEOSocialImageField(pageRecord, pagesCollection, rawValue); err != nil {
+			if err := setNuvioCMSBackofficePageSEOSocialImageField(app, pageRecord, pagesCollection, rawValue); err != nil {
 				return err
 			}
 			updatedFields++
@@ -1462,6 +1465,7 @@ func setNuvioCMSBackofficePageSEOValueField(
 }
 
 func setNuvioCMSBackofficePageSEOSocialImageField(
+	app core.App,
 	pageRecord *core.Record,
 	pagesCollection *core.Collection,
 	rawValue any,
@@ -1472,30 +1476,262 @@ func setNuvioCMSBackofficePageSEOSocialImageField(
 	}
 
 	field := pagesCollection.Fields.GetByName(fieldName)
+
+	if isNuvioCMSBackofficeEmptyAssetValue(rawValue) {
+		pageRecord.Set(fieldName, "")
+		return nil
+	}
+
+	if assetRef, ok, err := parseNuvioCMSBackofficeSEOAssetRef(rawValue); err != nil {
+		return err
+	} else if ok {
+		if field != nil && field.Type() == core.FieldTypeFile {
+			return setNuvioCMSBackofficeFileFieldFromAssetRef(app, pageRecord, fieldName, assetRef)
+		}
+
+		if _, err := resolveNuvioCMSBackofficeAssetRecordFromRef(app, assetRef); err != nil {
+			return err
+		}
+		encoded, encodeErr := encodeNuvioCMSBackofficeSEOAssetRef(assetRef)
+		if encodeErr != nil {
+			return fmt.Errorf("seo_social_image expects a valid asset reference")
+		}
+		pageRecord.Set(fieldName, encoded)
+		return nil
+	}
+
 	if field != nil && field.Type() == core.FieldTypeFile {
-		return fmt.Errorf("seo_social_image file mutation is not supported in this endpoint yet")
+		return fmt.Errorf("seo_social_image expects an asset reference")
 	}
 
-	switch rawValue.(type) {
-	case map[string]any, []any:
-		return fmt.Errorf("seo_social_image expects a string value")
+	stringValue, ok := rawValue.(string)
+	if !ok {
+		return fmt.Errorf("seo_social_image expects a string value or asset reference")
 	}
-
-	stringValue := ""
-	switch typed := rawValue.(type) {
-	case nil:
-		stringValue = ""
-	case string:
-		stringValue = strings.TrimSpace(typed)
-	default:
-		return fmt.Errorf("seo_social_image expects a string value")
-	}
+	stringValue = strings.TrimSpace(stringValue)
 	if err := validateNuvioCMSBackofficePageSEOSocialImage(stringValue); err != nil {
 		return err
 	}
-
 	pageRecord.Set(fieldName, stringValue)
 	return nil
+}
+
+func setNuvioCMSBackofficeWebsiteSEOAssetField(
+	app core.App,
+	websiteRecord *core.Record,
+	aliases []string,
+	rawValue any,
+	fieldLabel string,
+) error {
+	if websiteRecord == nil {
+		return fmt.Errorf("Website not found")
+	}
+
+	collection := websiteRecord.Collection()
+	if collection == nil {
+		return fmt.Errorf("%s field is not available for this website collection", fieldLabel)
+	}
+
+	fieldName := resolveNuvioCollectionFieldNameByAliases(collection, aliases)
+	if fieldName == "" {
+		return fmt.Errorf("%s field is not available for this website collection", fieldLabel)
+	}
+
+	field := collection.Fields.GetByName(fieldName)
+	if isNuvioCMSBackofficeEmptyAssetValue(rawValue) {
+		websiteRecord.Set(fieldName, "")
+		return nil
+	}
+
+	if assetRef, ok, err := parseNuvioCMSBackofficeSEOAssetRef(rawValue); err != nil {
+		return err
+	} else if ok {
+		if field != nil && field.Type() == core.FieldTypeFile {
+			return setNuvioCMSBackofficeFileFieldFromAssetRef(app, websiteRecord, fieldName, assetRef)
+		}
+
+		if _, err := resolveNuvioCMSBackofficeAssetRecordFromRef(app, assetRef); err != nil {
+			return err
+		}
+		encoded, encodeErr := encodeNuvioCMSBackofficeSEOAssetRef(assetRef)
+		if encodeErr != nil {
+			return fmt.Errorf("%s expects a valid asset reference", fieldLabel)
+		}
+		websiteRecord.Set(fieldName, encoded)
+		return nil
+	}
+
+	if field != nil && field.Type() == core.FieldTypeFile {
+		return fmt.Errorf("%s expects an asset reference", fieldLabel)
+	}
+
+	stringValue, ok := rawValue.(string)
+	if !ok {
+		return fmt.Errorf("%s expects a string value or asset reference", fieldLabel)
+	}
+	stringValue = strings.TrimSpace(stringValue)
+	if err := validateNuvioCMSBackofficePageSEOSocialImage(stringValue); err != nil {
+		return err
+	}
+	websiteRecord.Set(fieldName, stringValue)
+	return nil
+}
+
+func isNuvioCMSBackofficeEmptyAssetValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	if raw, ok := value.(string); ok {
+		return strings.TrimSpace(raw) == ""
+	}
+	return false
+}
+
+func parseNuvioCMSBackofficeSEOAssetRef(value any) (nuvioCMSBackofficeSEOAssetRef, bool, error) {
+	valueMap, ok := toStringAnyMap(value)
+	if !ok {
+		return nuvioCMSBackofficeSEOAssetRef{}, false, nil
+	}
+
+	if containsNuvioCMSBackofficeFileLikePayload(valueMap) {
+		return nuvioCMSBackofficeSEOAssetRef{}, false, fmt.Errorf("SEO image expects an asset reference, not a file payload")
+	}
+
+	ref := nuvioCMSBackofficeSEOAssetRef{
+		Collection: strings.TrimSpace(parseStringValue(valueMap["collection"])),
+		RecordID:   strings.TrimSpace(parseStringValue(valueMap["recordId"])),
+		Filename:   strings.TrimSpace(parseStringValue(valueMap["filename"])),
+	}
+	if ref.RecordID == "" {
+		ref.RecordID = strings.TrimSpace(parseStringValue(valueMap["id"]))
+	}
+	if ref.Filename == "" {
+		ref.Filename = strings.TrimSpace(parseStringValue(valueMap["file"]))
+	}
+	if ref.Collection == "" {
+		ref.Collection = strings.TrimSpace(parseStringValue(valueMap["collectionName"]))
+	}
+	if ref.Collection == "" && toStringAnyMapValue(valueMap["file"]) != nil {
+		fileMap := toStringAnyMapValue(valueMap["file"])
+		ref.Collection = strings.TrimSpace(parseStringValue(fileMap["collection"]))
+		ref.RecordID = firstNonEmptyNuvioCMSBackofficeString(ref.RecordID, parseStringValue(fileMap["recordId"]))
+		ref.Filename = firstNonEmptyNuvioCMSBackofficeString(ref.Filename, parseStringValue(fileMap["filename"]))
+	}
+
+	if ref.Collection == "" {
+		ref.Collection = "Assets"
+	}
+
+	if ref.RecordID == "" || ref.Filename == "" {
+		return nuvioCMSBackofficeSEOAssetRef{}, false, fmt.Errorf("SEO image asset reference is incomplete")
+	}
+
+	return ref, true, nil
+}
+
+func toStringAnyMapValue(value any) map[string]any {
+	result, _ := toStringAnyMap(value)
+	return result
+}
+
+func firstNonEmptyNuvioCMSBackofficeString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func encodeNuvioCMSBackofficeSEOAssetRef(ref nuvioCMSBackofficeSEOAssetRef) (string, error) {
+	payload := map[string]string{
+		"collection": strings.TrimSpace(ref.Collection),
+		"recordId":   strings.TrimSpace(ref.RecordID),
+		"filename":   strings.TrimSpace(ref.Filename),
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func setNuvioCMSBackofficeFileFieldFromAssetRef(
+	app core.App,
+	targetRecord *core.Record,
+	targetFieldName string,
+	ref nuvioCMSBackofficeSEOAssetRef,
+) error {
+	if app == nil || targetRecord == nil {
+		return fmt.Errorf("SEO image asset reference could not be resolved")
+	}
+
+	assetRecord, err := resolveNuvioCMSBackofficeAssetRecordFromRef(app, ref)
+	if err != nil {
+		return err
+	}
+
+	fsys, err := app.NewFilesystem()
+	if err != nil {
+		return fmt.Errorf("SEO image asset reference could not be resolved")
+	}
+	defer fsys.Close()
+
+	reader, err := fsys.GetReader(assetRecord.BaseFilesPath() + "/" + strings.TrimSpace(ref.Filename))
+	if err != nil {
+		return fmt.Errorf("SEO image asset reference could not be loaded")
+	}
+	defer reader.Close()
+
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("SEO image asset reference could not be loaded")
+	}
+
+	file, err := filesystem.NewFileFromBytes(content, strings.TrimSpace(ref.Filename))
+	if err != nil {
+		return fmt.Errorf("SEO image asset reference could not be loaded")
+	}
+	file.Name = strings.TrimSpace(ref.Filename)
+
+	targetRecord.Set(targetFieldName, file)
+	return nil
+}
+
+func resolveNuvioCMSBackofficeAssetRecordFromRef(
+	app core.App,
+	ref nuvioCMSBackofficeSEOAssetRef,
+) (*core.Record, error) {
+	if app == nil {
+		return nil, fmt.Errorf("SEO image asset reference could not be resolved")
+	}
+
+	assetsCollection, err := findNuvioCMSDashboardCollectionByAliases(app, nuvioCMSDashboardAssetsCollectionAliases)
+	if err != nil {
+		return nil, fmt.Errorf("SEO image asset reference could not be resolved")
+	}
+
+	refCollection := strings.TrimSpace(ref.Collection)
+	if refCollection != "" && refCollection != assetsCollection.Name && refCollection != assetsCollection.Id {
+		return nil, fmt.Errorf("SEO image asset reference must point to Assets")
+	}
+
+	assetRecord, err := app.FindRecordById(assetsCollection.Id, strings.TrimSpace(ref.RecordID))
+	if err != nil {
+		return nil, fmt.Errorf("SEO image asset reference was not found")
+	}
+
+	fileFieldName := resolveNuvioCollectionFieldNameByAliases(assetsCollection, []string{"file"})
+	if fileFieldName == "" {
+		return nil, fmt.Errorf("SEO image asset reference could not be resolved")
+	}
+
+	assetFilename := toNuvioCMSDashboardSingleFileName(assetRecord.Get(fileFieldName))
+	if assetFilename == "" || assetFilename != strings.TrimSpace(ref.Filename) {
+		return nil, fmt.Errorf("SEO image asset reference does not match an existing asset file")
+	}
+
+	return assetRecord, nil
 }
 
 func normalizeNuvioCMSBackofficeSEOTranslationsValue(rawValue any) (any, error) {
@@ -1532,6 +1768,13 @@ func validateNuvioCMSBackofficeIdentityFieldValue(normalizedKey string, rawValue
 	switch normalizedKey {
 	case "seocanonicaldomain":
 		if err := validateNuvioCMSBackofficeCanonicalDomainValue(stringValue); err != nil {
+			return "", err
+		}
+	case "logo", "seoimage":
+		if containsNuvioCMSBackofficeFileLikePayload(rawValue) {
+			return "", fmt.Errorf("%s expects a string value", normalizedKey)
+		}
+		if err := validateNuvioCMSBackofficePageSEOSocialImage(stringValue); err != nil {
 			return "", err
 		}
 	case "businesssocialprofiles":
@@ -1869,7 +2112,7 @@ func validateNuvioCMSBackofficeDomainBaseValue(value string) error {
 	return nil
 }
 
-func applyNuvioCMSBackofficeIdentityPatch(record *core.Record, payload map[string]any, isAdmin bool) error {
+func applyNuvioCMSBackofficeIdentityPatch(app core.App, record *core.Record, payload map[string]any, isAdmin bool) error {
 	if record == nil {
 		return fmt.Errorf("Website not found")
 	}
@@ -1894,9 +2137,13 @@ func applyNuvioCMSBackofficeIdentityPatch(record *core.Record, payload map[strin
 			return fmt.Errorf("Field %q is not allowed in this endpoint", strings.TrimSpace(rawKey))
 		}
 
-		stringValue, err := validateNuvioCMSBackofficeIdentityFieldValue(normalizedKey, rawValue)
-		if err != nil {
-			return err
+		stringValue := ""
+		if normalizedKey != "logo" && normalizedKey != "seoimage" {
+			var err error
+			stringValue, err = validateNuvioCMSBackofficeIdentityFieldValue(normalizedKey, rawValue)
+			if err != nil {
+				return err
+			}
 		}
 		switch normalizedKey {
 		case "name":
@@ -1923,6 +2170,16 @@ func applyNuvioCMSBackofficeIdentityPatch(record *core.Record, payload map[strin
 			if setNuvioCMSBackofficeWebsiteStringField(record, []string{"seoDescription", "seo_description"}, stringValue) {
 				updatedFieldCount++
 			}
+		case "logo":
+			if err := setNuvioCMSBackofficeWebsiteSEOAssetField(app, record, []string{"logo"}, rawValue, "logo"); err != nil {
+				return err
+			}
+			updatedFieldCount++
+		case "seoimage":
+			if err := setNuvioCMSBackofficeWebsiteSEOAssetField(app, record, []string{"seoImage", "seo_image"}, rawValue, "seoImage"); err != nil {
+				return err
+			}
+			updatedFieldCount++
 		case "seotitletemplate":
 			if setNuvioCMSBackofficeWebsiteStringField(record, []string{"seo_title_template", "seoTitleTemplate"}, stringValue) {
 				updatedFieldCount++
@@ -3138,10 +3395,10 @@ func buildNuvioCMSDashboardWebsiteDTO(record *core.Record, isAdmin bool) nuvioCM
 	dto.Domain = strings.TrimSpace(record.GetString("domain"))
 	dto.DisplayName = resolveWebsiteDisplayName(record)
 
-	dto.Logo = toNuvioCMSDashboardSingleFileName(record.Get("logo"))
+	dto.Logo = buildNuvioCMSDashboardSEOFileValue(record, []string{"logo"})
 	dto.SEOTitle = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seoTitle", "seo_title"}))
 	dto.SEODescription = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seoDescription", "seo_description"}))
-	dto.SEOImage = toNuvioCMSDashboardSingleFileName(readNuvioCMSDashboardValueByAliases(record, []string{"seoImage", "seo_image"}))
+	dto.SEOImage = buildNuvioCMSDashboardSEOFileValue(record, []string{"seoImage", "seo_image"})
 	dto.SEOTitleTemplate = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seo_title_template", "seoTitleTemplate"}))
 	dto.SEOTitleSeparator = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seo_title_separator", "seoTitleSeparator"}))
 	dto.SEOCanonicalDomain = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seo_canonical_domain", "seoCanonicalDomain"}))
@@ -3248,7 +3505,7 @@ func buildNuvioCMSDashboardPageDTO(record *core.Record) nuvioCMSDashboardPageDTO
 	dto.Visible = visibleValue
 	dto.SEOTitle = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seo_title", "seoTitle"}))
 	dto.SEODescription = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seo_description", "seoDescription"}))
-	dto.SEOSocialImage = toNuvioCMSDashboardSingleFileName(readNuvioCMSDashboardValueByAliases(record, []string{"seo_social_image", "seoSocialImage"}))
+	dto.SEOSocialImage = buildNuvioCMSDashboardSEOFileValue(record, []string{"seo_social_image", "seoSocialImage"})
 	dto.SEOCanonicalURL = strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(record, []string{"seo_canonical_url", "seoCanonicalUrl"}))
 	dto.SEONoindex = seoNoindex
 	dto.SEOExcludeFromSitemap = seoExcludeFromSitemap
@@ -3843,6 +4100,65 @@ func toNuvioCMSDashboardSingleFileName(value any) string {
 	}
 
 	return strings.TrimSpace(parseStringValue(value))
+}
+
+func buildNuvioCMSDashboardSEOFileValue(record *core.Record, aliases []string) any {
+	if record == nil {
+		return ""
+	}
+
+	fieldName := resolveNuvioCollectionFieldNameByAliases(record.Collection(), aliases)
+	if fieldName == "" {
+		return ""
+	}
+
+	rawValue := record.Get(fieldName)
+	filename := toNuvioCMSDashboardSingleFileName(rawValue)
+	if filename == "" {
+		return ""
+	}
+
+	if ref, ok := parseNuvioCMSDashboardStoredAssetRef(filename); ok {
+		return map[string]string{
+			"collection": ref.Collection,
+			"recordId":   ref.RecordID,
+			"filename":   ref.Filename,
+		}
+	}
+
+	field := record.Collection().Fields.GetByName(fieldName)
+	if field != nil && field.Type() == core.FieldTypeFile {
+		collectionName := strings.TrimSpace(record.Collection().Name)
+		if collectionName == "" {
+			collectionName = strings.TrimSpace(record.Collection().Id)
+		}
+		return map[string]string{
+			"collection": collectionName,
+			"recordId":   strings.TrimSpace(record.Id),
+			"filename":   filename,
+		}
+	}
+
+	return filename
+}
+
+func parseNuvioCMSDashboardStoredAssetRef(value string) (nuvioCMSBackofficeSEOAssetRef, bool) {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "{") {
+		return nuvioCMSBackofficeSEOAssetRef{}, false
+	}
+
+	parsed := map[string]any{}
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return nuvioCMSBackofficeSEOAssetRef{}, false
+	}
+
+	ref, ok, err := parseNuvioCMSBackofficeSEOAssetRef(parsed)
+	if err != nil || !ok {
+		return nuvioCMSBackofficeSEOAssetRef{}, false
+	}
+
+	return ref, true
 }
 
 func validateNuvioCMSBackofficeAssetUpload(uploadedFile *filesystem.File) (string, error) {

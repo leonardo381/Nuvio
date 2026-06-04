@@ -533,23 +533,83 @@ func TestNuvioCMSBackofficeWebsiteEndpoints(t *testing.T) {
 			},
 		},
 		{
-			Name:   "identity endpoint defers logo and seo image file fields",
+			Name:   "identity endpoint persists logo and seo image asset references",
 			Method: http.MethodPatch,
 			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
 			Headers: map[string]string{
 				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
 			},
 			Body: strings.NewReader(`{
-				"logo":"new-logo.webp"
+				"logo":{"collection":"Assets","recordId":"` + nuvioCMSAssetAlphaRecordID + `","filename":"alpha-seeded.png"},
+				"seoImage":{"collection":"Assets","recordId":"` + nuvioCMSAssetAlphaRecordID + `","filename":"alpha-seeded.png"}
 			}`),
 			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
 				seedNuvioCMSBackofficeDashboardData(t, app)
+				seedNuvioCMSBackofficeAssetRecords(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"logo":{"collection":"Assets"`,
+				`"filename":"alpha-seeded.png"`,
+				`"recordId":"` + nuvioCMSAssetAlphaRecordID + `"`,
+				`"seoImage":{"collection":"Assets"`,
+			},
+		},
+		{
+			Name:   "identity endpoint rejects invalid logo asset reference",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"logo":{"collection":"Assets","recordId":"missingasset01","filename":"missing.png"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				seedNuvioCMSBackofficeAssetRecords(t, app)
 				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
 			},
 			ExpectedStatus: 400,
 			ExpectedContent: []string{
 				`"data":{}`,
+			},
+		},
+		{
+			Name:   "identity endpoint copies asset ref into native seo image file field",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/websites/" + nuvioCMSDashboardAlphaWebsiteID + "/identity",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seoImage":{"collection":"Assets","recordId":"` + nuvioCMSAssetAlphaRecordID + `","filename":"alpha-seeded.png"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeNativeSEOImageData(t, app)
+				seedNuvioCMSBackofficeAssetRecords(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"seoImage":{"collection":"Websites"`,
+				`"filename":"alpha-seeded.png"`,
+				`"recordId":"` + nuvioCMSDashboardAlphaWebsiteID + `"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				website, err := app.FindRecordById(nuvioWebsitesCollectionID, nuvioCMSDashboardAlphaWebsiteID)
+				if err != nil {
+					t.Fatalf("expected website to exist: %v", err)
+				}
+				if filename := strings.TrimSpace(website.GetString("seoImage")); filename != "alpha-seeded.png" {
+					t.Fatalf("expected native seoImage file to be copied, got %q", filename)
+				}
 			},
 		},
 		{
@@ -1442,7 +1502,7 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 			Body: strings.NewReader(`{
 				"seo_title":"Updated Alpha Home SEO title",
 				"seo_description":"Updated Alpha Home SEO description",
-				"seo_social_image":"updated-alpha-home-seo.webp",
+				"seo_social_image":{"collection":"Assets","recordId":"` + nuvioCMSAssetAlphaRecordID + `","filename":"alpha-seeded.png"},
 				"seo_canonical_url":"https://alpha.example/updated-home",
 				"seo_noindex":true,
 				"seo_exclude_from_sitemap":true,
@@ -1455,6 +1515,7 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
 				seedNuvioCMSBackofficeDashboardData(t, app)
+				seedNuvioCMSBackofficeAssetRecords(t, app)
 				setNuvioBackofficeSuperuserRoleAndAccess(
 					t,
 					app,
@@ -1468,7 +1529,9 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 				`"page":{"id":"` + nuvioCMSDashboardAlphaPageID + `"`,
 				`"seo_title":"Updated Alpha Home SEO title"`,
 				`"seo_description":"Updated Alpha Home SEO description"`,
-				`"seo_social_image":"updated-alpha-home-seo.webp"`,
+				`"seo_social_image":{"collection":"Assets"`,
+				`"filename":"alpha-seeded.png"`,
+				`"recordId":"` + nuvioCMSAssetAlphaRecordID + `"`,
 				`"seo_canonical_url":"https://alpha.example/updated-home"`,
 				`"seo_noindex":true`,
 				`"seo_exclude_from_sitemap":true`,
@@ -1488,7 +1551,7 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 				if strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(pageRecord, []string{"seo_title", "seoTitle"})) != "Updated Alpha Home SEO title" {
 					t.Fatalf("expected seo_title to be updated")
 				}
-				if strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(pageRecord, []string{"seo_social_image", "seoSocialImage"})) != "updated-alpha-home-seo.webp" {
+				if !strings.Contains(strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(pageRecord, []string{"seo_social_image", "seoSocialImage"})), nuvioCMSAssetAlphaRecordID) {
 					t.Fatalf("expected seo_social_image to be updated")
 				}
 				if strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(pageRecord, []string{"slug"})) != "home" {
@@ -1555,6 +1618,60 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 			ExpectedContent: []string{
 				`"state":"ok"`,
 				`"seo_canonical_url":"/site/alpha/home"`,
+			},
+		},
+		{
+			Name:   "page seo endpoint rejects invalid social image asset reference",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_social_image":{"collection":"Assets","recordId":"missingasset01","filename":"missing.png"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				seedNuvioCMSBackofficeAssetRecords(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 400,
+			ExpectedContent: []string{
+				`"data":{}`,
+			},
+		},
+		{
+			Name:   "page seo endpoint copies asset ref into native social image file field",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/pages/" + nuvioCMSDashboardAlphaPageID + "/seo",
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"seo_social_image":{"collection":"Assets","recordId":"` + nuvioCMSAssetAlphaRecordID + `","filename":"alpha-seeded.png"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeNativeSEOImageData(t, app)
+				seedNuvioCMSBackofficeAssetRecords(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleClient, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"seo_social_image":{"collection":"Pages"`,
+				`"filename":"alpha-seeded.png"`,
+				`"recordId":"` + nuvioCMSDashboardAlphaPageID + `"`,
+			},
+			AfterTestFunc: func(t testing.TB, app *tests.TestApp, _ *http.Response) {
+				page, err := app.FindRecordById(nuvioPagesCollectionID, nuvioCMSDashboardAlphaPageID)
+				if err != nil {
+					t.Fatalf("expected page to exist: %v", err)
+				}
+				if filename := strings.TrimSpace(page.GetString("seo_social_image")); filename != "alpha-seeded.png" {
+					t.Fatalf("expected native seo_social_image file to be copied, got %q", filename)
+				}
 			},
 		},
 		{
@@ -2780,6 +2897,76 @@ func seedNuvioCMSBackofficeDashboardData(t testing.TB, app *tests.TestApp) {
 		"visible":      true,
 		"status":       "active",
 	})
+}
+
+func seedNuvioCMSBackofficeNativeSEOImageData(t testing.TB, app *tests.TestApp) {
+	t.Helper()
+
+	websitesCollection := ensureNuvioCMSBackofficeCollection(t, app, "Websites", nuvioWebsitesCollectionID, []core.Field{
+		&core.TextField{Name: "name"},
+		&core.TextField{Name: "title"},
+		&core.TextField{Name: "slug"},
+		&core.TextField{Name: "domain"},
+		&core.FileField{Name: "logo", MaxSelect: 1},
+		&core.TextField{Name: "seoTitle"},
+		&core.TextField{Name: "seoDescription"},
+		&core.FileField{Name: "seoImage", MaxSelect: 1},
+		&core.JSONField{Name: "settings"},
+	})
+	pagesCollection := ensureNuvioCMSBackofficeCollection(t, app, "Pages", nuvioPagesCollectionID, []core.Field{
+		&core.TextField{Name: "website"},
+		&core.TextField{Name: "title"},
+		&core.TextField{Name: "name"},
+		&core.TextField{Name: "slug"},
+		&core.TextField{Name: "status"},
+		&core.TextField{Name: "seo_title"},
+		&core.TextField{Name: "seo_description"},
+		&core.FileField{Name: "seo_social_image", MaxSelect: 1},
+		&core.TextField{Name: "seo_canonical_url"},
+		&core.BoolField{Name: "seo_noindex"},
+		&core.BoolField{Name: "seo_exclude_from_sitemap"},
+		&core.TextField{Name: "seo_focus_keyword"},
+		&core.JSONField{Name: "seo_translations"},
+	})
+
+	websiteRecord := core.NewRecord(websitesCollection)
+	websiteRecord.Id = nuvioCMSDashboardAlphaWebsiteID
+	websiteRecord.Set("name", "Alpha CMS")
+	websiteRecord.Set("title", "Alpha CMS")
+	websiteRecord.Set("slug", "alpha-cms")
+	websiteRecord.Set("domain", "alpha-cms.example.test")
+	websiteRecord.Set("seoTitle", "Alpha CMS SEO title")
+	websiteRecord.Set("seoDescription", "Alpha CMS SEO description")
+	websiteRecord.Set("settings", map[string]any{})
+	if err := app.Save(websiteRecord); err != nil {
+		t.Fatalf("failed to create native seo website: %v", err)
+	}
+
+	betaWebsiteRecord := core.NewRecord(websitesCollection)
+	betaWebsiteRecord.Id = nuvioCMSDashboardBetaWebsiteID
+	betaWebsiteRecord.Set("name", "Beta CMS")
+	betaWebsiteRecord.Set("title", "Beta CMS")
+	betaWebsiteRecord.Set("slug", "beta-cms")
+	betaWebsiteRecord.Set("domain", "beta-cms.example.test")
+	betaWebsiteRecord.Set("settings", map[string]any{})
+	if err := app.Save(betaWebsiteRecord); err != nil {
+		t.Fatalf("failed to create native seo beta website: %v", err)
+	}
+
+	pageRecord := core.NewRecord(pagesCollection)
+	pageRecord.Id = nuvioCMSDashboardAlphaPageID
+	pageRecord.Set("website", nuvioCMSDashboardAlphaWebsiteID)
+	pageRecord.Set("title", "A Home")
+	pageRecord.Set("name", "Home")
+	pageRecord.Set("slug", "home")
+	pageRecord.Set("status", "published")
+	pageRecord.Set("seo_title", "Alpha Home SEO title")
+	pageRecord.Set("seo_description", "Alpha Home SEO description")
+	pageRecord.Set("seo_canonical_url", "https://alpha.example/home")
+	pageRecord.Set("seo_translations", map[string]any{})
+	if err := app.Save(pageRecord); err != nil {
+		t.Fatalf("failed to create native seo page: %v", err)
+	}
 }
 
 func ensureNuvioCMSBackofficeCollection(
