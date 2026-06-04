@@ -464,7 +464,7 @@
             type: "file",
             hint: !scopedAssetWebsiteId
                 ? "Select a website before managing files."
-                : "",
+                : "Used when this page is shared. If empty, the global SEO image is used.",
             nuvioUseScopedAssets: true,
             nuvioAssetWebsiteId: scopedAssetWebsiteId,
             nuvioCanUseFileFields: canUseScopedAssetActions,
@@ -3511,10 +3511,6 @@
         return !!toSingleFileName(value);
     }
 
-    function getSeoImageValueLabel(value) {
-        return toSingleFileName(value);
-    }
-
     function getSeoImagePayloadValue(value) {
         if (isPlainObject(value)) {
             const fileRef = resolveScopedSEOAssetRef(value);
@@ -3709,58 +3705,6 @@
             seoSocialImageFile: normalizedNextValue,
             seoSocialImageRemove: !hasNextValue && hadCurrentValue,
         };
-    }
-
-    function markWebsiteSeoImageForRemoval(type) {
-        if (!canUseScopedAssetActions) {
-            websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
-            return;
-        }
-
-        if (type === "logo") {
-            websiteIdentitySeoDraft = {
-                ...websiteIdentitySeoDraft,
-                logoCurrent: "",
-                logoFile: null,
-                logoRemove: true,
-            };
-            return;
-        }
-
-        if (type === "seoImage") {
-            websiteIdentitySeoDraft = {
-                ...websiteIdentitySeoDraft,
-                seoImageCurrent: "",
-                seoImageFile: null,
-                seoImageRemove: true,
-            };
-        }
-    }
-
-    function undoWebsiteSeoImageRemoval(type) {
-        if (!canUseScopedAssetActions) {
-            websiteIdentitySeoError = "File uploads are managed by an administrator for now.";
-            return;
-        }
-
-        if (type === "logo") {
-            websiteIdentitySeoDraft = {
-                ...websiteIdentitySeoDraft,
-                logoCurrent: websiteLogoField ? toSingleFileName(selectedWebsite?.[websiteLogoField]) : "",
-                logoFile: null,
-                logoRemove: false,
-            };
-            return;
-        }
-
-        if (type === "seoImage") {
-            websiteIdentitySeoDraft = {
-                ...websiteIdentitySeoDraft,
-                seoImageCurrent: websiteSeoImageField ? toSingleFileName(selectedWebsite?.[websiteSeoImageField]) : "",
-                seoImageFile: null,
-                seoImageRemove: false,
-            };
-        }
     }
 
     function handlePageSeoTitleInput(event) {
@@ -5204,21 +5148,6 @@
                                                                             on:change={handlePageSeoScopedAssetChange}
                                                                         />
                                                                     {/if}
-
-                                                                    <div class="help-block file-field-hint">
-                                                                        {#if pageEditForm.seoSocialImageRemove}
-                                                                            <span class="label label-sm settings-file-state">Image will be removed on save</span>
-                                                                        {:else if hasSeoImageValue(pageEditForm.seoSocialImageFile)}
-                                                                            <span class="label label-sm settings-file-state">New file: {getSeoImageValueLabel(pageEditForm.seoSocialImageFile)}</span>
-                                                                        {:else if hasSeoImageValue(pageEditForm.seoSocialImageCurrent)}
-                                                                            <span class="label label-sm settings-file-state">Current file: {getSeoImageValueLabel(pageEditForm.seoSocialImageCurrent)}</span>
-                                                                        {:else}
-                                                                            <span class="label label-sm settings-file-state">No current image</span>
-                                                                        {/if}
-                                                                    </div>
-                                                                        <div class="help-block">
-                                                                            Used when this page is shared. If empty, the global SEO image is used.
-                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                         </div>
@@ -5563,43 +5492,6 @@
                                                                                 on:change={(event) => handleWebsiteSeoScopedAssetChange("logo", event)}
                                                                             />
                                                                         {/if}
-
-                                                                        {#if websiteIdentitySeoDraft.logoRemove || websiteIdentitySeoDraft.logoCurrent || websiteIdentitySeoDraft.logoFile}
-                                                                            <div class="page-seo-image-action-row">
-                                                                                {#if websiteIdentitySeoDraft.logoRemove}
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                        on:click={() => undoWebsiteSeoImageRemoval("logo")}
-                                                                                    >
-                                                                                        Undo remove
-                                                                                    </button>
-                                                                                {:else}
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                        on:click={() => markWebsiteSeoImageForRemoval("logo")}
-                                                                                    >
-                                                                                        Remove image
-                                                                                    </button>
-                                                                                {/if}
-                                                                            </div>
-                                                                        {/if}
-
-                                                                        <div class="help-block file-field-hint">
-                                                                            {#if websiteIdentitySeoDraft.logoRemove}
-                                                                                <span class="label label-sm settings-file-state">Image will be removed on save</span>
-                                                                            {:else if websiteIdentitySeoDraft.logoFile}
-                                                                                <span class="label label-sm settings-file-state">New file: {getSeoImageValueLabel(websiteIdentitySeoDraft.logoFile)}</span>
-                                                                            {:else if websiteIdentitySeoDraft.logoCurrent}
-                                                                                <span class="label label-sm settings-file-state">Current file: {getSeoImageValueLabel(websiteIdentitySeoDraft.logoCurrent)}</span>
-                                                                            {:else}
-                                                                                <span class="label label-sm settings-file-state">No current image</span>
-                                                                            {/if}
-                                                                        </div>
-                                                                        <div class="help-block">
-                                                                            Used as the default website identity logo in SEO previews and metadata.
-                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -5678,43 +5570,6 @@
                                                                                 on:change={(event) => handleWebsiteSeoScopedAssetChange("seoImage", event)}
                                                                             />
                                                                         {/if}
-
-                                                                        {#if websiteIdentitySeoDraft.seoImageRemove || websiteIdentitySeoDraft.seoImageCurrent || websiteIdentitySeoDraft.seoImageFile}
-                                                                            <div class="page-seo-image-action-row">
-                                                                                {#if websiteIdentitySeoDraft.seoImageRemove}
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                        on:click={() => undoWebsiteSeoImageRemoval("seoImage")}
-                                                                                    >
-                                                                                        Undo remove
-                                                                                    </button>
-                                                                                {:else}
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        class="btn btn-sm btn-outline page-seo-image-action-btn"
-                                                                                        on:click={() => markWebsiteSeoImageForRemoval("seoImage")}
-                                                                                    >
-                                                                                        Remove image
-                                                                                    </button>
-                                                                                {/if}
-                                                                            </div>
-                                                                        {/if}
-
-                                                                        <div class="help-block file-field-hint">
-                                                                            {#if websiteIdentitySeoDraft.seoImageRemove}
-                                                                                <span class="label label-sm settings-file-state">Image will be removed on save</span>
-                                                                            {:else if websiteIdentitySeoDraft.seoImageFile}
-                                                                                <span class="label label-sm settings-file-state">New file: {getSeoImageValueLabel(websiteIdentitySeoDraft.seoImageFile)}</span>
-                                                                            {:else if websiteIdentitySeoDraft.seoImageCurrent}
-                                                                                <span class="label label-sm settings-file-state">Current file: {getSeoImageValueLabel(websiteIdentitySeoDraft.seoImageCurrent)}</span>
-                                                                            {:else}
-                                                                                <span class="label label-sm settings-file-state">No current image</span>
-                                                                            {/if}
-                                                                        </div>
-                                                                        <div class="help-block">
-                                                                            Used when pages are shared. If empty, runtime fallback applies.
-                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -7135,72 +6990,6 @@
         align-content: start;
     }
 
-    .page-seo-image-card .help-block {
-        margin: 0;
-    }
-
-    .page-seo-image-upload-row {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-
-    .page-seo-image-input-row {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        width: 100%;
-        justify-content: space-between;
-        flex-wrap: nowrap;
-    }
-
-    .page-seo-image-action-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex: 0 0 auto;
-        margin-left: auto;
-    }
-
-    .page-seo-image-action-btn {
-        min-height: 30px;
-        align-self: flex-start;
-        white-space: nowrap;
-    }
-
-    .page-seo-file-input {
-        width: 100%;
-        max-width: none;
-        min-width: 0;
-        min-height: 44px;
-        padding: 8px 10px;
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 78%, transparent);
-    }
-
-    .page-seo-image-controls .file-field-hint,
-    .page-seo-image-controls > .help-block:not(.file-field-hint) {
-        padding-left: 10px;
-    }
-
-    .page-seo-file-input::file-selector-button {
-        height: 28px;
-        padding: 0 12px;
-        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 76%, transparent);
-        border-radius: 8px;
-        background: color-mix(in srgb, var(--baseAlt1Color) 16%, var(--baseColor));
-        color: var(--txtPrimaryColor);
-        font-size: var(--smFontSize);
-        font-weight: 500;
-        margin-right: 8px;
-        cursor: pointer;
-        transition: background-color var(--baseAnimationSpeed), border-color var(--baseAnimationSpeed);
-    }
-
-    .page-seo-file-input:hover::file-selector-button,
-    .page-seo-file-input:focus-visible::file-selector-button {
-        border-color: color-mix(in srgb, var(--baseAlt3Color) 90%, transparent);
-        background: color-mix(in srgb, var(--baseAlt2Color) 60%, var(--baseColor));
-    }
-
     .seo-main-actions {
         justify-content: flex-start;
     }
@@ -7224,21 +7013,6 @@
             aspect-ratio: 1.4 / 1;
         }
 
-        .page-seo-image-input-row {
-            flex-wrap: wrap;
-            align-items: flex-start;
-            justify-content: flex-start;
-        }
-
-        .page-seo-file-input {
-            width: 100%;
-            min-width: 0;
-        }
-
-        .page-seo-image-controls .file-field-hint,
-        .page-seo-image-controls > .help-block:not(.file-field-hint) {
-            padding-left: 0;
-        }
     }
 
     .seo-advanced-pane {
@@ -7450,13 +7224,6 @@
 
     .settings-file-row {
         display: block;
-    }
-
-    .settings-file-state {
-        --labelHPadding: 8px;
-        border-color: color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
-        color: var(--txtHintColor);
-        background: color-mix(in srgb, var(--baseAlt1Color) 26%, var(--baseColor));
     }
 
     .seo-preview-card {
