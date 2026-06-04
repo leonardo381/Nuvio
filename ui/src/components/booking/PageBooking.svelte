@@ -6374,8 +6374,8 @@
                             />
                         </div>
 
-                        <div class="form-field m-b-0 booking-manual-slot-field">
-                            <label class="txt-sm txt-hint">Available slot</label>
+                        <div class="booking-reschedule-slot-section">
+                            <div class="txt-sm txt-hint booking-reschedule-slot-label">Available slot</div>
                             {#if !rescheduleForm.serviceId || !rescheduleForm.date}
                                 <div class="txt-xs txt-hint">Select service and date to load available times.</div>
                             {:else if isLoadingRescheduleSlots}
@@ -7837,6 +7837,17 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
+    }
+
+    .booking-reschedule-slot-section {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .booking-reschedule-slot-label {
+        line-height: 1.3;
     }
 
     .booking-manual-slot-field {

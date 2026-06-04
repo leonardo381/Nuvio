@@ -77,6 +77,7 @@
     let normalizedCampaignManualRecipientsCount = 0;
     let activeSubscriberIdsByGroupId = new Map();
     let groupSelectionMetaById = new Map();
+    let selectedCampaignGroupIds = [];
     let lastWebsitesCollectionId = "";    let lastDataKey = "";    let lastSubscribersFilterKey = "";    let lastAudienceRecipientsResetKey = "";    let lastPersistedContextKey = "";    $: websitesCollection = findCollectionByRequiredNames($collections, ["websites", "Websites"]);    $: subscribersCollection = findCollectionByRequiredNames($collections, ["Subscribers", "subscribers"]); 
     $: campaignsCollection = findCollectionByRequiredNames($collections, ["Campaigns", "campaigns"]);
     $: subscriberGroupsCollection = findCollectionByRequiredNames($collections, ["SubscriberGroups", "subscribergroups"]);
@@ -194,6 +195,13 @@
     );
     $: activeSubscriberIds = activeSubscribers.map((subscriber) => subscriber.id);
     $: activeSubscriberIdsSet = new Set(activeSubscriberIds);
+    $: {
+        const availableGroupIds = new Set(subscriberGroups.map((group) => group.id));
+        const nextSelectedGroupIds = selectedCampaignGroupIds.filter((groupId) => availableGroupIds.has(groupId));
+        if (nextSelectedGroupIds.length !== selectedCampaignGroupIds.length) {
+            selectedCampaignGroupIds = nextSelectedGroupIds;
+        }
+    }
     $: normalizedCampaignManualRecipientIds = normalizeManualRecipientIds(campaignForm.recipientsIds);
     $: normalizedCampaignManualRecipientIdsSet = new Set(normalizedCampaignManualRecipientIds);
     $: normalizedCampaignManualRecipientsCount = normalizedCampaignManualRecipientIds.length;
@@ -270,13 +278,13 @@
     $: audienceRecipientsSummary = `${resolveManualAudienceRecipientCountForMode(campaignForm.recipientsType, campaignForm.recipientsIds)} selected / ${activeSubscribers.length} active`;
     $: audienceSummaryStatus = isViewingSentCampaign
         ? "Sent campaign (read-only)"
-        : (editingCampaignId ? "Editing existing draft" : "New draft");
+        : (editingCampaignId ? "Editing saved campaign" : "New campaign");
     $: audienceSubjectReady = !!campaignSubjectValue;
     $: audienceBodyReady = !!campaignBodyValue;
     $: audienceRecipientsReady = normalizedCampaignManualRecipientsCount > 0;
     $: audienceHasUnsavedChanges = !!editingCampaign && campaignHasUnsavedComposerChanges(editingCampaign);
     $: audienceSendDisabledReason = !editingCampaign
-        ? "Save the draft before sending this campaign."
+        ? "Save the campaign before sending."
         : getSendCampaignDisabledReason(editingCampaign);
     $: audienceBlockingWarnings = [];
     $: if (!audienceSubjectReady) {
@@ -289,19 +297,19 @@
         audienceBlockingWarnings.push("Select at least one active recipient before sending.");
     }
     $: if (!editingCampaignId) {
-        audienceBlockingWarnings.push("Save the draft before sending this campaign.");
+        audienceBlockingWarnings.push("Save the campaign before sending.");
     }
     $: if (editingCampaign && normalizeStatus(editingCampaign.status) === "sent") {
         audienceBlockingWarnings.push("Campaign already sent.");
     }
     $: audienceAttentionWarnings = [];
     $: if (audienceHasUnsavedChanges) {
-        audienceAttentionWarnings.push("Update the draft before sending these selected recipients.");
+        audienceAttentionWarnings.push("Save changes before sending these selected recipients.");
     }
     $: if (
         !!editingCampaign
         && !!audienceSendDisabledReason
-        && audienceSendDisabledReason !== "Update the draft before sending these selected recipients."
+        && audienceSendDisabledReason !== "Save changes before sending these selected recipients."
         && !audienceBlockingWarnings.includes(audienceSendDisabledReason)
     ) {
         audienceAttentionWarnings.push(audienceSendDisabledReason);
@@ -321,7 +329,7 @@
         canSend: audienceCanSendNow,
     });
     $: audienceHealthPillClass = resolveAudienceHealthPillClass(audienceHealthStatus);
-    $: subscribersTotalPages = Math.max(1, Math.ceil(filteredSubscribers.length / subscribersPageSize));    $: if (subscribersPage > subscribersTotalPages) {        subscribersPage = subscribersTotalPages;    };    $: subscribersPageStart = (subscribersPage - 1) * subscribersPageSize;    $: pagedSubscribers = filteredSubscribers.slice(subscribersPageStart, subscribersPageStart + subscribersPageSize);    $: visibleSubscriberIds = pagedSubscribers.map((subscriber) => subscriber.id);    $: areAllVisibleSubscribersSelected = visibleSubscriberIds.length > 0        && visibleSubscriberIds.every((id) => selectedSubscriberIds.includes(id));    $: selectedSubscribersCount = selectedSubscriberIds.length;    $: pendingSendRecipientsCount = resolveCampaignRecipientsCount(pendingSendCampaign);    $: {
+    $: subscribersTotalPages = Math.max(1, Math.ceil(filteredSubscribers.length / subscribersPageSize));    $: if (subscribersPage > subscribersTotalPages) {        subscribersPage = subscribersTotalPages;    };    $: subscribersPageStart = (subscribersPage - 1) * subscribersPageSize;    $: pagedSubscribers = filteredSubscribers.slice(subscribersPageStart, subscribersPageStart + subscribersPageSize);    $: visibleSubscriberIds = pagedSubscribers.map((subscriber) => subscriber.id);    $: areAllVisibleSubscribersSelected = visibleSubscriberIds.length > 0        && visibleSubscriberIds.every((id) => selectedSubscriberIds.includes(id));    $: selectedSubscribersCount = selectedSubscriberIds.length;    $: selectedSubscriberActiveRecipientIds = normalizeManualRecipientIds(selectedSubscriberIds);    $: selectedSubscribersCampaignRecipientsCount = selectedSubscriberActiveRecipientIds.length;    $: selectedSubscribersSelectionSummary = `${selectedSubscribersCount} subscriber${selectedSubscribersCount === 1 ? "" : "s"} selected`;    $: selectedSubscribersCampaignSummary = selectedSubscribersCampaignRecipientsCount === selectedSubscribersCount        ? "Use this selection as campaign recipients."        : `${selectedSubscribersCampaignRecipientsCount} active subscriber${selectedSubscribersCampaignRecipientsCount === 1 ? "" : "s"} can be used as campaign recipients.`;    $: pendingSendRecipientsCount = resolveCampaignRecipientsCount(pendingSendCampaign);    $: {
         const nextFilterKey = `${selectedWebsiteId}|${subscriberSearch}|${subscriberStatusFilter}|${subscriberGroupFilter}|${subscriberSort}|${subscribers.length}`;
         if (nextFilterKey !== lastSubscribersFilterKey) {
             lastSubscribersFilterKey = nextFilterKey;
@@ -480,12 +488,15 @@
         }
 
         const nextSelection = new Set(normalizedCampaignManualRecipientIds);
-        const groupState = getGroupSelectionMeta(groupId).state;
-        if (groupState === "full") {
+        const nextExplicitGroupIds = new Set(selectedCampaignGroupIds);
+        if (nextExplicitGroupIds.has(groupId)) {
+            nextExplicitGroupIds.delete(groupId);
             groupActiveRecipientIds.forEach((id) => nextSelection.delete(id));
         } else {
+            nextExplicitGroupIds.add(groupId);
             groupActiveRecipientIds.forEach((id) => nextSelection.add(id));
         }
+        selectedCampaignGroupIds = [...nextExplicitGroupIds];
         setManualRecipientIds([...nextSelection]);
     }
 
@@ -493,6 +504,7 @@
         if (normalizeStatus(campaignForm.recipientsType) !== "manual") {
             setCampaignRecipientsType("manual");
         }
+        selectedCampaignGroupIds = [];
         setManualRecipientIds(getActiveSubscriberIds());
     }
 
@@ -500,6 +512,7 @@
         if (normalizeStatus(campaignForm.recipientsType) === "all") {
             setCampaignRecipientsType("manual");
         }
+        selectedCampaignGroupIds = [];
         setManualRecipientIds([]);
     }
 
@@ -555,7 +568,7 @@
 
     function resolveCreateCampaignDisabledReason(isCreating, websiteId, subject, body, recipientsType, recipientsIds) {
         if (isCreating) {
-            return "Creating draft...";
+            return "Saving campaign...";
         }
 
         if (!websiteId) {
@@ -617,7 +630,7 @@
             return "Campaign already sent.";
         }
         if (campaignHasUnsavedComposerChanges(campaign)) {
-            return "Update the draft before sending these selected recipients.";
+            return "Save changes before sending these selected recipients.";
         }
         if (resolveCampaignRecipientsCount(campaign) < 1) {
             return "Select at least one active recipient before sending.";
@@ -734,7 +747,7 @@
     }
 
     function resolveAudienceStepHint() {
-        return "Finalize recipients, then save or send from your drafts list.";
+        return "Finalize recipients, then save the campaign or send it from your drafts list.";
     }
 
     function resolveAudienceHealthStatus({ hasMissingBasics = false, needsAttention = false, canSend = false } = {}) {
@@ -1310,7 +1323,7 @@
         nextCreateGroupIds.add(groupId);
         subscriberForm = { ...subscriberForm, groupIds: [...nextCreateGroupIds] };
     }
-    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
+    function setActiveSection(section) {        if (newsletterSections.has(section)) {            activeSection = section;            if (section === "campaigns") {                campaignWorkspace = "builder";                campaignBuilderShowEditor = true;                campaignBuilderShowPreview = false;            }        }    }    function setSubscribersPage(page) {        const nextPage = Math.min(Math.max(page, 1), subscribersTotalPages);        subscribersPage = nextPage;    }    function isManualRecipientSelected(subscriberId) {        return normalizedCampaignManualRecipientIdsSet.has(subscriberId);    }    function toggleManualRecipient(subscriberId) {        if (!subscriberId || !activeSubscriberIdsSet.has(subscriberId)) {            return;        }        if (normalizeStatus(campaignForm.recipientsType) !== "manual") {            setCampaignRecipientsType("manual");        }        const nextSelection = new Set(normalizedCampaignManualRecipientIds);        if (nextSelection.has(subscriberId)) {            nextSelection.delete(subscriberId);        } else {            nextSelection.add(subscriberId);        }        setManualRecipientIds([...nextSelection]);    }    function isSubscriberSelected(subscriberId) {        return selectedSubscriberIds.includes(subscriberId);    }    function toggleSubscriberSelection(subscriberId) {        if (selectedSubscriberIds.includes(subscriberId)) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => id !== subscriberId);        } else {            selectedSubscriberIds = [...selectedSubscriberIds, subscriberId];        }    }    function toggleAllVisibleSubscribers() {        if (areAllVisibleSubscribersSelected) {            selectedSubscriberIds = selectedSubscriberIds.filter((id) => !visibleSubscriberIds.includes(id));            return;        }        const nextSelectedIds = new Set(selectedSubscriberIds);        visibleSubscriberIds.forEach((id) => nextSelectedIds.add(id));        selectedSubscriberIds = [...nextSelectedIds];    }    function resetSubscriberSelection() {        selectedSubscriberIds = [];    }    function useSelectedSubscribersForCampaign() {        selectedCampaignGroupIds = [];        const appliedRecipientIds = setManualRecipientIds(selectedSubscriberIds);        if (!appliedRecipientIds.length) {            addWarningToast("Select at least one active subscriber to use in a campaign.");            return;        }        activeSection = "campaigns";        campaignWorkspace = "audience";        campaignBuilderShowEditor = true;        closeCampaignPreviewModal();        addSuccessToast(`${appliedRecipientIds.length} subscriber${appliedRecipientIds.length === 1 ? "" : "s"} added to campaign recipients.`);    }    function openSendCampaignModal(campaign) {        const reason = getSendCampaignDisabledReason(campaign);        if (reason) {            return;        }        pendingSendCampaign = campaign;    }    function closeSendCampaignModal() {
         pendingSendCampaign = null;
     }
 
@@ -1695,6 +1708,7 @@
             recipientsType: "manual",
             recipientsIds: [],
         };
+        selectedCampaignGroupIds = [];
         audienceRecipientSearch = "";
         audienceRecipientVisibilityFilter = "all";
         campaignFormError = "";
@@ -1723,6 +1737,7 @@
             recipientsType: "manual",
             recipientsIds: normalizeManualRecipientIds(resolvedRecipientsIds),
         };
+        selectedCampaignGroupIds = [];
         audienceRecipientSearch = "";
         audienceRecipientVisibilityFilter = "all";
         campaignBuilderShowEditor = true;
@@ -1749,6 +1764,7 @@
             recipientsType: "manual",
             recipientsIds: normalizeManualRecipientIds(resolvedRecipientsIds),
         };
+        selectedCampaignGroupIds = [];
         audienceRecipientSearch = "";
         audienceRecipientVisibilityFilter = "all";
         campaignBuilderShowEditor = false;
@@ -1835,9 +1851,9 @@
                 if (statusCode === 401) {
                     ApiClient.error(err, false);
                 } else if (statusCode === 403) {
-                    addErrorToast("You do not have access to update this draft.");
+                    addErrorToast("You do not have access to save this campaign.");
                 } else {
-                    ApiClient.error(err);
+                    addErrorToast("We could not save the campaign. Please try again.");
                 }
             }
             isSavingCampaign = false;
@@ -1846,15 +1862,43 @@
 
         isCreatingCampaign = true;
         try {
-            await ApiClient.createNewsletterCampaign(payload, {
+            const response = await ApiClient.createNewsletterCampaign(payload, {
                 requestKey: "nuvio_newsletter_campaign_create_" + selectedWebsiteId,
             });
-            await loadNewsletterDashboard();
-            addSuccessToast("Campaign draft created.");
-            resetCampaignComposer();
+            const createdCampaign = response?.campaign || null;
+            if (createdCampaign?.id) {
+                campaigns = [
+                    createdCampaign,
+                    ...campaigns.filter((campaign) => campaign.id !== createdCampaign.id),
+                ];
+                editingCampaignId = createdCampaign.id;
+                viewingSentCampaignId = "";
+            } else {
+                await loadNewsletterDashboard();
+                const matchingCampaign = campaigns.find((campaign) =>
+                    normalizeStatus(campaign?.status) === "draft"
+                    && `${campaign?.subject || ""}`.trim() === payload.subject
+                    && `${campaign?.body || ""}`.trim() === payload.body
+                    && areIdListsEqual(
+                        normalizeManualAudienceRecipientIds(getCampaignRecipientIds(campaign)),
+                        payload.recipientsIds,
+                    ));
+                if (matchingCampaign?.id) {
+                    editingCampaignId = matchingCampaign.id;
+                    viewingSentCampaignId = "";
+                }
+            }
+            addSuccessToast("Campaign saved.");
             campaignWorkspace = "audience";
         } catch (err) {
-            ApiClient.error(err);
+            const statusCode = Number(err?.status) || 0;
+            if (statusCode === 401) {
+                ApiClient.error(err, false);
+            } else if (statusCode === 403) {
+                addErrorToast("You do not have access to save this campaign.");
+            } else {
+                addErrorToast("We could not save the campaign. Please try again.");
+            }
         }
         isCreatingCampaign = false;
     }
@@ -2428,14 +2472,23 @@
                             {#if selectedSubscribersCount}
                                 <div class="subscriber-selection-popover" role="status" aria-live="polite">
                                     <span class="selection-summary">
-                                        Selected {selectedSubscribersCount} record(s)
+                                        {selectedSubscribersSelectionSummary}
+                                        <span class="txt-xs txt-hint">- {selectedSubscribersCampaignSummary}</span>
                                     </span>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm"
+                                        disabled={!selectedSubscribersCampaignRecipientsCount}
+                                        on:click={useSelectedSubscribersForCampaign}
+                                    >
+                                        <span class="txt">Use in campaign</span>
+                                    </button>
                                     <button
                                         type="button"
                                         class="btn btn-sm btn-outline"
                                         on:click={resetSubscriberSelection}
                                     >
-                                        <span class="txt">Reset</span>
+                                        <span class="txt">Clear selection</span>
                                     </button>
                                 </div>
                             {/if}
@@ -2493,7 +2546,7 @@
                                             </button>
                                         {:else}
                                             <button type="button" class="btn btn-xs btn-outline" on:click={resetCampaignComposer}>
-                                                <span class="txt">New draft</span>
+                                                <span class="txt">New campaign</span>
                                             </button>
                                         {/if}
                                     </div>
@@ -2707,12 +2760,11 @@
                                                     {#if hasSubscriberGroupsFeature && subscriberGroups.length}
                                                         <div class="manual-group-chip-list">
                                                             {#each subscriberGroups as group (group.id)}
-                                                                {@const groupSelectionMeta = getGroupSelectionMeta(group.id)}
+                                                                {@const groupSelectionMeta = groupSelectionMetaById.get(group.id) || { state: "none", selectedCount: 0, totalCount: 0 }}
                                                                 <button
                                                                     type="button"
                                                                 class="manual-group-chip"
-                                                                class:is-active={groupSelectionMeta.state === "full"}
-                                                                class:is-partial={groupSelectionMeta.state === "partial"}
+                                                                class:is-active={selectedCampaignGroupIds.includes(group.id)}
                                                                 disabled={isViewingSentCampaign}
                                                                 on:click={() => toggleGroupRecipients(group.id)}
                                                             >
@@ -2806,8 +2858,8 @@
                                                 <h5 class="m-0">Campaign summary</h5>
                                                 <div class="campaign-audience-summary-list">
                                                     <div class="campaign-audience-summary-row">
-                                                        <span class="audience-stat-label">Draft</span>
-                                                        <span class="audience-stat-value">{campaignSubjectValue || "Untitled draft"}</span>
+                                                        <span class="audience-stat-label">Campaign</span>
+                                                        <span class="audience-stat-value">{campaignSubjectValue || "Untitled campaign"}</span>
                                                     </div>
                                                     <div class="campaign-audience-summary-row">
                                                         <span class="audience-stat-label">Status</span>
@@ -2875,7 +2927,7 @@
                                                             disabled={!!createCampaignDisabledReason || isCreatingCampaign || isSavingCampaign}
                                                             title={createCampaignDisabledReason || null}
                                                         >
-                                                            <span class="txt">{editingCampaignId ? "Update draft" : "Create draft"}</span>
+                                                            <span class="txt">Save campaign</span>
                                                         </button>
                                                         <button
                                                             type="button"
@@ -3494,6 +3546,9 @@
     }
 
     .selection-summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
         color: var(--txtPrimaryColor);
         font-weight: 600;
         font-size: var(--smFontSize);
@@ -4393,12 +4448,6 @@
         color: var(--txtPrimaryColor);
     }
 
-    .manual-group-chip.is-partial {
-        border-color: color-mix(in srgb, var(--primaryColor) 32%, var(--baseAlt2Color));
-        background: color-mix(in srgb, var(--primaryColor) 6%, var(--baseColor));
-        color: var(--txtPrimaryColor);
-    }
-
     .manual-group-chip-name {
         font-size: 12px;
         max-width: 180px;
@@ -4424,11 +4473,6 @@
 
     .manual-group-chip.is-active .manual-group-chip-count {
         border-color: color-mix(in srgb, var(--primaryColor) 38%, var(--baseAlt2Color));
-        color: var(--txtPrimaryColor);
-    }
-
-    .manual-group-chip.is-partial .manual-group-chip-count {
-        border-color: color-mix(in srgb, var(--primaryColor) 32%, var(--baseAlt2Color));
         color: var(--txtPrimaryColor);
     }
 
@@ -4856,6 +4900,9 @@
         }
 
         .selection-summary {
+            align-items: flex-start;
+            flex-direction: column;
+            white-space: normal;
             width: 100%;
         }
 
