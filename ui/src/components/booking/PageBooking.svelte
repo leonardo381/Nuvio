@@ -2092,7 +2092,7 @@
             addSuccessToast("Appointment created.");
 
             if (normalizeString(response?.warning)) {
-                addErrorToast(normalizeString(response.warning));
+                addWarningToast(normalizeString(response.warning));
             }
         } catch (err) {
             ApiClient.error(err, false);
@@ -2104,7 +2104,7 @@
                 addErrorToast(conflictMessage);
                 await loadManualAppointmentSlots();
             } else {
-                addErrorToast("Unable to create appointment right now.");
+                addErrorToast("We could not create the appointment. Please try again.");
             }
         } finally {
             isCreatingManualAppointment = false;
@@ -2144,11 +2144,11 @@
             closeReschedulePanel();
             addSuccessToast("Appointment rescheduled.");
             if (payload.sendEmail && response?.emailSent === true) {
-                addSuccessToast("Reschedule email sent.");
+                addSuccessToast("Notification sent.");
             }
 
             if (normalizeString(response?.warning)) {
-                addErrorToast(normalizeString(response.warning));
+                addWarningToast(normalizeString(response.warning));
             }
         } catch (err) {
             ApiClient.error(err, false);
@@ -2160,7 +2160,7 @@
                 addErrorToast(conflictMessage);
                 await loadRescheduleAppointmentSlots();
             } else {
-                addErrorToast("Unable to reschedule appointment right now.");
+                addErrorToast("We could not reschedule the appointment. Please try again.");
             }
         } finally {
             isSavingRescheduleAppointment = false;
@@ -2441,7 +2441,7 @@
         }
 
         if (!targetUrl) {
-            addErrorToast("Google Calendar link is unavailable for this appointment.");
+            addErrorToast("Google Calendar is not available for this appointment.");
             return;
         }
 
@@ -2464,16 +2464,17 @@
                 requestKey: `nuvio_booking_calendar_${selectedWebsiteId}_${appointmentId}`,
             });
 
-            addSuccessToast("Google Calendar opened.");
             if (response?.emailSent === true) {
-                addSuccessToast("Confirmation email sent.");
+                addSuccessToast("Calendar opened and notification sent.");
+            } else {
+                addSuccessToast("Calendar opened.");
             }
             if (normalizeString(response?.warning)) {
                 addWarningToast(normalizeString(response.warning));
             }
         } catch (err) {
             ApiClient.error(err, false);
-            addWarningToast("Google Calendar opened, but the confirmation email could not be sent.");
+            addWarningToast("Calendar opened. We could not send the notification.");
         } finally {
             isSendingCalendarInvite = false;
         }
@@ -2932,16 +2933,16 @@
             patchAppointmentRecord(selectedAppointment.id, patchPayload);
             dispatchSidebarBadgeRefresh();
 
-            addSuccessToast(`Appointment marked as ${resolvedStatus}.`);
+            addSuccessToast("Appointment updated.");
             if (sendEmail && response?.emailSent === true) {
-                addSuccessToast("Confirmation email sent.");
+                addSuccessToast("Notification sent.");
             }
             if (normalizeString(response?.warning)) {
-                addErrorToast(normalizeString(response.warning));
+                addWarningToast(normalizeString(response.warning));
             }
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to update appointment status right now.");
+            addErrorToast("We could not update the appointment. Please try again.");
         } finally {
             isUpdatingAppointmentStatus = false;
             updatingAppointmentId = "";
@@ -2971,10 +2972,10 @@
             });
             appointmentInternalNotesDraft = resolvedInternalNotes;
 
-            addSuccessToast("Internal notes saved.");
+            addSuccessToast("Notes saved.");
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to save internal notes right now.");
+            addErrorToast("We could not save notes. Please try again.");
         } finally {
             isSavingAppointmentInternalNotes = false;
         }
@@ -3012,8 +3013,8 @@
         } catch (err) {
             ApiClient.error(err, false);
             addErrorToast(nextArchived
-                ? "Unable to archive appointment right now."
-                : "Unable to move appointment to inbox right now.");
+                ? "We could not archive the appointment. Please try again."
+                : "We could not move the appointment to inbox. Please try again.");
         } finally {
             isUpdatingAppointmentArchive = false;
         }
@@ -3104,15 +3105,15 @@
             } else if (succeededIds.size && failedIds.length) {
                 selectedAppointmentIds = failedIds;
                 ApiClient.error(firstFailureReason, false);
-                addErrorToast("Some selected appointments could not be updated.");
+                addErrorToast("Some selected appointments could not be updated. Please try again.");
             } else if (failedIds.length) {
                 selectedAppointmentIds = failedIds;
                 ApiClient.error(firstFailureReason, false);
-                addErrorToast("Unable to update selected appointments right now.");
+                addErrorToast("We could not update selected appointments. Please try again.");
             }
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to update selected appointments right now.");
+            addErrorToast("We could not update selected appointments. Please try again.");
         } finally {
             isBulkUpdatingAppointments = false;
         }
@@ -3247,14 +3248,14 @@
 
             if (failedIds.length > 0) {
                 selectedServiceIds = failedIds;
-                addErrorToast("Some services could not be updated right now. Please try again.");
+                addErrorToast("Some selected services could not be updated. Please try again.");
             } else {
                 selectedServiceIds = [];
                 addSuccessToast(`Selected services ${targetActive ? "activated" : "deactivated"}.`);
             }
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to update selected services right now.");
+            addErrorToast("We could not update selected services. Please try again.");
         } finally {
             isBulkUpdatingServices = false;
         }
@@ -3302,7 +3303,7 @@
                         ? { ...record, ...updated }
                         : record,
                 );
-                addSuccessToast("Service updated.");
+                addSuccessToast("Service saved.");
             } else {
                 const response = await ApiClient.createBookingBackofficeService({
                     websiteId: selectedWebsiteId,
@@ -3319,7 +3320,7 @@
             }
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to save service right now.");
+            addErrorToast("We could not save the service. Please try again.");
         } finally {
             isSavingService = false;
         }
@@ -3793,7 +3794,7 @@
                 availabilityRows = applyAvailabilityValidation(nextRows);
 
                 if (!options?.silent) {
-                    addSuccessToast(`${row.label} window updated.`);
+                    addSuccessToast("Availability saved.");
                 }
             } else {
                 const response = await ApiClient.createBookingBackofficeAvailability({
@@ -3840,7 +3841,7 @@
                 availabilityRows = applyAvailabilityValidation(nextRows);
 
                 if (!options?.silent) {
-                    addSuccessToast(`${row.label} window saved.`);
+                    addSuccessToast("Availability saved.");
                 }
             }
 
@@ -3850,9 +3851,9 @@
             return true;
         } catch (err) {
             ApiClient.error(err, false);
-            updateAvailabilityWindow(dayKey, windowKey, { error: "Unable to save this window right now." });
+            updateAvailabilityWindow(dayKey, windowKey, { error: "We could not save this window. Please try again." });
             if (!options?.silent) {
-                addErrorToast("Unable to save availability right now.");
+                addErrorToast("We could not save availability. Please try again.");
             }
             return false;
         } finally {
@@ -3997,12 +3998,12 @@
         }
 
         if (!dirtyWindows.length && !invalidDirtyWindowsCount) {
-            addSuccessToast("No unsaved availability changes.");
+            addSuccessToast("All availability changes are saved.");
             return;
         }
 
         if (!dirtyWindows.length && invalidDirtyWindowsCount > 0) {
-            addErrorToast("Fix invalid windows before saving schedule changes.");
+            addErrorToast("Please fix invalid windows before saving.");
             return;
         }
 
@@ -4024,11 +4025,11 @@
             }
 
             if (savedCount > 0) {
-                addSuccessToast(`${savedCount} schedule window${savedCount === 1 ? "" : "s"} saved.`);
+                addSuccessToast("Availability saved.");
             }
 
             if (failedCount > 0 || invalidDirtyWindowsCount > 0) {
-                addErrorToast("Some schedule changes could not be saved.");
+                addErrorToast("Some availability changes could not be saved. Please try again.");
             }
 
             if (savedCount > 0) {
@@ -4166,15 +4167,15 @@
             } else if (updatedRecordsById.size && failedIds.length > 0) {
                 selectedExceptionIds = failedIds;
                 ApiClient.error(firstFailureReason, false);
-                addErrorToast("Some selected exceptions could not be updated.");
+                addErrorToast("Some selected exceptions could not be updated. Please try again.");
             } else if (failedIds.length > 0) {
                 selectedExceptionIds = failedIds;
                 ApiClient.error(firstFailureReason, false);
-                addErrorToast("Unable to update selected exceptions right now.");
+                addErrorToast("We could not update selected exceptions. Please try again.");
             }
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to update selected exceptions right now.");
+            addErrorToast("We could not update selected exceptions. Please try again.");
         } finally {
             isBulkUpdatingExceptions = false;
         }
@@ -4261,7 +4262,7 @@
                 );
                 isCreatingException = false;
                 selectedExceptionId = normalizeString(updated?.id);
-                addSuccessToast("Exception updated.");
+                addSuccessToast("Exception saved.");
             } else {
                 const response = await ApiClient.createBookingBackofficeException({
                     websiteId: selectedWebsiteId,
@@ -4279,8 +4280,8 @@
             await loadSlotPreview();
         } catch (err) {
             ApiClient.error(err, false);
-            exceptionFormError = "Unable to save exception right now.";
-            addErrorToast("Unable to save exception right now.");
+            exceptionFormError = "We could not save this exception. Please try again.";
+            addErrorToast("We could not save this exception. Please try again.");
         } finally {
             isSavingException = false;
         }
@@ -4333,8 +4334,8 @@
             await loadSlotPreview();
         } catch (err) {
             ApiClient.error(err, false);
-            bookingRulesFormError = "Unable to save booking rules right now.";
-            addErrorToast("Unable to save booking rules right now.");
+            bookingRulesFormError = "We could not save booking rules. Please try again.";
+            addErrorToast("We could not save booking rules. Please try again.");
         } finally {
             isSavingBookingRules = false;
         }

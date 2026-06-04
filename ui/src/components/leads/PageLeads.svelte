@@ -205,6 +205,7 @@
     $: bulkMarkReadEligibleCount = selectedLeads.filter((lead) => canBulkMarkLeadAsRead(lead)).length;
     $: bulkArchiveEligibleCount = selectedLeads.filter((lead) => canBulkArchiveLead(lead)).length;
     $: bulkMoveInboxEligibleCount = selectedLeads.filter((lead) => canBulkMoveLeadToInbox(lead)).length;
+    $: bulkMarkContactedEligibleCount = selectedLeads.filter((lead) => canBulkMarkLeadContacted(lead)).length;
     $: if (isDesktopMasterDetail && isLeadDetailsActive) {
         isLeadDetailsActive = false;
     }
@@ -1223,6 +1224,34 @@
         });
     }
 
+    function resolveLeadFollowUpEndpointSource(lead) {
+        const leadCollectionId = normalizeString(lead?.collectionId);
+        const leadCollectionName = normalizeLower(lead?.collectionName);
+        const leadKey = normalizeLower(lead?.key);
+        const sourceKey = normalizeLower(lead?.sourceKey);
+
+        if (
+            leadCollectionId && leadCollectionId === normalizeString(whatsappCollection?.id)
+            || leadCollectionName === normalizeLower(whatsappCollection?.name)
+            || leadKey.startsWith("whatsapp:")
+            || sourceKey === "whatsapp"
+        ) {
+            return "whatsapp";
+        }
+
+        if (
+            leadCollectionId && leadCollectionId === normalizeString(contactsCollection?.id)
+            || leadCollectionName === normalizeLower(contactsCollection?.name)
+            || leadKey.startsWith("contacts:")
+            || sourceKey === "contact"
+            || sourceKey === "booking"
+        ) {
+            return "contact";
+        }
+
+        return "";
+    }
+
     async function loadWebsites() {
         if (!websitesCollection?.id) {
             websites = [];
@@ -1424,10 +1453,12 @@
                     : normalizedTargetStatus === normalizeLower(statusSupport.archiveValue)
                         ? "archived"
                     : "updated";
-            addSuccessToast(`Lead marked as ${nextLabel}.`);
+            addSuccessToast(normalizedTargetStatus === normalizeLower(statusSupport.archiveValue)
+                ? "Lead archived."
+                : "Lead updated.");
         } catch (err) {
             ApiClient.error(err, false);
-            addErrorToast("Unable to update lead status right now.");
+            addErrorToast("We could not update this lead. Please try again.");
         } finally {
             isUpdatingLeadStatus = false;
             updatingLeadStatusKey = "";
@@ -1467,8 +1498,8 @@
             addSuccessToast("Lead note saved.");
         } catch (err) {
             ApiClient.error(err, false);
-            leadFollowUpError = "Unable to save follow-up note right now.";
-            addErrorToast("Unable to save follow-up note right now.");
+            leadFollowUpError = "We could not save the note. Please try again.";
+            addErrorToast("We could not save the note. Please try again.");
         } finally {
             isSavingLeadFollowUp = false;
         }
@@ -1492,11 +1523,11 @@
         try {
             await updateLeadFollowUpBySource(selectedLead.sourceKey, selectedLead.recordId, patchData);
             patchLeadRecord(selectedLead.sourceKey, selectedLead.recordId, patchData);
-            addSuccessToast("Lead marked as contacted.");
+            addSuccessToast("Marked as contacted.");
         } catch (err) {
             ApiClient.error(err, false);
-            leadFollowUpError = "Unable to update follow-up details right now.";
-            addErrorToast("Unable to update follow-up details right now.");
+            leadFollowUpError = "We could not update follow-up details. Please try again.";
+            addErrorToast("We could not update follow-up details. Please try again.");
         } finally {
             isSavingLeadFollowUp = false;
         }
@@ -1513,7 +1544,7 @@
         }
 
         if (!selectedLeadNewsletterInviteWebsiteId) {
-            addErrorToast("This lead is missing website context for newsletter invitation.");
+            addErrorToast("Select a website before sending a newsletter invitation.");
             return;
         }
 
@@ -1543,7 +1574,7 @@
             }
 
             if (inviteResult === "resent") {
-                addSuccessToast("Confirmation email sent again.");
+                addSuccessToast("Confirmation email sent.");
                 return;
             }
 
@@ -1552,7 +1583,7 @@
             const statusCode = Number(err?.status) || 0;
             const backendMessage = normalizeLower(err?.data?.message || err?.message);
             if (statusCode === 403) {
-                addErrorToast("You do not have permission to invite contacts to the newsletter.");
+                addErrorToast("This action is only available to admins.");
                 return;
             }
             if (backendMessage.includes("valid email")) {
@@ -1560,7 +1591,7 @@
                 return;
             }
 
-            addErrorToast("Unable to send newsletter invitation right now.");
+            addErrorToast("We could not send the newsletter invitation. Please try again.");
         } finally {
             isInvitingLeadToNewsletter = false;
         }
@@ -1673,6 +1704,10 @@
         return !!resolveBulkLeadStatusTarget(lead, "moveInbox");
     }
 
+    function canBulkMarkLeadContacted(lead) {
+        return !!lead?.recordId && !!resolveLeadFollowUpEndpointSource(lead);
+    }
+
     function resolveBulkLeadSuccessMessage(actionKey, count) {
         const quantityLabel = `${count} lead${count === 1 ? "" : "s"}`;
         if (actionKey === "markRead") {
@@ -1682,6 +1717,10 @@
             return `${quantityLabel} archived.`;
         }
         return `${quantityLabel} moved to inbox.`;
+    }
+
+    function resolveBulkLeadContactedSuccessMessage(count) {
+        return `${count} lead${count === 1 ? "" : "s"} marked as contacted.`;
     }
 
     async function applyBulkLeadStatusUpdate(actionKey) {
@@ -1705,7 +1744,7 @@
             .filter(Boolean);
 
         if (!operations.length) {
-            addErrorToast("Selected leads do not support this action.");
+            addErrorToast("The selected leads cannot use this action.");
             return;
         }
 
@@ -1756,7 +1795,7 @@
             }
 
             if (failureCount) {
-                addErrorToast("Some selected leads could not be updated.");
+                addErrorToast("Some selected leads could not be updated. Please try again.");
             }
         } finally {
             isBulkUpdatingLeads = false;
@@ -1774,6 +1813,80 @@
 
     async function moveSelectedLeadsToInbox() {
         await applyBulkLeadStatusUpdate("moveInbox");
+    }
+
+    async function markSelectedLeadsContactedNow() {
+        if (!selectedLeadsCount || isBulkUpdatingLeads || isUpdatingLeadStatus) {
+            return;
+        }
+
+        const contactedAt = new Date().toISOString();
+        const selectedSnapshot = [...selectedLeads];
+        const operations = selectedSnapshot
+            .filter((lead) => canBulkMarkLeadContacted(lead))
+            .map((lead) => ({
+                lead,
+                endpointSource: resolveLeadFollowUpEndpointSource(lead),
+                timestamp: contactedAt,
+            }));
+
+        if (!operations.length) {
+            addErrorToast("The selected leads cannot use this action.");
+            return;
+        }
+
+        isBulkUpdatingLeads = true;
+        bulkLeadActionKey = "markContacted";
+
+        try {
+            const updateResults = await Promise.allSettled(
+                operations.map((operation) =>
+                    updateLeadFollowUpBySource(
+                        operation.endpointSource,
+                        operation.lead.recordId,
+                        { lastContactedAt: operation.timestamp },
+                    )),
+            );
+
+            const successfulKeys = [];
+            let successCount = 0;
+            let failureCount = 0;
+
+            updateResults.forEach((result, index) => {
+                const operation = operations[index];
+                if (!operation) {
+                    return;
+                }
+
+                if (result.status === "fulfilled") {
+                    patchLeadRecord(operation.endpointSource, operation.lead.recordId, {
+                        lastContactedAt: operation.timestamp,
+                    });
+                    successCount += 1;
+                    successfulKeys.push(normalizeString(operation.lead.key));
+                    return;
+                }
+
+                failureCount += 1;
+                ApiClient.error(result.reason, false);
+            });
+
+            if (successfulKeys.length) {
+                const successfulKeySet = new Set(successfulKeys);
+                selectedLeadKeys = selectedLeadKeys.filter((key) => !successfulKeySet.has(normalizeString(key)));
+            }
+
+            if (successCount && !failureCount) {
+                addSuccessToast(resolveBulkLeadContactedSuccessMessage(successCount));
+            } else if (successCount && failureCount) {
+                addErrorToast(`${resolveBulkLeadContactedSuccessMessage(successCount)} Some selected leads could not be updated.`);
+            } else if (failureCount) {
+                addErrorToast("We could not update the selected leads. Please try again.");
+            }
+        } finally {
+            isBulkUpdatingLeads = false;
+            bulkLeadActionKey = "";
+        }
     }
 
     function handleLeadCardKeyDown(event, lead) {
@@ -2240,6 +2353,15 @@
                                 on:click={markSelectedLeadsAsRead}
                             >
                                 <span class="txt">Mark selected as read</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-sm btn-outline"
+                                class:btn-loading={isBulkUpdatingLeads && bulkLeadActionKey === "markContacted"}
+                                disabled={isBulkUpdatingLeads || !bulkMarkContactedEligibleCount}
+                                on:click={markSelectedLeadsContactedNow}
+                            >
+                                <span class="txt">Mark as contacted</span>
                             </button>
                             <button
                                 type="button"

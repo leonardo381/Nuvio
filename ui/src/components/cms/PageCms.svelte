@@ -4316,7 +4316,7 @@
                 );
             }
 
-            addSuccessToast("Page SEO updated.");
+            addSuccessToast("SEO settings saved.");
             pageEditForm = {
                 ...pageEditForm,
                 seoTitle: !activePageSeoTranslationLanguageCode && pageSeoTitleField
@@ -4345,8 +4345,9 @@
             };
             refreshPagePreview();
         } catch (err) {
-            ApiClient.error(err);
-            pageError = err?.response?.message || err?.message || "Failed to save page.";
+            ApiClient.error(err, false);
+            pageError = err?.response?.message || err?.message || "We could not save SEO settings. Please try again.";
+            addErrorToast("We could not save SEO settings. Please try again.");
         }
 
         isSavingPage = false;
@@ -4362,7 +4363,7 @@
         websiteIdentitySeoError = "";
 
         if (!selectedWebsite?.id || !hasWebsiteIdentitySeoFields) {
-            websiteIdentitySeoError = "Could not save identity and global SEO.";
+            websiteIdentitySeoError = "We could not save identity and global SEO. Please try again.";
             return;
         }
 
@@ -4500,11 +4501,12 @@
                 seoImageRemove: false,
             };
 
-            addSuccessToast("Identity and global SEO updated.");
+            addSuccessToast("Identity and SEO saved.");
             refreshPagePreview();
         } catch (err) {
-            ApiClient.error(err);
-            websiteIdentitySeoError = err?.response?.message || err?.message || "Failed to save identity and global SEO.";
+            ApiClient.error(err, false);
+            websiteIdentitySeoError = err?.response?.message || err?.message || "We could not save identity and global SEO. Please try again.";
+            addErrorToast("We could not save identity and global SEO. Please try again.");
         }
 
         isSavingWebsiteIdentitySeo = false;
@@ -4514,7 +4516,7 @@
         websiteSettingsError = "";
 
         if (!selectedWebsite?.id || !hasWebsiteSettingsField) {
-            websiteSettingsError = "Could not save this website settings.";
+            websiteSettingsError = "We could not save website settings. Please try again.";
             return;
         }
 
@@ -4538,11 +4540,12 @@
                 await loadCMSDashboard(selectedPageId);
             }
 
-            addSuccessToast("Website settings updated.");
+            addSuccessToast("Website settings saved.");
             refreshPagePreview();
         } catch (err) {
-            ApiClient.error(err);
-            websiteSettingsError = err?.response?.message || err?.message || "Failed to save website settings.";
+            ApiClient.error(err, false);
+            websiteSettingsError = err?.response?.message || err?.message || "We could not save website settings. Please try again.";
+            addErrorToast("We could not save website settings. Please try again.");
         }
 
         isSavingWebsiteSettings = false;
@@ -4623,14 +4626,15 @@
                 };
             }
 
-            addSuccessToast("Section updated.");
+            addSuccessToast("Section saved.");
             refreshPagePreview();
         } catch (err) {
-            ApiClient.error(err);
+            ApiClient.error(err, false);
             sectionErrorById = {
                 ...sectionErrorById,
-                [blockId]: err?.response?.message || err?.message || "Failed to save section.",
+                [blockId]: err?.response?.message || err?.message || "We could not save this section. Please try again.",
             };
+            addErrorToast("We could not save this section. Please try again.");
         }
 
         isSavingSectionById = {

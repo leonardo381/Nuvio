@@ -1306,15 +1306,15 @@
         }
 
         if (normalizedState === "provider_unconfigured") {
-            return "Analytics provider is not configured on the server yet.";
+            return "Traffic analytics are not configured yet.";
         }
 
         if (normalizedState === "provider_auth_missing") {
-            return "Analytics provider authentication is not configured on the server yet.";
+            return "Traffic analytics need setup before data can load.";
         }
 
         if (normalizedState === "provider_auth_error") {
-            return "Unable to authenticate with the analytics provider.";
+            return "We could not connect to traffic analytics.";
         }
 
         if (normalizedState === "provider_not_found") {
@@ -1947,7 +1947,7 @@
         trafficAnalyticsSetupSuccess = "";
 
         if (!selectedWebsite?.id || !resolvedWebsitesCollection?.id || !websiteSettingsField) {
-            trafficAnalyticsSetupError = "Unable to save traffic analytics settings for this website.";
+            trafficAnalyticsSetupError = "We could not save traffic analytics settings for this website.";
             return;
         }
 
@@ -1998,8 +1998,8 @@
             await loadWebsites();
             await loadTrafficData();
         } catch (err) {
-            ApiClient.error(err);
-            trafficAnalyticsSetupError = err?.response?.message || err?.message || "Failed to save traffic analytics settings.";
+            ApiClient.error(err, false);
+            trafficAnalyticsSetupError = err?.response?.message || err?.message || "We could not save traffic analytics settings. Please try again.";
         } finally {
             isSavingTrafficAnalyticsSetup = false;
         }

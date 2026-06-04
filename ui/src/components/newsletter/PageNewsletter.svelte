@@ -1122,7 +1122,7 @@
     }
 
     function resolveSendConfirmationHint() {
-        return "This action submits the campaign to your email provider immediately.";
+        return "This action sends the campaign immediately.";
     }
 
     function resolveCampaignFilterEmptyHint() {
@@ -1552,7 +1552,7 @@
             } else if (statusCode === 401) {
                 ApiClient.error(err, false);
             } else {
-                addErrorToast("Unable to send confirmation right now. Please try again.");
+                addErrorToast("We could not send the confirmation email. Please try again.");
             }
         } finally {
             resendingSubscriberId = "";
@@ -1651,22 +1651,22 @@
 
             if (hasSentCount && hasFailedCount) {
                 if (sentCountValue > 0 && failedCountValue > 0) {
-                    addWarningToast(`Campaign submitted to email provider. Submitted: ${sentCountValue}. Failed: ${failedCountValue}. Some emails may still bounce or be rejected later.`);
+                    addWarningToast(`Campaign submitted. ${sentCountValue} sent. ${failedCountValue} could not be processed. Delivery status will update shortly.`);
                     sent = true;
                 } else if (sentCountValue > 0) {
-                    addSuccessToast(`Campaign submitted to email provider. Submitted: ${sentCountValue}. Some emails may still bounce or be rejected later.`);
+                    addSuccessToast(`Campaign submitted. ${sentCountValue} recipient${sentCountValue === 1 ? "" : "s"} sent.`);
                     sent = true;
                 } else if (failedCountValue > 0) {
-                    addErrorToast("Campaign could not be sent. Please try again or check email configuration.");
+                    addErrorToast("Campaign could not be sent. Please try again.");
                 } else {
-                    addSuccessToast("Campaign submitted to email provider. Some emails may still bounce or be rejected later.");
+                    addSuccessToast("Campaign submitted. Delivery status will update shortly.");
                     sent = true;
                 }
             } else if (hasRecipientsCount) {
-                addSuccessToast(`Campaign submitted to email provider. Submitted: ${recipientsCountValue}. Some emails may still bounce or be rejected later.`);
+                addSuccessToast(`Campaign submitted. ${recipientsCountValue} recipient${recipientsCountValue === 1 ? "" : "s"} queued.`);
                 sent = true;
             } else {
-                addSuccessToast("Campaign submitted to email provider. Some emails may still bounce or be rejected later.");
+                addSuccessToast("Campaign submitted. Delivery status will update shortly.");
                 sent = true;
             }
 
@@ -1678,7 +1678,7 @@
             } else if (statusCode === 401) {
                 ApiClient.error(err, false);
             } else {
-                addErrorToast("Campaign could not be sent. Please try again or check email configuration.");
+                addErrorToast("Campaign could not be sent. Please try again.");
             }
         }
 
@@ -1829,7 +1829,7 @@
                         };
                     });
                 }
-                addSuccessToast("Campaign draft updated.");
+                addSuccessToast("Campaign saved.");
             } catch (err) {
                 const statusCode = Number(err?.status) || 0;
                 if (statusCode === 401) {
@@ -1850,7 +1850,7 @@
                 requestKey: "nuvio_newsletter_campaign_create_" + selectedWebsiteId,
             });
             await loadNewsletterDashboard();
-            addSuccessToast("Draft campaign created.");
+            addSuccessToast("Campaign draft created.");
             resetCampaignComposer();
             campaignWorkspace = "audience";
         } catch (err) {
@@ -1876,7 +1876,7 @@
             const nextDraft = campaigns.find((item) => item.id === createdCampaign?.id) || createdCampaign || campaign;
             startEditCampaign(nextDraft);
             campaignWorkspace = "builder";
-            addSuccessToast("Draft created from sent campaign.");
+            addSuccessToast("Campaign duplicated as a draft.");
         } catch (err) {
             ApiClient.error(err);
         }
@@ -1915,7 +1915,7 @@
             addSuccessToast("Draft deleted.");
         } catch (err) {
             console.error("Unable to delete draft campaign:", err);
-            addErrorToast("Unable to delete draft right now.");
+            addErrorToast("We could not delete this draft. Please try again.");
         }
 
         if (pendingDeleteCampaign?.id === campaign.id) {
@@ -3185,7 +3185,7 @@
                 </div>
 
                 <p class="txt-sm txt-hint m-0">
-                    <strong>{pendingSendCampaign.subject}</strong> will be submitted to your email provider for approximately
+                    <strong>{pendingSendCampaign.subject}</strong> will be submitted for delivery to approximately
                     <strong> {pendingSendRecipientsCount}</strong> recipient(s).
                 </p>
                 <p class="txt-xs txt-hint m-t-xs m-b-0">{resolveSendConfirmationHint()}</p>
