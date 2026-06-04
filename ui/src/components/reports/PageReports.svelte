@@ -35,6 +35,7 @@
 
     const archivedStatusAliases = ["archived", "archive"];
     const clientTrafficUnavailableMessage = "Traffic analytics are not configured for this website yet.";
+    const staleNewLeadDaysThreshold = 3;
 
     let activeTab = defaultReportsTab;
     let selectedPeriod = defaultReportsPeriod;
@@ -468,6 +469,14 @@
         bookingCount: leadsByTypeCounts.booking,
     };
 
+    $: leadTrendRows = buildLeadTrendRows(periodLeadRecords, selectedPeriod);
+    $: leadTrendHasData = hasPositiveTrafficRows(leadTrendRows);
+    $: leadContactabilityRows = buildLeadContactabilityRows(periodLeadRecords);
+    $: leadContactabilityHasData = hasPositiveTrafficRows(leadContactabilityRows);
+    $: staleNewLeadsCount = countStaleNewLeads(periodLeadRecords, staleNewLeadDaysThreshold);
+    $: leadAttentionRows = buildLeadAttentionRows(leadsSummary, staleNewLeadsCount, staleNewLeadDaysThreshold);
+    $: leadAttentionHasData = hasPositiveTrafficRows(leadAttentionRows);
+
     $: sortedRecentLeads = [...periodLeadRecords]
         .sort((a, b) => (b.createdTs || 0) - (a.createdTs || 0))
         .slice(0, 8);
@@ -493,6 +502,11 @@
     };
 
     $: topBookingServices = buildTopServices(periodAppointments);
+    $: bookingTrendRows = buildBookingTrendRows(periodAppointments, selectedPeriod);
+    $: bookingTrendHasData = hasPositiveTrafficRows(bookingTrendRows);
+    $: upcomingBookingLoadRows = buildUpcomingBookingLoadRows(normalizedAppointments, selectedPeriod);
+    $: upcomingBookingLoadHasData = hasPositiveTrafficRows(upcomingBookingLoadRows);
+    $: bookingQualityRows = buildBookingQualityRows(periodAppointments);
     $: upcomingAppointments = [...normalizedAppointments]
         .filter((appointment) => {
             if (appointment.statusKey === "cancelled") {
@@ -564,7 +578,7 @@
             key: "newLeads",
             label: "New leads",
             value: formatMetricNumber(leadsSummary.newCount),
-            hint: "Awaiting first follow-up",
+            hint: "New in selected period",
             meta: formatShareOfTotal(leadsSummary.newCount, leadsSummary.total, "leads"),
             icon: "ri-notification-3-line",
             badgeLabel: leadsSummary.newCount > 0 ? "Action needed" : "On track",
@@ -592,14 +606,14 @@
         },
         {
             key: "followUpNeeded",
-            label: "Follow-up needed",
+            label: "Needs attention",
             value: formatMetricNumber(leadsActionNeededCount),
             hint: leadsActionNeededCount > 0
-                ? "Prioritize new incoming leads"
-                : "No urgent follow-up right now",
+                ? "Review new incoming leads"
+                : "No urgent lead status issue",
             meta: `${formatMetricNumber(leadsSummary.total)} total leads in period`,
             icon: "ri-todo-line",
-            badgeLabel: leadsActionNeededCount > 0 ? "Needs attention" : "Healthy",
+            badgeLabel: leadsActionNeededCount > 0 ? "Attention" : "Healthy",
             badgeClass: leadsActionNeededCount > 0 ? "label-warning" : "label-success",
         },
     ];
@@ -1468,6 +1482,33 @@
         return `${percentage}% of ${noun}`;
     }
 
+    function formatPercentageValue(value, total) {
+        const numericValue = Number(value);
+        const numericTotal = Number(total);
+        if (!Number.isFinite(numericValue) || !Number.isFinite(numericTotal) || numericTotal <= 0) {
+            return "0%";
+        }
+        return `${Math.round((numericValue / numericTotal) * 100)}%`;
+    }
+
+    function formatDurationCompact(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+            return "-";
+        }
+
+        const totalHours = Math.round(numeric / (60 * 60 * 1000));
+        const days = Math.floor(totalHours / 24);
+        const hours = totalHours % 24;
+        if (days > 0) {
+            return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+        }
+        if (hours > 0) {
+            return `${hours}h`;
+        }
+        return "<1h";
+    }
+
     function formatBounceRate(value) {
         const numeric = Number(value);
         if (!Number.isFinite(numeric)) {
@@ -2130,6 +2171,181 @@
         return true;
     }
 
+    function buildLeadTrendRows(leads = [], periodKey = defaultReportsPeriod) {
+        const granularity = resolveLeadTrendGranularity(leads, periodKey);
+        const buckets = new Map();
+
+        for (const lead of leads || []) {
+            const timestamp = Number(lead?.createdTs || 0);
+            if (!timestamp) {
+                continue;
+            }
+
+            const bucket = resolveLeadTrendBucket(timestamp, granularity);
+            if (!bucket?.key) {
+                continue;
+            }
+
+            const current = buckets.get(bucket.key) || {
+                key: bucket.key,
+                label: bucket.label,
+                startTs: bucket.startTs,
+                count: 0,
+            };
+            current.count += 1;
+            buckets.set(bucket.key, current);
+        }
+
+        const rows = Array.from(buckets.values())
+            .sort((a, b) => (a.startTs || 0) - (b.startTs || 0))
+            .map((row) => ({
+                ...row,
+                meta: formatShareOfTotal(row.count, leads.length, "leads"),
+            }));
+
+        if (rows.length <= 10) {
+            return rows;
+        }
+
+        const visibleRows = rows.slice(-9);
+        const earlierRows = rows.slice(0, -9);
+        const earlierCount = earlierRows.reduce((sum, row) => sum + (Number(row?.count) || 0), 0);
+
+        return [
+            {
+                key: "earlier",
+                label: granularity === "week" ? "Earlier weeks" : "Earlier days",
+                count: earlierCount,
+                meta: `${formatMetricNumber(earlierRows.length)} earlier ${granularity === "week" ? "week" : "day"}${earlierRows.length === 1 ? "" : "s"}`,
+            },
+            ...visibleRows,
+        ];
+    }
+
+    function resolveLeadTrendGranularity(leads = [], periodKey = defaultReportsPeriod) {
+        if (periodKey === "allTime" || periodKey === "last30Days" || periodKey === "lastMonth") {
+            return "week";
+        }
+
+        const bounds = getPeriodBounds(periodKey);
+        const endTs = bounds.end || Date.now();
+        const startTs = bounds.start || resolveMinTimestamp((leads || []).map((lead) => lead?.createdTs));
+        const daySpan = startTs > 0 ? Math.ceil((endTs - startTs) / (24 * 60 * 60 * 1000)) : 0;
+        return daySpan > 14 ? "week" : "day";
+    }
+
+    function resolveLeadTrendBucket(timestamp, granularity = "day") {
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+
+        if (granularity === "week") {
+            const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+            const dayOffset = (start.getDay() + 6) % 7;
+            start.setDate(start.getDate() - dayOffset);
+            const end = new Date(start.getTime());
+            end.setDate(start.getDate() + 6);
+            return {
+                key: `week:${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`,
+                label: `${formatShortDate(start.getTime())} - ${formatShortDate(end.getTime())}`,
+                startTs: start.getTime(),
+            };
+        }
+
+        const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+        return {
+            key: `day:${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`,
+            label: formatShortDate(dayStart.getTime()),
+            startTs: dayStart.getTime(),
+        };
+    }
+
+    function formatShortDate(value) {
+        const timestamp = toTimestamp(value);
+        if (!timestamp) {
+            return "-";
+        }
+
+        return new Date(timestamp).toLocaleDateString([], {
+            month: "short",
+            day: "numeric",
+        });
+    }
+
+    function resolveMinTimestamp(values = []) {
+        let minTimestamp = 0;
+        for (const value of values || []) {
+            const timestamp = Number(value || 0);
+            if (Number.isFinite(timestamp) && timestamp > 0 && (!minTimestamp || timestamp < minTimestamp)) {
+                minTimestamp = timestamp;
+            }
+        }
+        return minTimestamp;
+    }
+
+    function buildLeadContactabilityRows(leads = []) {
+        const rows = [
+            { key: "both", label: "Both email and phone", count: 0 },
+            { key: "email", label: "Email only", count: 0 },
+            { key: "phone", label: "Phone only", count: 0 },
+            { key: "none", label: "No contact method", count: 0 },
+        ];
+        const rowByKey = new Map(rows.map((row) => [row.key, row]));
+
+        for (const lead of leads || []) {
+            const hasEmail = !!normalizeString(lead?.email);
+            const hasPhone = !!normalizeString(lead?.phone);
+            const key = hasEmail && hasPhone
+                ? "both"
+                : hasEmail
+                    ? "email"
+                    : hasPhone
+                        ? "phone"
+                        : "none";
+            rowByKey.get(key).count += 1;
+        }
+
+        return rows.map((row) => ({
+            ...row,
+            meta: formatShareOfTotal(row.count, leads.length, "leads"),
+        }));
+    }
+
+    function countStaleNewLeads(leads = [], daysThreshold = staleNewLeadDaysThreshold) {
+        const cutoff = Date.now() - (Number(daysThreshold || 0) * 24 * 60 * 60 * 1000);
+        return (leads || []).filter((lead) => {
+            const createdTs = Number(lead?.createdTs || 0);
+            return lead?.statusKey === "new" && createdTs > 0 && createdTs < cutoff;
+        }).length;
+    }
+
+    function buildLeadAttentionRows(summary = {}, staleCount = 0, daysThreshold = staleNewLeadDaysThreshold) {
+        const total = Number(summary?.total || 0);
+        return [
+            {
+                label: `New leads older than ${daysThreshold} days`,
+                count: Number(staleCount || 0),
+                meta: formatShareOfTotal(staleCount, total, "leads"),
+            },
+            {
+                label: "New leads this period",
+                count: Number(summary?.newCount || 0),
+                meta: formatShareOfTotal(summary?.newCount, total, "leads"),
+            },
+            {
+                label: "Read leads this period",
+                count: Number(summary?.readCount || 0),
+                meta: formatShareOfTotal(summary?.readCount, total, "leads"),
+            },
+            {
+                label: "Archived leads this period",
+                count: Number(summary?.archivedCount || 0),
+                meta: formatShareOfTotal(summary?.archivedCount, total, "leads"),
+            },
+        ];
+    }
+
     function normalizeStatusKey(value) {
         const normalized = normalizeLower(value);
 
@@ -2444,6 +2660,168 @@
                 return a.label.localeCompare(b.label);
             })
             .slice(0, 6);
+    }
+
+    function buildBookingTrendRows(appointments = [], periodKey = defaultReportsPeriod) {
+        const granularity = resolveBookingTrendGranularity(appointments, periodKey);
+        const buckets = new Map();
+
+        for (const appointment of appointments || []) {
+            const timestamp = Number(appointment?.createdTs || 0);
+            if (!timestamp) {
+                continue;
+            }
+
+            const bucket = resolveLeadTrendBucket(timestamp, granularity);
+            if (!bucket?.key) {
+                continue;
+            }
+
+            const current = buckets.get(bucket.key) || {
+                key: bucket.key,
+                label: bucket.label,
+                startTs: bucket.startTs,
+                count: 0,
+            };
+            current.count += 1;
+            buckets.set(bucket.key, current);
+        }
+
+        const rows = Array.from(buckets.values())
+            .sort((a, b) => (a.startTs || 0) - (b.startTs || 0))
+            .map((row) => ({
+                ...row,
+                meta: formatShareOfTotal(row.count, appointments.length, "requests"),
+            }));
+
+        if (rows.length <= 10) {
+            return rows;
+        }
+
+        const visibleRows = rows.slice(-9);
+        const earlierRows = rows.slice(0, -9);
+        const earlierCount = earlierRows.reduce((sum, row) => sum + (Number(row?.count) || 0), 0);
+
+        return [
+            {
+                key: "earlier",
+                label: granularity === "week" ? "Earlier weeks" : "Earlier days",
+                count: earlierCount,
+                meta: `${formatMetricNumber(earlierRows.length)} earlier ${granularity === "week" ? "week" : "day"}${earlierRows.length === 1 ? "" : "s"}`,
+            },
+            ...visibleRows,
+        ];
+    }
+
+    function resolveBookingTrendGranularity(appointments = [], periodKey = defaultReportsPeriod) {
+        if (periodKey === "allTime" || periodKey === "last30Days" || periodKey === "lastMonth") {
+            return "week";
+        }
+
+        const bounds = getPeriodBounds(periodKey);
+        const endTs = bounds.end || Date.now();
+        const startTs = bounds.start || resolveMinTimestamp((appointments || []).map((appointment) => appointment?.createdTs));
+        const daySpan = startTs > 0 ? Math.ceil((endTs - startTs) / (24 * 60 * 60 * 1000)) : 0;
+        return daySpan > 14 ? "week" : "day";
+    }
+
+    function buildUpcomingBookingLoadRows(appointments = [], periodKey = defaultReportsPeriod) {
+        const now = Date.now();
+        const eligibleAppointments = (appointments || []).filter((appointment) => {
+            const scheduledTs = Number(appointment?.scheduledTs || 0);
+            return appointment?.statusKey !== "cancelled"
+                && scheduledTs > 0
+                && scheduledTs >= now
+                && isTimestampInPeriod(scheduledTs, periodKey);
+        });
+        const buckets = new Map();
+
+        for (const appointment of eligibleAppointments) {
+            const bucket = resolveLeadTrendBucket(appointment.scheduledTs, "day");
+            if (!bucket?.key) {
+                continue;
+            }
+
+            const current = buckets.get(bucket.key) || {
+                key: bucket.key,
+                label: bucket.label,
+                startTs: bucket.startTs,
+                count: 0,
+            };
+            current.count += 1;
+            buckets.set(bucket.key, current);
+        }
+
+        const rows = Array.from(buckets.values())
+            .sort((a, b) => (a.startTs || 0) - (b.startTs || 0))
+            .map((row) => ({
+                ...row,
+                meta: formatShareOfTotal(row.count, eligibleAppointments.length, "upcoming bookings"),
+            }));
+
+        if (rows.length <= 8) {
+            return rows;
+        }
+
+        const visibleRows = rows.slice(0, 7);
+        const laterRows = rows.slice(7);
+        const laterCount = laterRows.reduce((sum, row) => sum + (Number(row?.count) || 0), 0);
+
+        return [
+            ...visibleRows,
+            {
+                key: "later",
+                label: "Later dates",
+                count: laterCount,
+                meta: `${formatMetricNumber(laterRows.length)} later date${laterRows.length === 1 ? "" : "s"}`,
+            },
+        ];
+    }
+
+    function buildBookingQualityRows(appointments = []) {
+        const total = appointments.length;
+        const cancelledCount = appointments.filter((appointment) => appointment?.statusKey === "cancelled").length;
+        const confirmedCount = appointments.filter((appointment) => appointment?.statusKey === "confirmed").length;
+        const pendingCount = appointments.filter((appointment) => appointment?.statusKey === "pending").length;
+        const noticeValues = appointments
+            .map((appointment) => {
+                const createdTs = Number(appointment?.createdTs || 0);
+                const scheduledTs = Number(appointment?.scheduledTs || 0);
+                return createdTs > 0 && scheduledTs > createdTs ? scheduledTs - createdTs : 0;
+            })
+            .filter((value) => value > 0);
+        const averageNotice = noticeValues.length
+            ? noticeValues.reduce((sum, value) => sum + value, 0) / noticeValues.length
+            : 0;
+
+        return [
+            {
+                key: "cancellationRate",
+                label: "Cancellation rate",
+                value: formatPercentageValue(cancelledCount, total),
+                meta: `${formatMetricNumber(cancelledCount)} cancelled`,
+            },
+            {
+                key: "confirmedRatio",
+                label: "Confirmed ratio",
+                value: formatPercentageValue(confirmedCount, total),
+                meta: `${formatMetricNumber(confirmedCount)} confirmed`,
+            },
+            {
+                key: "pendingRatio",
+                label: "Pending ratio",
+                value: formatPercentageValue(pendingCount, total),
+                meta: `${formatMetricNumber(pendingCount)} pending`,
+            },
+            {
+                key: "averageNotice",
+                label: "Average notice",
+                value: noticeValues.length ? formatDurationCompact(averageNotice) : "Not enough data",
+                meta: noticeValues.length
+                    ? `${formatMetricNumber(noticeValues.length)} request${noticeValues.length === 1 ? "" : "s"} with schedule timing`
+                    : "Needs created and scheduled dates",
+            },
+        ];
     }
 
     function buildReportWarnings(payload = {}) {
@@ -3451,7 +3829,7 @@
                     <section class="panel reports-overview-section reports-section-shell">
                         <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Leads summary</h5>
-                            <p class="txt-sm txt-hint m-b-0">Lead performance and follow-up status for {selectedPeriodLabel.toLowerCase()}.</p>
+                            <p class="txt-sm txt-hint m-b-0">Lead performance and status for {selectedPeriodLabel.toLowerCase()}.</p>
                         </div>
                         <div class="reports-kpi-grid reports-kpi-grid--hero reports-tab-kpi-grid">
                             {#each leadsHeroCards as metric (metric.key)}
@@ -3504,43 +3882,89 @@
                         {/if}
                     </section>
 
+                    <div class="reports-grid-two reports-operational-grid">
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Leads over time</h5>
+                                <p class="txt-sm txt-hint m-b-0">Lead volume during the selected period.</p>
+                            </div>
+                            {#if leadTrendHasData}
+                                {@const maxLeadTrend = resolveTrafficMaxCount(leadTrendRows)}
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each leadTrendRows as trendRow (trendRow.key)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{trendRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(trendRow.count)}</strong>
+                                            </div>
+                                            {#if trendRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{trendRow.meta}</div>
+                                            {/if}
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(trendRow.count, maxLeadTrend)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No leads recorded for this period.</div>
+                            {/if}
+                        </section>
+
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Contactability</h5>
+                                <p class="txt-sm txt-hint m-b-0">How easy it is to reach current leads.</p>
+                            </div>
+                            {#if leadContactabilityHasData}
+                                {@const maxLeadContactability = resolveTrafficMaxCount(leadContactabilityRows)}
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each leadContactabilityRows as contactabilityRow (contactabilityRow.key)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{contactabilityRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(contactabilityRow.count)}</strong>
+                                            </div>
+                                            {#if contactabilityRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{contactabilityRow.meta}</div>
+                                            {/if}
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(contactabilityRow.count, maxLeadContactability)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No contact methods available for leads in this period.</div>
+                            {/if}
+                        </section>
+                    </div>
+
                     <section class="panel reports-breakdown-card reports-section-shell">
                         <div class="section-head report-section-head m-b-sm">
-                            <h5 class="m-0">Follow-up needed</h5>
-                            <p class="txt-sm txt-hint m-b-0">New leads and the latest lead activity.</p>
+                            <h5 class="m-0">Lead attention</h5>
+                            <p class="txt-sm txt-hint m-b-0">Status and age signals from current lead records.</p>
                         </div>
                         <div class="reports-grid-two reports-operational-grid">
                             <article class="report-breakdown-item reports-operational-card">
                                 <div class="report-breakdown-head">
-                                    <h6 class="m-0 report-breakdown-title">Lead status</h6>
+                                    <h6 class="m-0 report-breakdown-title">Lead status and age</h6>
                                     <span class={`label label-sm ${leadsSummary.newCount > 0 ? "label-warning" : "label-success"}`}>
                                         {leadsSummary.newCount > 0 ? "Action needed" : "On track"}
                                     </span>
                                 </div>
-                                <div class="report-metric-grid report-metric-grid--compact">
-                                    <div class="report-metric-row">
-                                        <span>Total leads</span>
-                                        <strong>{formatMetricNumber(leadsSummary.total)}</strong>
+                                {#if leadAttentionHasData}
+                                    {@const maxLeadAttention = resolveTrafficMaxCount(leadAttentionRows)}
+                                    <div class="report-bar-list reports-pulse-list">
+                                        {#each leadAttentionRows as attentionRow (attentionRow.label)}
+                                            <div class="report-bar-item reports-pulse-item">
+                                                <div class="report-bar-head">
+                                                    <span class="report-bar-label">{attentionRow.label}</span>
+                                                    <strong class="report-bar-value">{formatMetricNumber(attentionRow.count)}</strong>
+                                                </div>
+                                                {#if attentionRow.meta}
+                                                    <div class="txt-xs txt-hint report-bar-meta">{attentionRow.meta}</div>
+                                                {/if}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(attentionRow.count, maxLeadAttention)}%;`} /></div>
+                                            </div>
+                                        {/each}
                                     </div>
-                                    <div class="report-metric-row">
-                                        <span>New leads</span>
-                                        <strong>{formatMetricNumber(leadsSummary.newCount)}</strong>
-                                    </div>
-                                    <div class="report-metric-row">
-                                        <span>Read leads</span>
-                                        <strong>{formatMetricNumber(leadsSummary.readCount)}</strong>
-                                    </div>
-                                    <div class="report-metric-row">
-                                        <span>Archived leads</span>
-                                        <strong>{formatMetricNumber(leadsSummary.archivedCount)}</strong>
-                                    </div>
-                                </div>
-                                {#if leadsSummary.newCount > 0}
-                                    <p class="txt-xs txt-hint m-b-0">
-                                        {formatMetricNumber(leadsSummary.newCount)} new lead{leadsSummary.newCount === 1 ? "" : "s"} waiting for follow-up.
-                                    </p>
-                                {:else if leadsHasRecords}
-                                    <p class="txt-xs txt-hint m-b-0">No new leads need follow-up right now.</p>
                                 {:else}
                                     <div class="report-empty-state">No leads recorded for this period.</div>
                                 {/if}
@@ -3612,6 +4036,60 @@
                         {/if}
                     </section>
 
+                    <div class="reports-grid-two reports-operational-grid">
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Bookings over time</h5>
+                                <p class="txt-sm txt-hint m-b-0">Request volume during the selected period.</p>
+                            </div>
+                            {#if bookingTrendHasData}
+                                {@const maxBookingTrend = resolveTrafficMaxCount(bookingTrendRows)}
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each bookingTrendRows as trendRow (trendRow.key)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{trendRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(trendRow.count)}</strong>
+                                            </div>
+                                            {#if trendRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{trendRow.meta}</div>
+                                            {/if}
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(trendRow.count, maxBookingTrend)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No booking requests recorded for this period.</div>
+                            {/if}
+                        </section>
+
+                        <section class="panel reports-breakdown-card reports-section-shell reports-operational-card">
+                            <div class="section-head report-section-head m-b-sm">
+                                <h5 class="m-0">Upcoming load</h5>
+                                <p class="txt-sm txt-hint m-b-0">Scheduled bookings coming up in the selected period.</p>
+                            </div>
+                            {#if upcomingBookingLoadHasData}
+                                {@const maxUpcomingBookingLoad = resolveTrafficMaxCount(upcomingBookingLoadRows)}
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each upcomingBookingLoadRows as loadRow (loadRow.key)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{loadRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(loadRow.count)}</strong>
+                                            </div>
+                                            {#if loadRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{loadRow.meta}</div>
+                                            {/if}
+                                            <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(loadRow.count, maxUpcomingBookingLoad)}%;`} /></div>
+                                        </div>
+                                    {/each}
+                                </div>
+                            {:else}
+                                <div class="report-empty-state">No upcoming scheduled bookings in this period.</div>
+                            {/if}
+                        </section>
+                    </div>
+
                     <section class="panel reports-breakdown-card reports-section-shell">
                         <div class="section-head report-section-head m-b-sm">
                             <h5 class="m-0">Status and service demand</h5>
@@ -3664,6 +4142,26 @@
                                 {/if}
                             </article>
                         </div>
+                    </section>
+
+                    <section class="panel reports-breakdown-card reports-section-shell">
+                        <div class="section-head report-section-head m-b-sm">
+                            <h5 class="m-0">Booking quality</h5>
+                            <p class="txt-sm txt-hint m-b-0">Status ratios and average notice from available booking records.</p>
+                        </div>
+                        {#if bookingHasRequests}
+                            <div class="report-metric-grid report-metric-grid--compact">
+                                {#each bookingQualityRows as qualityRow (qualityRow.key)}
+                                    <div class="report-metric-row">
+                                        <span>{qualityRow.label}</span>
+                                        <strong>{qualityRow.value}</strong>
+                                    </div>
+                                {/each}
+                            </div>
+                            <p class="txt-xs txt-hint m-b-0">Average notice uses only requests with both created time and scheduled appointment time.</p>
+                        {:else}
+                            <div class="report-empty-state">No booking requests recorded for this period.</div>
+                        {/if}
                     </section>
 
                     <section class="panel reports-breakdown-card reports-section-shell">
@@ -4693,30 +5191,9 @@
 </PageWrapper>
 
 <style>
-    .reports-head.operations-head .head-main {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 20px;
-        flex-wrap: wrap;
-    }
-
-    .reports-head.operations-head .reports-head-title {
-        min-width: min(100%, 280px);
-    }
-
-    .reports-head.operations-head .reports-head-title-row {
-        align-items: center;
-        gap: 8px;
-    }
-
-    .reports-head.operations-head .head-description {
-        max-width: 520px;
-    }
-
     .reports-head.operations-head .reports-head-controls {
-        flex: 1 1 640px;
-        max-width: 900px;
+        flex: 0 1 560px;
+        max-width: 560px;
         min-width: 0;
         margin-left: auto;
     }
@@ -4724,62 +5201,30 @@
     .reports-head.operations-head .head-selector {
         width: 100%;
         display: grid;
-        grid-template-columns: minmax(340px, 1fr) minmax(220px, 260px);
+        grid-template-columns: minmax(260px, 360px) minmax(150px, 180px);
+        justify-content: end;
         align-items: end;
-        gap: 12px;
-    }
-
-    .reports-head.operations-head .reports-head-tools {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-    }
-
-    .reports-head.operations-head .reports-head-tools > * {
-        min-width: 0;
-    }
-
-    .reports-head.operations-head .selector-row {
-        display: flex;
-        align-items: center;
         gap: 8px;
-        min-width: 0;
     }
 
     .reports-head.operations-head .selector-row .input {
-        flex: 1 1 auto;
         min-width: 0;
         width: 100%;
-    }
-
-    .reports-head.operations-head .selector-row--website .selector-label {
-        min-width: 68px;
-    }
-
-    .reports-head.operations-head .selector-row--period .selector-label {
-        min-width: 58px;
-    }
-
-    .reports-head.operations-head .summary-badges {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        width: auto;
-        justify-content: flex-end;
-        margin-left: auto;
-        padding-top: 0;
-    }
-
-    .reports-head-pills {
-        width: auto;
     }
 
     .reports-body {
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
+        padding: calc(var(--baseSpacing) - 10px) calc(var(--baseSpacing) - 8px);
+    }
+
+    .reports-body > :first-child {
+        margin-top: 0;
+    }
+
+    .reports-body > :last-child {
+        margin-bottom: 0;
     }
 
     .reports-tabs {
@@ -5398,10 +5843,6 @@
         .reports-head.operations-head .summary-badges {
             justify-content: flex-start;
             margin-left: 0;
-        }
-
-        .reports-head.operations-head .reports-head-tools {
-            align-items: flex-start;
         }
 
         .reports-head.operations-head .head-selector {
