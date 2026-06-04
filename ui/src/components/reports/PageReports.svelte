@@ -1123,6 +1123,10 @@
             meta: formatShareOfTotal(seoSummary.missingBasics, seoSummary.totalPages, "pages"),
         },
     ];
+    $: overviewLeadActivityRows = overviewLeadBookingRows.slice(0, 3);
+    $: overviewBookingActivityRows = overviewLeadBookingRows.slice(3);
+    $: overviewNewsletterStatusRows = overviewNewsletterSeoRows.slice(0, 3);
+    $: overviewSeoStatusRows = overviewNewsletterSeoRows.slice(3);
     $: overviewTrafficHighlightRows = trafficState === "ok"
         ? [
             {
@@ -1145,8 +1149,10 @@
             },
         ]
         : [];
-    $: maxLeadBookingRow = resolveTrafficMaxCount(overviewLeadBookingRows);
-    $: maxNewsletterSeoRow = resolveTrafficMaxCount(overviewNewsletterSeoRows);
+    $: maxLeadActivityRow = resolveTrafficMaxCount(overviewLeadActivityRows);
+    $: maxBookingActivityRow = resolveTrafficMaxCount(overviewBookingActivityRows);
+    $: maxNewsletterStatusRow = resolveTrafficMaxCount(overviewNewsletterStatusRows);
+    $: maxSeoStatusRow = resolveTrafficMaxCount(overviewSeoStatusRows);
     $: overviewAttentionItems = buildOverviewAttentionItems({
         reportWarnings,
         sourceReadinessRows,
@@ -3064,15 +3070,15 @@
 <PageWrapper>
     <section class="operations-head panel reports-head m-b-base">
         <div class="head-main">
-            <div class="summary-title-wrap">
-                <div class="title-row">
+            <div class="summary-title-wrap reports-head-title">
+                <div class="title-row reports-head-title-row">
                     <h2 class="m-0">Reports</h2>
                     <RefreshButton class="btn-sm" tooltip={{ text: "Refresh", position: "right" }} on:refresh={reload} />
                 </div>
                 <p class="head-description txt-sm txt-hint m-b-0">Track business performance for this website.</p>
             </div>
 
-            <div class="head-selector operations-website-select">
+            <div class="head-selector operations-website-select reports-head-controls">
                 <div class="selector-row selector-row--website">
                     <label class="txt-sm txt-hint selector-label m-b-0" for="reports-website-selector">Website</label>
                     <select
@@ -3102,8 +3108,22 @@
             </div>
         </div>
 
-        <div class="head-tools">
-            <div class="summary-badges">
+        <div class="head-tools reports-head-tools">
+            <div class="tabs-header compact combined left operations-tabs reports-tabs">
+                {#each reportsTabs as tab (tab.key)}
+                    <button
+                        type="button"
+                        class="tab-item"
+                        class:active={activeTab === tab.key}
+                        on:click={() => (activeTab = tab.key)}
+                    >
+                        <i class={`${tab.icon} tab-icon`} aria-hidden="true" />
+                        <span class="tab-label">{tab.label}</span>
+                    </button>
+                {/each}
+            </div>
+
+            <div class="summary-badges reports-head-pills" aria-label="Report summary">
                 <span class="summary-pill">
                     <i class="ri-mail-line" />
                     Leads: {leadsSummary.total}
@@ -3162,20 +3182,6 @@
         </div>
     {:else}
         <section class="panel operations-content-panel reports-body m-b-base">
-            <div class="tabs-header compact combined left operations-tabs reports-tabs m-b-sm">
-                {#each reportsTabs as tab (tab.key)}
-                    <button
-                        type="button"
-                        class="tab-item"
-                        class:active={activeTab === tab.key}
-                        on:click={() => (activeTab = tab.key)}
-                    >
-                        <i class={`${tab.icon} tab-icon`} aria-hidden="true" />
-                        <span class="tab-label">{tab.label}</span>
-                    </button>
-                {/each}
-            </div>
-
             {#if activeTab === "overview"}
                 <div class="reports-overview-layout">
                     <div class="reports-overview-main">
@@ -3205,54 +3211,6 @@
                                 {/each}
                             </div>
                         </section>
-
-                        <div class="reports-grid-two reports-overview-pulse-grid">
-                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
-                                <div class="section-head report-section-head m-b-sm">
-                                    <h5 class="m-0">Lead and booking activity</h5>
-                                    <p class="txt-sm txt-hint m-b-0">Pipeline movement in this period.</p>
-                                </div>
-                                <div class="report-bar-list reports-pulse-list">
-                                    {#each overviewLeadBookingRows as metricRow (metricRow.label)}
-                                        <div class="report-bar-item reports-pulse-item">
-                                            <div class="report-bar-head">
-                                                <span class="report-bar-label">{metricRow.label}</span>
-                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
-                                            </div>
-                                            {#if metricRow.meta}
-                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
-                                            {/if}
-                                            {#if maxLeadBookingRow > 0}
-                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxLeadBookingRow)}%;`} /></div>
-                                            {/if}
-                                        </div>
-                                    {/each}
-                                </div>
-                            </section>
-
-                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
-                                <div class="section-head report-section-head m-b-sm">
-                                    <h5 class="m-0">Newsletter and SEO status</h5>
-                                    <p class="txt-sm txt-hint m-b-0">Audience growth and visibility health.</p>
-                                </div>
-                                <div class="report-bar-list reports-pulse-list">
-                                    {#each overviewNewsletterSeoRows as metricRow (metricRow.label)}
-                                        <div class="report-bar-item reports-pulse-item">
-                                            <div class="report-bar-head">
-                                                <span class="report-bar-label">{metricRow.label}</span>
-                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
-                                            </div>
-                                            {#if metricRow.meta}
-                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
-                                            {/if}
-                                            {#if maxNewsletterSeoRow > 0}
-                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxNewsletterSeoRow)}%;`} /></div>
-                                            {/if}
-                                        </div>
-                                    {/each}
-                                </div>
-                            </section>
-                        </div>
 
                         {#if trafficState === "ok"}
                             <section class="panel reports-breakdown-card reports-section-shell reports-overview-traffic-card">
@@ -3299,18 +3257,112 @@
                                 {/if}
                             </section>
                         {/if}
+
+                        <div class="reports-grid-two reports-overview-pulse-grid reports-overview-feature-grid">
+                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
+                                <div class="section-head report-section-head m-b-sm">
+                                    <h5 class="m-0">Lead activity</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Lead sources captured in this period.</p>
+                                </div>
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each overviewLeadActivityRows as metricRow (metricRow.label)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{metricRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
+                                            </div>
+                                            {#if metricRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
+                                            {/if}
+                                            {#if maxLeadActivityRow > 0}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxLeadActivityRow)}%;`} /></div>
+                                            {/if}
+                                        </div>
+                                    {/each}
+                                </div>
+                            </section>
+
+                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
+                                <div class="section-head report-section-head m-b-sm">
+                                    <h5 class="m-0">Booking activity</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Booking requests moving through the schedule.</p>
+                                </div>
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each overviewBookingActivityRows as metricRow (metricRow.label)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{metricRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
+                                            </div>
+                                            {#if metricRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
+                                            {/if}
+                                            {#if maxBookingActivityRow > 0}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxBookingActivityRow)}%;`} /></div>
+                                            {/if}
+                                        </div>
+                                    {/each}
+                                </div>
+                            </section>
+
+                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
+                                <div class="section-head report-section-head m-b-sm">
+                                    <h5 class="m-0">Newsletter status</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Audience growth and campaign activity.</p>
+                                </div>
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each overviewNewsletterStatusRows as metricRow (metricRow.label)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{metricRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
+                                            </div>
+                                            {#if metricRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
+                                            {/if}
+                                            {#if maxNewsletterStatusRow > 0}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxNewsletterStatusRow)}%;`} /></div>
+                                            {/if}
+                                        </div>
+                                    {/each}
+                                </div>
+                            </section>
+
+                            <section class="panel reports-breakdown-card reports-section-shell reports-pulse-card">
+                                <div class="section-head report-section-head m-b-sm">
+                                    <h5 class="m-0">SEO status</h5>
+                                    <p class="txt-sm txt-hint m-b-0">Visibility checks across website pages.</p>
+                                </div>
+                                <div class="report-bar-list reports-pulse-list">
+                                    {#each overviewSeoStatusRows as metricRow (metricRow.label)}
+                                        <div class="report-bar-item reports-pulse-item">
+                                            <div class="report-bar-head">
+                                                <span class="report-bar-label">{metricRow.label}</span>
+                                                <strong class="report-bar-value">{formatMetricNumber(metricRow.count)}</strong>
+                                            </div>
+                                            {#if metricRow.meta}
+                                                <div class="txt-xs txt-hint report-bar-meta">{metricRow.meta}</div>
+                                            {/if}
+                                            {#if maxSeoStatusRow > 0}
+                                                <div class="report-bar-track"><span class="report-bar-fill" style={`width: ${resolveTrafficBarWidth(metricRow.count, maxSeoStatusRow)}%;`} /></div>
+                                            {/if}
+                                        </div>
+                                    {/each}
+                                </div>
+                            </section>
+                        </div>
                     </div>
 
-                    <aside class="reports-overview-rail">
-                        <section class="panel report-health-panel reports-rail-card reports-rail-card--attention reports-section-shell">
-                            <div class="report-health-head">
+                    <aside class="reports-overview-rail" aria-live="polite">
+                        <section class="reports-side-card reports-rail-card reports-rail-card--attention reports-section-shell">
+                            <div class="reports-side-card-head">
                                 <div class="report-health-main">
                                     <h5 class="m-0">Attention needed now</h5>
                                     <p class="txt-sm txt-hint m-b-0">Priority items that need follow-up in this period.</p>
                                 </div>
                                 <div class="report-health-meta">
                                     <span class={`label label-sm ${reportHealthState.pillClass}`}>{reportHealthState.label}</span>
-                                    <span class="summary-pill">{overviewAttentionItems.length} item(s)</span>
+                                    <span class="summary-pill">{overviewAttentionItems.length} {overviewAttentionItems.length === 1 ? "item" : "items"}</span>
                                 </div>
                             </div>
                             {#if overviewAttentionItems.length}
@@ -3338,8 +3390,8 @@
                             {/if}
                         </section>
 
-                        <section class="panel report-health-panel reports-rail-card reports-rail-card--actions reports-section-shell">
-                            <div class="section-head report-section-head m-b-sm">
+                        <section class="reports-side-card reports-rail-card reports-rail-card--actions reports-section-shell">
+                            <div class="reports-side-card-head reports-side-card-head--stack">
                                 <h5 class="m-0">Recommended next actions</h5>
                                 <p class="txt-sm txt-hint m-b-0">Suggested business actions based on current report signals.</p>
                             </div>
@@ -3363,8 +3415,8 @@
                             {/if}
                         </section>
 
-                        <section class="panel report-sources-panel reports-rail-card reports-rail-card--confidence reports-section-shell">
-                            <div class="section-head report-section-head m-b-sm">
+                        <section class="reports-side-card reports-rail-card reports-rail-card--confidence reports-section-shell">
+                            <div class="reports-side-card-head reports-side-card-head--stack">
                                 <h5 class="m-0">Data confidence</h5>
                                 <p class="txt-sm txt-hint m-b-0">Data source coverage and analytics connection status.</p>
                             </div>
@@ -4642,31 +4694,51 @@
 
 <style>
     .reports-head.operations-head .head-main {
-        gap: 12px;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+
+    .reports-head.operations-head .reports-head-title {
+        min-width: min(100%, 280px);
+    }
+
+    .reports-head.operations-head .reports-head-title-row {
+        align-items: center;
+        gap: 8px;
     }
 
     .reports-head.operations-head .head-description {
         max-width: 520px;
     }
 
-    .reports-head.operations-head .head-tools {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        flex-wrap: wrap;
-    }
-
-    .reports-head.operations-head .head-tools > * {
+    .reports-head.operations-head .reports-head-controls {
+        flex: 1 1 640px;
+        max-width: 900px;
         min-width: 0;
+        margin-left: auto;
     }
 
     .reports-head.operations-head .head-selector {
-        width: min(100%, 760px);
+        width: 100%;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+        grid-template-columns: minmax(340px, 1fr) minmax(220px, 260px);
         align-items: end;
-        gap: 8px;
+        gap: 12px;
+    }
+
+    .reports-head.operations-head .reports-head-tools {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .reports-head.operations-head .reports-head-tools > * {
+        min-width: 0;
     }
 
     .reports-head.operations-head .selector-row {
@@ -4679,49 +4751,57 @@
     .reports-head.operations-head .selector-row .input {
         flex: 1 1 auto;
         min-width: 0;
+        width: 100%;
     }
 
     .reports-head.operations-head .selector-row--website .selector-label {
-        min-width: 60px;
+        min-width: 68px;
     }
 
     .reports-head.operations-head .selector-row--period .selector-label {
-        min-width: 52px;
+        min-width: 58px;
     }
 
     .reports-head.operations-head .summary-badges {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+        width: auto;
         justify-content: flex-end;
+        margin-left: auto;
+        padding-top: 0;
+    }
+
+    .reports-head-pills {
+        width: auto;
     }
 
     .reports-body {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 14px;
     }
 
     .reports-tabs {
         width: fit-content;
         max-width: 100%;
         margin-top: 0;
+        flex: 0 1 auto;
         flex-wrap: wrap;
     }
 
     .reports-overview-layout {
         display: grid;
-        gap: 12px;
-        grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+        gap: 14px;
+        grid-template-columns: minmax(0, 1fr) clamp(312px, 25vw, 352px);
         align-items: start;
     }
 
     .reports-overview-main,
     .reports-overview-rail,
-    .reports-traffic-layout,
-    .report-health-panel {
+    .reports-traffic-layout {
         display: grid;
-        gap: 12px;
+        gap: 14px;
     }
 
     .reports-kpi-grid {
@@ -4803,7 +4883,7 @@
 
     .reports-overview-section {
         display: grid;
-        gap: 10px;
+        gap: 12px;
     }
 
     .reports-section-shell {
@@ -4885,6 +4965,10 @@
     .reports-grid-three {
         display: grid;
         gap: 10px;
+    }
+
+    .reports-overview-feature-grid {
+        gap: 12px;
     }
 
     .reports-grid-two {
@@ -5128,12 +5212,23 @@
         text-align: right;
     }
 
+    .reports-side-card {
+        border: 1px solid color-mix(in srgb, var(--baseAlt2Color) 90%, transparent);
+        border-radius: var(--baseRadius);
+        padding: 12px;
+        background: var(--baseColor);
+        box-shadow: none;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+    }
+
     .reports-rail-card {
-        background: color-mix(in srgb, var(--baseAlt1Color) 10%, var(--baseColor));
+        background: var(--baseColor);
         gap: 10px;
     }
 
-    .report-health-head {
+    .reports-side-card-head {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
@@ -5141,7 +5236,8 @@
         flex-wrap: wrap;
     }
 
-    .report-health-main {
+    .report-health-main,
+    .reports-side-card-head--stack {
         display: grid;
         gap: 4px;
     }
@@ -5292,12 +5388,20 @@
     }
 
     @media (max-width: 980px) {
-        .reports-head.operations-head .head-tools {
-            align-items: stretch;
+        .reports-head.operations-head .reports-head-controls {
+            flex-basis: 100%;
+            width: 100%;
+            max-width: none;
+            margin-left: 0;
         }
 
         .reports-head.operations-head .summary-badges {
             justify-content: flex-start;
+            margin-left: 0;
+        }
+
+        .reports-head.operations-head .reports-head-tools {
+            align-items: flex-start;
         }
 
         .reports-head.operations-head .head-selector {
@@ -5336,6 +5440,14 @@
     @media (max-width: 760px) {
         .reports-head.operations-head .selector-row {
             min-width: 100%;
+            align-items: stretch;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .reports-head.operations-head .selector-row--website .selector-label,
+        .reports-head.operations-head .selector-row--period .selector-label {
+            min-width: 0;
         }
     }
 </style>
