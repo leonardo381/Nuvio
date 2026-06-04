@@ -4892,7 +4892,7 @@
                         {#if !prioritizedSeoRows.length}
                             <div class="report-empty-state">No SEO issues detected for this website.</div>
                         {:else}
-                            <div class="reports-list reports-operational-list">
+                            <div class="reports-list reports-operational-list reports-card-grid-list">
                                 {#each prioritizedSeoRows as pageRow (pageRow.id)}
                                     <div class="reports-list-item reports-operational-row">
                                         <div class="reports-list-main reports-operational-main">
@@ -5548,7 +5548,7 @@
                             <p class="txt-sm txt-hint m-b-0">Recent events from the current Reports datasets. This is not a saved report archive yet.</p>
                         </div>
                         {#if historyHasActivityRows}
-                            <div class="reports-list reports-operational-list">
+                            <div class="reports-list reports-operational-list reports-card-grid-list">
                                 {#each historyActivityRows as historyRow (historyRow.id)}
                                     <div class="reports-list-item reports-operational-row">
                                         <div class="reports-list-main reports-operational-main">
@@ -5637,9 +5637,13 @@
     }
 
     .reports-kpi-grid {
-        display: grid;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: stretch;
         gap: 10px;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: calc(100% + (var(--baseSpacing) * 2));
+        margin: 0 calc(var(--baseSpacing) * -1);
+        padding: 0;
     }
 
     .reports-kpi-grid--hero {
@@ -5647,17 +5651,20 @@
     }
 
     .reports-overview-kpi-grid {
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
         gap: 10px;
-    }
-
-    .reports-tab-kpi-grid {
-        grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
     }
 
     .reports-kpi-card {
         display: grid;
         gap: 8px;
+    }
+
+    .reports-kpi-grid > .reports-kpi-card {
+        flex: 1 1 180px;
+        min-width: min(100%, 180px);
+        width: auto;
+        max-width: none;
+        margin: 0;
     }
 
     .reports-overview-kpi-card {
@@ -6024,9 +6031,35 @@
         gap: 10px;
     }
 
+    .reports-card-grid-list {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        align-items: stretch;
+    }
+
     .reports-operational-row {
         border-color: color-mix(in srgb, var(--baseAlt2Color) 82%, transparent);
         background: color-mix(in srgb, var(--baseAlt1Color) 7%, var(--baseColor));
+    }
+
+    .reports-card-grid-list .reports-operational-row {
+        flex-direction: column;
+        justify-content: flex-start;
+        min-width: 0;
+        min-height: 100%;
+    }
+
+    .reports-card-grid-list .reports-list-main {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .reports-card-grid-list .reports-list-meta,
+    .reports-card-grid-list .reports-operational-row > .label {
+        align-self: flex-start;
+    }
+
+    .reports-card-grid-list .reports-operational-time {
+        text-align: left;
     }
 
     .reports-operational-main {
@@ -6239,7 +6272,6 @@
 
         .reports-grid-two,
         .reports-grid-three,
-        .reports-kpi-grid,
         .reports-overview-rail,
         .reports-analytics-setup-grid,
         .reports-overview-traffic-metrics,
@@ -6266,6 +6298,20 @@
     }
 
     @media (max-width: 760px) {
+        .reports-card-grid-list {
+            grid-template-columns: 1fr;
+        }
+
+        .reports-kpi-grid {
+            flex-direction: column;
+        }
+
+        .reports-kpi-grid > .reports-kpi-card {
+            flex-basis: auto;
+            width: 100%;
+            min-width: 0;
+        }
+
         .reports-head.operations-head .selector-row {
             min-width: 100%;
             align-items: stretch;
