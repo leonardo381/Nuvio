@@ -1223,66 +1223,15 @@
     $: historyTotalSourcesCount = overviewDataConfidenceRows.length;
     $: historyArchiveStatusLabel = historyTotalSourcesCount > 0 ? "Awaiting snapshots" : "Checking sources";
     $: historyArchiveStatusClass = historyTotalSourcesCount > 0 ? "label-warning" : "";
-    $: latestLeadActivityTs = resolveMaxTimestamp(periodLeadRecords.map((lead) => lead.createdTs));
-    $: latestBookingActivityTs = resolveMaxTimestamp(
-        periodAppointments.map((appointment) => Math.max(Number(appointment?.createdTs) || 0, Number(appointment?.scheduledTs) || 0)),
-    );
-    $: latestNewsletterActivityTs = resolveMaxTimestamp([
-        ...normalizedSubscribers.map((subscriber) => subscriber.createdTs),
-        ...normalizedCampaigns.map((campaign) => Math.max(
-            Number(campaign?.sentTs) || 0,
-            Number(campaign?.updatedTs) || 0,
-            Number(campaign?.createdTs) || 0,
-        )),
-    ]);
-    $: latestSeoActivityTs = resolveMaxTimestamp(
-        (pagesRecords || []).map((page) => Math.max(
-            toTimestamp(page?.updated),
-            toTimestamp(page?.created),
-        )),
-    );
-    $: historyActivityRows = [
-        ...(latestLeadActivityTs > 0
-            ? [{
-                id: "leads",
-                title: "Latest lead activity",
-                detail: `${formatMetricNumber(leadsSummary.total)} leads tracked in ${selectedPeriodLabel.toLowerCase()}.`,
-                timestampLabel: formatDateTime(latestLeadActivityTs),
-                statusLabel: leadsSummary.newCount > 0 ? "Follow-up needed" : "Stable",
-                statusClass: leadsSummary.newCount > 0 ? "label-warning" : "label-success",
-            }]
-            : []),
-        ...(latestBookingActivityTs > 0
-            ? [{
-                id: "booking",
-                title: "Latest booking activity",
-                detail: `${formatMetricNumber(bookingSummary.total)} booking requests tracked in this period.`,
-                timestampLabel: formatDateTime(latestBookingActivityTs),
-                statusLabel: bookingSummary.pendingCount > 0 ? "Pending requests" : "On track",
-                statusClass: bookingSummary.pendingCount > 0 ? "label-warning" : "label-success",
-            }]
-            : []),
-        ...(latestNewsletterActivityTs > 0
-            ? [{
-                id: "newsletter",
-                title: "Latest newsletter activity",
-                detail: `${formatMetricNumber(newsletterSummary.sentCampaignsPeriod)} campaigns submitted in this period.`,
-                timestampLabel: formatDateTime(latestNewsletterActivityTs),
-                statusLabel: newsletterSummary.sentCampaignsPeriod > 0 ? "Campaign activity" : "No campaigns yet",
-                statusClass: newsletterSummary.sentCampaignsPeriod > 0 ? "label-success" : "",
-            }]
-            : []),
-        ...(latestSeoActivityTs > 0
-            ? [{
-                id: "seo",
-                title: "Latest SEO audit signal",
-                detail: `${formatMetricNumber(seoSummary.needsAttention + seoSummary.missingBasics)} pages currently need review.`,
-                timestampLabel: formatDateTime(latestSeoActivityTs),
-                statusLabel: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "Needs review" : "Healthy",
-                statusClass: seoSummary.needsAttention + seoSummary.missingBasics > 0 ? "label-warning" : "label-success",
-            }]
-            : []),
-    ];
+    $: historyActivityRows = buildHistoryActivityRows({
+        contacts: normalizedContacts,
+        whatsapp: normalizedWhatsApp,
+        appointments: normalizedAppointments,
+        subscribers: normalizedSubscribers,
+        campaigns: normalizedCampaigns,
+        pages: normalizedPages,
+        periodKey: selectedPeriod,
+    });
     $: historyHasActivityRows = historyActivityRows.length > 0;
 
     export async function reload() {
@@ -2984,6 +2933,145 @@
         return ["sent", "submitted"].includes(normalizeLower(statusKey));
     }
 
+    function buildHistoryActivityRows(options = {}) {
+        const periodKey = options?.periodKey || defaultReportsPeriod;
+        const events = [];
+
+        for (const lead of options?.contacts || []) {
+            const timestamp = Number(lead?.createdTs || 0);
+            if (!isTimestampInPeriod(timestamp, periodKey)) {
+                continue;
+            }
+
+            const sourceLabel = resolveLeadSourceLabel(lead?.sourceKey);
+            const statusLabel = resolveLeadStatusLabel(lead?.statusKey);
+            events.push({
+                id: `lead:${lead?.key || timestamp}`,
+                type: "lead",
+                title: "Lead received",
+                detail: `${sourceLabel} lead captured.`,
+                timestamp,
+                timestampLabel: formatDateTime(timestamp),
+                sourceLabel,
+                statusLabel,
+                statusClass: resolveLeadStatusPillClass(lead?.statusKey),
+            });
+        }
+
+        for (const interaction of options?.whatsapp || []) {
+            const timestamp = Number(interaction?.createdTs || 0);
+            if (!isTimestampInPeriod(timestamp, periodKey)) {
+                continue;
+            }
+
+            const sourceDetail = normalizeString(interaction?.subject);
+            events.push({
+                id: `whatsapp:${interaction?.key || timestamp}`,
+                type: "whatsapp",
+                title: "WhatsApp interaction received",
+                detail: sourceDetail && sourceDetail !== "WhatsApp interaction"
+                    ? `Source: ${truncate(sourceDetail, 80)}`
+                    : "WhatsApp source recorded.",
+                timestamp,
+                timestampLabel: formatDateTime(timestamp),
+                sourceLabel: "WhatsApp",
+                statusLabel: resolveLeadStatusLabel(interaction?.statusKey),
+                statusClass: resolveLeadStatusPillClass(interaction?.statusKey),
+            });
+        }
+
+        for (const appointment of options?.appointments || []) {
+            const timestamp = Number(appointment?.createdTs || 0);
+            if (!isTimestampInPeriod(timestamp, periodKey)) {
+                continue;
+            }
+
+            const serviceLabel = normalizeString(appointment?.serviceLabel) || "Unknown service";
+            events.push({
+                id: `booking:${appointment?.id || timestamp}`,
+                type: "booking",
+                title: "Booking request created",
+                detail: `Request for ${truncate(serviceLabel, 80)}.`,
+                timestamp,
+                timestampLabel: formatDateTime(timestamp),
+                sourceLabel: "Booking",
+                statusLabel: resolveAppointmentStatusLabel(appointment?.statusKey),
+                statusClass: resolveAppointmentStatusPillClass(appointment?.statusKey),
+            });
+        }
+
+        for (const subscriber of options?.subscribers || []) {
+            const timestamp = Number(subscriber?.createdTs || 0);
+            if (!isTimestampInPeriod(timestamp, periodKey)) {
+                continue;
+            }
+
+            const statusLabel = resolveSubscriberStatusLabel(subscriber?.statusKey);
+            events.push({
+                id: `subscriber:${subscriber?.id || timestamp}`,
+                type: "subscriber",
+                title: "Newsletter subscriber added",
+                detail: `Subscription status: ${statusLabel}.`,
+                timestamp,
+                timestampLabel: formatDateTime(timestamp),
+                sourceLabel: "Newsletter",
+                statusLabel,
+                statusClass: resolveSubscriberStatusPillClass(subscriber?.statusKey),
+            });
+        }
+
+        for (const campaign of options?.campaigns || []) {
+            const timestamp = resolveCampaignActivityTimestamp(campaign);
+            if (!isTimestampInPeriod(timestamp, periodKey)) {
+                continue;
+            }
+
+            const submitted = isSubmittedCampaignStatus(campaign?.statusKey) && Number(campaign?.sentTs || 0) > 0;
+            const recipients = Number(campaign?.recipientsCount || 0);
+            const subject = truncate(campaign?.subject, 72) || "Untitled campaign";
+            events.push({
+                id: `campaign:${campaign?.id || timestamp}`,
+                type: "campaign",
+                title: submitted ? "Campaign submitted" : "Campaign updated",
+                detail: recipients > 0
+                    ? `${subject} - ${formatMetricNumber(recipients)} recipients submitted.`
+                    : subject,
+                timestamp,
+                timestampLabel: formatDateTime(timestamp),
+                sourceLabel: "Newsletter",
+                statusLabel: resolveCampaignStatusLabel(campaign?.statusKey),
+                statusClass: resolveCampaignStatusPillClass(campaign?.statusKey),
+            });
+        }
+
+        for (const page of options?.pages || []) {
+            const timestamp = Number(page?.updatedTs || page?.createdTs || 0);
+            if (!isTimestampInPeriod(timestamp, periodKey)) {
+                continue;
+            }
+
+            const slug = normalizeString(page?.slug);
+            events.push({
+                id: `page:${page?.id || timestamp}`,
+                type: "page",
+                title: "Page updated",
+                detail: slug
+                    ? `${truncate(page?.title, 72)} - ${slug.startsWith("/") ? slug : `/${slug}`}`
+                    : truncate(page?.title, 92),
+                timestamp,
+                timestampLabel: formatDateTime(timestamp),
+                sourceLabel: "CMS",
+                statusLabel: page?.seoNoindex ? "Noindex" : "Page",
+                statusClass: page?.seoNoindex ? "label-warning" : "",
+            });
+        }
+
+        return events
+            .filter((event) => Number(event?.timestamp || 0) > 0)
+            .sort((a, b) => Number(b?.timestamp || 0) - Number(a?.timestamp || 0))
+            .slice(0, 20);
+    }
+
     function buildReportWarnings(payload = {}) {
         const warnings = [];
 
@@ -3537,6 +3625,31 @@
         }
         if (["failed", "error", "rejected"].includes(normalized)) {
             return "label-danger";
+        }
+        return "";
+    }
+
+    function resolveSubscriberStatusLabel(statusKey) {
+        const normalized = normalizeLower(statusKey);
+        if (normalized === "active") {
+            return "Active";
+        }
+        if (normalized === "pending") {
+            return "Pending";
+        }
+        if (normalized === "unsubscribed") {
+            return "Unsubscribed";
+        }
+        return "Subscriber";
+    }
+
+    function resolveSubscriberStatusPillClass(statusKey) {
+        const normalized = normalizeLower(statusKey);
+        if (normalized === "active") {
+            return "label-success";
+        }
+        if (normalized === "pending" || normalized === "unsubscribed") {
+            return "label-warning";
         }
         return "";
     }
@@ -5431,8 +5544,8 @@
 
                     <section class="panel reports-breakdown-card reports-section-shell">
                         <div class="section-head report-section-head m-b-sm">
-                            <h5 class="m-0">Recent reporting activity</h5>
-                            <p class="txt-sm txt-hint m-b-0">Latest data activity across report areas.</p>
+                            <h5 class="m-0">Recent activity</h5>
+                            <p class="txt-sm txt-hint m-b-0">Recent events from the current Reports datasets. This is not a saved report archive yet.</p>
                         </div>
                         {#if historyHasActivityRows}
                             <div class="reports-list reports-operational-list">
@@ -5442,6 +5555,9 @@
                                             <div class="reports-list-title">{historyRow.title}</div>
                                             <div class="txt-sm reports-list-snippet">{historyRow.detail}</div>
                                             <div class="reports-operational-chip-row">
+                                                {#if historyRow.sourceLabel}
+                                                    <span class="label label-sm">{historyRow.sourceLabel}</span>
+                                                {/if}
                                                 <span class={`label label-sm ${historyRow.statusClass || ""}`}>{historyRow.statusLabel}</span>
                                             </div>
                                         </div>
@@ -5451,7 +5567,7 @@
                             </div>
                         {:else}
                             <div class="report-empty-state">
-                                No report activity has been captured yet. Activity rows will appear once website data starts updating.
+                                No recent activity is available for this website yet.
                             </div>
                         {/if}
                     </section>
