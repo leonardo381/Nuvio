@@ -1,7 +1,48 @@
 .git
 .gitignore
+.dockerignore
+
+# Secrets and local env files
+.env
+.env.*
+!.env.example
+ui/.env
+ui/.env.*
+
+# Runtime PocketBase data and storage
+pb_data
+pb_data/**
+
+# Local QA/snapshot/temp artifacts
+dev_qa_snapshots
+screenshots
+tmp_screenshots
+.codex_backend_sync
+
+# Logs and runtime output
+*.log
+*.out
+*.err
+
+# Local binaries/build output
+nuvio
+nuvio.exe
+*.exe
+.builds
 bin
 obj
-node_modules
-tmp
 artifacts
+dist
+
+# Frontend dependencies/build output
+node_modules
+ui/node_modules
+ui/dist
+
+# Temporary/cache artifacts
+tmp
+temp
+.cache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
