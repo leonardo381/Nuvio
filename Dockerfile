@@ -7,6 +7,12 @@ COPY ui/package.json ui/package-lock.json ./
 RUN npm ci
 
 COPY ui/ ./
+
+# VITE_* values are browser-exposed and must be provided at image build time.
+ARG VITE_PB_BACKEND_URL=http://localhost:8090
+ARG VITE_PUBLIC_SITE_BASE_URL=http://localhost:3000
+ENV VITE_PB_BACKEND_URL=$VITE_PB_BACKEND_URL
+ENV VITE_PUBLIC_SITE_BASE_URL=$VITE_PUBLIC_SITE_BASE_URL
 RUN npm run build
 
 # ---------- Go build stage ----------
