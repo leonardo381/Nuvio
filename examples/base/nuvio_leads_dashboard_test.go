@@ -52,6 +52,8 @@ func TestNuvioLeadsDashboardEndpoint(t *testing.T) {
 				`"capabilities":{"contacts":`,
 				`"allowedStatus":["new","read","archived"]`,
 				`"name":"Alpha Contact"`,
+				`"page":"/alpha-contact"`,
+				`"source":"hero-form"`,
 				`"name":"Alpha WhatsApp"`,
 			},
 			NotExpectedContent: []string{
