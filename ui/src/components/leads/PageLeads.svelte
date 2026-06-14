@@ -322,6 +322,57 @@
         return normalizeString(value).toLowerCase();
     }
 
+    const leadContextPlaceholderValues = new Set(["n/a", "na", "-", "unknown"]);
+    const leadContextTechnicalSourceValues = new Set(["reference_contact"]);
+
+    function normalizeLeadContextPart(value) {
+        const normalized = normalizeString(value);
+        if (!normalized) {
+            return "";
+        }
+
+        if (leadContextPlaceholderValues.has(normalizeLower(normalized))) {
+            return "";
+        }
+
+        return normalized;
+    }
+
+    function normalizeLeadHumanContextPart(value, { allowTechnicalSource = false } = {}) {
+        const normalized = normalizeLeadContextPart(value);
+        if (!normalized) {
+            return "";
+        }
+
+        if (!allowTechnicalSource && leadContextTechnicalSourceValues.has(normalizeLower(normalized))) {
+            return "";
+        }
+
+        return normalized;
+    }
+
+    function isMeaningfulLeadContextSource(value) {
+        return !!normalizeLeadHumanContextPart(value);
+    }
+
+    function appendLeadContextPart(parts, value, { exclude = [] } = {}) {
+        const normalized = normalizeLeadHumanContextPart(value);
+        if (!normalized) {
+            return;
+        }
+
+        const normalizedLower = normalizeLower(normalized);
+        if (exclude.some((excludedValue) => normalizeLower(excludedValue) === normalizedLower)) {
+            return;
+        }
+
+        if (parts.some((part) => normalizeLower(part) === normalizedLower)) {
+            return;
+        }
+
+        parts.push(normalized);
+    }
+
     function normalizeWebsiteRelationValue(value) {
         if (Array.isArray(value)) {
             return normalizeString(value[0]);
@@ -670,22 +721,13 @@
 
     function resolveLeadAttributionDetail(lead) {
         const sourceLabel = normalizeLower(resolveSourceLabel(lead?.sourceKey));
-        const candidates = [lead?.originSource, lead?.page];
+        const value = normalizeLeadHumanContextPart(lead?.originSource);
 
-        for (const candidate of candidates) {
-            const value = normalizeString(candidate);
-            if (!value) {
-                continue;
-            }
-
-            if (normalizeLower(value) === sourceLabel) {
-                continue;
-            }
-
-            return value;
+        if (!value || normalizeLower(value) === sourceLabel) {
+            return "";
         }
 
-        return "";
+        return value;
     }
 
     function resolveLeadAttribution(lead) {
@@ -699,33 +741,20 @@
         return `${sourceLabel} · ${detail}`;
     }
 
-    function resolveLeadLocationHint(lead) {
+    function resolveLeadLocationHint(lead, { missingValue = "N/A" } = {}) {
         const parts = [];
-        const usedDetail = normalizeLower(resolveLeadAttributionDetail(lead));
+        const attributionDetail = resolveLeadAttributionDetail(lead);
+        const excludedValues = attributionDetail ? [attributionDetail] : [];
 
-        const websiteName = normalizeString(lead?.websiteName);
-        if (websiteName) {
-            parts.push(websiteName);
+        appendLeadContextPart(parts, lead?.websiteName, { exclude: excludedValues });
+
+        if (isMeaningfulLeadContextSource(lead?.originSource)) {
+            appendLeadContextPart(parts, lead?.originSource, { exclude: excludedValues });
         }
 
-        for (const candidate of [lead?.page, lead?.originSource]) {
-            const value = normalizeString(candidate);
-            if (!value) {
-                continue;
-            }
+        appendLeadContextPart(parts, lead?.page, { exclude: excludedValues });
 
-            if (normalizeLower(value) === usedDetail) {
-                continue;
-            }
-
-            if (parts.some((part) => normalizeLower(part) === normalizeLower(value))) {
-                continue;
-            }
-
-            parts.push(value);
-        }
-
-        return parts.join(" · ");
+        return parts.length ? parts.join(" · ") : missingValue;
     }
 
     function resolveLeadPreviewText(lead) {
@@ -2294,8 +2323,8 @@
                                             <div class="leads-inbox-item-attribution">
                                                 <span class="leads-inbox-inline-label">Origin:</span>
                                                 <span class="leads-inbox-item-attribution-main">{resolveLeadAttribution(lead)}</span>
-                                                {#if resolveLeadLocationHint(lead)}
-                                                    <span class="leads-inbox-item-attribution-context">{resolveLeadLocationHint(lead)}</span>
+                                                {#if resolveLeadLocationHint(lead, { missingValue: "" })}
+                                                    <span class="leads-inbox-item-attribution-context">{resolveLeadLocationHint(lead, { missingValue: "" })}</span>
                                                 {/if}
                                             </div>
                                             <div class="leads-inbox-item-last-contact">
@@ -3420,7 +3449,7 @@
     }
 
     .leads-inbox-item-attribution-context::before {
-        content: "-";
+        content: "·";
         margin-right: 6px;
         color: var(--txtDisabledColor);
     }
