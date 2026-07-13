@@ -1,0 +1,29 @@
+# Canonical Decisions
+
+Agents must preserve these decisions unless current source code, current git status, or explicit user instruction overrides them.
+
+| Area | Decision | Why | Agent implication | Do not change unless |
+| --- | --- | --- | --- | --- |
+| Current phase | Nuvio is in release-readiness mode, not broad backlog mode. | Product is mostly built; deployment/demo/first-client readiness are current blockers. | Classify work before changing files. Avoid expanding scope. | User explicitly asks for new product scope. |
+| Central backoffice | Backoffice/backend is central and reusable. | It owns scoped APIs, data, UI, migrations, and operational modules. | Preserve existing architecture; do not fork per client. | A future architecture phase explicitly replaces this model. |
+| Public websites | Public websites should be separate apps/repos/instances. | Sites need custom UI while preserving Nuvio integration boundaries. | Do not put real site work into Reference. | User explicitly targets a real site repo. |
+| cms5 role | cms5 is useful for current runtime/testing history but not the canonical starter. | It contains lab/dev history and broader runtime code. | Use cms5 for current runtime behavior; do not copy wholesale. | Task targets cms5 runtime itself. |
+| Reference role | Reference is the clean public-site reference/template candidate. | It defines clean env and integration boundaries for future sites. | Use Reference docs for new public-site template direction. | Current Reference code contradicts docs. |
+| Instance model | Clients are instances/deployments, not branches/repos. | Each instance owns env, data, domains, storage, backups, and snapshot. | Keep code shared and data isolated. | A future multi-tenant architecture phase changes this. |
+| Auth/tenant | Auth model is admin/client role plus `websiteAccess`. | Client-role safety depends on scoped access checks. | Enforce authorization in backend/scoped endpoints. | Current code shows a different model. |
+| Scoped endpoints | Client-role product flows require scoped custom endpoints, not raw PB writes. | UI-only restrictions are not security. | Do not reintroduce raw PocketBase writes. | A scoped endpoint is proven missing and a backend change is explicitly allowed. |
+| Website settings/SEO | SEO identity fields stay top-level; feature config lives in `websites.settings`. | Prevents duplicate sources and broken runtime SEO. | Preserve hidden keys and data boundaries. | Contract changes explicitly. |
+| UI standards | Admin UI should use established Nuvio primitives and rhythm. | Keeps product coherent. | Use operations-head, operations-tabs, summary pills, labels, buttons, OverlayPanel, Form v2 rhythm. | Existing primitives cannot support the task and a scoped new variant is justified. |
+| Forms | SchemaForm is canonical for dynamic props, but workflow forms may stay hardcoded. | Nuvio has multiple valid form systems. | Do not force all forms into one system. | Explicit form-system refactor phase. |
+| Leads | Contact Form and WhatsApp are conceptually unified as Leads. | Both represent inbound opportunities. | Keep attribution/context human-readable and scoped. | Product intentionally splits the model later. |
+| Booking | Booking is sensitive. | It touches slots, appointments, public submit, status lifecycle, email, and scheduling trust. | Avoid casual changes to status, slots, payloads, or email side effects. | Task explicitly scopes and validates booking behavior. |
+| Newsletter | Newsletter is useful but not advanced automation. | Current scope is subscribers, groups, campaigns, lifecycle, and server-side send. | Do not promise automation/open-click analytics unless implemented. | Future newsletter automation phase. |
+| Reports/analytics | Reports should be client-friendly operational dashboards. | They summarize current DTO/provider data, not a raw analytics warehouse. | Do not invent metrics or show fake insights. Keep provider secrets server-side. | Backend DTO/provider support is added and validated. |
+| Umami | Umami/analytics deployment validation is current. | Reports traffic confidence depends on real provider setup. | Treat configured/unconfigured states clearly; never expose secrets. | Provider strategy changes. |
+| Reviews | Reviews / Google Places is deferred/inactive for Nuvio 1.0. | Not required for first deployment path. | Do not start Reviews work from old references. | User explicitly revives it with scope. |
+| Pricing | Pricing is not final. | No durable pricing source was found in Phase 1/2. | Do not invent exact prices. Use cautious positioning copy. | User provides canonical pricing source. |
+| Business plan | Plan B/business plan is positioning source, not implementation checklist. | It was not found as a local source in Phase 1/2. | Treat business claims as unknown unless provided. | User provides a current business source. |
+| Deployment | Deployment/Coolify, restore, smoke testing, analytics validation, own landing, and first-client readiness are active priorities. | These unlock first real deployment. | Prioritize readiness blockers over deferred polish. | Product phase changes. |
+| Restore | Snapshot restore is controlled one-off work, not startup behavior. | Restore can overwrite important data. | Do not automate restore on container startup. | A future production-safe bootstrap design is explicitly approved. |
+| Secrets | `VITE_*` is browser-exposed; `PUBLIC_*` is browser-exposed in SvelteKit public sites. | Prevents secret leakage. | Never put secrets/tokens/provider credentials in browser env. | Never, unless value is intentionally public. |
+| Root READMEs | Root READMEs/default starter docs may be stale. | Main README is PocketBase-oriented; cms5 README is default Svelte starter. | Do not use them as Nuvio architecture/product truth. | They are updated later and checked. |
