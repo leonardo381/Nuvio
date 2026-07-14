@@ -8,7 +8,7 @@ This registry lists repeatable Nuvio agent processes. Active processes have a pr
 
 | Process | Status | Purpose | Path | Notes / when to use |
 | --- | --- | --- | --- | --- |
-| `WEBSITE_FACTORY` | active | Build client or official public websites from brief to deploy through strict staged gates. | [processes/website_factory](processes/website_factory/README.md) | Use when a website must move from client brief, source block selection, import, copy, visual adaptation, integration, QA, and handoff. WF2 expanded with full stage gates, supporting docs, prompts, and artifact templates. |
+| `WEBSITE_FACTORY` | active | Build client or official public websites from brief to deploy through strict staged gates. | [processes/website_factory](processes/website_factory/README.md) | Use when a website must move from client brief, source block selection, import, copy, visual adaptation, integration, QA, and handoff. WF2 expanded with full stage gates, supporting docs, prompts, and artifact templates. WF3 targeted QA tightened approval gates, reduced mode, and source-block safety confirmations. |
 
 ## Planned / Future Processes
 

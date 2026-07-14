@@ -41,6 +41,7 @@ Do not place client secrets, credentials, private tokens, or sensitive personal 
 - Mark unknowns as `Unknown / needs confirmation`.
 - Do not use artifacts as a place to store secrets.
 - Keep generated artifacts with the target site unless a private client folder is required.
+- Reduced Website Factory Mode may shorten artifact content, but required status, open question, approval, and deferred fields must remain visible.
 
 ## Related Docs
 

@@ -26,6 +26,7 @@ Stage 4
 
 | Section | Value | Notes |
 | --- | --- | --- |
+| Canonical source block library | `C:\Users\Leo\Documents\Nuvio\Srcs\html` / `Unknown / needs source block library path` |  |
 | Selected block | `Unknown / needs confirmation` |  |
 | Source path | `Unknown / needs confirmation` |  |
 | Target page/section | `Unknown / needs confirmation` |  |
@@ -33,6 +34,15 @@ Stage 4
 | Fit score/notes | `Unknown / needs confirmation` |  |
 | Risks | `Unknown / needs confirmation` |  |
 | Dependencies | `Unknown / needs confirmation` |  |
+
+## Source Block Safety
+
+| Check | Status | Notes |
+| --- | --- | --- |
+| Source blocks inspected read-only | `yes` / `no` |  |
+| Source files unchanged | `yes` / `no` | Stop if `no`. |
+| Import not started in this stage | `yes` / `no` | Stop if `no`. |
+| Hermes/Leonardo approval needed before import | `yes` | Record approval in Stage 5 before copying. |
 
 ## Status Fields
 

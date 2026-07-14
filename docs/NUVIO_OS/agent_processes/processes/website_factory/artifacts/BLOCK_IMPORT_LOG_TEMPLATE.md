@@ -34,6 +34,18 @@ Stage 5
 | Build/import issues | `Unknown / needs confirmation` |  |
 | Forbidden changes confirmation | `Unknown / needs confirmation` |  |
 
+## Raw Import Safety Confirmation
+
+| Check | Status | Notes |
+| --- | --- | --- |
+| Hermes/Leonardo import approval recorded | `yes` / `no` | Stop if `no`. |
+| Source files unchanged | `yes` / `no` | Stop if `no`. |
+| Copy/text unchanged | `yes` / `no` | Stop if `no`. |
+| Visual hierarchy unchanged | `yes` / `no` | Stop if `no`. |
+| No layout redesign | `yes` / `no` | Stop if `no`. |
+| No integration/refactor/component cleanup | `yes` / `no` | Stop if `no`. |
+| Only minimal import/build fixes made | `yes` / `no` | List every fix above. |
+
 ## Status Fields
 
 | Item | Status | Notes |

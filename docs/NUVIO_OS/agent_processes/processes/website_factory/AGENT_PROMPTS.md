@@ -14,7 +14,7 @@ Before changing anything, follow:
 - Goal: Capture business, site, client, operational, and launch constraints before any creative or technical work starts.
 - Produce or update: SITE_BRIEF.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -54,7 +54,7 @@ Before changing anything, follow:
 - Goal: Analyze the current business/site/content/positioning and identify practical problems, opportunities, and risks.
 - Produce or update: WEBSITE_AUDIT.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -92,8 +92,9 @@ Before changing anything, follow:
 - Read the Website Factory Process, Stage Gates, Block Library Rules when relevant, and the artifact template for this stage.
 - Goal: Define pages, routes, page purposes, priority, dependencies, and CTA roles.
 - Produce or update: SITEMAP.md.
+- Stop before treating the sitemap as accepted unless Hermes/Leonardo approval is recorded.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -132,7 +133,7 @@ Before changing anything, follow:
 - Goal: Define each page section-by-section before block selection or coding.
 - Produce or update: PAGE_BLUEPRINTS.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -167,11 +168,11 @@ Report format:
 ```text
 Before changing anything, follow:
 - You are executing Website Factory Stage 4 - Block selection only.
-- Read the Website Factory Process, Stage Gates, Block Library Rules when relevant, and the artifact template for this stage.
+- Read the Website Factory Process, Stage Gates, Block Library Rules, Source Block Library (`SOURCE_BLOCK_LIBRARY.md`), and the artifact template for this stage.
 - Goal: Select approved source blocks that best match the page blueprint without modifying or importing them.
 - Produce or update: BLOCK_SELECTION.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs, canonical source block library access, or required approvals are missing; stop if source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -209,8 +210,9 @@ Before changing anything, follow:
 - Read the Website Factory Process, Stage Gates, Block Library Rules when relevant, and the artifact template for this stage.
 - Goal: Copy selected blocks into the target site as-is and make only minimal import/build fixes required to compile.
 - Produce or update: BLOCK_IMPORT_LOG.md.
+- Do not import blocks unless Hermes/Leonardo approval is recorded.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -255,7 +257,7 @@ Before changing anything, follow:
 - Goal: Assemble imported copied blocks into target routes/pages according to the blueprint while preserving selected block structure.
 - Produce or update: PAGE_BLUEPRINTS.md / BLOCK_IMPORT_LOG.md updates.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -295,7 +297,7 @@ Before changing anything, follow:
 - Goal: Replace placeholder/source copy with site-specific copy while preserving approved structure.
 - Produce or update: COPY_DECK.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -334,7 +336,7 @@ Before changing anything, follow:
 - Goal: Adapt copied blocks to the site brand, visual hierarchy, spacing, imagery, and assets without changing strategy.
 - Produce or update: VISUAL_ADAPTATION_NOTES.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -372,8 +374,9 @@ Before changing anything, follow:
 - Read the Website Factory Process, Stage Gates, Block Library Rules when relevant, and the artifact template for this stage.
 - Goal: Integrate applicable Nuvio flows and public runtime needs using existing technical contracts.
 - Produce or update: INTEGRATION_CHECKLIST.md.
+- Do not start integration unless Hermes/Leonardo approval is recorded.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -412,7 +415,7 @@ Before changing anything, follow:
 - Goal: Map static content to Nuvio CMS fields/blocks where needed and identify what remains static.
 - Produce or update: CMS_CONTENT_MAP.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -451,7 +454,7 @@ Before changing anything, follow:
 - Goal: Validate the website using the severity model and produce a clear issue matrix.
 - Produce or update: WEBSITE_QA_MATRIX.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -490,7 +493,7 @@ Before changing anything, follow:
 - Goal: Fix approved P0/P1 issues and cheap P2 polish without reopening strategy or design.
 - Produce or update: FINAL_REVIEW.md and DEFERRED_LIST.md.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:
@@ -528,8 +531,9 @@ Before changing anything, follow:
 - Read the Website Factory Process, Stage Gates, Block Library Rules when relevant, and the artifact template for this stage.
 - Goal: Deploy through the approved environment/process, record facts, and prepare a clear client/operator handoff.
 - Produce or update: DEPLOYMENT_RECORD.md and CLIENT_HANDOFF.md.
+- Do not deploy or hand off unless Hermes/Leonardo approval is recorded.
 - Do not perform work from any other Website Factory stage.
-- Stop if required inputs are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
+- Stop if required inputs or required approvals are missing, source blocks would be modified, secrets/PII would be stored, or the work requires a forbidden action.
 - Report files inspected, files changed, artifact produced, validation performed or skipped, P0/P1/P2/deferred findings, and next safe stage.
 
 Allowed actions:

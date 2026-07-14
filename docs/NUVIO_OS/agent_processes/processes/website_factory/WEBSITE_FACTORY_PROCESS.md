@@ -29,6 +29,7 @@ Do not use this process to define backend schemas, PocketBase rules, deployment 
 - Agents MUST produce the required artifact for the active stage.
 - Agents MUST report skipped validation honestly.
 - Agents MUST avoid secrets, credentials, tokens, private client data, and unnecessary PII in Website Factory artifacts.
+- Agents MUST stop for Hermes/Leonardo approval at explicit approval gates.
 
 ## Source Block Immutability Rule Summary
 
@@ -68,6 +69,41 @@ Each stage has:
 - an example prompt.
 
 The next stage may start only when the required artifact exists and the current stage exit gate is satisfied or explicitly marked `Unknown / needs confirmation`.
+
+## Approval Gates
+
+Agents MUST stop for Hermes/Leonardo approval before:
+
+- accepting the sitemap/page plan as the build plan;
+- importing selected blocks into a target repo;
+- starting Nuvio integration work;
+- deploy/handoff;
+- any source-block-related exception;
+- any schema, backend, public runtime, env, config, or deployment change suggestion.
+
+If approval is missing, record `Unknown / needs confirmation` and stop. Do not treat silence as approval.
+
+## Reduced Website Factory Mode
+
+Simple websites may use Reduced Website Factory Mode, but the stage model still applies.
+
+Reduced mode MAY:
+
+- make artifacts shorter;
+- combine brief content into concise tables;
+- mark non-applicable sections as `Not applicable`;
+- keep copy, visual, integration, and QA notes compact.
+
+Reduced mode MUST NOT:
+
+- skip gates;
+- skip raw block import logging;
+- skip QA;
+- skip deploy/handoff records;
+- skip `DEFERRED_LIST.md` when anything is intentionally left out;
+- hide unknowns or approvals.
+
+Any compressed detail must be explicitly documented in the active artifact.
 
 ## Artifact Model
 
@@ -322,6 +358,7 @@ Define pages, routes, page purposes, priority, dependencies, and CTA roles.
 
 - Every planned page has route, purpose, CTA, priority, dependencies, and status
 - Deferred pages are explicitly marked
+- Hermes/Leonardo approval is recorded before treating the sitemap as accepted
 
 #### Stop conditions
 
@@ -557,6 +594,7 @@ Copy selected blocks into the target site as-is and make only minimal import/bui
 - Copied blocks exist in target repo
 - Only allowed minimal fixes were made
 - `BLOCK_IMPORT_LOG.md` records copied blocks, paths, fixes, issues, and forbidden-change confirmation
+- Hermes/Leonardo approval to import selected blocks is recorded
 
 #### Stop conditions
 
@@ -874,6 +912,7 @@ Integrate applicable Nuvio flows and public runtime needs using existing technic
 
 - Integration checklist records each applicable flow, status, notes, and validation needs
 - No unsupported contracts were invented
+- Hermes/Leonardo approval to start integration work is recorded
 
 #### Stop conditions
 
@@ -1186,6 +1225,7 @@ Deploy through the approved environment/process, record facts, and prepare a cle
 #### Definition of done
 
 - Deployment record and client handoff exist
+- Hermes/Leonardo deploy/handoff approval is recorded
 - Smoke checks are recorded
 - Rollback notes exist
 - Known limitations are visible
@@ -1222,6 +1262,7 @@ Before changing anything, follow:
 Stop and report `Unknown / needs confirmation` when:
 
 - required inputs are missing;
+- required Hermes/Leonardo approval is missing;
 - source-of-truth docs conflict;
 - the requested action belongs to another Website Factory stage;
 - a source block would need to be edited;
@@ -1244,6 +1285,7 @@ Stop and report `Unknown / needs confirmation` when:
 A Website Factory site is release-ready only when:
 
 - Stage 0-13 required artifacts exist or are explicitly marked not applicable;
+- required approval gates are recorded;
 - source block immutability is confirmed;
 - final QA has no unresolved P0;
 - P1 issues are fixed or accepted with owner/date;

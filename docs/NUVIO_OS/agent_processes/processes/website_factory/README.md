@@ -32,6 +32,7 @@ Start with [Website Factory Process](WEBSITE_FACTORY_PROCESS.md). Do not improvi
 | [Website Factory Process](WEBSITE_FACTORY_PROCESS.md) | Canonical stage 0-13 process contract. |
 | [Stage Gates](STAGE_GATES.md) | Compact entry/exit gate checklist for every stage. |
 | [Block Library Rules](BLOCK_LIBRARY_RULES.md) | Immutable source library and raw import rules. |
+| [Source Block Library](SOURCE_BLOCK_LIBRARY.md) | Canonical source block library path and Stage 4 selection standard. |
 | [Page Patterns](PAGE_PATTERNS.md) | Home, Services, and Contact page patterns. |
 | [Visual Weight Rules](VISUAL_WEIGHT_RULES.md) | Hierarchy, density, section rhythm, and visual restraint. |
 | [Copywriting Guide](COPYWRITING_GUIDE.md) | Copywriting pass rules and tone constraints. |

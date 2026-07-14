@@ -35,6 +35,14 @@ Stage 8
 | Deviations from source block | `Unknown / needs confirmation` |  |
 | Risks | `Unknown / needs confirmation` |  |
 
+## Source Block Safety
+
+| Check | Status | Notes |
+| --- | --- | --- |
+| Only copied target blocks were adapted | `yes` / `no` | Stop if `no`. |
+| Source library unchanged | `yes` / `no` | Stop if `no`. |
+| Deviations from selected block are logged | `yes` / `no` |  |
+
 ## Status Fields
 
 | Item | Status | Notes |

@@ -35,6 +35,11 @@ Stage 13
 | Smoke result | `Unknown / needs confirmation` |  |
 | Rollback notes | `Unknown / needs confirmation` |  |
 
+## Secret Safety
+
+- Do not record real secret values, tokens, passwords, private keys, or provider credentials.
+- Record only env variable names, whether they were configured, and any non-sensitive notes.
+
 ## Status Fields
 
 | Item | Status | Notes |

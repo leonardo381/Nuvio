@@ -4,6 +4,8 @@
 
 This document defines how agents may use source blocks during Website Factory work.
 
+For the canonical Website Factory source block path and Stage 4 selection source, read [Source Block Library](SOURCE_BLOCK_LIBRARY.md).
+
 ## Immutable Source Library Rule
 
 The source block library is immutable.
@@ -22,6 +24,7 @@ Agents MUST NOT edit, rename, reformat, delete, normalize, or "clean up" source 
 ## Selection Rules
 
 - Select blocks only during Stage 4.
+- Use the canonical source block library defined in [Source Block Library](SOURCE_BLOCK_LIBRARY.md).
 - Select exact files or folders, not vague inspiration.
 - Record source path, target page/section, reason, fit notes, risks, and dependencies.
 - Prefer blocks that match the blueprint with minimal later adaptation.
@@ -31,6 +34,8 @@ Agents MUST NOT edit, rename, reformat, delete, normalize, or "clean up" source 
 ## Raw Import Rules
 
 Stage 5 raw block import MUST be boring and literal.
+
+Hermes/Leonardo approval is required before importing blocks into the target repo.
 
 Allowed:
 
@@ -101,6 +106,8 @@ If a source block is accidentally changed:
 ## Stop Conditions
 
 Stop when:
+
+- Hermes/Leonardo approval is missing for block import or a source-block exception;
 
 - a source block would need modification;
 - import requires unapproved dependencies;
