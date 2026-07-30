@@ -335,6 +335,25 @@ func hasNuvioPublicCollectionField(collection *core.Collection, fieldName string
 	return collection.Fields.GetByName(strings.TrimSpace(fieldName)) != nil
 }
 
+func readNuvioPublicBoolField(record *core.Record, fieldName string) any {
+	if record == nil {
+		return nil
+	}
+	if !hasNuvioPublicCollectionField(record.Collection(), fieldName) {
+		return nil
+	}
+	return record.GetBool(fieldName)
+}
+
+func readNuvioPublicStringField(record *core.Record, fieldName string) string {
+	if record == nil {
+		return ""
+	}
+	if !hasNuvioPublicCollectionField(record.Collection(), fieldName) {
+		return ""
+	}
+	return strings.TrimSpace(record.GetString(fieldName))
+}
 func resolveNuvioPublicPagesWebsiteFieldName(collection *core.Collection) string {
 	if hasNuvioPublicCollectionField(collection, "website") {
 		return "website"
@@ -434,10 +453,10 @@ func buildNuvioPublicWebsiteDTO(record *core.Record) map[string]any {
 		"business_google_place_id": strings.TrimSpace(record.GetString("business_google_place_id")),
 		"business_social_profiles": strings.TrimSpace(record.GetString("business_social_profiles")),
 		"business_price_range":     strings.TrimSpace(record.GetString("business_price_range")),
-		"enabled":                  record.GetBool("enabled"),
-		"active":                   record.GetBool("active"),
-		"published":                record.GetBool("published"),
-		"status":                   strings.TrimSpace(record.GetString("status")),
+		"enabled":                  readNuvioPublicBoolField(record, "enabled"),
+		"active":                   readNuvioPublicBoolField(record, "active"),
+		"published":                readNuvioPublicBoolField(record, "published"),
+		"status":                   readNuvioPublicStringField(record, "status"),
 		"settings":                 buildNuvioPublicWebsiteSettingsDTO(record.Get("settings")),
 	}
 }
@@ -480,10 +499,10 @@ func buildNuvioPublicPageDTO(record *core.Record) map[string]any {
 		"seo_noindex":              record.GetBool("seo_noindex"),
 		"seo_exclude_from_sitemap": record.GetBool("seo_exclude_from_sitemap"),
 		"seo_translations":         normalizeNuvioPublicJSONValue(record.Get("seo_translations")),
-		"enabled":                  record.GetBool("enabled"),
-		"active":                   record.GetBool("active"),
-		"published":                record.GetBool("published"),
-		"status":                   strings.TrimSpace(record.GetString("status")),
+		"enabled":                  readNuvioPublicBoolField(record, "enabled"),
+		"active":                   readNuvioPublicBoolField(record, "active"),
+		"published":                readNuvioPublicBoolField(record, "published"),
+		"status":                   readNuvioPublicStringField(record, "status"),
 		"created":                  strings.TrimSpace(record.GetString("created")),
 		"updated":                  strings.TrimSpace(record.GetString("updated")),
 	}
