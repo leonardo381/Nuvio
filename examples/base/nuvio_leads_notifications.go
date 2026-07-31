@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -32,6 +35,172 @@ const (
 	nuvioPublicWhatsappSourceMaxLen = 120
 	nuvioPublicWhatsappPageMaxLen   = 200
 )
+
+const (
+	nuvioContactSubmitRateLimitDefaultMaxRequests   = 5
+	nuvioContactSubmitRateLimitDefaultWindowSeconds = 60
+	nuvioContactSubmitRateLimitMaxEnv               = "NUVIO_CONTACT_SUBMIT_RATE_LIMIT_MAX"
+	nuvioContactSubmitRateLimitWindowEnv            = "NUVIO_CONTACT_SUBMIT_RATE_LIMIT_WINDOW_SECONDS"
+	nuvioContactSubmitRateLimitStoreKey             = "__nuvioContactSubmitRateLimiter__"
+	nuvioContactSubmitRateLimitConfigStoreKey       = "__nuvioContactSubmitRateLimitConfig__"
+	nuvioContactSubmitRateLimitMessage              = "Too many contact submissions. Please try again later."
+)
+
+type nuvioContactSubmitRateLimitConfig struct {
+	MaxRequests int
+	Window      time.Duration
+}
+
+type nuvioContactSubmitRateLimiter struct {
+	mu          sync.Mutex
+	clients     map[string]nuvioContactSubmitRateLimitWindow
+	lastCleanup time.Time
+}
+
+type nuvioContactSubmitRateLimitWindow struct {
+	remaining int
+	resetAt   time.Time
+}
+
+// NUVIO CUSTOM START: Explicit public contact submit rate limiter.
+func checkNuvioPublicContactSubmitRateLimit(e *core.RequestEvent) error {
+	config := resolveNuvioContactSubmitRateLimitConfig(e.App)
+	clientKey := buildNuvioContactSubmitRateLimitClientKey(e)
+	limiter := getNuvioContactSubmitRateLimiter(e.App)
+
+	allowed, retryAfter := limiter.Allow(clientKey, config, time.Now().UTC())
+	if allowed {
+		return nil
+	}
+
+	e.Response.Header().Set("Retry-After", strconv.Itoa(nuvioContactSubmitRetryAfterSeconds(retryAfter)))
+	return e.TooManyRequestsError(nuvioContactSubmitRateLimitMessage, nil)
+}
+
+func getNuvioContactSubmitRateLimiter(app core.App) *nuvioContactSubmitRateLimiter {
+	return app.Store().GetOrSet(nuvioContactSubmitRateLimitStoreKey, func() any {
+		return &nuvioContactSubmitRateLimiter{
+			clients: map[string]nuvioContactSubmitRateLimitWindow{},
+		}
+	}).(*nuvioContactSubmitRateLimiter)
+}
+
+func resolveNuvioContactSubmitRateLimitConfig(app core.App) nuvioContactSubmitRateLimitConfig {
+	if raw := app.Store().Get(nuvioContactSubmitRateLimitConfigStoreKey); raw != nil {
+		switch value := raw.(type) {
+		case nuvioContactSubmitRateLimitConfig:
+			return normalizeNuvioContactSubmitRateLimitConfig(value)
+		case *nuvioContactSubmitRateLimitConfig:
+			if value != nil {
+				return normalizeNuvioContactSubmitRateLimitConfig(*value)
+			}
+		}
+	}
+
+	return normalizeNuvioContactSubmitRateLimitConfig(nuvioContactSubmitRateLimitConfig{
+		MaxRequests: readNuvioPositiveIntEnv(nuvioContactSubmitRateLimitMaxEnv, nuvioContactSubmitRateLimitDefaultMaxRequests),
+		Window: time.Duration(readNuvioPositiveIntEnv(
+			nuvioContactSubmitRateLimitWindowEnv,
+			nuvioContactSubmitRateLimitDefaultWindowSeconds,
+		)) * time.Second,
+	})
+}
+
+func normalizeNuvioContactSubmitRateLimitConfig(config nuvioContactSubmitRateLimitConfig) nuvioContactSubmitRateLimitConfig {
+	if config.MaxRequests < 1 {
+		config.MaxRequests = nuvioContactSubmitRateLimitDefaultMaxRequests
+	}
+	if config.Window <= 0 {
+		config.Window = time.Duration(nuvioContactSubmitRateLimitDefaultWindowSeconds) * time.Second
+	}
+
+	return config
+}
+
+func readNuvioPositiveIntEnv(name string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 1 {
+		return fallback
+	}
+
+	return parsed
+}
+
+func buildNuvioContactSubmitRateLimitClientKey(e *core.RequestEvent) string {
+	method := http.MethodPost
+	if e.Request != nil && e.Request.Method != "" {
+		method = strings.ToUpper(strings.TrimSpace(e.Request.Method))
+	}
+
+	clientIP := strings.TrimSpace(e.RealIP())
+	if clientIP == "" {
+		clientIP = "unknown"
+	}
+
+	return method + " contact-submit|" + clientIP
+}
+
+func (limiter *nuvioContactSubmitRateLimiter) Allow(
+	key string,
+	config nuvioContactSubmitRateLimitConfig,
+	now time.Time,
+) (bool, time.Duration) {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+
+	if limiter.clients == nil {
+		limiter.clients = map[string]nuvioContactSubmitRateLimitWindow{}
+	}
+
+	if limiter.lastCleanup.IsZero() || now.Sub(limiter.lastCleanup) >= config.Window {
+		for clientKey, window := range limiter.clients {
+			if !now.Before(window.resetAt) {
+				delete(limiter.clients, clientKey)
+			}
+		}
+		limiter.lastCleanup = now
+	}
+
+	window, exists := limiter.clients[key]
+	if !exists || !now.Before(window.resetAt) {
+		window = nuvioContactSubmitRateLimitWindow{
+			remaining: config.MaxRequests,
+			resetAt:   now.Add(config.Window),
+		}
+	}
+
+	if window.remaining <= 0 {
+		limiter.clients[key] = window
+		return false, window.resetAt.Sub(now)
+	}
+
+	window.remaining--
+	limiter.clients[key] = window
+	return true, 0
+}
+
+func nuvioContactSubmitRetryAfterSeconds(duration time.Duration) int {
+	if duration <= 0 {
+		return 1
+	}
+
+	seconds := int(duration / time.Second)
+	if duration%time.Second != 0 {
+		seconds++
+	}
+	if seconds < 1 {
+		return 1
+	}
+
+	return seconds
+}
+
+// NUVIO CUSTOM END: Explicit public contact submit rate limiter.
 
 type nuvioEmailNotificationsConfig struct {
 	Enabled bool
@@ -88,6 +257,10 @@ type nuvioWhatsappInteractionPayload struct {
 // NUVIO CUSTOM START: Contact form + WhatsApp interaction endpoints with independent email notifications.
 func registerNuvioLeadsRoutes(e *core.ServeEvent) {
 	contactSubmitHandler := func(e *core.RequestEvent) error {
+		if err := checkNuvioPublicContactSubmitRateLimit(e); err != nil {
+			return err
+		}
+
 		payload := map[string]any{}
 		if err := e.BindBody(&payload); err != nil {
 			return e.BadRequestError("Invalid contact form payload.", nil)

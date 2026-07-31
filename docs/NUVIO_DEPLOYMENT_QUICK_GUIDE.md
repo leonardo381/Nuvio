@@ -59,6 +59,17 @@ Every `VITE_*` variable is exposed to the browser. Never put secrets here.
 
 Only configure these when the corresponding feature is enabled for the instance.
 
+### Public contact hardening
+
+The public contact submit endpoint has a built-in per contact-submit route/client-IP limiter. Defaults are safe for staging, but production can tune them if needed.
+
+| Variable | Plain-language purpose |
+| --- | --- |
+| `NUVIO_CONTACT_SUBMIT_RATE_LIMIT_MAX` | Allowed unauthenticated contact submissions per client/window. Defaults to `5`. |
+| `NUVIO_CONTACT_SUBMIT_RATE_LIMIT_WINDOW_SECONDS` | Window length in seconds. Defaults to `60`. |
+
+If the backend is behind Coolify or another reverse proxy, configure PocketBase trusted proxy headers only for the trusted proxy path; otherwise the limiter will key by the direct remote IP, often the proxy IP.
+
 ### Email / Resend
 
 | Variable | Plain-language purpose |

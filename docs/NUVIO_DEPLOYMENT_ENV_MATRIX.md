@@ -35,6 +35,8 @@ These variables belong to the backend/backoffice repo at `C:\Users\Leo\Documents
 | `NUVIO_PUBLIC_BASE_URL` | Server-only | Public URL | Required if newsletter lifecycle emails are enabled | Per instance | `https://www.client.example.com` | Visitor-facing base URL for newsletter confirmation/unsubscribe links. | `.env.example`, `examples/base/nuvio_newsletter.go` |
 | `NUVIO_CORS_ALLOWED_ORIGINS` | Server-only | Public origins | Required for production | Per instance | `https://admin.client.example.com https://www.client.example.com` | Explicit CORS origin allowlist. | `.env.example`, `apis/serve.go`, `cmd/serve.go` |
 | `NUVIO_CMS_PREVIEW_FRAME_SRC` | Server-only | Public origins | Required when CMS preview uses a separate public runtime origin | Per instance | `https://www.client.example.com` | Backoffice CSP `frame-src` and `child-src` preview allowlist. | `.env.example`, `apis/serve.go` |
+| `NUVIO_CONTACT_SUBMIT_RATE_LIMIT_MAX` | Server-only | Operational | Optional | Per instance | `5` | Maximum unauthenticated public contact submissions per contact-submit route + client IP within the configured window. | `.env.example`, `examples/base/nuvio_leads_notifications.go` |
+| `NUVIO_CONTACT_SUBMIT_RATE_LIMIT_WINDOW_SECONDS` | Server-only | Operational | Optional | Per instance | `60` | Contact submit rate-limit window in seconds. | `.env.example`, `examples/base/nuvio_leads_notifications.go` |
 | `NUVIO_RESEND_API_KEY` | Server-only | Secret | Required if Resend email sending is enabled | Per instance or provider account | `<secret-resend-api-key>` | Primary Resend API key. | `.env.example`, `examples/base/nuvio_email.go` |
 | `RESEND_API_KEY` | Server-only | Secret | Optional fallback | Per instance or provider account | `<secret-resend-api-key>` | Resend API key fallback. Prefer `NUVIO_RESEND_API_KEY`. | `.env.example`, `examples/base/nuvio_email.go` |
 | `NUVIO_RESEND_FROM` | Server-only | Public/sensitive email | Optional | Per instance | `Nuvio <hello@client.example.com>` | Primary email sender identity. | `.env.example`, `examples/base/nuvio_email.go` |
@@ -98,6 +100,7 @@ These variables belong to the public/template runtime repo at `C:\Users\Leo\Docu
 | --- | --- | --- | --- |
 | `NUVIO_CORS_ALLOWED_ORIGINS` | Backend/server | Yes | Set exact admin and public origins. Do not use wildcard origins in production. |
 | `NUVIO_CMS_PREVIEW_FRAME_SRC` | Backend/server | If CMS preview frames public runtime cross-origin | Set exact public runtime origin(s) that the backoffice may iframe. |
+| PocketBase trusted proxy headers | Backend/server | If backend runs behind Coolify/reverse proxy and is not directly reachable | Configure trusted proxy headers so `RequestEvent.RealIP()` keys contact submit rate limits by visitor IP instead of the proxy IP. Do not trust forwarded headers if the app is directly reachable. |
 | `VITE_CMS_PREVIEW_PARENT_ORIGIN` | Public runtime | If CMS preview frames public runtime cross-origin | Set exact backoffice/admin origin(s) allowed to frame the public runtime. |
 
 ## QA and Dev-Only Variables

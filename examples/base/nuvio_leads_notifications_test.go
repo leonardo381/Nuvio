@@ -1,11 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 )
@@ -249,6 +253,102 @@ func TestNuvioContactPublicSubmitEndpoint(t *testing.T) {
 	}
 }
 
+func TestNuvioContactPublicSubmitRateLimit(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("failed to create test app: %v", err)
+	}
+	defer app.Cleanup()
+
+	baseRouter, err := apis.NewRouter(app)
+	if err != nil {
+		t.Fatalf("failed to create router: %v", err)
+	}
+
+	serveEvent := &core.ServeEvent{
+		App:    app,
+		Router: baseRouter,
+	}
+
+	serveErr := app.OnServe().Trigger(serveEvent, func(e *core.ServeEvent) error {
+		registerNuvioLeadsRoutes(e)
+		registerNuvioPublicContentRoutes(e)
+		seedNuvioPublicLeadsNotificationsWebsite(t, app, true, true)
+		seedNuvioCMSBackofficeDashboardData(t, app)
+		ensureNuvioLeadsDashboardContactsCollection(t, app)
+		setNuvioContactSubmitRateLimitConfigForTest(app, nuvioContactSubmitRateLimitConfig{
+			MaxRequests: 2,
+			Window:      time.Minute,
+		})
+		if config := resolveNuvioContactSubmitRateLimitConfig(app); config.MaxRequests != 2 {
+			t.Fatalf("expected test rate-limit config max=2, got %d", config.MaxRequests)
+		}
+
+		mux, err := e.Router.BuildMux()
+		if err != nil {
+			t.Fatalf("failed to build router mux: %v", err)
+		}
+
+		for i := 1; i <= 2; i++ {
+			res := submitNuvioContactForRateLimitTest(t, mux, fmt.Sprintf("allowed-%d@example.test", i), "198.51.100.44")
+			if res.Code != http.StatusOK {
+				t.Fatalf("expected allowed request %d to return 200, got %d: %s", i, res.Code, res.Body.String())
+			}
+		}
+
+		if count := countNuvioPublicContactRecordsForWebsite(t, app); count != 2 {
+			t.Fatalf("expected 2 saved contact records before limit, got %d", count)
+		}
+
+		limited := submitNuvioContactForRateLimitTest(
+			t,
+			mux,
+			"limited@example.test",
+			"198.51.100.44",
+		)
+		if limited.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected third request to return 429, got %d: %s", limited.Code, limited.Body.String())
+		}
+		if retryAfter := limited.Header().Get("Retry-After"); retryAfter == "" {
+			t.Fatalf("expected Retry-After header on rate-limited response")
+		}
+		if !strings.Contains(limited.Body.String(), nuvioContactSubmitRateLimitMessage) {
+			t.Fatalf("expected generic rate-limit response message, got %s", limited.Body.String())
+		}
+
+		legacyLimited := submitNuvioContactForRateLimitPathTest(
+			t,
+			mux,
+			"/api/nuvio/leads/contact/submit",
+			"legacy-limited@example.test",
+			"198.51.100.44",
+		)
+		if legacyLimited.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected compatibility contact route to share the rate limit, got %d: %s", legacyLimited.Code, legacyLimited.Body.String())
+		}
+
+		if count := countNuvioPublicContactRecordsForWebsite(t, app); count != 2 {
+			t.Fatalf("expected rate-limited request not to create a contact record, got %d records", count)
+		}
+
+		contentRes := httptest.NewRecorder()
+		contentReq := httptest.NewRequest(
+			http.MethodGet,
+			"/api/nuvio/public/content?websiteSlug=alpha-cms&pageSlug=home",
+			nil,
+		)
+		mux.ServeHTTP(contentRes, contentReq)
+		if contentRes.Code != http.StatusOK {
+			t.Fatalf("expected unrelated public content route to remain available, got %d: %s", contentRes.Code, contentRes.Body.String())
+		}
+
+		return nil
+	})
+	if serveErr != nil {
+		t.Fatalf("failed to trigger serve hook: %v", serveErr)
+	}
+}
+
 func TestNuvioWhatsappPublicInteractionEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -368,6 +468,80 @@ func TestNuvioWhatsappPublicInteractionEndpoint(t *testing.T) {
 	}
 }
 
+func setNuvioContactSubmitRateLimitConfigForTest(
+	app core.App,
+	config nuvioContactSubmitRateLimitConfig,
+) {
+	app.Store().Set(nuvioContactSubmitRateLimitConfigStoreKey, config)
+	app.Store().Remove(nuvioContactSubmitRateLimitStoreKey)
+}
+
+func submitNuvioContactForRateLimitTest(
+	t testing.TB,
+	mux http.Handler,
+	email string,
+	forwardedFor string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	return submitNuvioContactForRateLimitPathTest(
+		t,
+		mux,
+		"/api/nuvio/contact/submit",
+		email,
+		forwardedFor,
+	)
+}
+
+func submitNuvioContactForRateLimitPathTest(
+	t testing.TB,
+	mux http.Handler,
+	path string,
+	email string,
+	forwardedFor string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body := strings.NewReader(`{
+		"websiteSlug":"` + nuvioPublicNotificationsSlug + `",
+		"name":"Rate Limit Test",
+		"email":"` + email + `",
+		"message":"Please contact me."
+	}`)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, path, body)
+	request.Header.Set("content-type", "application/json")
+	request.RemoteAddr = "203.0.113.10:1234"
+	if forwardedFor != "" {
+		request.Header.Set("X-Forwarded-For", forwardedFor)
+	}
+
+	mux.ServeHTTP(recorder, request)
+	return recorder
+}
+
+func countNuvioPublicContactRecordsForWebsite(t testing.TB, app core.App) int {
+	t.Helper()
+
+	contactsCollection, err := app.FindCollectionByNameOrId(nuvioContactsCollectionID)
+	if err != nil {
+		t.Fatalf("failed to load contacts collection: %v", err)
+	}
+
+	records, err := app.FindRecordsByFilter(
+		contactsCollection,
+		"website={:website}",
+		"",
+		50,
+		0,
+		dbx.Params{"website": nuvioPublicNotificationsWebsiteID},
+	)
+	if err != nil {
+		t.Fatalf("failed to count contact records: %v", err)
+	}
+
+	return len(records)
+}
 func setupNuvioPublicLeadsNotificationsRoutes(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
 	t.Helper()
 	_ = app

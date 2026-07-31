@@ -39,7 +39,7 @@ Done but needs regression.
 - Preserve the unified Leads model; why: contact form, WhatsApp, and booking-related contacts share one operator workflow; agent implication: do not split flows into unrelated dashboards.
 - Keep `settings.contactForm` compatibility; why: existing public sites and settings depend on it; agent implication: do not replace with only a new nested model.
 - Keep `settings.whatsapp` compatibility; why: WhatsApp public links and notifications may read it; agent implication: do not prematurely migrate to `settings.leads.channels`.
-- Harden public endpoints separately from admin endpoints; why: public submissions are unauthenticated threat surfaces; agent implication: validate input and avoid exposing internal data.
+- Harden public endpoints separately from admin endpoints; why: public submissions are unauthenticated threat surfaces; agent implication: validate input, rate-limit public submits, and avoid exposing internal data.
 - Notification templates are part of the flow; why: submissions often trigger business emails; agent implication: do not change notification payloads casually.
 - Attribution and context should be human-readable; why: clients need useful origin data; agent implication: filter placeholders and technical keys in UI display.
 
@@ -57,7 +57,7 @@ Done but needs regression.
 - Do not migrate settings to `settings.leads.channels` prematurely.
 - Do not add unsupported public payload fields.
 - Do not weaken public endpoint validation.
-- Do not expose PII in analytics or logs.
+- Do not expose PII in analytics or logs. The public contact submit rate limiter must key by the logical contact-submit route + `RequestEvent.RealIP()` and return a generic 429 before saving records or sending notifications.
 - Do not change Booking, Newsletter, Reports, CMS, or public runtime routing as part of a Leads polish task.
 - Do not reintroduce raw PB writes from the UI.
 
@@ -73,7 +73,7 @@ Done but needs regression.
 ## 9. Validation checklist
 
 - Run `cd ui; npm run build` when Leads UI changed.
-- Run focused Leads/contact backend tests when backend code changed.
+- Run focused Leads/contact backend tests when backend code changed, including the public contact submit rate-limit regression.
 - Manually submit a public contact form and confirm a lead appears.
 - Manually test WhatsApp tracking/contact flow if touched.
 - Check client-role assigned user can see only scoped leads.
