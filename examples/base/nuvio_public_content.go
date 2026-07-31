@@ -30,13 +30,20 @@ var (
 		"_cmspreview": {},
 	}
 	nuvioPublicSitemapAllowedQueryKeys = map[string]struct{}{}
-	nuvioPublicSitemapExcludedStatuses = map[string]struct{}{
-		"draft":       {},
-		"disabled":    {},
-		"inactive":    {},
-		"archived":    {},
-		"private":     {},
-		"unpublished": {},
+	nuvioPublicNonRenderableStatuses   = map[string]struct{}{
+		"archived":        {},
+		"deleted":         {},
+		"disabled":        {},
+		"disabled_public": {},
+		"draft":           {},
+		"hidden":          {},
+		"inactive":        {},
+		"offline":         {},
+		"pending":         {},
+		"private":         {},
+		"review":          {},
+		"unlisted":        {},
+		"unpublished":     {},
 	}
 )
 
@@ -78,6 +85,10 @@ func registerNuvioPublicContentRoutes(e *core.ServeEvent) {
 			return e.InternalServerError("Failed to load public content.", nil)
 		}
 
+		if !isNuvioPublicRecordRenderable(websiteRecord) {
+			return e.NotFoundError("Website not found.", nil)
+		}
+
 		response := nuvioPublicContentResponse{
 			Website: buildNuvioPublicWebsiteDTO(websiteRecord),
 			Blocks:  []map[string]any{},
@@ -93,6 +104,10 @@ func registerNuvioPublicContentRoutes(e *core.ServeEvent) {
 				return e.NotFoundError("Page not found.", nil)
 			}
 			return e.InternalServerError("Failed to load public content.", nil)
+		}
+
+		if !isNuvioPublicRecordRenderable(pageRecord) {
+			return e.NotFoundError("Page not found.", nil)
 		}
 
 		blockRecords, err := findNuvioPublicBlocksByPageID(e.App, pageRecord.Id)
@@ -152,7 +167,7 @@ func registerNuvioPublicContentRoutes(e *core.ServeEvent) {
 
 		websiteSlugByID := make(map[string]string, len(websiteRecords))
 		for _, website := range websiteRecords {
-			if !isNuvioPublicSitemapRecordIndexable(website) {
+			if !isNuvioPublicRecordRenderable(website) {
 				continue
 			}
 
@@ -166,7 +181,7 @@ func registerNuvioPublicContentRoutes(e *core.ServeEvent) {
 		}
 
 		for _, page := range pageRecords {
-			if !isNuvioPublicSitemapRecordIndexable(page) || isNuvioPublicSitemapPageExcluded(page) {
+			if !isNuvioPublicRecordRenderable(page) || isNuvioPublicSitemapPageExcluded(page) {
 				continue
 			}
 
@@ -320,6 +335,8 @@ func findNuvioPublicBlocksByPageID(app core.App, pageID string) ([]*core.Record,
 	if err != nil {
 		return nil, err
 	}
+
+	blockRecords = filterNuvioPublicRenderableRecords(blockRecords)
 
 	if hasNuvioPublicCollectionField(blocksCollection, "component") && len(blockRecords) > 0 {
 		_ = app.ExpandRecords(blockRecords, []string{"component"}, nil)
@@ -525,26 +542,54 @@ func buildNuvioPublicSitemapPageDTO(record *core.Record, websiteSlug string) map
 	}
 }
 
-func isNuvioPublicSitemapRecordIndexable(record *core.Record) bool {
+func filterNuvioPublicRenderableRecords(records []*core.Record) []*core.Record {
+	if len(records) == 0 {
+		return []*core.Record{}
+	}
+
+	result := make([]*core.Record, 0, len(records))
+	for _, record := range records {
+		if isNuvioPublicRecordRenderable(record) {
+			result = append(result, record)
+		}
+	}
+
+	return result
+}
+
+func isNuvioPublicRecordRenderable(record *core.Record) bool {
 	if record == nil {
 		return false
 	}
 
-	booleanFlags := []string{"enabled", "active", "published", "is_published", "isPublished"}
-	for _, fieldName := range booleanFlags {
-		if hasNuvioPublicCollectionField(record.Collection(), fieldName) && !record.GetBool(fieldName) {
+	falseBooleanFlags := []string{"enabled", "active", "published", "is_published", "isPublished", "visible", "is_visible", "isVisible"}
+	for _, fieldName := range falseBooleanFlags {
+		if !hasNuvioPublicCollectionField(record.Collection(), fieldName) {
+			continue
+		}
+		if value, ok := parseBoolValue(record.Get(fieldName)); ok && !value {
 			return false
 		}
 	}
 
-	statusCandidates := []string{"status", "publication_status", "publishStatus"}
+	trueBooleanFlags := []string{"private", "is_private", "isPrivate", "draft", "is_draft", "isDraft", "archived", "is_archived", "isArchived", "deleted", "is_deleted", "isDeleted", "hidden", "is_hidden", "isHidden", "unlisted", "is_unlisted", "isUnlisted"}
+	for _, fieldName := range trueBooleanFlags {
+		if !hasNuvioPublicCollectionField(record.Collection(), fieldName) {
+			continue
+		}
+		if value, ok := parseBoolValue(record.Get(fieldName)); ok && value {
+			return false
+		}
+	}
+
+	statusCandidates := []string{"status", "publication_status", "publicationStatus", "publishStatus", "visibility"}
 	for _, fieldName := range statusCandidates {
 		if !hasNuvioPublicCollectionField(record.Collection(), fieldName) {
 			continue
 		}
 
 		status := strings.ToLower(strings.TrimSpace(record.GetString(fieldName)))
-		if _, isExcluded := nuvioPublicSitemapExcludedStatuses[status]; isExcluded {
+		if _, isExcluded := nuvioPublicNonRenderableStatuses[status]; isExcluded {
 			return false
 		}
 	}
