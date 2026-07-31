@@ -33,55 +33,122 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "miniCards",
-            "label": "Mini Cards",
+            "key": "miniCards",
+            "label": "Cards",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "label",
+                  "label": "Label",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "text",
+                  "label": "Card description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Card"
           },
           {
-            "name": "checklistLabel",
-            "label": "Checklist Label",
+            "key": "checklistLabel",
+            "label": "Checklist label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "checklist",
-            "label": "Checklist",
+            "key": "checklist",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "description",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           }
         ]
       }
@@ -99,19 +166,346 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "context",
-            "label": "Context",
+            "key": "context",
+            "label": "Context panel",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Context panel",
+            "fields": [
+              {
+                "key": "eyebrow",
+                "label": "Section label",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "headingPrefix",
+                "label": "Title",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "headingAccent",
+                "label": "Highlighted words",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "headingSuffix",
+                "label": "Title after highlight",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "whatToSendLabel",
+                "label": "List label",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "whatToSend",
+                "label": "List items",
+                "type": "array",
+                "required": false,
+                "group": "Context panel",
+                "item": {
+                  "type": "object",
+                  "fields": [
+                    {
+                      "key": "title",
+                      "label": "Item title",
+                      "type": "text",
+                      "required": false,
+                      "group": "Context panel"
+                    },
+                    {
+                      "key": "text",
+                      "label": "Item description",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Context panel",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "options": {
+                        "rows": 4
+                      }
+                    }
+                  ]
+                },
+                "itemLabel": "Item"
+              },
+              {
+                "key": "mappedOutputsLabel",
+                "label": "Output label",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "mappedOutputsHeadingPrefix",
+                "label": "Output title",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "mappedOutputsHeadingAccent",
+                "label": "Output highlighted words",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "mappedOutputsHeadingSuffix",
+                "label": "Output title after highlight",
+                "type": "text",
+                "required": false,
+                "group": "Context panel"
+              },
+              {
+                "key": "mappedOutputs",
+                "label": "List items",
+                "type": "array",
+                "required": false,
+                "group": "Context panel",
+                "item": {
+                  "type": "object",
+                  "fields": [
+                    {
+                      "key": "title",
+                      "label": "Item title",
+                      "type": "text",
+                      "required": false,
+                      "group": "Context panel"
+                    },
+                    {
+                      "key": "text",
+                      "label": "Item description",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Context panel",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "options": {
+                        "rows": 4
+                      }
+                    }
+                  ]
+                },
+                "itemLabel": "Item"
+              }
+            ]
           },
           {
-            "name": "form",
-            "label": "Form",
+            "key": "form",
+            "label": "Form copy",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Form copy",
+            "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+            "fields": [
+              {
+                "key": "eyebrow",
+                "label": "Section label",
+                "type": "text",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "headingPrefix",
+                "label": "Title",
+                "type": "text",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "headingAccent",
+                "label": "Highlighted words",
+                "type": "text",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "support",
+                "label": "Subtitle",
+                "type": "textarea",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                "options": {
+                  "rows": 4
+                }
+              },
+              {
+                "key": "loadingStatus",
+                "label": "Loading message",
+                "type": "text",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "labels",
+                "label": "Field labels",
+                "type": "object",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                "fields": [
+                  {
+                    "key": "name",
+                    "label": "Name field label",
+                    "type": "text",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                    "advanced": true,
+                    "visibility": "advanced"
+                  },
+                  {
+                    "key": "email",
+                    "label": "Email field label",
+                    "type": "text",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                    "advanced": true,
+                    "visibility": "advanced"
+                  },
+                  {
+                    "key": "phone",
+                    "label": "Phone field label",
+                    "type": "text",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                    "advanced": true,
+                    "visibility": "advanced"
+                  },
+                  {
+                    "key": "subject",
+                    "label": "Business field label",
+                    "type": "text",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                    "advanced": true,
+                    "visibility": "advanced"
+                  },
+                  {
+                    "key": "message",
+                    "label": "Message field label",
+                    "type": "text",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                    "advanced": true,
+                    "visibility": "advanced"
+                  }
+                ]
+              },
+              {
+                "key": "placeholders",
+                "label": "Placeholders",
+                "type": "object",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                "fields": [
+                  {
+                    "key": "subject",
+                    "label": "Business placeholder",
+                    "type": "text",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+                  },
+                  {
+                    "key": "message",
+                    "label": "Message placeholder",
+                    "type": "textarea",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                    "options": {
+                      "rows": 3
+                    }
+                  }
+                ]
+              },
+              {
+                "key": "help",
+                "label": "Helper text",
+                "type": "object",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                "fields": [
+                  {
+                    "key": "message",
+                    "label": "Message helper text",
+                    "type": "textarea",
+                    "required": false,
+                    "group": "Form copy",
+                    "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                    "options": {
+                      "rows": 3
+                    }
+                  }
+                ]
+              },
+              {
+                "key": "optionalLabel",
+                "label": "Optional field label",
+                "type": "text",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "submitIdle",
+                "label": "Button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "submitLoading",
+                "label": "Loading button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "note",
+                "label": "Note",
+                "type": "textarea",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned.",
+                "options": {
+                  "rows": 4
+                }
+              }
+            ]
           }
         ]
       }
@@ -129,49 +523,81 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "ariaLabel",
-            "label": "Aria Label",
+            "key": "brand",
+            "label": "Brand name",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "brand",
-            "label": "Brand",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "navItems",
-            "label": "Nav Items",
+            "key": "navItems",
+            "label": "Navigation labels",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Item"
           },
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "heading",
-            "label": "Heading",
+            "key": "heading",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "cta",
-            "label": "Cta",
+            "key": "cta",
+            "label": "Button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Button text",
+                "type": "text",
+                "required": false,
+                "group": "Content"
+              },
+              {
+                "key": "href",
+                "label": "Button link",
+                "type": "text",
+                "required": false,
+                "group": "Content",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "pages",
-            "label": "Pages",
+            "key": "pages",
+            "label": "Page labels",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Page"
           }
         ]
       }
@@ -189,55 +615,381 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "overviewAriaLabel",
-            "label": "Overview Aria Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "publicPanel",
-            "label": "Public Panel",
+            "key": "publicPanel",
+            "label": "Public website card",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Public website card",
+            "fields": [
+              {
+                "key": "eyebrow",
+                "label": "Section label",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "heading",
+                "label": "Title",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "brand",
+                "label": "Brand name",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "navItems",
+                "label": "Navigation labels",
+                "type": "array",
+                "required": false,
+                "group": "Public website card",
+                "item": {
+                  "type": "text"
+                },
+                "itemLabel": "Item"
+              },
+              {
+                "key": "siteEyebrow",
+                "label": "Preview section label",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "siteHeading",
+                "label": "Site Heading",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "cta",
+                "label": "Button",
+                "type": "object",
+                "required": false,
+                "group": "Buttons",
+                "fields": [
+                  {
+                    "key": "label",
+                    "label": "Button text",
+                    "type": "text",
+                    "required": false,
+                    "group": "Buttons"
+                  },
+                  {
+                    "key": "href",
+                    "label": "Button link",
+                    "type": "text",
+                    "required": false,
+                    "group": "Buttons",
+                    "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+                  }
+                ]
+              },
+              {
+                "key": "visualLabel",
+                "label": "Visual label",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "visualText",
+                "label": "Visual Text",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "benefitsLabel",
+                "label": "List label",
+                "type": "text",
+                "required": false,
+                "group": "Public website card"
+              },
+              {
+                "key": "points",
+                "label": "List items",
+                "type": "array",
+                "required": false,
+                "group": "Public website card",
+                "item": {
+                  "type": "object",
+                  "fields": [
+                    {
+                      "key": "icon",
+                      "label": "Icon",
+                      "type": "select",
+                      "required": false,
+                      "group": "Public website card",
+                      "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                      "options": {
+                        "values": [
+                          {
+                            "value": "map",
+                            "label": "Map / planning"
+                          },
+                          {
+                            "value": "layout",
+                            "label": "Website layout"
+                          },
+                          {
+                            "value": "message",
+                            "label": "Message / contact"
+                          },
+                          {
+                            "value": "support",
+                            "label": "Support"
+                          },
+                          {
+                            "value": "clarity",
+                            "label": "Clarity"
+                          },
+                          {
+                            "value": "presence",
+                            "label": "Online presence"
+                          },
+                          {
+                            "value": "control",
+                            "label": "Control panel"
+                          },
+                          {
+                            "value": "improve",
+                            "label": "Improvements"
+                          },
+                          {
+                            "value": "mobile",
+                            "label": "Mobile"
+                          },
+                          {
+                            "value": "scope",
+                            "label": "Scope"
+                          },
+                          {
+                            "value": "refund",
+                            "label": "Refund"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": "title",
+                      "label": "Card title",
+                      "type": "text",
+                      "required": false,
+                      "group": "Public website card"
+                    },
+                    {
+                      "key": "text",
+                      "label": "Card description",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Public website card",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "options": {
+                        "rows": 4
+                      }
+                    }
+                  ]
+                },
+                "itemLabel": "Item"
+              }
+            ]
           },
           {
-            "name": "backofficePanel",
-            "label": "Backoffice Panel",
+            "key": "backofficePanel",
+            "label": "Backoffice card",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Backoffice card",
+            "fields": [
+              {
+                "key": "eyebrow",
+                "label": "Section label",
+                "type": "text",
+                "required": false,
+                "group": "Backoffice card"
+              },
+              {
+                "key": "heading",
+                "label": "Title",
+                "type": "text",
+                "required": false,
+                "group": "Backoffice card"
+              },
+              {
+                "key": "imageSrc",
+                "label": "Image",
+                "type": "file",
+                "required": false,
+                "group": "Media",
+                "hint": "Use a clean screenshot or exported visual. Avoid broken text, fake UI, checkerboard backgrounds, or unreadable small copy.",
+                "options": {
+                  "accept": [
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                    "image/gif"
+                  ]
+                }
+              },
+              {
+                "key": "imageAlt",
+                "label": "Image description",
+                "type": "text",
+                "required": false,
+                "group": "Media",
+                "hint": "Describe the image for accessibility."
+              },
+              {
+                "key": "benefitsLabel",
+                "label": "List label",
+                "type": "text",
+                "required": false,
+                "group": "Backoffice card"
+              },
+              {
+                "key": "callouts",
+                "label": "Cards",
+                "type": "array",
+                "required": false,
+                "group": "Backoffice card",
+                "item": {
+                  "type": "object",
+                  "fields": [
+                    {
+                      "key": "icon",
+                      "label": "Icon",
+                      "type": "select",
+                      "required": false,
+                      "group": "Backoffice card",
+                      "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                      "options": {
+                        "values": [
+                          {
+                            "value": "map",
+                            "label": "Map / planning"
+                          },
+                          {
+                            "value": "layout",
+                            "label": "Website layout"
+                          },
+                          {
+                            "value": "message",
+                            "label": "Message / contact"
+                          },
+                          {
+                            "value": "support",
+                            "label": "Support"
+                          },
+                          {
+                            "value": "clarity",
+                            "label": "Clarity"
+                          },
+                          {
+                            "value": "presence",
+                            "label": "Online presence"
+                          },
+                          {
+                            "value": "control",
+                            "label": "Control panel"
+                          },
+                          {
+                            "value": "improve",
+                            "label": "Improvements"
+                          },
+                          {
+                            "value": "mobile",
+                            "label": "Mobile"
+                          },
+                          {
+                            "value": "scope",
+                            "label": "Scope"
+                          },
+                          {
+                            "value": "refund",
+                            "label": "Refund"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": "label",
+                      "label": "Label",
+                      "type": "text",
+                      "required": false,
+                      "group": "Backoffice card"
+                    },
+                    {
+                      "key": "text",
+                      "label": "Card description",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Backoffice card",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "options": {
+                        "rows": 4
+                      }
+                    }
+                  ]
+                },
+                "itemLabel": "Card"
+              }
+            ]
           }
         ]
       }
@@ -255,55 +1007,101 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "heading",
-            "label": "Heading",
+            "key": "heading",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "primaryCta",
-            "label": "Primary Cta",
+            "key": "primaryCta",
+            "label": "Primary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Primary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Primary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "secondaryCta",
-            "label": "Secondary Cta",
+            "key": "secondaryCta",
+            "label": "Secondary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Secondary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Secondary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "actionsLabel",
-            "label": "Actions Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "motifTitle",
+            "key": "motifTitle",
             "label": "Motif Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "motifText",
+            "key": "motifText",
             "label": "Motif Text",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           }
         ]
       }
@@ -321,55 +1119,101 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "primaryCta",
-            "label": "Primary Cta",
+            "key": "primaryCta",
+            "label": "Primary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Primary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Primary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "secondaryCta",
-            "label": "Secondary Cta",
+            "key": "secondaryCta",
+            "label": "Secondary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Secondary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Secondary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "actionsLabel",
-            "label": "Actions Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "scopeLine",
+            "key": "scopeLine",
             "label": "Scope Line",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           }
         ]
       }
@@ -387,97 +1231,293 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "layoutAriaLabel",
-            "label": "Layout Aria Label",
+            "key": "productLabel",
+            "label": "Product label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "backofficeAriaLabel",
-            "label": "Backoffice Aria Label",
+            "key": "contextPill",
+            "label": "Context pill text",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "productLabel",
-            "label": "Product Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "contextPill",
-            "label": "Context Pill",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "tabRailLabel",
+            "key": "tabRailLabel",
             "label": "Tab Rail Label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "overlayLabel",
-            "label": "Overlay Label",
+            "key": "overlayLabel",
+            "label": "Overlay label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "managedAriaLabel",
-            "label": "Managed Aria Label",
+            "key": "managedTitle",
+            "label": "Managed panel title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "managedTitle",
-            "label": "Managed Title",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "features",
-            "label": "Features",
+            "key": "features",
+            "label": "Tabs",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "label",
+                  "label": "Label",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "detail",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                },
+                {
+                  "key": "image",
+                  "label": "Image",
+                  "type": "file",
+                  "required": false,
+                  "group": "Media",
+                  "hint": "Use a clean screenshot or exported visual. Avoid broken text, fake UI, checkerboard backgrounds, or unreadable small copy.",
+                  "options": {
+                    "accept": [
+                      "image/jpeg",
+                      "image/png",
+                      "image/webp",
+                      "image/gif"
+                    ]
+                  }
+                },
+                {
+                  "key": "alt",
+                  "label": "Image description",
+                  "type": "text",
+                  "required": false,
+                  "group": "Media",
+                  "hint": "Describe the image for accessibility."
+                }
+              ]
+            },
+            "itemLabel": "Tab"
           },
           {
-            "name": "managedItems",
-            "label": "Managed Items",
+            "key": "managedItems",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "description",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           }
         ]
       }
@@ -495,31 +1535,71 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "heading",
-            "label": "Heading",
+            "key": "heading",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "gridLabel",
-            "label": "Grid Label",
+            "key": "gridLabel",
+            "label": "FAQ list label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "items",
-            "label": "Items",
+            "key": "items",
+            "label": "FAQ questions",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "question",
+                  "label": "Question",
+                  "type": "text",
+                  "required": false,
+                  "group": "Pricing copy",
+                  "hint": "Pricing values and refund limits are protected by the site contract."
+                },
+                {
+                  "key": "answer",
+                  "label": "Answer",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Pricing copy",
+                  "hint": "Pricing values and refund limits are protected by the site contract.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Question"
           }
         ]
       }
@@ -537,127 +1617,189 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "actionsLabel",
-            "label": "Actions Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "primaryCta",
-            "label": "Primary Cta",
+            "key": "primaryCta",
+            "label": "Primary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Primary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "href",
+                "label": "Primary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "secondaryCta",
-            "label": "Secondary Cta",
+            "key": "secondaryCta",
+            "label": "Secondary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Secondary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "href",
+                "label": "Secondary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "panelLabel",
-            "label": "Panel Label",
+            "key": "panelLabel",
+            "label": "Panel label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "panelKicker",
-            "label": "Panel Kicker",
+            "key": "panelKicker",
+            "label": "Panel section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "panelHeading",
+            "key": "panelHeading",
             "label": "Panel Heading",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "modelAriaLabel",
-            "label": "Model Aria Label",
+            "key": "setupLabel",
+            "label": "Setup-fee label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "setupLabel",
-            "label": "Setup Label",
+            "key": "setupDescription",
+            "label": "Setup-fee description",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "setupDescription",
-            "label": "Setup Description",
+            "key": "monthlyLabel",
+            "label": "Monthly price label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "monthlyLabel",
-            "label": "Monthly Label",
+            "key": "monthlyDescription",
+            "label": "Monthly service description",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "monthlyDescription",
-            "label": "Monthly Description",
+            "key": "founderLabel",
+            "label": "Founder pricing label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "founderLabel",
-            "label": "Founder Label",
+            "key": "founderDescription",
+            "label": "Founder pricing description",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           },
           {
-            "name": "founderDescription",
-            "label": "Founder Description",
+            "key": "refundLabel",
+            "label": "Refund label",
             "type": "text",
-            "required": false
-          },
-          {
-            "name": "refundLabel",
-            "label": "Refund Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "refundDescription",
-            "label": "Refund Description",
-            "type": "text",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract."
           }
         ]
       }
@@ -675,25 +1817,445 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "plansSection",
-            "label": "Plans Section",
+            "key": "plansSection",
+            "label": "Plans",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "fields": [
+              {
+                "key": "eyebrow",
+                "label": "Section label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "headingPrefix",
+                "label": "Title",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "headingAccent",
+                "label": "Highlighted words",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "headingSuffix",
+                "label": "Title after highlight",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "support",
+                "label": "Subtitle",
+                "type": "textarea",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract.",
+                "options": {
+                  "rows": 4
+                }
+              },
+              {
+                "key": "founder",
+                "label": "Founder pricing note",
+                "type": "object",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract.",
+                "fields": [
+                  {
+                    "key": "title",
+                    "label": "Founder note title",
+                    "type": "text",
+                    "required": false,
+                    "group": "Pricing copy",
+                    "hint": "Pricing values and refund limits are protected by the site contract."
+                  },
+                  {
+                    "key": "text",
+                    "label": "Founder note description",
+                    "type": "textarea",
+                    "required": false,
+                    "group": "Pricing copy",
+                    "hint": "Pricing values and refund limits are protected by the site contract.",
+                    "options": {
+                      "rows": 4
+                    }
+                  },
+                  {
+                    "key": "factsLabel",
+                    "label": "Founder facts label",
+                    "type": "text",
+                    "required": false,
+                    "group": "Pricing copy",
+                    "hint": "Pricing values and refund limits are protected by the site contract."
+                  },
+                  {
+                    "key": "facts",
+                    "label": "Founder pricing notes",
+                    "type": "array",
+                    "required": false,
+                    "group": "Pricing copy",
+                    "hint": "Pricing values and refund limits are protected by the site contract.",
+                    "item": {
+                      "type": "text"
+                    },
+                    "itemLabel": "Fact"
+                  }
+                ]
+              },
+              {
+                "key": "plans",
+                "label": "Plans",
+                "type": "array",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract.",
+                "item": {
+                  "type": "object",
+                  "fields": [
+                    {
+                      "key": "name",
+                      "label": "Plan name",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "label",
+                      "label": "Plan label",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "promise",
+                      "label": "Plan promise",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "who",
+                      "label": "Best for",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "includes",
+                      "label": "Plan includes",
+                      "type": "array",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract.",
+                      "item": {
+                        "type": "text"
+                      },
+                      "itemLabel": "Item"
+                    }
+                  ]
+                },
+                "itemLabel": "Plan"
+              },
+              {
+                "key": "founderSetupLabel",
+                "label": "Setup price label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "standardSetupPrefix",
+                "label": "Standard setup label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "monthlyLabel",
+                "label": "Monthly price label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "fitLabel",
+                "label": "Best-fit label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "planCtaLabel",
+                "label": "Plan button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              }
+            ]
           },
           {
-            "name": "comparison",
+            "key": "comparison",
             "label": "Comparison",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "fields": [
+              {
+                "key": "summaryLabel",
+                "label": "Summary label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "summarySupport",
+                "label": "Summary subtitle",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "tableLabel",
+                "label": "Comparison label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "headerArea",
+                "label": "Feature column label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "planHeaders",
+                "label": "Plan column labels",
+                "type": "array",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract.",
+                "item": {
+                  "type": "text"
+                },
+                "itemLabel": "Item"
+              },
+              {
+                "key": "rows",
+                "label": "Comparison rows",
+                "type": "array",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract.",
+                "item": {
+                  "type": "object",
+                  "fields": [
+                    {
+                      "key": "category",
+                      "label": "Feature name",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "presenca",
+                      "label": "Presenca value",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "crescimento",
+                      "label": "Crescimento value",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "parceiro",
+                      "label": "Parceiro value",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    }
+                  ]
+                },
+                "itemLabel": "Comparison row"
+              }
+            ]
           },
           {
-            "name": "foundation",
-            "label": "Foundation",
+            "key": "foundation",
+            "label": "Included foundation",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Pricing copy",
+            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "fields": [
+              {
+                "key": "eyebrow",
+                "label": "Section label",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "headingPrefix",
+                "label": "Title",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "headingAccent",
+                "label": "Highlighted words",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "headingSuffix",
+                "label": "Title after highlight",
+                "type": "text",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract."
+              },
+              {
+                "key": "items",
+                "label": "List items",
+                "type": "array",
+                "required": false,
+                "group": "Pricing copy",
+                "hint": "Pricing values and refund limits are protected by the site contract.",
+                "item": {
+                  "type": "object",
+                  "fields": [
+                    {
+                      "key": "icon",
+                      "label": "Icon",
+                      "type": "select",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                      "options": {
+                        "values": [
+                          {
+                            "value": "map",
+                            "label": "Map / planning"
+                          },
+                          {
+                            "value": "layout",
+                            "label": "Website layout"
+                          },
+                          {
+                            "value": "message",
+                            "label": "Message / contact"
+                          },
+                          {
+                            "value": "support",
+                            "label": "Support"
+                          },
+                          {
+                            "value": "clarity",
+                            "label": "Clarity"
+                          },
+                          {
+                            "value": "presence",
+                            "label": "Online presence"
+                          },
+                          {
+                            "value": "control",
+                            "label": "Control panel"
+                          },
+                          {
+                            "value": "improve",
+                            "label": "Improvements"
+                          },
+                          {
+                            "value": "mobile",
+                            "label": "Mobile"
+                          },
+                          {
+                            "value": "scope",
+                            "label": "Scope"
+                          },
+                          {
+                            "value": "refund",
+                            "label": "Refund"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": "title",
+                      "label": "Card title",
+                      "type": "text",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract."
+                    },
+                    {
+                      "key": "body",
+                      "label": "Card description",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Pricing copy",
+                      "hint": "Pricing values and refund limits are protected by the site contract.",
+                      "options": {
+                        "rows": 4
+                      }
+                    }
+                  ]
+                },
+                "itemLabel": "Item"
+              }
+            ]
           }
         ]
       }
@@ -711,67 +2273,206 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "actionsLabel",
-            "label": "Actions Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "primaryCta",
-            "label": "Primary Cta",
+            "key": "primaryCta",
+            "label": "Primary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Primary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Primary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "secondaryCta",
-            "label": "Secondary Cta",
+            "key": "secondaryCta",
+            "label": "Secondary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Secondary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Secondary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "stepsLabel",
+            "key": "stepsLabel",
             "label": "Steps Label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "steps",
-            "label": "Steps",
+            "key": "steps",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "description",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                },
+                {
+                  "key": "text",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           }
         ]
       }
@@ -789,19 +2490,94 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "ariaLabel",
-            "label": "Aria Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "items",
-            "label": "Items",
+            "key": "items",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "text",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           }
         ]
       }
@@ -819,79 +2595,192 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingConnector",
-            "label": "Heading Connector",
+            "key": "headingConnector",
+            "label": "Connecting word",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "imageSrc",
-            "label": "Image Src",
-            "type": "text",
-            "required": false
+            "key": "imageSrc",
+            "label": "Image",
+            "type": "file",
+            "required": false,
+            "group": "Media",
+            "hint": "Use a clean screenshot or exported visual. Avoid broken text, fake UI, checkerboard backgrounds, or unreadable small copy.",
+            "options": {
+              "accept": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "image/gif"
+              ]
+            }
           },
           {
-            "name": "imageAlt",
-            "label": "Image Alt",
+            "key": "imageAlt",
+            "label": "Image description",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Media",
+            "hint": "Describe the image for accessibility."
           },
           {
-            "name": "supportCardLabel",
-            "label": "Support Card Label",
+            "key": "supportCardLabel",
+            "label": "Card label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "supportCardHeading",
-            "label": "Support Card Heading",
+            "key": "supportCardHeading",
+            "label": "Card title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "listLabel",
-            "label": "List Label",
+            "key": "listLabel",
+            "label": "List label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "items",
-            "label": "Items",
+            "key": "items",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "text",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           }
         ]
       }
@@ -909,103 +2798,230 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingConnector",
-            "label": "Heading Connector",
+            "key": "headingConnector",
+            "label": "Connecting word",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "actionsLabel",
-            "label": "Actions Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "primaryCta",
-            "label": "Primary Cta",
+            "key": "primaryCta",
+            "label": "Primary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Primary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Primary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "secondaryCta",
-            "label": "Secondary Cta",
+            "key": "secondaryCta",
+            "label": "Secondary button",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Buttons",
+            "fields": [
+              {
+                "key": "label",
+                "label": "Secondary button text",
+                "type": "text",
+                "required": false,
+                "group": "Buttons"
+              },
+              {
+                "key": "href",
+                "label": "Secondary button link",
+                "type": "text",
+                "required": false,
+                "group": "Buttons",
+                "hint": "Use a safe route or URL, for example /contact, /pricing, #plans, https://, mailto:, or tel:."
+              }
+            ]
           },
           {
-            "name": "visualLabel",
-            "label": "Visual Label",
+            "key": "visualLabel",
+            "label": "Visual label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Visual labels"
           },
           {
-            "name": "diagramLabel",
-            "label": "Diagram Label",
+            "key": "diagramLabel",
+            "label": "Diagram label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Visual labels"
           },
           {
-            "name": "inputColumnLabel",
-            "label": "Input Column Label",
+            "key": "inputColumnLabel",
+            "label": "Input column label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "outputColumnLabel",
-            "label": "Output Column Label",
+            "key": "outputColumnLabel",
+            "label": "Output column label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "supportLayerLabel",
-            "label": "Support Layer Label",
+            "key": "supportLayerLabel",
+            "label": "Managed layer label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "inputItems",
-            "label": "Input Items",
+            "key": "inputItems",
+            "label": "Input labels",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Item"
           },
           {
-            "name": "outputItems",
-            "label": "Output Items",
+            "key": "outputItems",
+            "label": "Output labels",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           }
         ]
       }
@@ -1023,79 +3039,143 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "responsibilitiesLabel",
-            "label": "Responsibilities Label",
+            "key": "responsibilitiesLabel",
+            "label": "Responsibility label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "responsibilityRows",
-            "label": "Responsibility Rows",
+            "key": "responsibilityRows",
+            "label": "Responsibility rows",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "label",
+                  "label": "Label",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "text",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                },
+                {
+                  "key": "managed",
+                  "label": "Managed by Nuvio",
+                  "type": "bool",
+                  "required": false,
+                  "group": "List content"
+                }
+              ]
+            },
+            "itemLabel": "Item"
           },
           {
-            "name": "visualLabel",
-            "label": "Visual Label",
+            "key": "visualLabel",
+            "label": "Visual label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Visual labels"
           },
           {
-            "name": "backofficeLabel",
+            "key": "backofficeLabel",
             "label": "Backoffice Label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "contextPill",
-            "label": "Context Pill",
+            "key": "contextPill",
+            "label": "Context pill text",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "imageSrc",
-            "label": "Image Src",
-            "type": "text",
-            "required": false
+            "key": "imageSrc",
+            "label": "Image",
+            "type": "file",
+            "required": false,
+            "group": "Media",
+            "hint": "Use a clean screenshot or exported visual. Avoid broken text, fake UI, checkerboard backgrounds, or unreadable small copy.",
+            "options": {
+              "accept": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "image/gif"
+              ]
+            }
           },
           {
-            "name": "imageAlt",
-            "label": "Image Alt",
+            "key": "imageAlt",
+            "label": "Image description",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Media",
+            "hint": "Describe the image for accessibility."
           }
         ]
       }
@@ -1113,115 +3193,264 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "compositionLabel",
-            "label": "Composition Label",
+            "key": "compositionLabel",
+            "label": "Composition label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Visual labels"
           },
           {
-            "name": "inputLabel",
-            "label": "Input Label",
+            "key": "inputLabel",
+            "label": "Input section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "inputTitle",
-            "label": "Input Title",
+            "key": "inputTitle",
+            "label": "Input title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "briefRows",
-            "label": "Brief Rows",
+            "key": "briefRows",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "text",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           },
           {
-            "name": "centerVisualLabel",
-            "label": "Center Visual Label",
+            "key": "centerVisualLabel",
+            "label": "Center visual label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Visual labels"
           },
           {
-            "name": "centerTitle",
-            "label": "Center Title",
+            "key": "centerTitle",
+            "label": "Visual title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Visual labels"
           },
           {
-            "name": "siteBrand",
-            "label": "Site Brand",
+            "key": "siteBrand",
+            "label": "Website brand name",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "navItems",
-            "label": "Nav Items",
+            "key": "navItems",
+            "label": "Navigation labels",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Item"
           },
           {
-            "name": "contactPathsLabel",
-            "label": "Contact Paths Label",
+            "key": "contactPathsLabel",
+            "label": "Contact path label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "contactChips",
-            "label": "Contact Chips",
+            "key": "contactChips",
+            "label": "Contact options",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Contact option"
           },
           {
-            "name": "pageChips",
-            "label": "Page Chips",
+            "key": "pageChips",
+            "label": "Page labels",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Page"
           },
           {
-            "name": "systemStrip",
-            "label": "System Strip",
+            "key": "systemStrip",
+            "label": "System strip labels",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Item"
           },
           {
-            "name": "outputLayers",
-            "label": "Output Layers",
+            "key": "outputLayers",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "text",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           }
         ]
       }
@@ -1239,61 +3468,184 @@
           "version": 1
         },
         "rawHtml": false,
+        "rawSvg": false,
         "editorControlledLayout": false,
+        "editor": {
+          "friendlyLabels": true,
+          "rawHtml": false,
+          "rawSvg": false,
+          "layout": "code-owned"
+        },
         "fields": [
           {
-            "name": "eyebrow",
-            "label": "Eyebrow",
+            "key": "eyebrow",
+            "label": "Section label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingPrefix",
-            "label": "Heading Prefix",
+            "key": "headingPrefix",
+            "label": "Title",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingAccent",
-            "label": "Heading Accent",
+            "key": "headingAccent",
+            "label": "Highlighted words",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "headingSuffix",
-            "label": "Heading Suffix",
+            "key": "headingSuffix",
+            "label": "Title after highlight",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Section intro"
           },
           {
-            "name": "support",
-            "label": "Support",
-            "type": "text",
-            "required": false
+            "key": "support",
+            "label": "Subtitle",
+            "type": "textarea",
+            "required": false,
+            "group": "Section intro",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "options": {
+              "rows": 4
+            }
           },
           {
-            "name": "gapsLabel",
-            "label": "Gaps Label",
+            "key": "gapsLabel",
+            "label": "List label",
             "type": "text",
-            "required": false
+            "required": false,
+            "group": "Content"
           },
           {
-            "name": "items",
-            "label": "Items",
+            "key": "items",
+            "label": "List items",
             "type": "array",
-            "required": false
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "object",
+              "fields": [
+                {
+                  "key": "icon",
+                  "label": "Icon",
+                  "type": "select",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "options": {
+                    "values": [
+                      {
+                        "value": "map",
+                        "label": "Map / planning"
+                      },
+                      {
+                        "value": "layout",
+                        "label": "Website layout"
+                      },
+                      {
+                        "value": "message",
+                        "label": "Message / contact"
+                      },
+                      {
+                        "value": "support",
+                        "label": "Support"
+                      },
+                      {
+                        "value": "clarity",
+                        "label": "Clarity"
+                      },
+                      {
+                        "value": "presence",
+                        "label": "Online presence"
+                      },
+                      {
+                        "value": "control",
+                        "label": "Control panel"
+                      },
+                      {
+                        "value": "improve",
+                        "label": "Improvements"
+                      },
+                      {
+                        "value": "mobile",
+                        "label": "Mobile"
+                      },
+                      {
+                        "value": "scope",
+                        "label": "Scope"
+                      },
+                      {
+                        "value": "refund",
+                        "label": "Refund"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
+                },
+                {
+                  "key": "text",
+                  "label": "Item description",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "List content",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "options": {
+                    "rows": 4
+                  }
+                }
+              ]
+            },
+            "itemLabel": "Item"
           },
           {
-            "name": "visualAriaLabel",
-            "label": "Visual Aria Label",
-            "type": "text",
-            "required": false
-          },
-          {
-            "name": "visual",
-            "label": "Visual",
+            "key": "visual",
+            "label": "Visual labels",
             "type": "object",
-            "required": false
+            "required": false,
+            "group": "Visual labels",
+            "fields": [
+              {
+                "key": "siteLabel",
+                "label": "Website label",
+                "type": "text",
+                "required": false,
+                "group": "Visual labels"
+              },
+              {
+                "key": "siteText",
+                "label": "Website description",
+                "type": "text",
+                "required": false,
+                "group": "Visual labels"
+              },
+              {
+                "key": "supportLabel",
+                "label": "Managed layer label",
+                "type": "text",
+                "required": false,
+                "group": "Visual labels"
+              },
+              {
+                "key": "supportText",
+                "label": "Managed layer description",
+                "type": "text",
+                "required": false,
+                "group": "Visual labels"
+              }
+            ]
           }
         ]
       }

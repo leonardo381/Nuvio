@@ -151,6 +151,7 @@ func validateNuvioMarketingSeedFixture(fixture nuvioMarketingSeedFixture) error 
 	expectedPages := map[string]int{"home": 9, "services": 6, "pricing": 4, "contact": 1}
 	seenPages := map[string]bool{}
 	componentKeys := map[string]bool{}
+	schemaStats := nuvioMarketingSeedSchemaStats{Labels: map[string]bool{}}
 	for _, component := range fixture.Components {
 		key := strings.TrimSpace(component.Key)
 		if key == "" {
@@ -163,6 +164,12 @@ func validateNuvioMarketingSeedFixture(fixture nuvioMarketingSeedFixture) error 
 		if !isNuvioMarketingSeedOwnedMap(component.Schema, fixture.OwnerKey) {
 			return fmt.Errorf("fixture component schema is missing ownership marker: %s", key)
 		}
+		if err := validateNuvioMarketingSeedComponentSchema(key, component.Schema, &schemaStats); err != nil {
+			return err
+		}
+	}
+	if err := validateNuvioMarketingSeedSchemaStats(schemaStats); err != nil {
+		return err
 	}
 
 	for _, page := range fixture.Pages {
@@ -519,6 +526,187 @@ func containsNuvioMarketingSeedRawHTML(value any) bool {
 		}
 	}
 	return false
+}
+
+type nuvioMarketingSeedSchemaStats struct {
+	FieldCount       int
+	NestedObjects    int
+	ArrayObjectItems int
+	IconSelects      int
+	Labels           map[string]bool
+}
+
+func validateNuvioMarketingSeedComponentSchema(componentKey string, schema map[string]any, stats *nuvioMarketingSeedSchemaStats) error {
+	if schema["rawHtml"] != false {
+		return fmt.Errorf("fixture component schema must disable rawHtml: %s", componentKey)
+	}
+	if schema["rawSvg"] != false {
+		return fmt.Errorf("fixture component schema must disable rawSvg: %s", componentKey)
+	}
+	fields, ok := schema["fields"].([]any)
+	if !ok || len(fields) == 0 {
+		return fmt.Errorf("fixture component schema has no editable fields: %s", componentKey)
+	}
+	return validateNuvioMarketingSeedSchemaFields(componentKey, componentKey, fields, 0, false, stats)
+}
+
+func validateNuvioMarketingSeedSchemaFields(componentKey string, pathPrefix string, fields []any, depth int, inArrayItem bool, stats *nuvioMarketingSeedSchemaStats) error {
+	for _, rawField := range fields {
+		field := nuvioMarketingSeedMapValue(rawField)
+		key := strings.TrimSpace(fmt.Sprint(field["key"]))
+		if key == "" {
+			return fmt.Errorf("fixture schema field missing key under %s", pathPrefix)
+		}
+		if _, hasLegacyName := field["name"]; hasLegacyName {
+			return fmt.Errorf("fixture schema field uses legacy name under %s.%s", pathPrefix, key)
+		}
+
+		fieldPath := pathPrefix + "." + key
+		label := strings.TrimSpace(fmt.Sprint(field["label"]))
+		if label == "" {
+			return fmt.Errorf("fixture schema field missing label: %s", fieldPath)
+		}
+		if hasNuvioMarketingSeedDeveloperFacingLabel(label) {
+			return fmt.Errorf("fixture schema field has developer-facing label %q at %s", label, fieldPath)
+		}
+
+		fieldType := strings.TrimSpace(fmt.Sprint(field["type"]))
+		if fieldType == "" {
+			return fmt.Errorf("fixture schema field missing type: %s", fieldPath)
+		}
+		switch strings.ToLower(fieldType) {
+		case "html", "rawhtml", "svg", "rawsvg":
+			return fmt.Errorf("fixture schema field uses unsafe type %q at %s", fieldType, fieldPath)
+		}
+
+		if err := validateNuvioMarketingSeedProtectedSchemaPath(componentKey, fieldPath); err != nil {
+			return err
+		}
+
+		stats.FieldCount++
+		stats.Labels[label] = true
+		if inArrayItem {
+			stats.ArrayObjectItems++
+		}
+		if strings.ToLower(key) == "icon" {
+			if strings.ToLower(fieldType) != "select" {
+				return fmt.Errorf("fixture icon field must use select type: %s", fieldPath)
+			}
+			if err := validateNuvioMarketingSeedIconOptions(fieldPath, field); err != nil {
+				return err
+			}
+			stats.IconSelects++
+		}
+
+		if strings.ToLower(fieldType) == "object" {
+			childFields, ok := field["fields"].([]any)
+			if !ok || len(childFields) == 0 {
+				return fmt.Errorf("fixture object field missing nested fields: %s", fieldPath)
+			}
+			if depth > 0 {
+				stats.NestedObjects++
+			}
+			if err := validateNuvioMarketingSeedSchemaFields(componentKey, fieldPath, childFields, depth+1, false, stats); err != nil {
+				return err
+			}
+		}
+
+		if strings.ToLower(fieldType) == "array" {
+			item := nuvioMarketingSeedMapValue(field["item"])
+			if strings.ToLower(strings.TrimSpace(fmt.Sprint(item["type"]))) == "object" {
+				childFields, ok := item["fields"].([]any)
+				if !ok || len(childFields) == 0 {
+					return fmt.Errorf("fixture array object field missing item fields: %s", fieldPath)
+				}
+				if err := validateNuvioMarketingSeedSchemaFields(componentKey, fieldPath+"[]", childFields, depth+1, true, stats); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateNuvioMarketingSeedSchemaStats(stats nuvioMarketingSeedSchemaStats) error {
+	if stats.FieldCount < 250 {
+		return fmt.Errorf("fixture schema has too few editable fields: %d", stats.FieldCount)
+	}
+	if stats.NestedObjects < 1 {
+		return errors.New("fixture schema did not preserve nested object fields")
+	}
+	if stats.ArrayObjectItems < 1 {
+		return errors.New("fixture schema did not preserve array item fields")
+	}
+	if stats.IconSelects < 1 {
+		return errors.New("fixture schema did not preserve icon select fields")
+	}
+	for _, label := range []string{"Section label", "Title", "Highlighted words", "Subtitle", "Primary button text", "Primary button link", "Icon", "Image", "Image description"} {
+		if !stats.Labels[label] {
+			return fmt.Errorf("fixture schema missing representative label: %s", label)
+		}
+	}
+	hasDescription := false
+	for label := range stats.Labels {
+		if strings.Contains(strings.ToLower(label), "description") {
+			hasDescription = true
+			break
+		}
+	}
+	if !hasDescription {
+		return errors.New("fixture schema missing description label")
+	}
+	return nil
+}
+
+func hasNuvioMarketingSeedDeveloperFacingLabel(label string) bool {
+	lower := strings.ToLower(label)
+	for _, banned := range []string{"prefix", "suffix", "eyebrow", "href", "image src", "aria label", "actions label", "props", "componentkey", "slot", "blockid", "class", "style", "raw", "html", "svg"} {
+		if strings.Contains(lower, banned) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateNuvioMarketingSeedProtectedSchemaPath(componentKey string, fieldPath string) error {
+	lowerPath := strings.ToLower(fieldPath)
+	if componentKey == "nuvio-contact-request" {
+		for _, forbidden := range []string{"honeypot", "website_url", "endpoint", "action", "method", "validation", "fieldnames"} {
+			if strings.Contains(lowerPath, forbidden) {
+				return fmt.Errorf("fixture contact schema exposes protected field: %s", fieldPath)
+			}
+		}
+	}
+	if componentKey == "nuvio-pricing-plans" {
+		for _, forbiddenSuffix := range []string{"planssection.plans[].id", "planssection.plans[].foundersetup", "planssection.plans[].standardsetup", "planssection.plans[].monthly", "planssection.plans[].recommended"} {
+			if strings.HasSuffix(lowerPath, forbiddenSuffix) {
+				return fmt.Errorf("fixture pricing schema exposes protected field: %s", fieldPath)
+			}
+		}
+	}
+	return nil
+}
+
+func validateNuvioMarketingSeedIconOptions(fieldPath string, field map[string]any) error {
+	options := nuvioMarketingSeedMapValue(field["options"])
+	rawValues, ok := options["values"].([]any)
+	if !ok || len(rawValues) == 0 {
+		return fmt.Errorf("fixture icon field missing options: %s", fieldPath)
+	}
+	expected := []string{"map", "layout", "message", "support", "clarity", "presence", "control", "improve", "mobile", "scope", "refund"}
+	if len(rawValues) != len(expected) {
+		return fmt.Errorf("fixture icon field has %d options, expected %d: %s", len(rawValues), len(expected), fieldPath)
+	}
+	for index, rawOption := range rawValues {
+		option := nuvioMarketingSeedMapValue(rawOption)
+		if strings.TrimSpace(fmt.Sprint(option["value"])) != expected[index] {
+			return fmt.Errorf("fixture icon option mismatch at %s[%d]", fieldPath, index)
+		}
+		if strings.TrimSpace(fmt.Sprint(option["label"])) == "" {
+			return fmt.Errorf("fixture icon option missing label at %s[%d]", fieldPath, index)
+		}
+	}
+	return nil
 }
 
 func validateNuvioMarketingSeedPricing(fixture nuvioMarketingSeedFixture) error {
