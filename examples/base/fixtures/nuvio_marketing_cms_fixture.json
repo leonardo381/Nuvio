@@ -1,0 +1,2354 @@
+{
+  "version": 1,
+  "ownerKey": "nuvio-marketing-cms-fixture",
+  "source": {
+    "repository": "Nuvio-CalmEditorialV2",
+    "file": "src/lib/nuvio/marketing-content.ts",
+    "export": "defaultMarketingContent"
+  },
+  "website": {
+    "slug": "nuvio",
+    "name": "Nuvio",
+    "title": "Nuvio",
+    "domain": "",
+    "settings": {
+      "nuvioMarketingFixture": {
+        "managed": true,
+        "ownerKey": "nuvio-marketing-cms-fixture",
+        "version": 1
+      }
+    }
+  },
+  "components": [
+    {
+      "key": "nuvio-commercial-clarity",
+      "name": "Commercial Clarity",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-commercial-clarity",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "miniCards",
+            "label": "Mini Cards",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "checklistLabel",
+            "label": "Checklist Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "checklist",
+            "label": "Checklist",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-contact-request",
+      "name": "Contact Request",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-contact-request",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "context",
+            "label": "Context",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "form",
+            "label": "Form",
+            "type": "object",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-customer-website-concept",
+      "name": "Customer Website Concept",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-customer-website-concept",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "ariaLabel",
+            "label": "Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "brand",
+            "label": "Brand",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "navItems",
+            "label": "Nav Items",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "heading",
+            "label": "Heading",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "cta",
+            "label": "Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "pages",
+            "label": "Pages",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-delivers-dual-card",
+      "name": "Delivers Dual Card",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-delivers-dual-card",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "overviewAriaLabel",
+            "label": "Overview Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "publicPanel",
+            "label": "Public Panel",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "backofficePanel",
+            "label": "Backoffice Panel",
+            "type": "object",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-final-cta",
+      "name": "Final Cta",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-final-cta",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "heading",
+            "label": "Heading",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "primaryCta",
+            "label": "Primary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "secondaryCta",
+            "label": "Secondary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "actionsLabel",
+            "label": "Actions Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "motifTitle",
+            "label": "Motif Title",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "motifText",
+            "label": "Motif Text",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-home-hero",
+      "name": "Home Hero",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-home-hero",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "primaryCta",
+            "label": "Primary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "secondaryCta",
+            "label": "Secondary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "actionsLabel",
+            "label": "Actions Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "scopeLine",
+            "label": "Scope Line",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-managed-backoffice",
+      "name": "Managed Backoffice",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-managed-backoffice",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "layoutAriaLabel",
+            "label": "Layout Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "backofficeAriaLabel",
+            "label": "Backoffice Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "productLabel",
+            "label": "Product Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "contextPill",
+            "label": "Context Pill",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "tabRailLabel",
+            "label": "Tab Rail Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "overlayLabel",
+            "label": "Overlay Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "managedAriaLabel",
+            "label": "Managed Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "managedTitle",
+            "label": "Managed Title",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "features",
+            "label": "Features",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "managedItems",
+            "label": "Managed Items",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-pricing-faq",
+      "name": "Pricing Faq",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-pricing-faq",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "heading",
+            "label": "Heading",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "gridLabel",
+            "label": "Grid Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "items",
+            "label": "Items",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-pricing-hero",
+      "name": "Pricing Hero",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-pricing-hero",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "actionsLabel",
+            "label": "Actions Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "primaryCta",
+            "label": "Primary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "secondaryCta",
+            "label": "Secondary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "panelLabel",
+            "label": "Panel Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "panelKicker",
+            "label": "Panel Kicker",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "panelHeading",
+            "label": "Panel Heading",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "modelAriaLabel",
+            "label": "Model Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "setupLabel",
+            "label": "Setup Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "setupDescription",
+            "label": "Setup Description",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "monthlyLabel",
+            "label": "Monthly Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "monthlyDescription",
+            "label": "Monthly Description",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "founderLabel",
+            "label": "Founder Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "founderDescription",
+            "label": "Founder Description",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "refundLabel",
+            "label": "Refund Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "refundDescription",
+            "label": "Refund Description",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-pricing-plans",
+      "name": "Pricing Plans",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-pricing-plans",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "plansSection",
+            "label": "Plans Section",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "comparison",
+            "label": "Comparison",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "foundation",
+            "label": "Foundation",
+            "type": "object",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-process-path",
+      "name": "Process Path",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-process-path",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "actionsLabel",
+            "label": "Actions Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "primaryCta",
+            "label": "Primary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "secondaryCta",
+            "label": "Secondary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "stepsLabel",
+            "label": "Steps Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "steps",
+            "label": "Steps",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-reassurance-rail",
+      "name": "Reassurance Rail",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-reassurance-rail",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "ariaLabel",
+            "label": "Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "items",
+            "label": "Items",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-services-after-launch",
+      "name": "Services After Launch",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-services-after-launch",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingConnector",
+            "label": "Heading Connector",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "imageSrc",
+            "label": "Image Src",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "imageAlt",
+            "label": "Image Alt",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "supportCardLabel",
+            "label": "Support Card Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "supportCardHeading",
+            "label": "Support Card Heading",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "listLabel",
+            "label": "List Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "items",
+            "label": "Items",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-services-hero",
+      "name": "Services Hero",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-services-hero",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingConnector",
+            "label": "Heading Connector",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "actionsLabel",
+            "label": "Actions Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "primaryCta",
+            "label": "Primary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "secondaryCta",
+            "label": "Secondary Cta",
+            "type": "object",
+            "required": false
+          },
+          {
+            "name": "visualLabel",
+            "label": "Visual Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "diagramLabel",
+            "label": "Diagram Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "inputColumnLabel",
+            "label": "Input Column Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "outputColumnLabel",
+            "label": "Output Column Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "supportLayerLabel",
+            "label": "Support Layer Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "inputItems",
+            "label": "Input Items",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "outputItems",
+            "label": "Output Items",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-services-managed-system",
+      "name": "Services Managed System",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-services-managed-system",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "responsibilitiesLabel",
+            "label": "Responsibilities Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "responsibilityRows",
+            "label": "Responsibility Rows",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "visualLabel",
+            "label": "Visual Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "backofficeLabel",
+            "label": "Backoffice Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "contextPill",
+            "label": "Context Pill",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "imageSrc",
+            "label": "Image Src",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "imageAlt",
+            "label": "Image Alt",
+            "type": "text",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-services-mapping",
+      "name": "Services Mapping",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-services-mapping",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "compositionLabel",
+            "label": "Composition Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "inputLabel",
+            "label": "Input Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "inputTitle",
+            "label": "Input Title",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "briefRows",
+            "label": "Brief Rows",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "centerVisualLabel",
+            "label": "Center Visual Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "centerTitle",
+            "label": "Center Title",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "siteBrand",
+            "label": "Site Brand",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "navItems",
+            "label": "Nav Items",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "contactPathsLabel",
+            "label": "Contact Paths Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "contactChips",
+            "label": "Contact Chips",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "pageChips",
+            "label": "Page Chips",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "systemStrip",
+            "label": "System Strip",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "outputLayers",
+            "label": "Output Layers",
+            "type": "array",
+            "required": false
+          }
+        ]
+      }
+    },
+    {
+      "key": "nuvio-trust-gap",
+      "name": "Trust Gap",
+      "schema": {
+        "version": 1,
+        "source": "nuvio-marketing-content",
+        "componentKey": "nuvio-trust-gap",
+        "nuvioMarketingFixture": {
+          "managed": true,
+          "ownerKey": "nuvio-marketing-cms-fixture",
+          "version": 1
+        },
+        "rawHtml": false,
+        "editorControlledLayout": false,
+        "fields": [
+          {
+            "name": "eyebrow",
+            "label": "Eyebrow",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingPrefix",
+            "label": "Heading Prefix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingAccent",
+            "label": "Heading Accent",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "headingSuffix",
+            "label": "Heading Suffix",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "support",
+            "label": "Support",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "gapsLabel",
+            "label": "Gaps Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "items",
+            "label": "Items",
+            "type": "array",
+            "required": false
+          },
+          {
+            "name": "visualAriaLabel",
+            "label": "Visual Aria Label",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "visual",
+            "label": "Visual",
+            "type": "object",
+            "required": false
+          }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "slug": "home",
+      "title": "Home",
+      "seoTitle": "Nuvio - Managed online presence for local businesses",
+      "seoDescription": "Nuvio creates and manages online presence for local businesses with a professional website, local visibility foundations, clear contact options, editable content, monthly reports, and support after launch.",
+      "published": true,
+      "seoNoindex": false,
+      "seoExcludeFromSitemap": false,
+      "blocks": [
+        {
+          "slot": "marketing.home.010.hero",
+          "componentKey": "nuvio-home-hero",
+          "title": "Hero",
+          "order": 10,
+          "props": {
+            "eyebrow": "Managed online presence for local businesses",
+            "headingPrefix": "Get found, look professional, and turn visitors into",
+            "headingAccent": "real contacts.",
+            "support": "Nuvio creates and manages your website, local visibility foundations, contact paths, editable content, monthly reports, and support after launch.",
+            "primaryCta": {
+              "label": "See what Nuvio would build for me",
+              "href": "/contact"
+            },
+            "secondaryCta": {
+              "label": "View plans",
+              "href": "/pricing"
+            },
+            "actionsLabel": "Hero actions",
+            "scopeLine": "Clear plan before build - Managed after launch - Monthly reports"
+          }
+        },
+        {
+          "slot": "marketing.home.020.customer-website-concept",
+          "componentKey": "nuvio-customer-website-concept",
+          "title": "Customer Website Concept",
+          "order": 20,
+          "props": {
+            "ariaLabel": "Illustrative customer website concept",
+            "brand": "Harbour Bookkeeping",
+            "navItems": [
+              "Services",
+              "Proof",
+              "Contact"
+            ],
+            "eyebrow": "Local business website",
+            "heading": "Clear services. Easier contact. Managed support.",
+            "cta": {
+              "label": "See what Nuvio would build for me",
+              "href": "/contact"
+            },
+            "pages": [
+              "Home",
+              "Services",
+              "Proof",
+              "Contact"
+            ]
+          }
+        },
+        {
+          "slot": "marketing.home.030.reassurance-rail",
+          "componentKey": "nuvio-reassurance-rail",
+          "title": "Reassurance Rail",
+          "order": 30,
+          "props": {
+            "ariaLabel": "Nuvio support cues",
+            "items": [
+              {
+                "icon": "clarity",
+                "text": "Get found online"
+              },
+              {
+                "icon": "presence",
+                "text": "Look professional"
+              },
+              {
+                "icon": "control",
+                "text": "Stay in control"
+              },
+              {
+                "icon": "improve",
+                "text": "Keep improving"
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.home.040.delivers",
+          "componentKey": "nuvio-delivers-dual-card",
+          "title": "Delivers",
+          "order": 40,
+          "props": {
+            "eyebrow": "What Nuvio delivers",
+            "headingPrefix": "A public website for customers. A simple",
+            "headingAccent": "backoffice",
+            "headingSuffix": "for you.",
+            "support": "Customers see services and contact paths clearly. You can update key content, review contacts, and follow reports while Nuvio manages the technical side.",
+            "overviewAriaLabel": "Nuvio delivery overview",
+            "publicPanel": {
+              "ariaLabel": "Public website preview",
+              "eyebrow": "Public website",
+              "heading": "What customers see",
+              "previewAriaLabel": "Illustrative public website concept",
+              "brand": "Lume Electrical",
+              "navItems": [
+                "Services",
+                "About",
+                "Contact"
+              ],
+              "siteEyebrow": "Local electrical services",
+              "siteHeading": "Clear help for homes, shops, and small offices.",
+              "cta": {
+                "label": "Request a quote",
+                "href": "/contact"
+              },
+              "visualLabel": "Service/contact visual",
+              "visualText": "Real work, team, or service detail.",
+              "benefitsLabel": "Public website highlights",
+              "points": [
+                {
+                  "icon": "clarity",
+                  "title": "Clear services",
+                  "text": "People understand what you offer quickly."
+                },
+                {
+                  "icon": "message",
+                  "title": "Easy contact",
+                  "text": "Calls, messages, forms, and bookings stay visible."
+                },
+                {
+                  "icon": "mobile",
+                  "title": "Mobile-ready",
+                  "text": "Phone visitors see the same next step."
+                }
+              ]
+            },
+            "backofficePanel": {
+              "ariaLabel": "Nuvio backoffice preview",
+              "eyebrow": "Nuvio backoffice",
+              "heading": "What your business controls",
+              "previewAriaLabel": "Nuvio backoffice screenshot and control benefits",
+              "imageSrc": "/backoffice/cms.png",
+              "imageAlt": "Nuvio backoffice screen for editing website content.",
+              "benefitsLabel": "Backoffice control highlights",
+              "callouts": [
+                {
+                  "icon": "layout",
+                  "label": "Update key content",
+                  "text": "Services, pages, and key details stay editable."
+                },
+                {
+                  "icon": "message",
+                  "label": "Review contacts",
+                  "text": "Contact requests stay easy to review."
+                },
+                {
+                  "icon": "improve",
+                  "label": "Follow reports",
+                  "text": "Monthly signals stay visible."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "slot": "marketing.home.050.trust-gap",
+          "componentKey": "nuvio-trust-gap",
+          "title": "Trust Gap",
+          "order": 50,
+          "props": {
+            "eyebrow": "The real problem",
+            "headingPrefix": "Opportunities are lost when people cannot",
+            "headingAccent": "find, trust, or contact",
+            "headingSuffix": "you.",
+            "support": "Missed opportunities are practical: unclear pages, outdated details, hidden contact options, slow updates, or no reports.",
+            "gapsLabel": "Common website confidence gaps",
+            "items": [
+              {
+                "icon": "clarity",
+                "title": "People struggle to find you",
+                "text": "Even good businesses get missed when presence is weak."
+              },
+              {
+                "icon": "presence",
+                "title": "The business looks less trustworthy",
+                "text": "Customers compare fast. The clearer business feels safer."
+              },
+              {
+                "icon": "message",
+                "title": "Contact options are not obvious",
+                "text": "Calls, forms, WhatsApp, and bookings should be obvious."
+              },
+              {
+                "icon": "control",
+                "title": "Small updates take too long",
+                "text": "Services, hours, photos, and key details should stay current."
+              },
+              {
+                "icon": "improve",
+                "title": "You cannot see what to improve",
+                "text": "Without reports, activity stays hidden and improvements become guesswork."
+              }
+            ],
+            "visualAriaLabel": "Illustrative trust gap visual",
+            "visual": {
+              "siteLabel": "Invisible or outdated",
+              "siteText": "Customer interest has no clear next step.",
+              "supportLabel": "No reports or support",
+              "supportText": "Small fixes wait. Useful signals get missed."
+            }
+          }
+        },
+        {
+          "slot": "marketing.home.060.managed-backoffice",
+          "componentKey": "nuvio-managed-backoffice",
+          "title": "Managed Backoffice",
+          "order": 60,
+          "props": {
+            "eyebrow": "What Nuvio manages",
+            "headingPrefix": "A simple backoffice for your business.",
+            "headingAccent": "Nuvio manages the rest",
+            "headingSuffix": ".",
+            "support": "Control content, contacts, newsletters, and reports. Nuvio keeps the technical service running.",
+            "layoutAriaLabel": "Nuvio backoffice and managed service overview",
+            "backofficeAriaLabel": "Nuvio Backoffice product preview",
+            "productLabel": "NUVIO BACKOFFICE",
+            "contextPill": "Simple control layer",
+            "tabRailLabel": "Backoffice preview selector",
+            "overlayLabel": "Nuvio Backoffice",
+            "managedAriaLabel": "Managed by Nuvio",
+            "managedTitle": "Managed by Nuvio",
+            "features": [
+              {
+                "id": "content",
+                "label": "Content",
+                "icon": "layout",
+                "title": "Edit key content",
+                "detail": "Services, opening hours, contact details",
+                "image": "/backoffice/cms.png",
+                "alt": "Nuvio CMS backoffice screen for editing website content."
+              },
+              {
+                "id": "leads",
+                "label": "Leads & bookings",
+                "icon": "message",
+                "title": "Follow leads and bookings",
+                "detail": "Contacts, bookings, follow-up",
+                "image": "/backoffice/leads.png",
+                "alt": "Nuvio backoffice screen for leads and booking activity."
+              },
+              {
+                "id": "newsletter",
+                "label": "Newsletter",
+                "icon": "support",
+                "title": "Manage newsletter activity",
+                "detail": "Subscribers, sends, signups",
+                "image": "/backoffice/newsletter.png",
+                "alt": "Nuvio newsletter backoffice screen."
+              },
+              {
+                "id": "reports",
+                "label": "Reports",
+                "icon": "improve",
+                "title": "Review reports",
+                "detail": "Visits, top pages, contact clicks",
+                "image": "/backoffice/reports.png",
+                "alt": "Nuvio reports backoffice screen."
+              }
+            ],
+            "managedItems": [
+              {
+                "title": "Hosting and maintenance",
+                "icon": "support",
+                "description": "Online, updated, and stable."
+              },
+              {
+                "title": "Backoffice setup",
+                "icon": "control",
+                "description": "Setup and small fixes stay handled."
+              },
+              {
+                "title": "Contact path checks",
+                "icon": "message",
+                "description": "Forms, calls, WhatsApp, or bookings stay clear."
+              },
+              {
+                "title": "Local and search foundations",
+                "icon": "map",
+                "description": "Search basics stay aligned."
+              },
+              {
+                "title": "Content support",
+                "icon": "layout",
+                "description": "Small updates stay supported."
+              },
+              {
+                "title": "Reports and improvements",
+                "icon": "improve",
+                "description": "Useful signals guide improvements."
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.home.070.process",
+          "componentKey": "nuvio-process-path",
+          "title": "Process",
+          "order": 70,
+          "props": {
+            "eyebrow": "NEXT STEPS",
+            "headingPrefix": "What happens after you",
+            "headingAccent": "ask for a plan",
+            "headingSuffix": ".",
+            "support": "Nuvio maps what your business needs, then shows scope, pricing, and next steps before build.",
+            "actionsLabel": "Next step actions",
+            "primaryCta": {
+              "label": "See what Nuvio would build for me",
+              "href": "/contact"
+            },
+            "secondaryCta": {
+              "label": "View plans",
+              "href": "/pricing"
+            },
+            "stepsLabel": "What happens after you ask for a plan",
+            "steps": [
+              {
+                "icon": "message",
+                "title": "Share your business",
+                "description": "Services, location, current profile, and preferred contact path."
+              },
+              {
+                "icon": "layout",
+                "title": "Receive your plan",
+                "description": "Recommended pages, contact options, Google profile, controls, and support."
+              },
+              {
+                "icon": "scope",
+                "title": "Review scope and pricing",
+                "description": "Setup fee, monthly service, refund terms, and inclusions."
+              },
+              {
+                "icon": "improve",
+                "title": "Approve the first version",
+                "description": "After approval, Nuvio builds and launches the first version."
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.home.080.commercial-clarity",
+          "componentKey": "nuvio-commercial-clarity",
+          "title": "Commercial Clarity",
+          "order": 80,
+          "props": {
+            "eyebrow": "COMMERCIAL CLARITY",
+            "headingPrefix": "Before you approve, the",
+            "headingAccent": "details are clear",
+            "headingSuffix": ".",
+            "support": "Nuvio shows scope, setup fee, monthly service, and refund terms before work starts.",
+            "miniCards": [
+              {
+                "label": "Scope confirmed",
+                "text": "First version clear before build."
+              },
+              {
+                "label": "Approval ready",
+                "text": "Setup, service, and refund terms visible."
+              }
+            ],
+            "checklistLabel": "Approval clarity checklist",
+            "checklist": [
+              {
+                "title": "Scope",
+                "description": "Recommended pages, contact paths, and first-version work."
+              },
+              {
+                "title": "Setup fee",
+                "description": "One-time build and setup cost confirmed before work starts."
+              },
+              {
+                "title": "Monthly service",
+                "description": "Hosting, support, reports, and improvements are clear."
+              },
+              {
+                "title": "Refund terms",
+                "description": "30-day setup-fee refund explained before approval."
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.home.090.final-cta",
+          "componentKey": "nuvio-final-cta",
+          "title": "Final Cta",
+          "order": 90,
+          "props": {
+            "eyebrow": "NEXT STEP",
+            "heading": "Ready to see what Nuvio would map for your business?",
+            "support": "Share your business, current website, and what you need. Nuvio will turn it into a clear recommended scope before anything is built.",
+            "primaryCta": {
+              "label": "See what Nuvio would build for me",
+              "href": "/contact"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "slug": "services",
+      "title": "How it works",
+      "seoTitle": "How it works - Nuvio",
+      "seoDescription": "See how Nuvio turns business context into a managed online presence with mapped pages, contact paths, launch support, monthly reports, and ongoing managed support.",
+      "published": true,
+      "seoNoindex": false,
+      "seoExcludeFromSitemap": false,
+      "blocks": [
+        {
+          "slot": "marketing.services.010.hero",
+          "componentKey": "nuvio-services-hero",
+          "title": "Hero",
+          "order": 10,
+          "props": {
+            "eyebrow": "How it works",
+            "headingPrefix": "How Nuvio turns business context",
+            "headingConnector": "into a",
+            "headingAccent": "managed online presence",
+            "headingSuffix": ".",
+            "support": "Context in. Structure out. Nuvio builds the first version and keeps support managed after launch.",
+            "actionsLabel": "How it works actions",
+            "primaryCta": {
+              "label": "See what Nuvio would build for me",
+              "href": "/contact"
+            },
+            "secondaryCta": {
+              "label": "View pricing",
+              "href": "/pricing"
+            },
+            "visualLabel": "Business context mapped into Nuvio structure",
+            "diagramLabel": "Business context mapped into structured Nuvio outputs",
+            "inputColumnLabel": "Context in",
+            "outputColumnLabel": "Structure out",
+            "supportLayerLabel": "Backoffice",
+            "inputItems": [
+              "Services",
+              "Location",
+              "Assets",
+              "Contact paths"
+            ],
+            "outputItems": [
+              {
+                "title": "Pages",
+                "icon": "layout"
+              },
+              {
+                "title": "Contact paths",
+                "icon": "message"
+              },
+              {
+                "title": "Backoffice",
+                "icon": "control"
+              },
+              {
+                "title": "Monthly reports",
+                "icon": "improve"
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.services.020.process",
+          "componentKey": "nuvio-process-path",
+          "title": "Process",
+          "order": 20,
+          "props": {
+            "eyebrow": "Process",
+            "headingPrefix": "A clear process",
+            "headingAccent": "before anything is built",
+            "headingSuffix": ".",
+            "support": "Four steps keep the work clear before build and launch.",
+            "stepsLabel": "Nuvio process steps",
+            "steps": [
+              {
+                "icon": "presence",
+                "title": "Share context",
+                "text": "Share what exists and what customers need."
+              },
+              {
+                "icon": "map",
+                "title": "Map the plan",
+                "text": "We define pages, contact paths, and scope."
+              },
+              {
+                "icon": "layout",
+                "title": "Build the first version",
+                "text": "Nuvio turns the plan into a working first version."
+              },
+              {
+                "icon": "support",
+                "title": "Manage after launch",
+                "text": "Hosting, updates, reports, and support stay covered."
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.services.030.mapping",
+          "componentKey": "nuvio-services-mapping",
+          "title": "Mapping",
+          "order": 30,
+          "props": {
+            "eyebrow": "What Nuvio maps",
+            "headingPrefix": "From what you send to a clear",
+            "headingAccent": "first version",
+            "headingSuffix": ".",
+            "support": "Your inputs become pages, contact paths, controls, and a launch rhythm.",
+            "compositionLabel": "Business context mapped into Nuvio output",
+            "inputLabel": "Planning brief inputs",
+            "inputTitle": "PLANNING BRIEF",
+            "briefRows": [
+              {
+                "title": "Business details",
+                "text": "Services, location, hours, and priorities."
+              },
+              {
+                "title": "Brand material",
+                "text": "Logo, colours, photos, and references."
+              },
+              {
+                "title": "Contact paths",
+                "text": "Call, WhatsApp, form, booking, or next step."
+              },
+              {
+                "title": "Priorities",
+                "text": "What launches first and what waits."
+              }
+            ],
+            "centerVisualLabel": "Mapped first public version preview",
+            "centerTitle": "FIRST PUBLIC VERSION",
+            "siteBrand": "Local business site",
+            "navItems": [
+              "Home",
+              "Services",
+              "Contact"
+            ],
+            "contactPathsLabel": "Contact paths",
+            "contactChips": [
+              "Call",
+              "WhatsApp",
+              "Form"
+            ],
+            "pageChips": [
+              "Home",
+              "Services",
+              "Proof",
+              "Contact"
+            ],
+            "systemStrip": [
+              "Backoffice",
+              "Reports"
+            ],
+            "outputLayers": [
+              {
+                "icon": "layout",
+                "title": "Website structure",
+                "text": "Pages, navigation, and launch priorities."
+              },
+              {
+                "icon": "message",
+                "title": "Contact paths",
+                "text": "Calls, forms, WhatsApp, booking, or quote routes."
+              },
+              {
+                "icon": "control",
+                "title": "Backoffice controls",
+                "text": "Editable content, contacts, and reports."
+              },
+              {
+                "icon": "support",
+                "title": "Managed support",
+                "text": "Hosting, updates, and small improvements."
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.services.040.managed-system",
+          "componentKey": "nuvio-services-managed-system",
+          "title": "Managed System",
+          "order": 40,
+          "props": {
+            "eyebrow": "Managed system",
+            "headingPrefix": "You control the business details.",
+            "headingAccent": "Nuvio manages",
+            "headingSuffix": "the technical layer.",
+            "support": "Your business keeps the important details clear. Nuvio handles the managed website, support, reports, and technical layer around them.",
+            "responsibilitiesLabel": "Managed system responsibilities",
+            "responsibilityRows": [
+              {
+                "label": "YOU CONTROL",
+                "text": "Services, key content, contact details, and incoming requests.",
+                "managed": false
+              },
+              {
+                "label": "NUVIO MANAGES",
+                "text": "Hosting, maintenance, technical fixes, reports, and ongoing support.",
+                "managed": true
+              }
+            ],
+            "visualLabel": "Nuvio backoffice and managed service model",
+            "backofficeLabel": "Nuvio Backoffice",
+            "contextPill": "Simple control layer",
+            "imageSrc": "/backoffice/cms.png",
+            "imageAlt": "Nuvio backoffice screenshot showing website pages and content preview"
+          }
+        },
+        {
+          "slot": "marketing.services.050.after-launch",
+          "componentKey": "nuvio-services-after-launch",
+          "title": "After Launch",
+          "order": 50,
+          "props": {
+            "eyebrow": "After launch",
+            "headingPrefix": "Launch is not the handoff.",
+            "headingConnector": "It is the",
+            "headingAccent": "start of support",
+            "headingSuffix": ".",
+            "support": "After launch, the useful parts stay visible and easier to improve.",
+            "imageSrc": "/backoffice/reports.png",
+            "imageAlt": "Nuvio reports screenshot showing monthly activity overview",
+            "supportCardLabel": "Monthly support",
+            "supportCardHeading": "Reports and updates stay connected.",
+            "listLabel": "After launch support",
+            "items": [
+              {
+                "icon": "improve",
+                "title": "Monthly reports",
+                "text": "Activity, top pages, and contact signals."
+              },
+              {
+                "icon": "scope",
+                "title": "Small improvements",
+                "text": "Useful details improve over time."
+              },
+              {
+                "icon": "clarity",
+                "title": "Technical stability",
+                "text": "Hosting, maintenance, and fixes stay handled."
+              },
+              {
+                "icon": "support",
+                "title": "Content support",
+                "text": "Service and contact updates stay easier."
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.services.060.final-cta",
+          "componentKey": "nuvio-final-cta",
+          "title": "Final Cta",
+          "order": 60,
+          "props": {
+            "eyebrow": "NEXT STEP",
+            "heading": "Ready to see what Nuvio would build for your business?",
+            "support": "Share your business context. Nuvio maps the first version and recommended scope before anything is built.",
+            "primaryCta": {
+              "label": "See what Nuvio would build for me",
+              "href": "/contact"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "slug": "pricing",
+      "title": "Pricing",
+      "seoTitle": "Pricing - Nuvio",
+      "seoDescription": "Clear Nuvio pricing for first-version website setup, monthly managed service, founder pricing, and setup-fee refund terms.",
+      "published": true,
+      "seoNoindex": false,
+      "seoExcludeFromSitemap": false,
+      "blocks": [
+        {
+          "slot": "marketing.pricing.010.hero",
+          "componentKey": "nuvio-pricing-hero",
+          "title": "Hero",
+          "order": 10,
+          "props": {
+            "eyebrow": "Pricing",
+            "headingPrefix": "Clear pricing for a",
+            "headingAccent": "managed online presence",
+            "headingSuffix": ".",
+            "support": "Nuvio separates the first-version build from the monthly service, so you know what is created before launch, what stays managed after, and how the setup-fee refund works.",
+            "actionsLabel": "Pricing actions",
+            "primaryCta": {
+              "label": "Request my Nuvio plan",
+              "href": "/contact"
+            },
+            "secondaryCta": {
+              "label": "Compare plans",
+              "href": "#plans"
+            },
+            "panelLabel": "Pricing model",
+            "panelKicker": "Pricing model",
+            "panelHeading": "Build once. Managed monthly.",
+            "modelAriaLabel": "Setup fee, monthly service, founder pricing, and refund terms",
+            "setupLabel": "Setup fee",
+            "setupDescription": "First version build",
+            "monthlyLabel": "Monthly service",
+            "monthlyDescription": "Managed after launch",
+            "founderLabel": "Founder entry",
+            "founderDescription": "First 15 clients",
+            "refundLabel": "30-day refund",
+            "refundDescription": "After launch. Setup fee only."
+          }
+        },
+        {
+          "slot": "marketing.pricing.020.plans",
+          "componentKey": "nuvio-pricing-plans",
+          "title": "Plans",
+          "order": 20,
+          "props": {
+            "plansSection": {
+              "eyebrow": "Plans",
+              "headingPrefix": "Choose the level of",
+              "headingAccent": "managed support",
+              "headingSuffix": "your business needs.",
+              "support": "Choose based on the scope, support rhythm, and improvement level your business needs.",
+              "founder": {
+                "title": "Founder pricing for the first 15 clients.",
+                "text": "Lower setup pricing. Same monthly service. Founder monthly rate stays while the original contract remains active and in good standing.",
+                "factsLabel": "Founder pricing details",
+                "facts": [
+                  "15 founder spots",
+                  "Lower setup fee",
+                  "Same monthly service"
+                ]
+              },
+              "plans": [
+                {
+                  "id": "presenca",
+                  "name": "Presen\u00e7a",
+                  "label": "Plan 01",
+                  "promise": "Get found and look professional.",
+                  "who": "A focused start.",
+                  "standardSetup": "\u20ac990",
+                  "founderSetup": "\u20ac590",
+                  "monthly": "\u20ac69/month",
+                  "recommended": false,
+                  "includes": [
+                    "Essential site structure",
+                    "Core contact paths",
+                    "Backoffice controls",
+                    "Monthly report"
+                  ]
+                },
+                {
+                  "id": "crescimento",
+                  "name": "Crescimento",
+                  "label": "Recommended",
+                  "promise": "Improve the presence every month.",
+                  "who": "Monthly growth rhythm.",
+                  "standardSetup": "\u20ac1,490",
+                  "founderSetup": "\u20ac990",
+                  "monthly": "\u20ac99/month",
+                  "recommended": true,
+                  "includes": [
+                    "Larger site structure",
+                    "Deeper contact planning",
+                    "Active monthly support",
+                    "Detailed report"
+                  ]
+                },
+                {
+                  "id": "parceiro",
+                  "name": "Parceiro",
+                  "label": "Plan 03",
+                  "promise": "Delegate more of the work.",
+                  "who": "Higher support coverage.",
+                  "standardSetup": "\u20ac1,990",
+                  "founderSetup": "\u20ac1,390",
+                  "monthly": "\u20ac149/month",
+                  "recommended": false,
+                  "includes": [
+                    "Broader page scope",
+                    "Monthly improvements",
+                    "Landing page support",
+                    "Annual review"
+                  ]
+                }
+              ],
+              "founderSetupLabel": "Founder setup",
+              "standardSetupPrefix": "Standard setup",
+              "monthlyLabel": "Monthly service",
+              "fitLabel": "Fit",
+              "planCtaLabel": "Request this plan"
+            },
+            "comparison": {
+              "ariaLabel": "Plan comparison details",
+              "summaryLabel": "Compare plan details",
+              "summarySupport": "See scope, support, reports, and monthly service differences.",
+              "tableLabel": "Plan comparison",
+              "headerArea": "Area",
+              "planHeaders": [
+                "Presen\u00e7a",
+                "Crescimento",
+                "Parceiro"
+              ],
+              "rows": [
+                {
+                  "category": "First-version scope",
+                  "presenca": "Essential website structure",
+                  "crescimento": "Larger site structure",
+                  "parceiro": "Broader page scope"
+                },
+                {
+                  "category": "Contact paths",
+                  "presenca": "Clear calls, forms, WhatsApp, booking, or quote paths",
+                  "crescimento": "More complete contact-path planning",
+                  "parceiro": "More hands-on contact-path support"
+                },
+                {
+                  "category": "Backoffice controls",
+                  "presenca": "Essential content and contact activity",
+                  "crescimento": "Expanded controls where useful",
+                  "parceiro": "Broader control and reporting view"
+                },
+                {
+                  "category": "Monthly reports",
+                  "presenca": "Monthly report",
+                  "crescimento": "More detailed monthly report",
+                  "parceiro": "More hands-on review rhythm"
+                },
+                {
+                  "category": "Improvement rhythm",
+                  "presenca": "Small monthly improvements",
+                  "crescimento": "More monthly changes",
+                  "parceiro": "More active improvement support"
+                },
+                {
+                  "category": "Support priority",
+                  "presenca": "Managed support",
+                  "crescimento": "Priority support",
+                  "parceiro": "Higher support priority"
+                },
+                {
+                  "category": "Local visibility foundations",
+                  "presenca": "SEO foundations",
+                  "crescimento": "Stronger local visibility foundations",
+                  "parceiro": "Broader support around visibility foundations"
+                },
+                {
+                  "category": "Campaign support",
+                  "presenca": "Not included",
+                  "crescimento": "Scoped separately if needed",
+                  "parceiro": "Included within agreed scope"
+                }
+              ]
+            },
+            "foundation": {
+              "eyebrow": "Included",
+              "headingPrefix": "Every plan includes the",
+              "headingAccent": "managed foundation",
+              "headingSuffix": ".",
+              "items": [
+                {
+                  "icon": "layout",
+                  "title": "Website structure",
+                  "body": "Pages planned before build."
+                },
+                {
+                  "icon": "message",
+                  "title": "Contact paths",
+                  "body": "Calls, forms, WhatsApp, or booking requests."
+                },
+                {
+                  "icon": "control",
+                  "title": "Backoffice controls",
+                  "body": "Essential content and contact activity."
+                },
+                {
+                  "icon": "support",
+                  "title": "Managed technical side",
+                  "body": "Hosting, maintenance, support."
+                },
+                {
+                  "icon": "clarity",
+                  "title": "Monthly reports",
+                  "body": "Useful activity signals after launch."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "slot": "marketing.pricing.030.faq",
+          "componentKey": "nuvio-pricing-faq",
+          "title": "Faq",
+          "order": 30,
+          "props": {
+            "eyebrow": "FAQ",
+            "heading": "Questions before you choose.",
+            "gridLabel": "Pricing questions",
+            "items": [
+              {
+                "question": "Why is there a setup fee and a monthly fee?",
+                "answer": "The setup fee covers the first version. The monthly fee keeps hosting, support, reports, and improvements managed after launch."
+              },
+              {
+                "question": "What affects the final setup scope?",
+                "answer": "Pages, content, contact paths, Google Business Profile support, and backoffice needs can affect scope."
+              },
+              {
+                "question": "Can I start with Presen\u00e7a and upgrade later?",
+                "answer": "Yes. Presen\u00e7a can start as a focused foundation, then move into a larger plan if your support needs grow."
+              },
+              {
+                "question": "What happens after launch?",
+                "answer": "Nuvio keeps the technical side managed, sends reports, supports changes, and improves the presence over time."
+              },
+              {
+                "question": "What is included in monthly support?",
+                "answer": "Hosting, maintenance, practical support, reporting, and improvements within the selected plan scope."
+              },
+              {
+                "question": "Do you guarantee leads, rankings, or revenue?",
+                "answer": "No. Nuvio improves structure, clarity, and contact paths, but does not promise fixed leads, rankings, or revenue."
+              },
+              {
+                "question": "How does the 30-day setup-fee refund work?",
+                "answer": "After launch, the setup fee can be refunded within 30 days. Setup fee only."
+              },
+              {
+                "question": "What does founder pricing mean?",
+                "answer": "Founder pricing is for the first 15 clients and keeps the founder monthly rate while the original contract remains active."
+              }
+            ]
+          }
+        },
+        {
+          "slot": "marketing.pricing.040.final-cta",
+          "componentKey": "nuvio-final-cta",
+          "title": "Final Cta",
+          "order": 40,
+          "props": {
+            "eyebrow": "NEXT STEP",
+            "heading": "Ready to choose the right plan for your business?",
+            "support": "Tell Nuvio what you do, what you need, and which level of support feels right. You will get a clear plan before anything is built.",
+            "primaryCta": {
+              "label": "Request my Nuvio plan",
+              "href": "/contact"
+            },
+            "secondaryCta": {
+              "label": "Compare plans",
+              "href": "#plans"
+            },
+            "actionsLabel": "Pricing final actions",
+            "motifTitle": "Plan first",
+            "motifText": "Scope and commercial details before build."
+          }
+        }
+      ]
+    },
+    {
+      "slug": "contact",
+      "title": "Contact",
+      "seoTitle": "Request a Nuvio plan | Managed online presence for local businesses",
+      "seoDescription": "Share your business context and Nuvio will map the right online presence, contact paths, backoffice controls, and monthly support before anything is built.",
+      "published": true,
+      "seoNoindex": false,
+      "seoExcludeFromSitemap": false,
+      "blocks": [
+        {
+          "slot": "marketing.contact.010.request",
+          "componentKey": "nuvio-contact-request",
+          "title": "Request",
+          "order": 10,
+          "props": {
+            "context": {
+              "eyebrow": "What to send",
+              "headingPrefix": "Send the context.",
+              "headingAccent": "Nuvio maps the plan",
+              "headingSuffix": ".",
+              "whatToSendLabel": "Useful context to send",
+              "whatToSend": [
+                {
+                  "title": "Current online presence",
+                  "text": "Website, Google profile, Instagram, or any current page customers use."
+                },
+                {
+                  "title": "Business and services",
+                  "text": "What you do, where you work, key services, and who usually contacts you."
+                },
+                {
+                  "title": "Desired customer action",
+                  "text": "Call, message, request a quote, book, or understand the offer first."
+                }
+              ],
+              "mappedOutputsLabel": "What Nuvio maps from this context",
+              "mappedOutputsHeadingPrefix": "What",
+              "mappedOutputsHeadingAccent": "Nuvio maps",
+              "mappedOutputsHeadingSuffix": "from this",
+              "mappedOutputs": [
+                {
+                  "title": "First version",
+                  "text": "Pages and structure."
+                },
+                {
+                  "title": "Contact paths",
+                  "text": "Calls, forms, WhatsApp, or booking requests."
+                },
+                {
+                  "title": "Backoffice controls",
+                  "text": "Content, contacts, and reports."
+                },
+                {
+                  "title": "Commercial clarity",
+                  "text": "Scope, setup fee, and monthly service."
+                }
+              ]
+            },
+            "form": {
+              "eyebrow": "Request a Nuvio plan",
+              "headingPrefix": "Request your",
+              "headingAccent": "Nuvio plan",
+              "support": "A short message is enough to begin. The more context you send, the easier it is to map the right first version.",
+              "loadingStatus": "Sending your Nuvio plan request...",
+              "honeypotLabel": "Website URL",
+              "labels": {
+                "name": "Your name",
+                "email": "Email",
+                "phone": "Phone or WhatsApp",
+                "subject": "Business name",
+                "message": "What should customers be able to do next?"
+              },
+              "placeholders": {
+                "subject": "Your business name or main topic",
+                "message": "Share your current website, Google profile, Instagram, services, location, and what customers should do next."
+              },
+              "help": {
+                "message": "Useful details: services, area, current online links, contact preference, and what feels unclear today."
+              },
+              "optionalLabel": "optional",
+              "submitIdle": "Request my Nuvio plan",
+              "submitLoading": "Sending request...",
+              "note": "Not ready with everything? Send what you have. Nuvio can start from your website, Google profile, or Instagram."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

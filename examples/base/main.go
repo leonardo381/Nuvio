@@ -79,6 +79,10 @@ func main() {
 		"fallback the request to index.html on missing static path, e.g. when pretty urls are used with SPA",
 	)
 
+	// NUVIO CUSTOM START: Register reproducible Nuvio marketing CMS seed command.
+	app.RootCmd.AddCommand(newNuvioMarketingSeedCommand(app))
+	// NUVIO CUSTOM END: Register reproducible Nuvio marketing CMS seed command.
+
 	app.RootCmd.ParseFlags(os.Args[1:])
 
 	// ---------------------------------------------------------------
