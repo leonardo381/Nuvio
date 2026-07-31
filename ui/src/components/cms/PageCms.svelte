@@ -66,6 +66,14 @@
         reports: "ri-bar-chart-2-line",
         i18n: "ri-global-line",
     };
+    // Nuvio dogfoods the CMS through the final marketing routes; client sites keep /site previews.
+    const nuvioMarketingPreviewWebsiteSlug = "nuvio";
+    const nuvioMarketingPreviewPathByPageSlug = {
+        home: "/",
+        services: "/services",
+        pricing: "/pricing",
+        contact: "/contact",
+    };
 
     let websites = [];
     let pages = [];
@@ -1872,9 +1880,7 @@
         }
 
         try {
-            const previewUrl = new URL(
-                `${baseUrl}/site/${encodeURIComponent(normalizedWebsiteSlug)}/${encodeURIComponent(normalizedPageSlug)}`,
-            );
+            const previewUrl = new URL(resolvePagePreviewPath(normalizedWebsiteSlug, normalizedPageSlug), `${baseUrl}/`);
 
             if (normalizedLanguageCode) {
                 previewUrl.searchParams.set("lang", normalizedLanguageCode);
@@ -1886,6 +1892,23 @@
         } catch (_) {
             return "";
         }
+    }
+
+    function resolvePagePreviewPath(websiteSlug, pageSlug) {
+        const mappedPath = getNuvioMarketingPreviewPath(websiteSlug, pageSlug);
+        if (mappedPath) {
+            return mappedPath;
+        }
+
+        return `/site/${encodeURIComponent(websiteSlug)}/${encodeURIComponent(pageSlug)}`;
+    }
+
+    function getNuvioMarketingPreviewPath(websiteSlug, pageSlug) {
+        if (normalizeString(websiteSlug).toLowerCase() !== nuvioMarketingPreviewWebsiteSlug) {
+            return "";
+        }
+
+        return nuvioMarketingPreviewPathByPageSlug[normalizeString(pageSlug).toLowerCase()] || "";
     }
 
     function getPageSeoPreviewPath(previewUrl, websiteSlug, pageSlug) {
