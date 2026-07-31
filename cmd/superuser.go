@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/go-ozzo/ozzo-validation/v4/is"
@@ -29,9 +30,11 @@ func NewSuperuserCommand(app core.App) *cobra.Command {
 }
 
 func superuserUpsertCommand(app core.App) *cobra.Command {
+	var role string
+
 	command := &cobra.Command{
 		Use:          "upsert",
-		Example:      "superuser upsert test@example.com 1234567890",
+		Example:      "superuser upsert test@example.com 1234567890\n  superuser upsert test@example.com 1234567890 --role admin",
 		Short:        "Creates, or updates if email exists, a single superuser",
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, args []string) error {
@@ -48,6 +51,13 @@ func superuserUpsertCommand(app core.App) *cobra.Command {
 				return fmt.Errorf("failed to fetch %q collection: %w", core.CollectionNameSuperusers, err)
 			}
 
+			role = normalizeSuperuserRoleFlag(role)
+			if role != "" {
+				if err := validateSuperuserRoleFlag(superusersCol, role); err != nil {
+					return err
+				}
+			}
+
 			superuser, err := app.FindAuthRecordByEmail(superusersCol, args[0])
 			if err != nil {
 				superuser = core.NewRecord(superusersCol)
@@ -55,6 +65,9 @@ func superuserUpsertCommand(app core.App) *cobra.Command {
 
 			superuser.SetEmail(args[0])
 			superuser.SetPassword(args[1])
+			if role != "" {
+				superuser.Set("role", role)
+			}
 
 			if err := app.Save(superuser); err != nil {
 				return fmt.Errorf("failed to upsert superuser account: %w", err)
@@ -65,7 +78,36 @@ func superuserUpsertCommand(app core.App) *cobra.Command {
 		},
 	}
 
+	command.Flags().StringVar(&role, "role", "", "optional Nuvio superuser role to assign (admin or client)")
+
 	return command
+}
+
+func normalizeSuperuserRoleFlag(role string) string {
+	return strings.TrimSpace(strings.ToLower(role))
+}
+
+func validateSuperuserRoleFlag(superusersCol *core.Collection, role string) error {
+	if role != "admin" && role != "client" {
+		return fmt.Errorf("invalid superuser role %q; expected \"admin\" or \"client\"", role)
+	}
+
+	if superusersCol == nil || superusersCol.Fields.GetByName("role") == nil {
+		return fmt.Errorf("superuser role field is missing; run the Nuvio migrations before using --role")
+	}
+
+	selectField, ok := superusersCol.Fields.GetByName("role").(*core.SelectField)
+	if !ok || len(selectField.Values) == 0 {
+		return nil
+	}
+
+	for _, value := range selectField.Values {
+		if strings.TrimSpace(strings.ToLower(value)) == role {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("superuser role %q is not allowed by the %q schema", role, core.CollectionNameSuperusers)
 }
 
 func superuserCreateCommand(app core.App) *cobra.Command {

@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"testing"
 
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/cmd"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
@@ -88,6 +89,129 @@ func TestSuperuserUpsertCommand(t *testing.T) {
 				t.Fatal("Expected the superuser password to match")
 			}
 		})
+	}
+}
+
+func TestSuperuserUpsertCommandRoleFlag(t *testing.T) {
+	app, _ := tests.NewTestApp()
+	defer app.Cleanup()
+
+	ensureSuperuserRoleField(t, app)
+
+	t.Run("without role leaves new superuser role empty", func(t *testing.T) {
+		command := cmd.NewSuperuserCommand(app)
+		command.SetArgs([]string{"upsert", "roleless@example.com", "1234567890!"})
+
+		if err := command.Execute(); err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		superuser, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "roleless@example.com")
+		if err != nil {
+			t.Fatalf("Failed to fetch roleless superuser: %v", err)
+		}
+		if role := superuser.GetString("role"); role != "" {
+			t.Fatalf("Expected empty role, got %q", role)
+		}
+	})
+
+	t.Run("without role preserves existing role", func(t *testing.T) {
+		superuser, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "roleless@example.com")
+		if err != nil {
+			t.Fatalf("Failed to fetch roleless superuser: %v", err)
+		}
+		superuser.Set("role", apis.SuperuserRoleAdmin)
+		if err := app.Save(superuser); err != nil {
+			t.Fatalf("Failed to save role before upsert: %v", err)
+		}
+
+		command := cmd.NewSuperuserCommand(app)
+		command.SetArgs([]string{"upsert", "roleless@example.com", "1234567890!"})
+		if err := command.Execute(); err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		superuser, err = app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "roleless@example.com")
+		if err != nil {
+			t.Fatalf("Failed to refetch roleless superuser: %v", err)
+		}
+		if role := superuser.GetString("role"); role != apis.SuperuserRoleAdmin {
+			t.Fatalf("Expected existing role to be preserved, got %q", role)
+		}
+	})
+
+	t.Run("admin role is saved explicitly", func(t *testing.T) {
+		command := cmd.NewSuperuserCommand(app)
+		command.SetArgs([]string{"upsert", "admin-role@example.com", "1234567890!", "--role", apis.SuperuserRoleAdmin})
+
+		if err := command.Execute(); err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		superuser, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "admin-role@example.com")
+		if err != nil {
+			t.Fatalf("Failed to fetch admin role superuser: %v", err)
+		}
+		if role := superuser.GetString("role"); role != apis.SuperuserRoleAdmin {
+			t.Fatalf("Expected admin role, got %q", role)
+		}
+	})
+
+	t.Run("client role is schema-valid but does not grant website access by itself", func(t *testing.T) {
+		command := cmd.NewSuperuserCommand(app)
+		command.SetArgs([]string{"upsert", "client-role@example.com", "1234567890!", "--role", apis.SuperuserRoleClient})
+
+		if err := command.Execute(); err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		superuser, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "client-role@example.com")
+		if err != nil {
+			t.Fatalf("Failed to fetch client role superuser: %v", err)
+		}
+		if role := superuser.GetString("role"); role != apis.SuperuserRoleClient {
+			t.Fatalf("Expected client role, got %q", role)
+		}
+		if access := superuser.GetStringSlice("websiteAccess"); len(access) != 0 {
+			t.Fatalf("Expected client role flag not to assign website access, got %v", access)
+		}
+	})
+
+	t.Run("invalid role fails clearly", func(t *testing.T) {
+		command := cmd.NewSuperuserCommand(app)
+		command.SetArgs([]string{"upsert", "bad-role@example.com", "1234567890!", "--role", "manager"})
+
+		if err := command.Execute(); err == nil {
+			t.Fatal("Expected invalid role error")
+		}
+
+		if _, err := app.FindAuthRecordByEmail(core.CollectionNameSuperusers, "bad-role@example.com"); err == nil {
+			t.Fatal("Expected invalid role upsert not to create a superuser")
+		}
+	})
+}
+
+func ensureSuperuserRoleField(t testing.TB, app *tests.TestApp) {
+	t.Helper()
+
+	superusersCollection, err := app.FindCollectionByNameOrId(core.CollectionNameSuperusers)
+	if err != nil {
+		t.Fatalf("Failed to load superusers collection: %v", err)
+	}
+
+	updated := false
+	if superusersCollection.Fields.GetByName("role") == nil {
+		superusersCollection.Fields.Add(&core.SelectField{
+			Name:      "role",
+			MaxSelect: 1,
+			Values:    []string{apis.SuperuserRoleAdmin, apis.SuperuserRoleClient},
+		})
+		updated = true
+	}
+	if updated {
+		if err := app.Save(superusersCollection); err != nil {
+			t.Fatalf("Failed to save superusers role fields: %v", err)
+		}
 	}
 }
 

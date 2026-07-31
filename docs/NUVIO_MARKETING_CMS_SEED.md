@@ -89,3 +89,13 @@ Expected root routes:
 - `/home` -> 404
 
 Strict mode proves the root marketing pages can render from the seeded CMS records instead of silently falling back to code defaults.
+
+## Temporary CMS Admin For Local/Staging Smoke
+
+`superuser upsert` intentionally keeps normal PocketBase behavior unless a trusted operator asks for a Nuvio role explicitly. For local or staging authoring smoke, create the account and grant the admin role in one CLI-only command:
+
+```powershell
+go run ./examples/base --dir $seedDir --migrationsDir pb_migrations superuser upsert phase46-smoke@example.test <temporary-password> --role admin
+```
+
+This is for trusted operator access only. It does not create a browser/public bootstrap endpoint, does not make every superuser an admin automatically, and still relies on the runtime CMS middleware requiring `role=admin` or `role=client` plus `websiteAccess`. If the backend is behind Coolify or another proxy and you trust proxy headers for rate limiting or logs, configure trusted proxy handling only for that controlled proxy path; do not expose the backend directly with untrusted forwarded headers.
