@@ -1,3 +1,6 @@
+> [!warning]
+> Historical audit note: this snapshot may contain stale pricing/business-source assumptions. Current product/pricing/process authority lives in the central Nuvio OS repo.
+
 ﻿# 2026-06-18 OS Consistency QA
 
 ## Summary Verdict

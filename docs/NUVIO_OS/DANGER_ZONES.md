@@ -19,7 +19,7 @@ Read this before touching sensitive areas. These rules are intentionally explici
 | cms5 vs Reference | Wrong repo can contaminate the clean template or runtime. | Do not copy cms5 wholesale into Reference; do not make Reference depend on cms5. | Use cms5 for runtime history; use Reference for clean site contracts. | Check changed repo/files; public site build if touched. |
 | Srcs source library | Source assets are not runtime dependencies. | Do not bulk-copy Srcs; do not runtime-import from Srcs; do not add UI libraries because a source uses them. | Copy/adapt selected assets into real site repo only. | Public site build; changed-file review. |
 | Stale backlog | Old notes may describe parked ideas as desirable. | Do not treat old roadmap/backlog as active. | Mention as deferred or unknown. | Check Current Roadmap and Deferred Features. |
-| Pricing/business claims | Pricing is not final. | Do not invent exact prices or guarantees. | Cautious positioning copy; mark unknowns. | Manual copy review. |
+| Pricing/business claims | Pricing is now defined in the central Nuvio OS `TIERS_AND_PRICING.md`; do not invent new prices, discounts, remaining founder spots, or guarantees. | Do not invent exact prices or guarantees. | Use central pricing/tier authority; mark unknowns only when a newer explicit pricing decision is missing. | Manual copy review. |
 
 ## Stop Conditions
 

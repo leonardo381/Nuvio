@@ -329,4 +329,4 @@ Next recommended step:
 - If validation is skipped, explain why and state remaining risk.
 - If no files changed, say so explicitly.
 - If old docs conflict with current code, say which source won.
-- If pricing, business plan, or external Hermes/ChatGPT context is needed but unavailable, mark `Unknown / needs confirmation`.
+- If pricing or tier context is needed, read the central Nuvio OS `TIERS_AND_PRICING.md`; mark `Unknown / needs confirmation` only for decisions not covered there.

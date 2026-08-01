@@ -1,5 +1,9 @@
 # Nuvio OS Core Pack QA
 
+> [!warning]
+> Historical audit note: this snapshot may contain stale pricing/business-source assumptions. Current product/pricing/process authority lives in the central Nuvio OS repo.
+
+
 Date: 2026-06-17
 
 ## 1. Files reviewed
