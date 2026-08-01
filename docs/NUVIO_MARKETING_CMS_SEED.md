@@ -23,6 +23,28 @@ npm run export:marketing-cms-fixture -- --out C:\Users\Leo\Documents\Nuvio\Nuvio
 ```
 
 The exporter validates the pricing lock, rejects raw-HTML-like content, and keeps Contact mechanics out of CMS props.
+## Preview Route Metadata
+
+Backoffice preview routes are data-driven.
+
+Preferred model:
+
+- page-level safe preview path fields, when present;
+- otherwise `website.settings.previewRoutes[pageSlug]`;
+- otherwise fallback `/site/<websiteSlug>/<pageSlug>`.
+
+The Nuvio marketing fixture/exporter records these root marketing preview routes in `website.settings.previewRoutes`:
+
+| Page slug | Preview path |
+| --- | --- |
+| `home` | `/` |
+| `services` | `/services` |
+| `pricing` | `/pricing` |
+| `contact` | `/contact` |
+
+The backoffice preview iframe should preserve `cmsPreview=1` when opening or focusing a page preview.
+
+Do not reintroduce hardcoded `websiteSlug === "nuvio"` routing in `PageCms.svelte`. Normal client websites should continue to preview through `/site/<websiteSlug>/<pageSlug>` unless their website/page records explicitly provide safe preview route metadata.
 
 ## Dry Run
 

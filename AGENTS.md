@@ -121,6 +121,29 @@ Preserve and extend these markers consistently when touching custom sections.
 
 ---
 
+## P0 documentation authority
+
+For product model, pricing/tier strategy, naming, prompt rules, client lifecycle, offboarding, and documentation authority, use the central vault:
+
+- `C:\Users\Leo\Documents\Documentation\Nuvio\Nuvio\DOCUMENTATION_AUTHORITY.md`
+- `C:\Users\Leo\Documents\Documentation\Nuvio\Nuvio\PRODUCT_MODEL.md`
+- `C:\Users\Leo\Documents\Documentation\Nuvio\Nuvio\TIERS_AND_PRICING.md`
+- `C:\Users\Leo\Documents\Documentation\Nuvio\Nuvio\PROMPT_RULES.md`
+- `C:\Users\Leo\Documents\Documentation\Nuvio\Nuvio\BACKOFFICE_BOUNDARY.md`
+
+The backend repo remains technical authority for CMS/backoffice behavior, endpoints, auth, schema contracts, seed/exporter behavior, middleware, and tests.
+
+## Strict Nuvio website-mapping boundary
+
+For work that maps websites into editable CMS/backoffice content, only touch schemas, component definitions, fixtures, seed data, and DB collections/records directly relevant to the mapped/editable sites.
+
+Do not touch SchemaForm, InputSelect, InputArray, editor UI, established CMS behavior, unrelated backoffice features, pricing source code, Contact mechanics, public renderer/layout/design, or production/staging data unless there is a severe blocker and the user explicitly approves that exact change.
+
+NuvioCMS must not drift into a generic page builder. Public website design/layout remains code-owned; CMS edits are controlled props.
+
+## Prompt convention
+
+Future backend/backoffice prompts should start with `Resumo dumbdown`: 5-6 short lines explaining what will change, where it will change, what will not be touched, what validation will run, and what to expect afterward.
 # Required behavior rules
 
 ## 1. Work from the current codebase, not from theory
