@@ -604,6 +604,20 @@
               "type": "text"
             },
             "itemLabel": "Page"
+          },
+          {
+            "key": "trustedHtmlIllustration",
+            "label": "Trusted illustration markup",
+            "type": "textarea",
+            "required": false,
+            "group": "Illustration",
+            "hint": "Trusted illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "trustedMarkup": true,
+            "profile": "trustedHtmlIllustration",
+            "intendedUse": "illustration",
+            "options": {
+              "rows": 8
+            }
           }
         ]
       }
@@ -1806,6 +1820,20 @@
             "required": false,
             "group": "Pricing copy",
             "hint": "Pricing values and refund limits are protected by the site contract."
+          },
+          {
+            "key": "trustedSvgIllustration",
+            "label": "Trusted illustration markup",
+            "type": "textarea",
+            "required": false,
+            "group": "Illustration",
+            "hint": "Trusted illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "trustedMarkup": true,
+            "profile": "trustedSvgIllustration",
+            "intendedUse": "illustration",
+            "options": {
+              "rows": 8
+            }
           }
         ]
       }
@@ -3028,6 +3056,20 @@
               ]
             },
             "itemLabel": "Item"
+          },
+          {
+            "key": "trustedSvgIllustration",
+            "label": "Trusted illustration markup",
+            "type": "textarea",
+            "required": false,
+            "group": "Illustration",
+            "hint": "Trusted illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "trustedMarkup": true,
+            "profile": "trustedSvgIllustration",
+            "intendedUse": "illustration",
+            "options": {
+              "rows": 8
+            }
           }
         ]
       }
@@ -3713,7 +3755,8 @@
               "Services",
               "Proof",
               "Contact"
-            ]
+            ],
+            "trustedHtmlIllustration": "<div class=\"customer-presence-illustration\" role=\"presentation\" data-nuvio-visual=\"customer-presence\"><div class=\"visual-panel visual-panel-main\"></div><div class=\"visual-panel visual-panel-side\"></div><div class=\"contact-path\"><span></span><span></span><span></span></div></div>"
           }
         },
         {
@@ -4122,7 +4165,8 @@
                 "title": "Monthly reports",
                 "icon": "improve"
               }
-            ]
+            ],
+            "trustedSvgIllustration": "<svg class=\"diagram-trusted-illustration\" viewBox=\"0 0 220 150\" xmlns=\"http://www.w3.org/2000/svg\" role=\"presentation\"><path class=\"diagram-main-flow\" d=\"M10 76 C62 20 158 20 210 76\"></path><path class=\"diagram-soft-flow\" d=\"M10 76 C62 130 158 130 210 76\"></path><path class=\"diagram-support-flow\" d=\"M122 98 C150 112 166 126 188 137\"></path><circle class=\"diagram-node\" cx=\"10\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node\" cx=\"210\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"122\" cy=\"98\" r=\"3.5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"188\" cy=\"137\" r=\"3.5\"></circle></svg>"
           }
         },
         {
@@ -4370,7 +4414,8 @@
             "founderLabel": "Founder entry",
             "founderDescription": "First 15 clients",
             "refundLabel": "30-day refund",
-            "refundDescription": "After launch. Setup fee only."
+            "refundDescription": "After launch. Setup fee only.",
+            "trustedSvgIllustration": "<svg class=\"pricing-model-connector\" viewBox=\"0 0 360 220\" xmlns=\"http://www.w3.org/2000/svg\" role=\"presentation\"><path class=\"pricing-connector-main\" d=\"M84 82 C136 62 224 62 276 82\"></path><path class=\"pricing-connector-soft\" d=\"M96 142 C150 174 210 174 264 142\"></path><circle class=\"pricing-connector-node\" cx=\"84\" cy=\"82\" r=\"4\"></circle><circle class=\"pricing-connector-node\" cx=\"276\" cy=\"82\" r=\"4\"></circle><circle class=\"pricing-connector-node pricing-connector-node-soft\" cx=\"96\" cy=\"142\" r=\"3\"></circle><circle class=\"pricing-connector-node pricing-connector-node-soft\" cx=\"264\" cy=\"142\" r=\"3\"></circle></svg>"
           }
         },
         {

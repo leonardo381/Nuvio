@@ -41,6 +41,26 @@ func TestNuvioMarketingSeedFixtureContract(t *testing.T) {
 	}
 }
 
+func TestNuvioMarketingSeedRejectsUnsafeTrustedMarkup(t *testing.T) {
+	fixture, err := loadNuvioMarketingSeedFixture("")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	servicesPage := findNuvioMarketingSeedPage(fixture, "services")
+	if servicesPage == nil {
+		t.Fatal("expected services page fixture")
+	}
+	heroBlock := findNuvioMarketingSeedBlock(*servicesPage, "nuvio-services-hero")
+	if heroBlock == nil {
+		t.Fatal("expected services hero block")
+	}
+	heroBlock.Props["trustedSvgIllustration"] = `<svg onload="alert(1)"><path d="M0 0"></path></svg>`
+
+	if err := validateNuvioMarketingSeedFixture(fixture); err == nil {
+		t.Fatal("expected unsafe trusted markup fixture to be rejected")
+	}
+}
 func TestNuvioMarketingSeedAppliesIdempotentlyToCleanCMSCollections(t *testing.T) {
 	app, err := tests.NewTestApp()
 	if err != nil {

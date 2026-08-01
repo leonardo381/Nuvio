@@ -194,8 +194,8 @@ func validateNuvioMarketingSeedFixture(fixture nuvioMarketingSeedFixture) error 
 			if !componentKeys[strings.TrimSpace(block.ComponentKey)] {
 				return fmt.Errorf("fixture block references missing component key: %s", block.ComponentKey)
 			}
-			if containsNuvioMarketingSeedRawHTML(block.Props) {
-				return fmt.Errorf("fixture block %s contains raw HTML-like content", block.Slot)
+			if err := validateNuvioMarketingSeedBlockProps(block.Props, []string{pageSlug, block.Slot, "props"}); err != nil {
+				return fmt.Errorf("fixture block %s has unsafe props: %w", block.Slot, err)
 			}
 		}
 	}
@@ -511,33 +511,73 @@ func isNuvioMarketingSeedOwnedMap(value map[string]any, ownerKey string) bool {
 	return strings.TrimSpace(fmt.Sprint(marker["ownerKey"])) == strings.TrimSpace(ownerKey) && marker["managed"] == true
 }
 
-func containsNuvioMarketingSeedRawHTML(value any) bool {
+func validateNuvioMarketingSeedBlockProps(value any, path []string) error {
 	switch typed := value.(type) {
 	case string:
-		lower := strings.ToLower(typed)
-		return strings.Contains(lower, "<script") || strings.Contains(lower, "<iframe") || strings.Contains(lower, "<style") || strings.Contains(lower, "</")
+		profile, trusted := nuvioMarketingSeedTrustedMarkupProfileForPath(path)
+		if trusted {
+			if strings.TrimSpace(typed) == "" {
+				return nil
+			}
+			if err := validateTrustedMarkup(typed, profile); err != nil {
+				return fmt.Errorf("%s: %w", strings.Join(path, "."), err)
+			}
+			return nil
+		}
+		if containsNuvioMarketingSeedRawHTMLLikeString(typed) {
+			return fmt.Errorf("%s contains raw HTML-like content", strings.Join(path, "."))
+		}
 	case []any:
-		for _, item := range typed {
-			if containsNuvioMarketingSeedRawHTML(item) {
-				return true
+		for index, item := range typed {
+			if err := validateNuvioMarketingSeedBlockProps(item, append(path, fmt.Sprint(index))); err != nil {
+				return err
 			}
 		}
 	case map[string]any:
-		for _, item := range typed {
-			if containsNuvioMarketingSeedRawHTML(item) {
-				return true
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if err := validateNuvioMarketingSeedBlockProps(typed[key], append(path, key)); err != nil {
+				return err
 			}
 		}
 	}
-	return false
+	return nil
+}
+
+func containsNuvioMarketingSeedRawHTMLLikeString(value string) bool {
+	lower := strings.ToLower(value)
+	return strings.Contains(lower, "<script") || strings.Contains(lower, "<iframe") || strings.Contains(lower, "<style") || strings.Contains(lower, "</")
+}
+
+func nuvioMarketingSeedTrustedMarkupProfileForPath(path []string) (trustedMarkupProfile, bool) {
+	if len(path) == 0 {
+		return "", false
+	}
+	return nuvioMarketingSeedTrustedMarkupProfileForKey(path[len(path)-1])
+}
+
+func nuvioMarketingSeedTrustedMarkupProfileForKey(key string) (trustedMarkupProfile, bool) {
+	switch strings.TrimSpace(key) {
+	case "trustedSvgIllustration":
+		return trustedSvgIllustration, true
+	case "trustedHtmlIllustration":
+		return trustedHtmlIllustration, true
+	default:
+		return "", false
+	}
 }
 
 type nuvioMarketingSeedSchemaStats struct {
-	FieldCount       int
-	NestedObjects    int
-	ArrayObjectItems int
-	IconSelects      int
-	Labels           map[string]bool
+	FieldCount          int
+	NestedObjects       int
+	ArrayObjectItems    int
+	IconSelects         int
+	TrustedMarkupFields int
+	Labels              map[string]bool
 }
 
 func validateNuvioMarketingSeedComponentSchema(componentKey string, schema map[string]any, stats *nuvioMarketingSeedSchemaStats) error {
@@ -581,6 +621,29 @@ func validateNuvioMarketingSeedSchemaFields(componentKey string, pathPrefix stri
 		switch strings.ToLower(fieldType) {
 		case "html", "rawhtml", "svg", "rawsvg":
 			return fmt.Errorf("fixture schema field uses unsafe type %q at %s", fieldType, fieldPath)
+		}
+
+		trustedProfile, trusted := nuvioMarketingSeedTrustedMarkupProfileForKey(key)
+		profileValue := ""
+		if rawProfile, ok := field["profile"]; ok {
+			profileValue = strings.TrimSpace(fmt.Sprint(rawProfile))
+		}
+		if trusted {
+			if strings.ToLower(fieldType) != "textarea" {
+				return fmt.Errorf("fixture trusted markup field must use textarea: %s", fieldPath)
+			}
+			if field["trustedMarkup"] != true {
+				return fmt.Errorf("fixture trusted markup field missing marker: %s", fieldPath)
+			}
+			if profileValue != string(trustedProfile) {
+				return fmt.Errorf("fixture trusted markup field profile mismatch: %s", fieldPath)
+			}
+			if strings.TrimSpace(fmt.Sprint(field["intendedUse"])) != "illustration" {
+				return fmt.Errorf("fixture trusted markup field must be illustration-only: %s", fieldPath)
+			}
+			stats.TrustedMarkupFields++
+		} else if field["trustedMarkup"] == true || profileValue != "" {
+			return fmt.Errorf("fixture trusted markup metadata on non-trusted field: %s", fieldPath)
 		}
 
 		if err := validateNuvioMarketingSeedProtectedSchemaPath(componentKey, fieldPath); err != nil {
@@ -643,6 +706,9 @@ func validateNuvioMarketingSeedSchemaStats(stats nuvioMarketingSeedSchemaStats) 
 	}
 	if stats.IconSelects < 1 {
 		return errors.New("fixture schema did not preserve icon select fields")
+	}
+	if stats.TrustedMarkupFields != 3 {
+		return fmt.Errorf("fixture schema expected 3 trusted markup fields, got %d", stats.TrustedMarkupFields)
 	}
 	for _, label := range []string{"Section label", "Title", "Highlighted words", "Subtitle", "Primary button text", "Primary button link", "Icon", "Image", "Image description"} {
 		if !stats.Labels[label] {
