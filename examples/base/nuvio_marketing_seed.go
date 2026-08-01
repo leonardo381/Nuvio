@@ -205,6 +205,10 @@ func validateNuvioMarketingSeedFixture(fixture nuvioMarketingSeedFixture) error 
 		}
 	}
 
+	if err := validateNuvioMarketingSeedPreviewRoutes(fixture); err != nil {
+		return err
+	}
+
 	if err := validateNuvioMarketingSeedPricing(fixture); err != nil {
 		return err
 	}
@@ -709,6 +713,41 @@ func validateNuvioMarketingSeedIconOptions(fieldPath string, field map[string]an
 	return nil
 }
 
+func validateNuvioMarketingSeedPreviewRoutes(fixture nuvioMarketingSeedFixture) error {
+	routes := nuvioMarketingSeedMapValue(fixture.Website.Settings["previewRoutes"])
+	expected := map[string]string{
+		"home":     "/",
+		"services": "/services",
+		"pricing":  "/pricing",
+		"contact":  "/contact",
+	}
+	if len(routes) != len(expected) {
+		return fmt.Errorf("fixture previewRoutes must contain %d routes", len(expected))
+	}
+	for slug, expectedPath := range expected {
+		actualPath := strings.TrimSpace(fmt.Sprint(routes[slug]))
+		if actualPath != expectedPath {
+			return fmt.Errorf("fixture previewRoutes.%s must be %q, got %q", slug, expectedPath, actualPath)
+		}
+		if !isSafeNuvioMarketingSeedPreviewPath(actualPath) {
+			return fmt.Errorf("fixture previewRoutes.%s is not a safe root-relative path", slug)
+		}
+	}
+	return nil
+}
+
+func isSafeNuvioMarketingSeedPreviewPath(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.Contains(path, "\\") {
+		return false
+	}
+	for _, char := range path {
+		if char < 0x20 || char == 0x7f {
+			return false
+		}
+	}
+	return true
+}
 func validateNuvioMarketingSeedPricing(fixture nuvioMarketingSeedFixture) error {
 	pricingPage := findNuvioMarketingSeedPage(fixture, "pricing")
 	if pricingPage == nil {

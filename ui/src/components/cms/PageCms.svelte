@@ -66,14 +66,6 @@
         reports: "ri-bar-chart-2-line",
         i18n: "ri-global-line",
     };
-    // Nuvio dogfoods the CMS through the final marketing routes; client sites keep /site previews.
-    const nuvioMarketingPreviewWebsiteSlug = "nuvio";
-    const nuvioMarketingPreviewPathByPageSlug = {
-        home: "/",
-        services: "/services",
-        pricing: "/pricing",
-        contact: "/contact",
-    };
 
     let websites = [];
     let pages = [];
@@ -439,6 +431,8 @@
         selectedWebsiteSlug,
         selectedPageSlug,
         activeSectionTranslationLanguageCode,
+        selectedPage,
+        selectedWebsite,
     );
     $: pagePreviewFocusedUrl = buildPagePreviewFocusedUrl(pagePreviewUrl, focusedBlockId);
     $: pagePreviewIframeSrc = buildPreviewIframeSrc(pagePreviewFocusedUrl, pagePreviewReloadToken);
@@ -1862,7 +1856,7 @@
         }
     }
 
-    function buildPagePreviewUrl(websiteSlug, pageSlug, languageCode = "") {
+    function buildPagePreviewUrl(websiteSlug, pageSlug, languageCode = "", pageRecord = null, websiteRecord = null) {
         const normalizedWebsiteSlug = normalizeString(websiteSlug);
         const normalizedPageSlug = normalizeString(pageSlug);
         const normalizedLanguageCode = normalizeLanguageCode(languageCode);
@@ -1880,7 +1874,7 @@
         }
 
         try {
-            const previewUrl = new URL(resolvePagePreviewPath(normalizedWebsiteSlug, normalizedPageSlug), `${baseUrl}/`);
+            const previewUrl = new URL(resolvePagePreviewPath(normalizedWebsiteSlug, normalizedPageSlug, pageRecord, websiteRecord), `${baseUrl}/`);
 
             if (normalizedLanguageCode) {
                 previewUrl.searchParams.set("lang", normalizedLanguageCode);
@@ -1894,21 +1888,81 @@
         }
     }
 
-    function resolvePagePreviewPath(websiteSlug, pageSlug) {
-        const mappedPath = getNuvioMarketingPreviewPath(websiteSlug, pageSlug);
-        if (mappedPath) {
-            return mappedPath;
+    function resolvePagePreviewPath(websiteSlug, pageSlug, pageRecord = null, websiteRecord = null) {
+        const pagePreviewPath = getPageRecordPreviewPath(pageRecord);
+        if (pagePreviewPath) {
+            return pagePreviewPath;
+        }
+
+        const websitePreviewPath = getWebsitePreviewRoutePath(websiteRecord, pageSlug);
+        if (websitePreviewPath) {
+            return websitePreviewPath;
         }
 
         return `/site/${encodeURIComponent(websiteSlug)}/${encodeURIComponent(pageSlug)}`;
     }
 
-    function getNuvioMarketingPreviewPath(websiteSlug, pageSlug) {
-        if (normalizeString(websiteSlug).toLowerCase() !== nuvioMarketingPreviewWebsiteSlug) {
+    function getPageRecordPreviewPath(record) {
+        if (!record) {
             return "";
         }
 
-        return nuvioMarketingPreviewPathByPageSlug[normalizeString(pageSlug).toLowerCase()] || "";
+        return normalizePreviewPath(
+            record.previewPath
+            ?? record.preview_path
+            ?? record.publicPath
+            ?? record.public_path
+            ?? record.routePath
+            ?? record.route_path,
+        );
+    }
+
+    function getWebsitePreviewRoutePath(record, pageSlug) {
+        const normalizedPageSlug = normalizeString(pageSlug);
+        if (!record || !normalizedPageSlug) {
+            return "";
+        }
+
+        const settings = getWebsiteSettingsFromRecord(record);
+        const routeMap = getPreviewRoutesMapFromSettings(settings);
+        if (!routeMap) {
+            return "";
+        }
+
+        const directPath = normalizePreviewPath(routeMap[normalizedPageSlug]);
+        if (directPath) {
+            return directPath;
+        }
+
+        return normalizePreviewPath(routeMap[normalizedPageSlug.toLowerCase()]);
+    }
+
+    function getPreviewRoutesMapFromSettings(settings) {
+        const rawRoutes = settings?.previewRoutes
+            ?? settings?.preview_routes
+            ?? settings?.previewPaths
+            ?? settings?.preview_paths;
+        if (!rawRoutes || typeof rawRoutes !== "object" || Array.isArray(rawRoutes)) {
+            return null;
+        }
+        return rawRoutes;
+    }
+
+    function normalizePreviewPath(value) {
+        const input = normalizeString(value);
+        if (!input || !input.startsWith("/") || input.startsWith("//") || input.includes("\\")) {
+            return "";
+        }
+
+        try {
+            const parsed = new URL(input, "https://nuvio-preview.local");
+            if (parsed.origin !== "https://nuvio-preview.local") {
+                return "";
+            }
+            return `${parsed.pathname || "/"}${parsed.search}${parsed.hash}`;
+        } catch (_) {
+            return "";
+        }
     }
 
     function getPageSeoPreviewPath(previewUrl, websiteSlug, pageSlug) {

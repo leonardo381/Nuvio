@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tests"
 )
@@ -22,6 +23,14 @@ func TestNuvioMarketingSeedFixtureContract(t *testing.T) {
 	}
 	if len(fixture.Components) != 17 {
 		t.Fatalf("expected 17 component definitions, got %d", len(fixture.Components))
+	}
+
+	expectedPreviewRoutes := map[string]string{"home": "/", "services": "/services", "pricing": "/pricing", "contact": "/contact"}
+	previewRoutes := nuvioMarketingSeedMapValue(fixture.Website.Settings["previewRoutes"])
+	for pageSlug, expectedPath := range expectedPreviewRoutes {
+		if previewRoutes[pageSlug] != expectedPath {
+			t.Fatalf("expected preview route %s=%q, got %q", pageSlug, expectedPath, previewRoutes[pageSlug])
+		}
 	}
 
 	expectedBlocks := map[string]int{"home": 9, "services": 6, "pricing": 4, "contact": 1}
@@ -59,6 +68,18 @@ func TestNuvioMarketingSeedAppliesIdempotentlyToCleanCMSCollections(t *testing.T
 	}
 	if stats.Created["Websites"] != 0 || stats.Created["Pages"] != 0 || stats.Created["Components"] != 0 || stats.Created["Blocks"] != 0 {
 		t.Fatalf("expected second apply to create no duplicate records, got: %#v", stats.Created)
+	}
+
+	website, err := app.FindFirstRecordByFilter(nuvioWebsitesCollectionID, "slug={:slug}", dbx.Params{"slug": "nuvio"})
+	if err != nil {
+		t.Fatalf("expected seeded Nuvio website: %v", err)
+	}
+	settings := nuvioMarketingSeedMapValue(website.Get("settings"))
+	previewRoutes := nuvioMarketingSeedMapValue(settings["previewRoutes"])
+	for pageSlug, expectedPath := range map[string]string{"home": "/", "services": "/services", "pricing": "/pricing", "contact": "/contact"} {
+		if previewRoutes[pageSlug] != expectedPath {
+			t.Fatalf("expected seeded preview route %s=%q, got %q", pageSlug, expectedPath, previewRoutes[pageSlug])
+		}
 	}
 
 	for _, pageSlug := range []string{"home", "services", "pricing", "contact"} {

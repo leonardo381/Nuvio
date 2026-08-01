@@ -16,6 +16,12 @@
         "managed": true,
         "ownerKey": "nuvio-marketing-cms-fixture",
         "version": 1
+      },
+      "previewRoutes": {
+        "home": "/",
+        "services": "/services",
+        "pricing": "/pricing",
+        "contact": "/contact"
       }
     }
   },

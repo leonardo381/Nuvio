@@ -3779,6 +3779,10 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 		}
 	}
 
+	if previewRoutes := sanitizeNuvioCMSDashboardPreviewRoutes(settings["previewRoutes"]); len(previewRoutes) > 0 {
+		dto["previewRoutes"] = previewRoutes
+	}
+
 	if reportsRaw, ok := toStringAnyMap(settings["reports"]); ok {
 		if analyticsRaw, ok := toStringAnyMap(reportsRaw["analytics"]); ok {
 			analytics := map[string]any{}
@@ -3823,6 +3827,39 @@ func buildNuvioCMSDashboardWebsiteSettingsDTO(rawSettings any, isAdmin bool) map
 	return dto
 }
 
+func sanitizeNuvioCMSDashboardPreviewRoutes(raw any) map[string]string {
+	rawRoutes, ok := toStringAnyMap(raw)
+	if !ok {
+		return map[string]string{}
+	}
+
+	routes := map[string]string{}
+	for rawSlug, rawPath := range rawRoutes {
+		pageSlug := strings.ToLower(strings.TrimSpace(rawSlug))
+		if pageSlug == "" || strings.ContainsAny(pageSlug, "/\\?#") {
+			continue
+		}
+		path := sanitizeNuvioCMSDashboardPreviewPath(rawPath)
+		if path == "" {
+			continue
+		}
+		routes[pageSlug] = path
+	}
+	return routes
+}
+
+func sanitizeNuvioCMSDashboardPreviewPath(raw any) string {
+	path := strings.TrimSpace(parseStringValue(raw))
+	if path == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.Contains(path, "\\") {
+		return ""
+	}
+	for _, char := range path {
+		if char < 0x20 || char == 0x7f {
+			return ""
+		}
+	}
+	return path
+}
 func sanitizeNuvioCMSDashboardEmailNotifications(raw any, includeRecipients bool) map[string]any {
 	notificationsRaw, ok := toStringAnyMap(raw)
 	if !ok {

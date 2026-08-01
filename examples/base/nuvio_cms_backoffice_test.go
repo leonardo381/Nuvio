@@ -3048,6 +3048,42 @@ func upsertNuvioCMSBackofficeWebsiteRecord(
 	}
 }
 
+func TestNuvioCMSDashboardWebsiteSettingsPreviewRoutesAreSanitized(t *testing.T) {
+	settings := map[string]any{
+		"previewRoutes": map[string]any{
+			"home":      "/",
+			"pricing":   "/pricing",
+			"bad/slash": "/bad",
+			"empty":     "",
+			"absolute":  "https://example.test/pricing",
+			"protocol":  "javascript:alert(1)",
+			"network":   "//example.test/pricing",
+			"backslash": "\\pricing",
+			"query":     "/contact?cmsPreview=1",
+		},
+	}
+
+	dto := buildNuvioCMSDashboardWebsiteSettingsDTO(settings, true)
+	routes, ok := dto["previewRoutes"].(map[string]string)
+	if !ok {
+		t.Fatalf("expected sanitized previewRoutes in dashboard settings DTO, got %#v", dto["previewRoutes"])
+	}
+
+	expected := map[string]string{
+		"home":    "/",
+		"pricing": "/pricing",
+		"query":   "/contact?cmsPreview=1",
+	}
+	if len(routes) != len(expected) {
+		t.Fatalf("expected %d safe preview routes, got %#v", len(expected), routes)
+	}
+	for pageSlug, expectedPath := range expected {
+		if routes[pageSlug] != expectedPath {
+			t.Fatalf("expected preview route %s=%q, got %q", pageSlug, expectedPath, routes[pageSlug])
+		}
+	}
+}
+
 func upsertNuvioCMSBackofficeRecord(
 	t testing.TB,
 	app *tests.TestApp,
