@@ -11,7 +11,7 @@ It covers:
 - the `nuvio-*` component definitions required by final-site strict mode;
 - all strict-required blocks for the four root marketing pages.
 
-The seed is intentionally narrow. It does not create arbitrary page-builder layouts, raw HTML fields, editor-controlled classes, secrets, or production data.
+The seed is intentionally narrow. It does not create arbitrary page-builder layouts, arbitrary raw HTML fields, editor-controlled classes, secrets, or production data.
 
 ## Source Of Truth
 
