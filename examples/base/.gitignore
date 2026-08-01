@@ -13,6 +13,7 @@
 !nuvio_reports.go
 !nuvio_leads_dashboard.go
 !nuvio_public_content.go
+!nuvio_trusted_markup.go
 !nuvio_marketing_seed.go
 !nuvio_backoffice_websites.go
 !nuvio_cms_backoffice.go
