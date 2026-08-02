@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -751,7 +752,7 @@ func registerNuvioCMSBackofficeRoutes(e *core.ServeEvent) {
 			return e.BadRequestError("At least one block content field is required.", nil)
 		}
 
-		if err := applyNuvioCMSBackofficeBlockPatch(blockRecord, blocksCollection, payload); err != nil {
+		if err := applyNuvioCMSBackofficeBlockPatch(e.App, blockRecord, blocksCollection, payload); err != nil {
 			return e.BadRequestError(err.Error(), nil)
 		}
 
@@ -932,6 +933,7 @@ func resolveNuvioCMSBackofficeBlockWriteTarget(e *core.RequestEvent) (*core.Coll
 }
 
 func applyNuvioCMSBackofficeBlockPatch(
+	app core.App,
 	blockRecord *core.Record,
 	blocksCollection *core.Collection,
 	payload map[string]any,
@@ -952,7 +954,7 @@ func applyNuvioCMSBackofficeBlockPatch(
 
 		switch normalizedKey {
 		case "props":
-			propsValue, err := normalizeNuvioCMSBackofficeBlockPropsValue(rawValue)
+			propsValue, err := normalizeNuvioCMSBackofficeBlockPropsValue(app, blockRecord, rawValue)
 			if err != nil {
 				return err
 			}
@@ -994,7 +996,7 @@ func setNuvioCMSBackofficeBlockValueField(
 	return nil
 }
 
-func normalizeNuvioCMSBackofficeBlockPropsValue(rawValue any) (map[string]any, error) {
+func normalizeNuvioCMSBackofficeBlockPropsValue(app core.App, blockRecord *core.Record, rawValue any) (map[string]any, error) {
 	if rawValue == nil {
 		return map[string]any{}, nil
 	}
@@ -1010,8 +1012,452 @@ func normalizeNuvioCMSBackofficeBlockPropsValue(rawValue any) (map[string]any, e
 	if err := validateNuvioCMSBackofficeBlockContentValue(propsMap, []string{"props"}); err != nil {
 		return nil, err
 	}
+	schema, err := resolveNuvioCMSBackofficeBlockComponentSchema(app, blockRecord)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateNuvioCMSBackofficeBlockPropsAgainstComponentSchema(propsMap, schema); err != nil {
+		return nil, err
+	}
 
 	return propsMap, nil
+}
+
+const nuvioCMSBackofficeBasicRichTextProfile = "basicRichText"
+
+var nuvioCMSBackofficeRawHTMLLikePattern = regexp.MustCompile(`(?i)<\s*/?\s*[a-z][a-z0-9:-]*(?:\s+[^<>]*)?/?>`)
+
+type nuvioCMSBackofficeComponentSchemaField struct {
+	Key             string
+	Type            string
+	Path            string
+	TrustedMarkup   bool
+	TrustedProfile  trustedMarkupProfile
+	RichText        bool
+	RichTextProfile string
+	Fields          []nuvioCMSBackofficeComponentSchemaField
+	ItemFields      []nuvioCMSBackofficeComponentSchemaField
+}
+
+func resolveNuvioCMSBackofficeBlockComponentSchema(app core.App, blockRecord *core.Record) (map[string]any, error) {
+	if app == nil || blockRecord == nil {
+		return nil, fmt.Errorf("Block component schema could not be resolved")
+	}
+
+	componentsCollection, err := findNuvioCMSDashboardCollectionByAliases(app, nuvioCMSDashboardComponentsCollectionAliases)
+	if err != nil {
+		return nil, fmt.Errorf("Block component schema could not be resolved")
+	}
+
+	componentRecord, err := findNuvioCMSBackofficeBlockComponentRecord(app, componentsCollection, blockRecord)
+	if err != nil {
+		return nil, err
+	}
+
+	schemaValue := normalizeNuvioPublicJSONValue(readNuvioCMSDashboardValueByAliases(componentRecord, []string{"schema"}))
+	schemaMap, ok := toStringAnyMap(schemaValue)
+	if !ok || len(schemaMap) == 0 {
+		return nil, fmt.Errorf("Block component schema is missing")
+	}
+	if rawFields, ok := schemaMap["fields"].([]any); !ok || len(rawFields) == 0 {
+		return nil, fmt.Errorf("Block component schema has no editable fields")
+	}
+
+	return schemaMap, nil
+}
+
+func findNuvioCMSBackofficeBlockComponentRecord(app core.App, componentsCollection *core.Collection, blockRecord *core.Record) (*core.Record, error) {
+	if app == nil || componentsCollection == nil || blockRecord == nil {
+		return nil, fmt.Errorf("Block component schema could not be resolved")
+	}
+
+	componentID := strings.TrimSpace(resolveNuvioPublicRelationID(blockRecord, "component"))
+	if componentID == "" {
+		if componentFieldName := resolveNuvioCollectionFieldNameByAliases(blockRecord.Collection(), []string{"component"}); componentFieldName != "" {
+			componentID = strings.TrimSpace(parseStringValue(blockRecord.Get(componentFieldName)))
+		}
+	}
+	if componentID != "" {
+		componentRecord, err := app.FindRecordById(componentsCollection.Id, componentID)
+		if err == nil {
+			return componentRecord, nil
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("Block component schema could not be resolved")
+		}
+	}
+
+	componentKey := strings.TrimSpace(parseNuvioCMSDashboardStringByAliases(blockRecord, []string{"component_key", "componentKey", "key"}))
+	if componentKey == "" {
+		return nil, fmt.Errorf("Block component key is missing")
+	}
+
+	filterParts := []string{}
+	for _, candidateField := range []string{"key", "component_key", "componentKey", "slug"} {
+		if resolveNuvioCollectionFieldNameByAliases(componentsCollection, []string{candidateField}) != "" {
+			filterParts = append(filterParts, candidateField+"={:componentKey}")
+		}
+	}
+	if len(filterParts) == 0 {
+		return nil, fmt.Errorf("Block component schema could not be resolved")
+	}
+
+	records, err := findNuvioCMSDashboardRecordsByFilter(
+		app,
+		componentsCollection,
+		strings.Join(filterParts, " || "),
+		dbx.Params{"componentKey": componentKey},
+		[]string{"+key,+component_key,+created", "+created"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("Block component schema could not be resolved")
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("Block component schema could not be resolved")
+	}
+	if len(records) > 1 {
+		return nil, fmt.Errorf("Block component schema is ambiguous")
+	}
+
+	return records[0], nil
+}
+
+func validateNuvioCMSBackofficeBlockPropsAgainstComponentSchema(props map[string]any, schema map[string]any) error {
+	if props == nil {
+		props = map[string]any{}
+	}
+	if schema == nil || len(schema) == 0 {
+		return fmt.Errorf("Block component schema is missing")
+	}
+	if value, ok := parseBoolValue(schema["rawHtml"]); ok && value {
+		return fmt.Errorf("Block component schema enables raw HTML")
+	}
+	if value, ok := parseBoolValue(schema["rawSvg"]); ok && value {
+		return fmt.Errorf("Block component schema enables raw SVG")
+	}
+
+	fields, err := parseNuvioCMSBackofficeComponentSchemaFields(schema["fields"], []string{"props"})
+	if err != nil {
+		return err
+	}
+	if len(fields) == 0 {
+		return fmt.Errorf("Block component schema has no editable fields")
+	}
+
+	return validateNuvioCMSBackofficePropsMapAgainstSchemaFields(props, fields, []string{"props"})
+}
+
+func parseNuvioCMSBackofficeComponentSchemaFields(rawFields any, parentPath []string) ([]nuvioCMSBackofficeComponentSchemaField, error) {
+	fieldsSlice, ok := rawFields.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%s schema fields are missing", formatNuvioCMSBackofficeBlockPath(parentPath))
+	}
+
+	fields := make([]nuvioCMSBackofficeComponentSchemaField, 0, len(fieldsSlice))
+	for _, rawField := range fieldsSlice {
+		fieldMap, ok := toStringAnyMap(normalizeNuvioPublicJSONValue(rawField))
+		if !ok || len(fieldMap) == 0 {
+			return nil, fmt.Errorf("%s contains an invalid schema field", formatNuvioCMSBackofficeBlockPath(parentPath))
+		}
+
+		key := strings.TrimSpace(parseStringValue(fieldMap["key"]))
+		if key == "" {
+			key = strings.TrimSpace(parseStringValue(fieldMap["name"]))
+		}
+		if key == "" {
+			return nil, fmt.Errorf("%s contains a schema field without key", formatNuvioCMSBackofficeBlockPath(parentPath))
+		}
+
+		fieldPath := appendNuvioCMSBackofficeBlockPathSegment(parentPath, key)
+		fieldType := strings.ToLower(strings.TrimSpace(parseStringValue(fieldMap["type"])))
+		if fieldType == "" {
+			fieldType = "text"
+		}
+		switch fieldType {
+		case "html", "rawhtml", "raw_html", "svg", "rawsvg", "raw_svg":
+			return nil, fmt.Errorf("%s uses an unsafe schema field type", formatNuvioCMSBackofficeBlockPath(fieldPath))
+		}
+
+		field := nuvioCMSBackofficeComponentSchemaField{
+			Key:  key,
+			Type: fieldType,
+			Path: formatNuvioCMSBackofficeBlockPath(fieldPath),
+		}
+
+		trusted, _ := parseBoolValue(fieldMap["trustedMarkup"])
+		profileValue := strings.TrimSpace(parseStringValue(fieldMap["profile"]))
+		if profileValue == "" {
+			profileValue = strings.TrimSpace(parseStringValue(fieldMap["trustedMarkupProfile"]))
+		}
+		if trusted {
+			profile, err := resolveNuvioCMSBackofficeTrustedMarkupProfileForField(key, profileValue)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", formatNuvioCMSBackofficeBlockPath(fieldPath), err)
+			}
+			if fieldType != "textarea" {
+				return nil, fmt.Errorf("%s trusted markup field must use textarea", formatNuvioCMSBackofficeBlockPath(fieldPath))
+			}
+			if err := validateNuvioCMSBackofficeTrustedMarkupIntendedUse(fieldMap, profile); err != nil {
+				return nil, fmt.Errorf("%s: %w", formatNuvioCMSBackofficeBlockPath(fieldPath), err)
+			}
+			field.TrustedMarkup = true
+			field.TrustedProfile = profile
+		} else if profileValue != "" {
+			return nil, fmt.Errorf("%s has trusted markup profile without trusted marker", formatNuvioCMSBackofficeBlockPath(fieldPath))
+		}
+
+		richText, _ := parseBoolValue(fieldMap["richText"])
+		richTextProfileValue := strings.TrimSpace(parseStringValue(fieldMap["richTextProfile"]))
+		if richText {
+			if err := validateNuvioCMSBackofficeRichTextProfileForField(key, richTextProfileValue); err != nil {
+				return nil, fmt.Errorf("%s: %w", formatNuvioCMSBackofficeBlockPath(fieldPath), err)
+			}
+			if fieldType != "textarea" {
+				return nil, fmt.Errorf("%s rich text field must use textarea", formatNuvioCMSBackofficeBlockPath(fieldPath))
+			}
+			field.RichText = true
+			field.RichTextProfile = richTextProfileValue
+		} else if richTextProfileValue != "" {
+			return nil, fmt.Errorf("%s has rich text profile without rich text marker", formatNuvioCMSBackofficeBlockPath(fieldPath))
+		}
+
+		if fieldType == "object" {
+			childFields, err := parseNuvioCMSBackofficeComponentSchemaFields(fieldMap["fields"], fieldPath)
+			if err != nil {
+				return nil, err
+			}
+			field.Fields = childFields
+		}
+
+		if fieldType == "array" {
+			itemMap, _ := toStringAnyMap(normalizeNuvioPublicJSONValue(fieldMap["item"]))
+			if len(itemMap) == 0 {
+				itemMap, _ = toStringAnyMap(normalizeNuvioPublicJSONValue(fieldMap["items"]))
+			}
+			if len(itemMap) > 0 && strings.ToLower(strings.TrimSpace(parseStringValue(itemMap["type"]))) == "object" {
+				childFields, err := parseNuvioCMSBackofficeComponentSchemaFields(itemMap["fields"], appendNuvioCMSBackofficeBlockPathSegment(fieldPath, "[]"))
+				if err != nil {
+					return nil, err
+				}
+				field.ItemFields = childFields
+			}
+		}
+
+		fields = append(fields, field)
+	}
+
+	return fields, nil
+}
+
+func validateNuvioCMSBackofficePropsMapAgainstSchemaFields(props map[string]any, fields []nuvioCMSBackofficeComponentSchemaField, path []string) error {
+	index := indexNuvioCMSBackofficeSchemaFields(fields)
+	keys := make([]string, 0, len(props))
+	for key := range props {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value := props[key]
+		childPath := appendNuvioCMSBackofficeBlockPathSegment(path, key)
+		field, ok := lookupNuvioCMSBackofficeSchemaField(index, key)
+		if !ok {
+			if err := validateNuvioCMSBackofficePlainPropsValue(value, childPath); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := validateNuvioCMSBackofficePropValueAgainstSchemaField(value, field, childPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateNuvioCMSBackofficePropValueAgainstSchemaField(value any, field nuvioCMSBackofficeComponentSchemaField, path []string) error {
+	if field.TrustedMarkup {
+		text, ok := value.(string)
+		if !ok {
+			if value == nil {
+				return nil
+			}
+			return fmt.Errorf("%s must be trusted markup text", formatNuvioCMSBackofficeBlockPath(path))
+		}
+		if strings.TrimSpace(text) == "" {
+			return nil
+		}
+		if err := validateTrustedMarkup(text, field.TrustedProfile); err != nil {
+			return fmt.Errorf("%s contains unsafe trusted markup", formatNuvioCMSBackofficeBlockPath(path))
+		}
+		return nil
+	}
+
+	if field.RichText {
+		text, ok := value.(string)
+		if !ok {
+			if value == nil {
+				return nil
+			}
+			return fmt.Errorf("%s must be rich text", formatNuvioCMSBackofficeBlockPath(path))
+		}
+		if err := validateNuvioCMSBackofficeBasicRichText(text); err != nil {
+			return fmt.Errorf("%s contains unsafe rich text", formatNuvioCMSBackofficeBlockPath(path))
+		}
+		return nil
+	}
+
+	if strings.EqualFold(field.Type, "object") && len(field.Fields) > 0 {
+		if value == nil {
+			return nil
+		}
+		valueMap, ok := toStringAnyMap(normalizeNuvioPublicJSONValue(value))
+		if !ok {
+			return validateNuvioCMSBackofficePlainPropsValue(value, path)
+		}
+		return validateNuvioCMSBackofficePropsMapAgainstSchemaFields(valueMap, field.Fields, path)
+	}
+
+	if strings.EqualFold(field.Type, "array") && len(field.ItemFields) > 0 {
+		items, ok := value.([]any)
+		if !ok {
+			return validateNuvioCMSBackofficePlainPropsValue(value, path)
+		}
+		for index, item := range items {
+			itemPath := appendNuvioCMSBackofficeBlockPathSegment(path, fmt.Sprintf("[%d]", index))
+			itemMap, ok := toStringAnyMap(normalizeNuvioPublicJSONValue(item))
+			if !ok {
+				if err := validateNuvioCMSBackofficePlainPropsValue(item, itemPath); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := validateNuvioCMSBackofficePropsMapAgainstSchemaFields(itemMap, field.ItemFields, itemPath); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return validateNuvioCMSBackofficePlainPropsValue(value, path)
+}
+
+func validateNuvioCMSBackofficePlainPropsValue(value any, path []string) error {
+	switch typed := value.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if err := validateNuvioCMSBackofficePlainPropsValue(typed[key], appendNuvioCMSBackofficeBlockPathSegment(path, key)); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for index, item := range typed {
+			if err := validateNuvioCMSBackofficePlainPropsValue(item, appendNuvioCMSBackofficeBlockPathSegment(path, fmt.Sprintf("[%d]", index))); err != nil {
+				return err
+			}
+		}
+	case string:
+		if containsNuvioCMSBackofficeRawHTMLLikeString(typed) {
+			return fmt.Errorf("%s contains raw HTML-like content", formatNuvioCMSBackofficeBlockPath(path))
+		}
+	}
+	return nil
+}
+
+func indexNuvioCMSBackofficeSchemaFields(fields []nuvioCMSBackofficeComponentSchemaField) map[string]nuvioCMSBackofficeComponentSchemaField {
+	index := map[string]nuvioCMSBackofficeComponentSchemaField{}
+	for _, field := range fields {
+		if strings.TrimSpace(field.Key) == "" {
+			continue
+		}
+		index[field.Key] = field
+		index[normalizeNuvioCMSBackofficePayloadKey(field.Key)] = field
+	}
+	return index
+}
+
+func lookupNuvioCMSBackofficeSchemaField(index map[string]nuvioCMSBackofficeComponentSchemaField, key string) (nuvioCMSBackofficeComponentSchemaField, bool) {
+	if field, ok := index[key]; ok {
+		return field, true
+	}
+	field, ok := index[normalizeNuvioCMSBackofficePayloadKey(key)]
+	return field, ok
+}
+
+func resolveNuvioCMSBackofficeTrustedMarkupProfileForField(key string, profileValue string) (trustedMarkupProfile, error) {
+	expectedProfile, expected := nuvioCMSBackofficeTrustedMarkupProfileForKey(key)
+	if !expected {
+		return "", fmt.Errorf("trusted markup is not allowed on this field")
+	}
+	profile := trustedMarkupProfile(strings.TrimSpace(profileValue))
+	if profile == "" {
+		return "", fmt.Errorf("trusted markup profile is missing")
+	}
+	if profile != expectedProfile {
+		return "", fmt.Errorf("trusted markup profile mismatch")
+	}
+	if _, ok := nuvioTrustedMarkupPolicies[profile]; !ok {
+		return "", fmt.Errorf("unknown trusted markup profile")
+	}
+	return profile, nil
+}
+
+func nuvioCMSBackofficeTrustedMarkupProfileForKey(key string) (trustedMarkupProfile, bool) {
+	switch strings.TrimSpace(key) {
+	case "trustedIconSvg":
+		return trustedIconSvg, true
+	case "trustedSvgIllustration":
+		return trustedSvgIllustration, true
+	case "trustedHtmlIllustration":
+		return trustedHtmlIllustration, true
+	default:
+		return "", false
+	}
+}
+
+func validateNuvioCMSBackofficeTrustedMarkupIntendedUse(field map[string]any, profile trustedMarkupProfile) error {
+	expected := "illustration"
+	if profile == trustedIconSvg {
+		expected = "icon"
+	}
+	if actual := strings.TrimSpace(parseStringValue(field["intendedUse"])); actual != expected {
+		return fmt.Errorf("trusted markup intended use must be %q", expected)
+	}
+	return nil
+}
+
+func validateNuvioCMSBackofficeRichTextProfileForField(key string, profileValue string) error {
+	if strings.TrimSpace(key) != "answer" {
+		return fmt.Errorf("rich text is not allowed on this field")
+	}
+	if strings.TrimSpace(profileValue) != nuvioCMSBackofficeBasicRichTextProfile {
+		return fmt.Errorf("unknown rich text profile")
+	}
+	return nil
+}
+
+func validateNuvioCMSBackofficeBasicRichText(value string) error {
+	return validateNuvioMarketingSeedRichText(value)
+}
+
+func containsNuvioCMSBackofficeRawHTMLLikeString(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	for _, fragment := range []string{"<script", "<iframe", "<style", "<object", "<embed", "<form", "<svg", "<math", "<img", "<video", "<audio", "<canvas", "</"} {
+		if strings.Contains(lower, fragment) {
+			return true
+		}
+	}
+	return nuvioCMSBackofficeRawHTMLLikePattern.MatchString(trimmed)
 }
 
 func normalizeNuvioCMSBackofficeBlockTranslationsValue(rawValue any) (any, error) {

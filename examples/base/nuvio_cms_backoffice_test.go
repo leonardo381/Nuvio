@@ -1988,7 +1988,7 @@ func TestNuvioCMSBackofficePageSEOEndpoint(t *testing.T) {
 	}
 }
 
-func TestNuvioCMSBackofficeBlockEndpoint(t *testing.T) {
+func TestNuvioCMSBackofficeBlockEndpointTrustedMarkupValidation(t *testing.T) {
 	t.Parallel()
 
 	overlongBlockURLValue := "https://example.test/" + strings.Repeat("a", nuvioCMSBackofficeURLMaxLen)
@@ -2293,6 +2293,226 @@ func TestNuvioCMSBackofficeBlockEndpoint(t *testing.T) {
 			},
 		},
 		{
+			Name:   "block endpoint accepts safe trusted markup props",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{
+					"trustedIconSvg":"<svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M3 8l3 3 7-7\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg>",
+					"trustedSvgIllustration":"<svg viewBox=\"0 0 120 80\" xmlns=\"http://www.w3.org/2000/svg\"><rect x=\"8\" y=\"8\" width=\"104\" height=\"64\" rx=\"12\" fill=\"none\" stroke=\"currentColor\"/><circle cx=\"36\" cy=\"40\" r=\"10\" fill=\"currentColor\" opacity=\"0.35\"/></svg>",
+					"trustedHtmlIllustration":"<div class=\"nuvio-signal\"><span>Signal</span><strong>Ready</strong></div>"
+				}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`"trustedIconSvg":`,
+				`"trustedSvgIllustration":`,
+				`"trustedHtmlIllustration":`,
+			},
+		},
+		{
+			Name:   "block endpoint accepts safe basic rich text props",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaOtherBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"items":[{"q":"Can formatting stay?","answer":"<p>Use <strong>bold</strong>, <em>italic</em>, and lists.</p><ul><li>Safe item</li></ul><p><a href=\"/contact\">Contact</a></p>"}]}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus: 200,
+			ExpectedContent: []string{
+				`"state":"ok"`,
+				`bold`,
+			},
+		},
+		{
+			Name:   "block endpoint rejects script in trusted markup field",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"trustedIconSvg":"<svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script><path d=\"M1 1h14v14H1z\"/></svg>"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint rejects event handler in trusted markup field",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"trustedSvgIllustration":"<svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\" onload=\"alert(1)\"><path d=\"M1 1h14v14H1z\"/></svg>"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint rejects iframe in trusted html illustration",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"trustedHtmlIllustration":"<div><iframe src=\"https://evil.example\"></iframe></div>"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint rejects malformed trusted SVG",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"trustedIconSvg":"<svg><path></svg>"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint rejects unsafe basic rich text",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaOtherBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"items":[{"q":"Unsafe?","answer":"<p><a href=\"javascript:alert(1)\">Bad</a></p>"}]}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint rejects HTML-like content in plain field",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"title":"<strong>Should not be raw HTML</strong>"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint rejects unknown trusted markup profile in schema",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"trustedIconSvg":"<svg viewBox=\"0 0 16 16\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M1 1h14v14H1z\"/></svg>"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				mutateNuvioCMSBackofficeComponentSchemaFieldForTest(t, app, nuvioCMSDashboardHeroComponentID, "trustedIconSvg", func(field map[string]any) {
+					field["profile"] = "unknownTrustedProfile"
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint rejects trusted metadata on non approved field",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"title":"Safe title"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				mutateNuvioCMSBackofficeComponentSchemaFieldForTest(t, app, nuvioCMSDashboardHeroComponentID, "title", func(field map[string]any) {
+					field["trustedMarkup"] = true
+					field["profile"] = "trustedIconSvg"
+					field["intendedUse"] = "icon"
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		},
+		{
+			Name:   "block endpoint fails closed when component schema is missing",
+			Method: http.MethodPatch,
+			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
+			Headers: map[string]string{
+				"Authorization": backofficeWebsitesTestSuperuserAuthToken,
+			},
+			Body: strings.NewReader(`{
+				"props":{"title":"Safe title"}
+			}`),
+			BeforeTestFunc: func(t testing.TB, app *tests.TestApp, e *core.ServeEvent) {
+				setupNuvioCMSBackofficeDashboardRoute(t, app, e)
+				seedNuvioCMSBackofficeDashboardData(t, app)
+				mutateNuvioCMSBackofficeComponentSchemaForTest(t, app, nuvioCMSDashboardHeroComponentID, func(schema map[string]any) {
+					delete(schema, "fields")
+				})
+				setNuvioBackofficeSuperuserRoleAndAccess(t, app, apis.SuperuserRoleAdmin, []string{nuvioCMSDashboardAlphaWebsiteID})
+			},
+			ExpectedStatus:  400,
+			ExpectedContent: []string{`"data":{}`},
+		}, {
 			Name:   "block endpoint rejects javascript href value",
 			Method: http.MethodPatch,
 			URL:    "/api/nuvio/cms/blocks/" + nuvioCMSDashboardAlphaBlockID,
@@ -2491,6 +2711,77 @@ func setupNuvioCMSBackofficeDashboardRoute(t testing.TB, app *tests.TestApp, e *
 	registerNuvioCMSBackofficeRoutes(e)
 }
 
+func mutateNuvioCMSBackofficeComponentSchemaForTest(
+	t testing.TB,
+	app *tests.TestApp,
+	componentID string,
+	mutate func(map[string]any),
+) {
+	t.Helper()
+
+	componentRecord, err := app.FindRecordById(nuvioComponentsCollectionID, componentID)
+	if err != nil {
+		t.Fatalf("failed to load component %s: %v", componentID, err)
+	}
+	schema, ok := toStringAnyMap(normalizeNuvioPublicJSONValue(componentRecord.Get("schema")))
+	if !ok {
+		t.Fatalf("expected component schema map for %s", componentID)
+	}
+	mutate(schema)
+	componentRecord.Set("schema", schema)
+	if saveErr := app.Save(componentRecord); saveErr != nil {
+		t.Fatalf("failed to save mutated component schema: %v", saveErr)
+	}
+}
+
+func mutateNuvioCMSBackofficeComponentSchemaFieldForTest(
+	t testing.TB,
+	app *tests.TestApp,
+	componentID string,
+	fieldKey string,
+	mutate func(map[string]any),
+) {
+	t.Helper()
+
+	mutateNuvioCMSBackofficeComponentSchemaForTest(t, app, componentID, func(schema map[string]any) {
+		field := findNuvioCMSBackofficeSchemaFieldForTest(schema["fields"], fieldKey)
+		if field == nil {
+			t.Fatalf("failed to find schema field %q for component %s", fieldKey, componentID)
+		}
+		mutate(field)
+	})
+}
+
+func findNuvioCMSBackofficeSchemaFieldForTest(rawFields any, fieldKey string) map[string]any {
+	fields, ok := rawFields.([]any)
+	if !ok {
+		return nil
+	}
+	for _, rawField := range fields {
+		field, ok := toStringAnyMap(normalizeNuvioPublicJSONValue(rawField))
+		if !ok || len(field) == 0 {
+			continue
+		}
+		key := strings.TrimSpace(parseStringValue(field["key"]))
+		if key == "" {
+			key = strings.TrimSpace(parseStringValue(field["name"]))
+		}
+		if key == fieldKey {
+			return field
+		}
+		if child := findNuvioCMSBackofficeSchemaFieldForTest(field["fields"], fieldKey); child != nil {
+			return child
+		}
+		item, _ := toStringAnyMap(normalizeNuvioPublicJSONValue(field["item"]))
+		if len(item) == 0 {
+			item, _ = toStringAnyMap(normalizeNuvioPublicJSONValue(field["items"]))
+		}
+		if child := findNuvioCMSBackofficeSchemaFieldForTest(item["fields"], fieldKey); child != nil {
+			return child
+		}
+	}
+	return nil
+}
 func injectNuvioCMSBackofficeHiddenSettings(t testing.TB, app *tests.TestApp, websiteID string) {
 	t.Helper()
 
@@ -2810,9 +3101,57 @@ func seedNuvioCMSBackofficeDashboardData(t testing.TB, app *tests.TestApp) {
 					"label": "Title",
 				},
 				map[string]any{
+					"key":   "description",
+					"type":  "textarea",
+					"label": "Description",
+				},
+				map[string]any{
 					"key":   "image",
 					"type":  "file",
 					"label": "Hero image",
+				},
+				map[string]any{
+					"key":           "trustedIconSvg",
+					"type":          "textarea",
+					"label":         "Trusted icon SVG",
+					"trustedMarkup": true,
+					"profile":       "trustedIconSvg",
+					"intendedUse":   "icon",
+				},
+				map[string]any{
+					"key":           "trustedSvgIllustration",
+					"type":          "textarea",
+					"label":         "Trusted SVG illustration",
+					"trustedMarkup": true,
+					"profile":       "trustedSvgIllustration",
+					"intendedUse":   "illustration",
+				},
+				map[string]any{
+					"key":           "trustedHtmlIllustration",
+					"type":          "textarea",
+					"label":         "Trusted HTML illustration",
+					"trustedMarkup": true,
+					"profile":       "trustedHtmlIllustration",
+					"intendedUse":   "illustration",
+				},
+				map[string]any{
+					"key":   "cta",
+					"type":  "object",
+					"label": "CTA",
+					"fields": []any{
+						map[string]any{"key": "label", "type": "text", "label": "Label"},
+						map[string]any{"key": "href", "type": "text", "label": "Link"},
+					},
+				},
+				map[string]any{
+					"key":   "hero",
+					"type":  "object",
+					"label": "Hero visual",
+					"fields": []any{
+						map[string]any{"key": "imageUrl", "type": "text", "label": "Image URL"},
+						map[string]any{"key": "backgroundImageUrl", "type": "text", "label": "Background image URL"},
+						map[string]any{"key": "embedUrl", "type": "text", "label": "Embed URL"},
+					},
 				},
 			},
 		},
@@ -2837,6 +3176,14 @@ func seedNuvioCMSBackofficeDashboardData(t testing.TB, app *tests.TestApp) {
 					"key":   "items",
 					"type":  "array",
 					"label": "FAQ items",
+					"item": map[string]any{
+						"type": "object",
+						"fields": []any{
+							map[string]any{"key": "q", "type": "text", "label": "Question"},
+							map[string]any{"key": "a", "type": "textarea", "label": "Short answer"},
+							map[string]any{"key": "answer", "type": "textarea", "label": "Answer", "richText": true, "richTextProfile": "basicRichText"},
+						},
+					},
 				},
 			},
 		},
