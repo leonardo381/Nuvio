@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -524,6 +525,12 @@ func validateNuvioMarketingSeedBlockProps(value any, path []string) error {
 			}
 			return nil
 		}
+		if _, richText := nuvioMarketingSeedRichTextProfileForPath(path); richText {
+			if err := validateNuvioMarketingSeedRichText(typed); err != nil {
+				return fmt.Errorf("%s: %w", strings.Join(path, "."), err)
+			}
+			return nil
+		}
 		if containsNuvioMarketingSeedRawHTMLLikeString(typed) {
 			return fmt.Errorf("%s contains raw HTML-like content", strings.Join(path, "."))
 		}
@@ -553,6 +560,131 @@ func containsNuvioMarketingSeedRawHTMLLikeString(value string) bool {
 	return strings.Contains(lower, "<script") || strings.Contains(lower, "<iframe") || strings.Contains(lower, "<style") || strings.Contains(lower, "</")
 }
 
+var nuvioMarketingSeedRichTextTagPattern = regexp.MustCompile("<\\s*(/?)\\s*([a-zA-Z][\\w:-]*)([^>]*)>")
+var nuvioMarketingSeedRichTextAttrPattern = regexp.MustCompile("([a-zA-Z_:][\\w:.-]*)(?:\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s\"'=<>]+))?")
+
+type nuvioMarketingSeedRichTextProfile string
+
+const basicNuvioMarketingSeedRichText nuvioMarketingSeedRichTextProfile = "basicRichText"
+
+func nuvioMarketingSeedRichTextProfileForPath(path []string) (nuvioMarketingSeedRichTextProfile, bool) {
+	if len(path) == 0 {
+		return "", false
+	}
+	return nuvioMarketingSeedRichTextProfileForKey(path[len(path)-1])
+}
+
+func nuvioMarketingSeedRichTextProfileForKey(key string) (nuvioMarketingSeedRichTextProfile, bool) {
+	if strings.TrimSpace(key) == "answer" {
+		return basicNuvioMarketingSeedRichText, true
+	}
+	return "", false
+}
+
+func validateNuvioMarketingSeedRichText(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	lower := strings.ToLower(trimmed)
+	for _, unsafe := range []string{"<script", "<style", "<iframe", "<object", "<embed", "<form", "<input", "<textarea", "<select", "<button", "<svg", "<math", "<img", "<video", "<audio", "<canvas", "javascript:", "data:", "vbscript:", " style="} {
+		if strings.Contains(lower, unsafe) {
+			return fmt.Errorf("rich text contains unsafe fragment")
+		}
+	}
+
+	allowedTags := map[string]string{"p": "p", "br": "br", "strong": "strong", "b": "strong", "em": "em", "i": "em", "ul": "ul", "ol": "ol", "li": "li", "a": "a"}
+	voidTags := map[string]bool{"br": true}
+	stack := []string{}
+	cursor := 0
+	matches := nuvioMarketingSeedRichTextTagPattern.FindAllStringSubmatchIndex(trimmed, -1)
+	for _, match := range matches {
+		if strings.Contains(trimmed[cursor:match[0]], "<") {
+			return fmt.Errorf("rich text contains malformed markup")
+		}
+		closing := strings.TrimSpace(trimmed[match[2]:match[3]]) != ""
+		tagName := strings.ToLower(trimmed[match[4]:match[5]])
+		attrs := ""
+		if match[6] >= 0 {
+			attrs = trimmed[match[6]:match[7]]
+		}
+		canonical, ok := allowedTags[tagName]
+		if !ok {
+			return fmt.Errorf("rich text tag <%s> is not allowed", tagName)
+		}
+		if closing {
+			if voidTags[canonical] {
+				return fmt.Errorf("rich text closing tag </%s> is not allowed", tagName)
+			}
+			if len(stack) == 0 || stack[len(stack)-1] != canonical {
+				return fmt.Errorf("rich text has mismatched closing tag </%s>", tagName)
+			}
+			stack = stack[:len(stack)-1]
+			cursor = match[1]
+			continue
+		}
+		selfClosing := strings.HasSuffix(strings.TrimSpace(attrs), "/") || voidTags[canonical]
+		if err := validateNuvioMarketingSeedRichTextAttrs(canonical, attrs); err != nil {
+			return err
+		}
+		if !selfClosing {
+			stack = append(stack, canonical)
+		}
+		cursor = match[1]
+	}
+	if strings.Contains(trimmed[cursor:], "<") {
+		return fmt.Errorf("rich text contains malformed markup")
+	}
+	if len(stack) > 0 {
+		return fmt.Errorf("rich text has unclosed tag <%s>", stack[len(stack)-1])
+	}
+	return nil
+}
+
+func validateNuvioMarketingSeedRichTextAttrs(tagName string, attrs string) error {
+	trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(attrs), "/"))
+	if trimmed == "" {
+		return nil
+	}
+	if tagName != "a" {
+		return fmt.Errorf("rich text tag <%s> cannot have attributes", tagName)
+	}
+	matches := nuvioMarketingSeedRichTextAttrPattern.FindAllStringSubmatch(trimmed, -1)
+	covered := ""
+	for _, match := range matches {
+		covered += match[0]
+		attrName := strings.ToLower(strings.TrimSpace(match[1]))
+		if attrName == "" || strings.HasPrefix(attrName, "on") || attrName == "style" || attrName == "class" || strings.HasPrefix(attrName, "data-") {
+			return fmt.Errorf("rich text contains unsafe link attribute")
+		}
+		if attrName != "href" && attrName != "title" && attrName != "target" && attrName != "rel" {
+			return fmt.Errorf("rich text link attribute %q is not allowed", attrName)
+		}
+		if attrName == "href" && len(match) > 2 {
+			value := strings.Trim(match[2], "\"'")
+			if !isSafeNuvioMarketingSeedRichTextHref(value) {
+				return fmt.Errorf("rich text link href is unsafe")
+			}
+		}
+		if attrName == "target" && len(match) > 2 && strings.Trim(match[2], "\"'") != "_blank" {
+			return fmt.Errorf("rich text link target is not allowed")
+		}
+	}
+	if strings.TrimSpace(strings.ReplaceAll(trimmed, covered, "")) != "" {
+		return fmt.Errorf("rich text contains malformed attributes")
+	}
+	return nil
+}
+
+func isSafeNuvioMarketingSeedRichTextHref(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	return strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "mailto:") || strings.HasPrefix(lower, "tel:")
+}
+
 func nuvioMarketingSeedTrustedMarkupProfileForPath(path []string) (trustedMarkupProfile, bool) {
 	if len(path) == 0 {
 		return "", false
@@ -566,6 +698,8 @@ func nuvioMarketingSeedTrustedMarkupProfileForKey(key string) (trustedMarkupProf
 		return trustedSvgIllustration, true
 	case "trustedHtmlIllustration":
 		return trustedHtmlIllustration, true
+	case "trustedIconSvg":
+		return trustedIconSvg, true
 	default:
 		return "", false
 	}
@@ -577,6 +711,7 @@ type nuvioMarketingSeedSchemaStats struct {
 	ArrayObjectItems    int
 	IconSelects         int
 	TrustedMarkupFields int
+	RichTextFields      int
 	Labels              map[string]bool
 }
 
@@ -638,12 +773,36 @@ func validateNuvioMarketingSeedSchemaFields(componentKey string, pathPrefix stri
 			if profileValue != string(trustedProfile) {
 				return fmt.Errorf("fixture trusted markup field profile mismatch: %s", fieldPath)
 			}
-			if strings.TrimSpace(fmt.Sprint(field["intendedUse"])) != "illustration" {
-				return fmt.Errorf("fixture trusted markup field must be illustration-only: %s", fieldPath)
+			expectedUse := "illustration"
+			if trustedProfile == trustedIconSvg {
+				expectedUse = "icon"
+			}
+			if strings.TrimSpace(fmt.Sprint(field["intendedUse"])) != expectedUse {
+				return fmt.Errorf("fixture trusted markup field has wrong intended use: %s", fieldPath)
 			}
 			stats.TrustedMarkupFields++
 		} else if field["trustedMarkup"] == true || profileValue != "" {
 			return fmt.Errorf("fixture trusted markup metadata on non-trusted field: %s", fieldPath)
+		}
+
+		richTextProfile, richText := nuvioMarketingSeedRichTextProfileForKey(key)
+		richTextProfileValue := ""
+		if rawRichTextProfile, ok := field["richTextProfile"]; ok {
+			richTextProfileValue = strings.TrimSpace(fmt.Sprint(rawRichTextProfile))
+		}
+		if richText {
+			if strings.ToLower(fieldType) != "textarea" {
+				return fmt.Errorf("fixture rich text field must use textarea: %s", fieldPath)
+			}
+			if field["richText"] != true {
+				return fmt.Errorf("fixture rich text field missing marker: %s", fieldPath)
+			}
+			if richTextProfileValue != string(richTextProfile) {
+				return fmt.Errorf("fixture rich text profile mismatch: %s", fieldPath)
+			}
+			stats.RichTextFields++
+		} else if field["richText"] == true || richTextProfileValue != "" {
+			return fmt.Errorf("fixture rich text metadata on non-rich-text field: %s", fieldPath)
 		}
 
 		if err := validateNuvioMarketingSeedProtectedSchemaPath(componentKey, fieldPath); err != nil {
@@ -707,8 +866,11 @@ func validateNuvioMarketingSeedSchemaStats(stats nuvioMarketingSeedSchemaStats) 
 	if stats.IconSelects < 1 {
 		return errors.New("fixture schema did not preserve icon select fields")
 	}
-	if stats.TrustedMarkupFields != 3 {
-		return fmt.Errorf("fixture schema expected 3 trusted markup fields, got %d", stats.TrustedMarkupFields)
+	if stats.TrustedMarkupFields < 3 {
+		return fmt.Errorf("fixture schema expected trusted markup fields, got %d", stats.TrustedMarkupFields)
+	}
+	if stats.RichTextFields < 1 {
+		return errors.New("fixture schema did not preserve rich text fields")
 	}
 	for _, label := range []string{"Section label", "Title", "Highlighted words", "Subtitle", "Primary button text", "Primary button link", "Icon", "Image", "Image description"} {
 		if !stats.Labels[label] {

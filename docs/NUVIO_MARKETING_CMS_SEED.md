@@ -11,7 +11,7 @@ It covers:
 - the `nuvio-*` component definitions required by final-site strict mode;
 - all strict-required blocks for the four root marketing pages.
 
-The seed is intentionally narrow. It does not create arbitrary page-builder layouts, arbitrary raw HTML fields, editor-controlled classes, secrets, or production data. Reviewed illustration fields may use explicit Trusted Markup schema metadata only.
+The seed is intentionally narrow. It does not create arbitrary page-builder layouts, arbitrary raw HTML fields, editor-controlled classes, secrets, or production data. Reviewed icon and illustration fields may use explicit Trusted Markup schema metadata only. FAQ answer fields may use narrow rich text metadata for bold, italic, lists, and safe links.
 
 ## Source Of Truth
 
@@ -22,7 +22,7 @@ cd C:\Users\Leo\Documents\Nuvio\Sites\Nuvio-CalmEditorialV2
 npm run export:marketing-cms-fixture -- --out C:\Users\Leo\Documents\Nuvio\NuvioCMS\Nuvio\examples\base\fixtures\nuvio_marketing_cms_fixture.json
 ```
 
-The exporter validates the pricing lock, rejects unsafe raw-HTML-like content outside Trusted Markup fields, validates trusted illustration markup, and keeps Contact mechanics out of CMS props.
+The exporter validates the pricing lock, rejects unsafe raw-HTML-like content outside Trusted Markup and narrow rich text fields, validates trusted icon/illustration markup, and keeps Contact mechanics out of CMS props.
 ## Preview Route Metadata
 
 Backoffice preview routes are data-driven.

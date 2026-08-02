@@ -611,7 +611,7 @@
             "type": "textarea",
             "required": false,
             "group": "Illustration",
-            "hint": "Trusted illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
             "trustedMarkup": true,
             "profile": "trustedHtmlIllustration",
             "intendedUse": "illustration",
@@ -796,7 +796,7 @@
                       "type": "select",
                       "required": false,
                       "group": "Public website card",
-                      "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                      "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                       "options": {
                         "values": [
                           {
@@ -844,6 +844,20 @@
                             "label": "Refund"
                           }
                         ]
+                      }
+                    },
+                    {
+                      "key": "trustedIconSvg",
+                      "label": "Trusted icon markup",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Icon",
+                      "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                      "trustedMarkup": true,
+                      "profile": "trustedIconSvg",
+                      "intendedUse": "icon",
+                      "options": {
+                        "rows": 8
                       }
                     },
                     {
@@ -937,7 +951,7 @@
                       "type": "select",
                       "required": false,
                       "group": "Backoffice card",
-                      "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                      "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                       "options": {
                         "values": [
                           {
@@ -985,6 +999,20 @@
                             "label": "Refund"
                           }
                         ]
+                      }
+                    },
+                    {
+                      "key": "trustedIconSvg",
+                      "label": "Trusted icon markup",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Icon",
+                      "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                      "trustedMarkup": true,
+                      "profile": "trustedIconSvg",
+                      "intendedUse": "icon",
+                      "options": {
+                        "rows": 8
                       }
                     },
                     {
@@ -1356,7 +1384,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -1404,6 +1432,20 @@
                         "label": "Refund"
                       }
                     ]
+                  }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
                   }
                 },
                 {
@@ -1474,7 +1516,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -1522,6 +1564,20 @@
                         "label": "Refund"
                       }
                     ]
+                  }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
                   }
                 },
                 {
@@ -1612,9 +1668,11 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Pricing copy",
-                  "hint": "Pricing values and refund limits are protected by the site contract.",
+                  "hint": "Rich text allowed: bold, italic, lists, and safe links only. Layout stays code-owned by Nuvio.",
+                  "richText": true,
+                  "richTextProfile": "basicRichText",
                   "options": {
-                    "rows": 4
+                    "rows": 5
                   }
                 }
               ]
@@ -1827,7 +1885,7 @@
             "type": "textarea",
             "required": false,
             "group": "Illustration",
-            "hint": "Trusted illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
             "trustedMarkup": true,
             "profile": "trustedSvgIllustration",
             "intendedUse": "illustration",
@@ -2216,7 +2274,7 @@
                       "type": "select",
                       "required": false,
                       "group": "Pricing copy",
-                      "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                      "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                       "options": {
                         "values": [
                           {
@@ -2264,6 +2322,20 @@
                             "label": "Refund"
                           }
                         ]
+                      }
+                    },
+                    {
+                      "key": "trustedIconSvg",
+                      "label": "Trusted icon markup",
+                      "type": "textarea",
+                      "required": false,
+                      "group": "Icon",
+                      "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                      "trustedMarkup": true,
+                      "profile": "trustedIconSvg",
+                      "intendedUse": "icon",
+                      "options": {
+                        "rows": 8
                       }
                     },
                     {
@@ -2425,7 +2497,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -2473,6 +2545,20 @@
                         "label": "Refund"
                       }
                     ]
+                  }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
                   }
                 },
                 {
@@ -2548,7 +2634,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -2596,6 +2682,20 @@
                         "label": "Refund"
                       }
                     ]
+                  }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
                   }
                 },
                 {
@@ -2744,7 +2844,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -2792,6 +2892,20 @@
                         "label": "Refund"
                       }
                     ]
+                  }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
                   }
                 },
                 {
@@ -3003,7 +3117,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -3052,6 +3166,20 @@
                       }
                     ]
                   }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
+                  }
                 }
               ]
             },
@@ -3063,7 +3191,7 @@
             "type": "textarea",
             "required": false,
             "group": "Illustration",
-            "hint": "Trusted illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
             "trustedMarkup": true,
             "profile": "trustedSvgIllustration",
             "intendedUse": "illustration",
@@ -3428,7 +3556,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -3476,6 +3604,20 @@
                         "label": "Refund"
                       }
                     ]
+                  }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
                   }
                 },
                 {
@@ -3586,7 +3728,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Decorative motif shapes stay code-owned.",
+                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -3634,6 +3776,20 @@
                         "label": "Refund"
                       }
                     ]
+                  }
+                },
+                {
+                  "key": "trustedIconSvg",
+                  "label": "Trusted icon markup",
+                  "type": "textarea",
+                  "required": false,
+                  "group": "Icon",
+                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "trustedMarkup": true,
+                  "profile": "trustedIconSvg",
+                  "intendedUse": "icon",
+                  "options": {
+                    "rows": 8
                   }
                 },
                 {
@@ -3769,18 +3925,22 @@
             "items": [
               {
                 "icon": "clarity",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
                 "text": "Get found online"
               },
               {
                 "icon": "presence",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
                 "text": "Look professional"
               },
               {
                 "icon": "control",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
                 "text": "Stay in control"
               },
               {
                 "icon": "improve",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                 "text": "Keep improving"
               }
             ]
@@ -3821,16 +3981,19 @@
               "points": [
                 {
                   "icon": "clarity",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
                   "title": "Clear services",
                   "text": "People understand what you offer quickly."
                 },
                 {
                   "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                   "title": "Easy contact",
                   "text": "Calls, messages, forms, and bookings stay visible."
                 },
                 {
                   "icon": "mobile",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"8\" y=\"4.2\" width=\"8\" height=\"15.6\" rx=\"2.2\"></rect><path d=\"M10.5 7h3\"></path><path d=\"M11.2 17h1.6\"></path></svg>",
                   "title": "Mobile-ready",
                   "text": "Phone visitors see the same next step."
                 }
@@ -3847,16 +4010,19 @@
               "callouts": [
                 {
                   "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                   "label": "Update key content",
                   "text": "Services, pages, and key details stay editable."
                 },
                 {
                   "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                   "label": "Review contacts",
                   "text": "Contact requests stay easy to review."
                 },
                 {
                   "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                   "label": "Follow reports",
                   "text": "Monthly signals stay visible."
                 }
@@ -3879,26 +4045,31 @@
             "items": [
               {
                 "icon": "clarity",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
                 "title": "People struggle to find you",
                 "text": "Even good businesses get missed when presence is weak."
               },
               {
                 "icon": "presence",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
                 "title": "The business looks less trustworthy",
                 "text": "Customers compare fast. The clearer business feels safer."
               },
               {
                 "icon": "message",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                 "title": "Contact options are not obvious",
                 "text": "Calls, forms, WhatsApp, and bookings should be obvious."
               },
               {
                 "icon": "control",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
                 "title": "Small updates take too long",
                 "text": "Services, hours, photos, and key details should stay current."
               },
               {
                 "icon": "improve",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                 "title": "You cannot see what to improve",
                 "text": "Without reports, activity stays hidden and improvements become guesswork."
               }
@@ -3936,6 +4107,7 @@
                 "id": "content",
                 "label": "Content",
                 "icon": "layout",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                 "title": "Edit key content",
                 "detail": "Services, opening hours, contact details",
                 "image": "/backoffice/cms.png",
@@ -3945,6 +4117,7 @@
                 "id": "leads",
                 "label": "Leads & bookings",
                 "icon": "message",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                 "title": "Follow leads and bookings",
                 "detail": "Contacts, bookings, follow-up",
                 "image": "/backoffice/leads.png",
@@ -3954,6 +4127,7 @@
                 "id": "newsletter",
                 "label": "Newsletter",
                 "icon": "support",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
                 "title": "Manage newsletter activity",
                 "detail": "Subscribers, sends, signups",
                 "image": "/backoffice/newsletter.png",
@@ -3963,6 +4137,7 @@
                 "id": "reports",
                 "label": "Reports",
                 "icon": "improve",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                 "title": "Review reports",
                 "detail": "Visits, top pages, contact clicks",
                 "image": "/backoffice/reports.png",
@@ -3973,31 +4148,37 @@
               {
                 "title": "Hosting and maintenance",
                 "icon": "support",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
                 "description": "Online, updated, and stable."
               },
               {
                 "title": "Backoffice setup",
                 "icon": "control",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
                 "description": "Setup and small fixes stay handled."
               },
               {
                 "title": "Contact path checks",
                 "icon": "message",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                 "description": "Forms, calls, WhatsApp, or bookings stay clear."
               },
               {
                 "title": "Local and search foundations",
                 "icon": "map",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.5 6.2l4.2-1.7 6.6 2.8 4.2-1.7v12.2l-4.2 1.7-6.6-2.8-4.2 1.7V6.2z\"></path><path d=\"M8.7 4.5v12.2\"></path><path d=\"M15.3 7.3v12.2\"></path></svg>",
                 "description": "Search basics stay aligned."
               },
               {
                 "title": "Content support",
                 "icon": "layout",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                 "description": "Small updates stay supported."
               },
               {
                 "title": "Reports and improvements",
                 "icon": "improve",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                 "description": "Useful signals guide improvements."
               }
             ]
@@ -4027,21 +4208,25 @@
             "steps": [
               {
                 "icon": "message",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                 "title": "Share your business",
                 "description": "Services, location, current profile, and preferred contact path."
               },
               {
                 "icon": "layout",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                 "title": "Receive your plan",
                 "description": "Recommended pages, contact options, Google profile, controls, and support."
               },
               {
                 "icon": "scope",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6.5 5.5h11v13h-11z\"></path><path d=\"M9 9h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 15h3.8\"></path><path d=\"M5 7.5h3\"></path><path d=\"M5 12h3\"></path><path d=\"M5 16.5h3\"></path></svg>",
                 "title": "Review scope and pricing",
                 "description": "Setup fee, monthly service, refund terms, and inclusions."
               },
               {
                 "icon": "improve",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                 "title": "Approve the first version",
                 "description": "After approval, Nuvio builds and launches the first version."
               }
@@ -4151,19 +4336,23 @@
             "outputItems": [
               {
                 "title": "Pages",
-                "icon": "layout"
+                "icon": "layout",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>"
               },
               {
                 "title": "Contact paths",
-                "icon": "message"
+                "icon": "message",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>"
               },
               {
                 "title": "Backoffice",
-                "icon": "control"
+                "icon": "control",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>"
               },
               {
                 "title": "Monthly reports",
-                "icon": "improve"
+                "icon": "improve",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>"
               }
             ],
             "trustedSvgIllustration": "<svg class=\"diagram-trusted-illustration\" viewBox=\"0 0 220 150\" xmlns=\"http://www.w3.org/2000/svg\" role=\"presentation\"><path class=\"diagram-main-flow\" d=\"M10 76 C62 20 158 20 210 76\"></path><path class=\"diagram-soft-flow\" d=\"M10 76 C62 130 158 130 210 76\"></path><path class=\"diagram-support-flow\" d=\"M122 98 C150 112 166 126 188 137\"></path><circle class=\"diagram-node\" cx=\"10\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node\" cx=\"210\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"122\" cy=\"98\" r=\"3.5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"188\" cy=\"137\" r=\"3.5\"></circle></svg>"
@@ -4184,21 +4373,25 @@
             "steps": [
               {
                 "icon": "presence",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
                 "title": "Share context",
                 "text": "Share what exists and what customers need."
               },
               {
                 "icon": "map",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.5 6.2l4.2-1.7 6.6 2.8 4.2-1.7v12.2l-4.2 1.7-6.6-2.8-4.2 1.7V6.2z\"></path><path d=\"M8.7 4.5v12.2\"></path><path d=\"M15.3 7.3v12.2\"></path></svg>",
                 "title": "Map the plan",
                 "text": "We define pages, contact paths, and scope."
               },
               {
                 "icon": "layout",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                 "title": "Build the first version",
                 "text": "Nuvio turns the plan into a working first version."
               },
               {
                 "icon": "support",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
                 "title": "Manage after launch",
                 "text": "Hosting, updates, reports, and support stay covered."
               }
@@ -4264,21 +4457,25 @@
             "outputLayers": [
               {
                 "icon": "layout",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                 "title": "Website structure",
                 "text": "Pages, navigation, and launch priorities."
               },
               {
                 "icon": "message",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                 "title": "Contact paths",
                 "text": "Calls, forms, WhatsApp, booking, or quote routes."
               },
               {
                 "icon": "control",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
                 "title": "Backoffice controls",
                 "text": "Editable content, contacts, and reports."
               },
               {
                 "icon": "support",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
                 "title": "Managed support",
                 "text": "Hosting, updates, and small improvements."
               }
@@ -4336,21 +4533,25 @@
             "items": [
               {
                 "icon": "improve",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                 "title": "Monthly reports",
                 "text": "Activity, top pages, and contact signals."
               },
               {
                 "icon": "scope",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6.5 5.5h11v13h-11z\"></path><path d=\"M9 9h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 15h3.8\"></path><path d=\"M5 7.5h3\"></path><path d=\"M5 12h3\"></path><path d=\"M5 16.5h3\"></path></svg>",
                 "title": "Small improvements",
                 "text": "Useful details improve over time."
               },
               {
                 "icon": "clarity",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
                 "title": "Technical stability",
                 "text": "Hosting, maintenance, and fixes stay handled."
               },
               {
                 "icon": "support",
+                "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
                 "title": "Content support",
                 "text": "Service and contact updates stay easier."
               }
@@ -4569,26 +4770,31 @@
               "items": [
                 {
                   "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                   "title": "Website structure",
                   "body": "Pages planned before build."
                 },
                 {
                   "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
                   "title": "Contact paths",
                   "body": "Calls, forms, WhatsApp, or booking requests."
                 },
                 {
                   "icon": "control",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
                   "title": "Backoffice controls",
                   "body": "Essential content and contact activity."
                 },
                 {
                   "icon": "support",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
                   "title": "Managed technical side",
                   "body": "Hosting, maintenance, support."
                 },
                 {
                   "icon": "clarity",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
                   "title": "Monthly reports",
                   "body": "Useful activity signals after launch."
                 }

@@ -61,6 +61,61 @@ func TestNuvioMarketingSeedRejectsUnsafeTrustedMarkup(t *testing.T) {
 		t.Fatal("expected unsafe trusted markup fixture to be rejected")
 	}
 }
+func TestNuvioMarketingSeedRejectsUnsafeTrustedIconMarkup(t *testing.T) {
+	fixture, err := loadNuvioMarketingSeedFixture("")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	homePage := findNuvioMarketingSeedPage(fixture, "home")
+	if homePage == nil {
+		t.Fatal("expected home page fixture")
+	}
+	block := findNuvioMarketingSeedBlock(*homePage, "nuvio-reassurance-rail")
+	if block == nil {
+		t.Fatal("expected reassurance rail block")
+	}
+	items, ok := block.Props["items"].([]any)
+	if !ok || len(items) == 0 {
+		t.Fatal("expected reassurance rail items")
+	}
+	item := nuvioMarketingSeedMapValue(items[0])
+	item["trustedIconSvg"] = `<svg><script>alert(1)</script></svg>`
+
+	if err := validateNuvioMarketingSeedFixture(fixture); err == nil {
+		t.Fatal("expected unsafe trusted icon markup fixture to be rejected")
+	}
+}
+
+func TestNuvioMarketingSeedAllowsSafeRichTextAndRejectsUnsafeRichText(t *testing.T) {
+	fixture, err := loadNuvioMarketingSeedFixture("")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+
+	pricingPage := findNuvioMarketingSeedPage(fixture, "pricing")
+	if pricingPage == nil {
+		t.Fatal("expected pricing page fixture")
+	}
+	faqBlock := findNuvioMarketingSeedBlock(*pricingPage, "nuvio-pricing-faq")
+	if faqBlock == nil {
+		t.Fatal("expected pricing FAQ block")
+	}
+	items, ok := faqBlock.Props["items"].([]any)
+	if !ok || len(items) == 0 {
+		t.Fatal("expected FAQ items")
+	}
+	item := nuvioMarketingSeedMapValue(items[0])
+	item["answer"] = `<p><strong>Bold</strong> and <em>italic</em></p>`
+	if err := validateNuvioMarketingSeedFixture(fixture); err != nil {
+		t.Fatalf("expected safe rich text answer to pass: %v", err)
+	}
+	item["answer"] = `<p onclick="alert(1)">Bad</p>`
+	if err := validateNuvioMarketingSeedFixture(fixture); err == nil {
+		t.Fatal("expected unsafe rich text answer to be rejected")
+	}
+}
+
 func TestNuvioMarketingSeedAppliesIdempotentlyToCleanCMSCollections(t *testing.T) {
 	app, err := tests.NewTestApp()
 	if err != nil {

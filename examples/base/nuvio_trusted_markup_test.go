@@ -58,6 +58,48 @@ func TestTrustedMarkupSVGRejectsUnsafeContent(t *testing.T) {
 	}
 }
 
+func TestTrustedMarkupIconSVGAllowsStaticIcon(t *testing.T) {
+	t.Parallel()
+
+	input := `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 12 C8 4 16 4 20 12"></path><circle cx="18" cy="12" r="2"></circle></svg>`
+
+	clean, report, err := sanitizeTrustedMarkup(input, trustedIconSvg)
+	if err != nil {
+		t.Fatalf("expected safe trusted icon SVG to pass, got %v", err)
+	}
+	if !report.Valid {
+		t.Fatalf("expected report to be valid: %#v", report)
+	}
+	for _, fragment := range []string{"<svg", "<path", "<circle"} {
+		if !strings.Contains(clean, fragment) {
+			t.Fatalf("expected sanitized icon SVG to contain %q, got: %s", fragment, clean)
+		}
+	}
+	assertNoTrustedMarkupUnsafeFragments(t, clean)
+}
+
+func TestTrustedMarkupIconSVGRejectsUnsafeContent(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`<svg onload="alert(1)"><path d="M0 0"></path></svg>`,
+		`<svg><script>alert(1)</script></svg>`,
+		`<svg><foreignObject><div>bad</div></foreignObject></svg>`,
+		`<svg><image href="https://evil.test/a.png"></image></svg>`,
+		`<div><svg><path></path></svg></div>`,
+	}
+
+	for _, input := range cases {
+		clean, report, err := sanitizeTrustedMarkup(input, trustedIconSvg)
+		if err == nil || !errors.Is(err, errNuvioTrustedMarkupUnsafe) {
+			t.Fatalf("expected unsafe icon SVG to fail closed for %s, got clean=%q report=%#v err=%v", input, clean, report, err)
+		}
+		if clean != "" {
+			t.Fatalf("expected unsafe icon SVG to return empty clean markup, got: %s", clean)
+		}
+	}
+}
+
 func TestTrustedMarkupHTMLAllowsLimitedVisualMarkup(t *testing.T) {
 	t.Parallel()
 
@@ -117,6 +159,7 @@ func TestTrustedMarkupFailsClosedOnMalformedMarkup(t *testing.T) {
 		input   string
 	}{
 		{trustedSvgIllustration, `<svg><path></svg>`},
+		{trustedIconSvg, `<svg><path></svg>`},
 		{trustedHtmlIllustration, `<div><span></div>`},
 		{trustedSvgIllustration, `<g><path></path></g>`},
 		{trustedHtmlIllustration, `plain text only`},

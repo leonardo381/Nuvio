@@ -17,6 +17,7 @@ type trustedMarkupProfile string
 const (
 	trustedSvgIllustration  trustedMarkupProfile = "trustedSvgIllustration"
 	trustedHtmlIllustration trustedMarkupProfile = "trustedHtmlIllustration"
+	trustedIconSvg          trustedMarkupProfile = "trustedIconSvg"
 )
 
 type trustedMarkupValidationReport struct {
@@ -44,6 +45,20 @@ var errNuvioTrustedMarkupUnsafe = errors.New("trusted markup is not safe")
 
 var nuvioTrustedMarkupPolicies = map[trustedMarkupProfile]trustedMarkupPolicy{
 	trustedSvgIllustration: {
+		AllowedTags: trustedMarkupCanonicalMap(
+			"svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+			"defs", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "title", "desc",
+		),
+		AllowedAttributes: trustedMarkupCanonicalMap(
+			"viewBox", "width", "height", "xmlns", "d", "x", "y", "x1", "y1", "x2", "y2",
+			"cx", "cy", "r", "rx", "ry", "points", "fill", "stroke", "stroke-width", "stroke-linecap",
+			"stroke-linejoin", "opacity", "fill-opacity", "stroke-opacity", "transform", "id", "class", "role",
+			"focusable", "preserveAspectRatio", "gradientUnits", "offset", "stop-color", "stop-opacity", "clip-path", "mask",
+		),
+		RequiredRootTag: "svg",
+		SingleRoot:      true,
+	},
+	trustedIconSvg: {
 		AllowedTags: trustedMarkupCanonicalMap(
 			"svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
 			"defs", "linearGradient", "radialGradient", "stop", "clipPath", "mask", "title", "desc",
@@ -157,7 +172,7 @@ func sanitizeTrustedMarkup(input string, profile trustedMarkupProfile) (string, 
 			if len(stack) == 0 {
 				return "", report, addTrustedMarkupError(&report, "text outside trusted markup elements is not allowed")
 			}
-			if profile == trustedSvgIllustration {
+			if profile == trustedSvgIllustration || profile == trustedIconSvg {
 				parentTag := strings.ToLower(stack[len(stack)-1])
 				if parentTag != "title" && parentTag != "desc" {
 					return "", report, addTrustedMarkupError(&report, "visible SVG text is not allowed in trusted illustration markup")
