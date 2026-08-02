@@ -571,6 +571,10 @@ func nuvioMarketingSeedRichTextProfileForPath(path []string) (nuvioMarketingSeed
 	if len(path) == 0 {
 		return "", false
 	}
+	joinedPath := strings.Join(path, ".")
+	if joinedPath == "home.hero.props.support" || joinedPath == "nuvio-home-hero.support" {
+		return basicNuvioMarketingSeedRichText, true
+	}
 	return nuvioMarketingSeedRichTextProfileForKey(path[len(path)-1])
 }
 
@@ -785,7 +789,7 @@ func validateNuvioMarketingSeedSchemaFields(componentKey string, pathPrefix stri
 			return fmt.Errorf("fixture trusted markup metadata on non-trusted field: %s", fieldPath)
 		}
 
-		richTextProfile, richText := nuvioMarketingSeedRichTextProfileForKey(key)
+		richTextProfile, richText := nuvioMarketingSeedRichTextProfileForPath(strings.Split(fieldPath, "."))
 		richTextProfileValue := ""
 		if rawRichTextProfile, ok := field["richTextProfile"]; ok {
 			richTextProfileValue = strings.TrimSpace(fmt.Sprint(rawRichTextProfile))

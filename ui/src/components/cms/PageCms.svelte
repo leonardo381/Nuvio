@@ -4712,12 +4712,12 @@
                 [blockId]: err?.response?.message || err?.message || "We could not save this section. Please try again.",
             };
             addErrorToast("We could not save this section. Please try again.");
+        } finally {
+            isSavingSectionById = {
+                ...isSavingSectionById,
+                [blockId]: false,
+            };
         }
-
-        isSavingSectionById = {
-            ...isSavingSectionById,
-            [blockId]: false,
-        };
     }
 
     async function handleWebsiteChange(event) {

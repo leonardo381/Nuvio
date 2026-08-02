@@ -1203,9 +1203,11 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Rich text allowed: bold, italic, lists, and safe links only. Layout stays code-owned by Nuvio.",
+            "richText": true,
+            "richTextProfile": "basicRichText",
             "options": {
-              "rows": 4
+              "rows": 5
             }
           },
           {
