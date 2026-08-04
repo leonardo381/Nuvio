@@ -595,17 +595,6 @@
             ]
           },
           {
-            "key": "pages",
-            "label": "Page labels",
-            "type": "array",
-            "required": false,
-            "group": "Content",
-            "item": {
-              "type": "text"
-            },
-            "itemLabel": "Page"
-          },
-          {
             "key": "trustedHtmlIllustration",
             "label": "Trusted illustration markup",
             "type": "textarea",
@@ -618,6 +607,17 @@
             "options": {
               "rows": 8
             }
+          },
+          {
+            "key": "pages",
+            "label": "Page labels",
+            "type": "array",
+            "required": false,
+            "group": "Content",
+            "item": {
+              "type": "text"
+            },
+            "itemLabel": "Page"
           }
         ]
       }
@@ -1374,13 +1374,6 @@
               "type": "object",
               "fields": [
                 {
-                  "key": "label",
-                  "label": "Label",
-                  "type": "text",
-                  "required": false,
-                  "group": "List content"
-                },
-                {
                   "key": "icon",
                   "label": "Icon",
                   "type": "select",
@@ -1449,6 +1442,13 @@
                   "options": {
                     "rows": 8
                   }
+                },
+                {
+                  "key": "label",
+                  "label": "Label",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
                 },
                 {
                   "key": "title",
@@ -1506,13 +1506,6 @@
               "type": "object",
               "fields": [
                 {
-                  "key": "title",
-                  "label": "Item title",
-                  "type": "text",
-                  "required": false,
-                  "group": "List content"
-                },
-                {
                   "key": "icon",
                   "label": "Icon",
                   "type": "select",
@@ -1581,6 +1574,13 @@
                   "options": {
                     "rows": 8
                   }
+                },
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
                 },
                 {
                   "key": "description",
@@ -1810,6 +1810,20 @@
             "group": "Pricing copy"
           },
           {
+            "key": "trustedSvgIllustration",
+            "label": "Trusted illustration markup",
+            "type": "textarea",
+            "required": false,
+            "group": "Illustration",
+            "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
+            "trustedMarkup": true,
+            "profile": "trustedSvgIllustration",
+            "intendedUse": "illustration",
+            "options": {
+              "rows": 8
+            }
+          },
+          {
             "key": "setupLabel",
             "label": "Setup-fee label",
             "type": "text",
@@ -1857,20 +1871,6 @@
             "type": "text",
             "required": false,
             "group": "Pricing copy"
-          },
-          {
-            "key": "trustedSvgIllustration",
-            "label": "Trusted illustration markup",
-            "type": "textarea",
-            "required": false,
-            "group": "Illustration",
-            "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
-            "trustedMarkup": true,
-            "profile": "trustedSvgIllustration",
-            "intendedUse": "illustration",
-            "options": {
-              "rows": 8
-            }
           }
         ]
       }
@@ -3026,6 +3026,20 @@
             "group": "Content"
           },
           {
+            "key": "trustedSvgIllustration",
+            "label": "Trusted illustration markup",
+            "type": "textarea",
+            "required": false,
+            "group": "Illustration",
+            "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
+            "trustedMarkup": true,
+            "profile": "trustedSvgIllustration",
+            "intendedUse": "illustration",
+            "options": {
+              "rows": 8
+            }
+          },
+          {
             "key": "inputItems",
             "label": "Input labels",
             "type": "array",
@@ -3045,13 +3059,6 @@
             "item": {
               "type": "object",
               "fields": [
-                {
-                  "key": "title",
-                  "label": "Item title",
-                  "type": "text",
-                  "required": false,
-                  "group": "List content"
-                },
                 {
                   "key": "icon",
                   "label": "Icon",
@@ -3121,24 +3128,17 @@
                   "options": {
                     "rows": 8
                   }
+                },
+                {
+                  "key": "title",
+                  "label": "Item title",
+                  "type": "text",
+                  "required": false,
+                  "group": "List content"
                 }
               ]
             },
             "itemLabel": "Item"
-          },
-          {
-            "key": "trustedSvgIllustration",
-            "label": "Trusted illustration markup",
-            "type": "textarea",
-            "required": false,
-            "group": "Illustration",
-            "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
-            "trustedMarkup": true,
-            "profile": "trustedSvgIllustration",
-            "intendedUse": "illustration",
-            "options": {
-              "rows": 8
-            }
           }
         ]
       }
