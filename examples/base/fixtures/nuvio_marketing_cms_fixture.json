@@ -611,7 +611,7 @@
             "type": "textarea",
             "required": false,
             "group": "Illustration",
-            "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
             "trustedMarkup": true,
             "profile": "trustedHtmlIllustration",
             "intendedUse": "illustration",
@@ -852,7 +852,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Icon",
-                      "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                      "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                       "trustedMarkup": true,
                       "profile": "trustedIconSvg",
                       "intendedUse": "icon",
@@ -1007,7 +1007,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Icon",
-                      "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                      "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                       "trustedMarkup": true,
                       "profile": "trustedIconSvg",
                       "intendedUse": "icon",
@@ -1203,7 +1203,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Rich text allowed: bold, italic, lists, and safe links only. Layout stays code-owned by Nuvio.",
+            "hint": "Rich text allowed: bold, italic, lists, and safe links.",
             "richText": true,
             "richTextProfile": "basicRichText",
             "options": {
@@ -1442,7 +1442,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
@@ -1574,7 +1574,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
@@ -1627,24 +1627,21 @@
             "label": "Section label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "heading",
             "label": "Title",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "gridLabel",
             "label": "FAQ list label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "items",
@@ -1652,7 +1649,6 @@
             "type": "array",
             "required": false,
             "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract.",
             "item": {
               "type": "object",
               "fields": [
@@ -1661,8 +1657,7 @@
                   "label": "Question",
                   "type": "text",
                   "required": false,
-                  "group": "Pricing copy",
-                  "hint": "Pricing values and refund limits are protected by the site contract."
+                  "group": "Pricing copy"
                 },
                 {
                   "key": "answer",
@@ -1670,7 +1665,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Pricing copy",
-                  "hint": "Rich text allowed: bold, italic, lists, and safe links only. Layout stays code-owned by Nuvio.",
+                  "hint": "Rich text allowed: bold, italic, lists, and safe links.",
                   "richText": true,
                   "richTextProfile": "basicRichText",
                   "options": {
@@ -1711,32 +1706,28 @@
             "label": "Section label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "headingPrefix",
             "label": "Title",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "headingAccent",
             "label": "Highlighted words",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "headingSuffix",
             "label": "Title after highlight",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "support",
@@ -1744,7 +1735,7 @@
             "type": "textarea",
             "required": false,
             "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
             "options": {
               "rows": 4
             }
@@ -1755,15 +1746,13 @@
             "type": "object",
             "required": false,
             "group": "Buttons",
-            "hint": "Pricing values and refund limits are protected by the site contract.",
             "fields": [
               {
                 "key": "label",
                 "label": "Primary button text",
                 "type": "text",
                 "required": false,
-                "group": "Buttons",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Buttons"
               },
               {
                 "key": "href",
@@ -1781,15 +1770,13 @@
             "type": "object",
             "required": false,
             "group": "Buttons",
-            "hint": "Pricing values and refund limits are protected by the site contract.",
             "fields": [
               {
                 "key": "label",
                 "label": "Secondary button text",
                 "type": "text",
                 "required": false,
-                "group": "Buttons",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Buttons"
               },
               {
                 "key": "href",
@@ -1806,80 +1793,70 @@
             "label": "Panel label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "panelKicker",
             "label": "Panel section label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "panelHeading",
             "label": "Panel Heading",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "setupLabel",
             "label": "Setup-fee label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "setupDescription",
             "label": "Setup-fee description",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "monthlyLabel",
             "label": "Monthly price label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "monthlyDescription",
             "label": "Monthly service description",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "founderLabel",
             "label": "Founder pricing label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "founderDescription",
             "label": "Founder pricing description",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "refundLabel",
             "label": "Refund label",
             "type": "text",
             "required": false,
-            "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract."
+            "group": "Pricing copy"
           },
           {
             "key": "trustedSvgIllustration",
@@ -1887,7 +1864,7 @@
             "type": "textarea",
             "required": false,
             "group": "Illustration",
-            "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
             "trustedMarkup": true,
             "profile": "trustedSvgIllustration",
             "intendedUse": "illustration",
@@ -1926,39 +1903,34 @@
             "type": "object",
             "required": false,
             "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract.",
             "fields": [
               {
                 "key": "eyebrow",
                 "label": "Section label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "headingPrefix",
                 "label": "Title",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "headingAccent",
                 "label": "Highlighted words",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "headingSuffix",
                 "label": "Title after highlight",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "support",
@@ -1966,7 +1938,7 @@
                 "type": "textarea",
                 "required": false,
                 "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract.",
+                "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
                 "options": {
                   "rows": 4
                 }
@@ -1977,15 +1949,13 @@
                 "type": "object",
                 "required": false,
                 "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract.",
                 "fields": [
                   {
                     "key": "title",
                     "label": "Founder note title",
                     "type": "text",
                     "required": false,
-                    "group": "Pricing copy",
-                    "hint": "Pricing values and refund limits are protected by the site contract."
+                    "group": "Pricing copy"
                   },
                   {
                     "key": "text",
@@ -1993,7 +1963,7 @@
                     "type": "textarea",
                     "required": false,
                     "group": "Pricing copy",
-                    "hint": "Pricing values and refund limits are protected by the site contract.",
+                    "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
                     "options": {
                       "rows": 4
                     }
@@ -2003,8 +1973,7 @@
                     "label": "Founder facts label",
                     "type": "text",
                     "required": false,
-                    "group": "Pricing copy",
-                    "hint": "Pricing values and refund limits are protected by the site contract."
+                    "group": "Pricing copy"
                   },
                   {
                     "key": "facts",
@@ -2012,7 +1981,6 @@
                     "type": "array",
                     "required": false,
                     "group": "Pricing copy",
-                    "hint": "Pricing values and refund limits are protected by the site contract.",
                     "item": {
                       "type": "text"
                     },
@@ -2026,7 +1994,6 @@
                 "type": "array",
                 "required": false,
                 "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract.",
                 "item": {
                   "type": "object",
                   "fields": [
@@ -2035,32 +2002,28 @@
                       "label": "Plan name",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "label",
                       "label": "Plan label",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "promise",
                       "label": "Plan promise",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "who",
                       "label": "Best for",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "includes",
@@ -2068,7 +2031,6 @@
                       "type": "array",
                       "required": false,
                       "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract.",
                       "item": {
                         "type": "text"
                       },
@@ -2083,40 +2045,35 @@
                 "label": "Setup price label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "standardSetupPrefix",
                 "label": "Standard setup label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "monthlyLabel",
                 "label": "Monthly price label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "fitLabel",
                 "label": "Best-fit label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "planCtaLabel",
                 "label": "Plan button text",
                 "type": "text",
                 "required": false,
-                "group": "Buttons",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Buttons"
               }
             ]
           },
@@ -2126,39 +2083,34 @@
             "type": "object",
             "required": false,
             "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract.",
             "fields": [
               {
                 "key": "summaryLabel",
                 "label": "Summary label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "summarySupport",
                 "label": "Summary subtitle",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "tableLabel",
                 "label": "Comparison label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "headerArea",
                 "label": "Feature column label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "planHeaders",
@@ -2166,7 +2118,6 @@
                 "type": "array",
                 "required": false,
                 "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract.",
                 "item": {
                   "type": "text"
                 },
@@ -2178,7 +2129,6 @@
                 "type": "array",
                 "required": false,
                 "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract.",
                 "item": {
                   "type": "object",
                   "fields": [
@@ -2187,32 +2137,28 @@
                       "label": "Feature name",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "presenca",
                       "label": "Presenca value",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "crescimento",
                       "label": "Crescimento value",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "parceiro",
                       "label": "Parceiro value",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     }
                   ]
                 },
@@ -2226,39 +2172,34 @@
             "type": "object",
             "required": false,
             "group": "Pricing copy",
-            "hint": "Pricing values and refund limits are protected by the site contract.",
             "fields": [
               {
                 "key": "eyebrow",
                 "label": "Section label",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "headingPrefix",
                 "label": "Title",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "headingAccent",
                 "label": "Highlighted words",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "headingSuffix",
                 "label": "Title after highlight",
                 "type": "text",
                 "required": false,
-                "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract."
+                "group": "Pricing copy"
               },
               {
                 "key": "items",
@@ -2266,7 +2207,6 @@
                 "type": "array",
                 "required": false,
                 "group": "Pricing copy",
-                "hint": "Pricing values and refund limits are protected by the site contract.",
                 "item": {
                   "type": "object",
                   "fields": [
@@ -2332,7 +2272,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Icon",
-                      "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                      "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                       "trustedMarkup": true,
                       "profile": "trustedIconSvg",
                       "intendedUse": "icon",
@@ -2345,8 +2285,7 @@
                       "label": "Card title",
                       "type": "text",
                       "required": false,
-                      "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract."
+                      "group": "Pricing copy"
                     },
                     {
                       "key": "body",
@@ -2354,7 +2293,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Pricing copy",
-                      "hint": "Pricing values and refund limits are protected by the site contract.",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
                       "options": {
                         "rows": 4
                       }
@@ -2555,7 +2494,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
@@ -2692,7 +2631,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
@@ -2902,7 +2841,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
@@ -3175,7 +3114,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
@@ -3193,7 +3132,7 @@
             "type": "textarea",
             "required": false,
             "group": "Illustration",
-            "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+            "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
             "trustedMarkup": true,
             "profile": "trustedSvgIllustration",
             "intendedUse": "illustration",
@@ -3614,7 +3553,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
@@ -3786,7 +3725,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "Icon",
-                  "hint": "Trusted icon or illustration markup only. No scripts, events, forms, iframes, external resources, or translatable copy where avoidable.",
+                  "hint": "Trusted visual markup only. Scripts, events, unsafe links and embeds are rejected.",
                   "trustedMarkup": true,
                   "profile": "trustedIconSvg",
                   "intendedUse": "icon",
