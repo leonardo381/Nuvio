@@ -10,8 +10,13 @@
   },
   "website": {
     "slug": "nuvio",
-    "name": "Nuvio",
-    "title": "Nuvio",
+    "name": "Nuvero",
+    "title": "Nuvero",
+    "seoTitle": "Nuvero - Presen\u00e7a online gerida para neg\u00f3cios locais",
+    "seoDescription": "A Nuvero cria e gere a presen\u00e7a online de neg\u00f3cios locais com um site profissional, bases de visibilidade local, contactos claros, conte\u00fado edit\u00e1vel, relat\u00f3rios mensais e apoio ap\u00f3s o lan\u00e7amento.",
+    "seoTitleTemplate": "%s | Nuvero",
+    "seoTitleSeparator": "|",
+    "businessName": "Nuvero",
     "domain": "",
     "settings": {
       "nuvioMarketingFixture": {
@@ -37,6 +42,9 @@
             "label": "English"
           }
         ]
+      },
+      "contactForm": {
+        "confirmationMessage": "Nuvero received your plan request."
       },
       "previewRoutes": {
         "home": "/",
@@ -117,7 +125,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -144,7 +152,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -182,7 +190,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -280,7 +288,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Context panel",
-                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                       "options": {
                         "rows": 4
                       }
@@ -339,7 +347,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Context panel",
-                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                       "options": {
                         "rows": 4
                       }
@@ -729,7 +737,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -847,7 +855,7 @@
                       "type": "select",
                       "required": false,
                       "group": "Public website card",
-                      "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                      "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                       "options": {
                         "values": [
                           {
@@ -924,7 +932,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Public website card",
-                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                       "options": {
                         "rows": 4
                       }
@@ -1002,7 +1010,7 @@
                       "type": "select",
                       "required": false,
                       "group": "Backoffice card",
-                      "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                      "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                       "options": {
                         "values": [
                           {
@@ -1079,7 +1087,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Backoffice card",
-                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                       "options": {
                         "rows": 4
                       }
@@ -1135,7 +1143,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -1375,7 +1383,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -1430,7 +1438,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -1514,7 +1522,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -1562,7 +1570,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -1639,7 +1647,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -1786,7 +1794,7 @@
             "type": "textarea",
             "required": false,
             "group": "Pricing copy",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -1989,7 +1997,7 @@
                 "type": "textarea",
                 "required": false,
                 "group": "Pricing copy",
-                "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                 "options": {
                   "rows": 4
                 }
@@ -2014,7 +2022,7 @@
                     "type": "textarea",
                     "required": false,
                     "group": "Pricing copy",
-                    "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                    "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                     "options": {
                       "rows": 4
                     }
@@ -2267,7 +2275,7 @@
                       "type": "select",
                       "required": false,
                       "group": "Pricing copy",
-                      "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                      "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                       "options": {
                         "values": [
                           {
@@ -2344,7 +2352,7 @@
                       "type": "textarea",
                       "required": false,
                       "group": "Pricing copy",
-                      "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                      "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                       "options": {
                         "rows": 4
                       }
@@ -2414,7 +2422,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -2489,7 +2497,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -2566,7 +2574,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -2577,7 +2585,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -2626,7 +2634,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -2696,7 +2704,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -2771,7 +2779,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -2836,7 +2844,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -2913,7 +2921,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -2988,7 +2996,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -3116,7 +3124,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -3250,7 +3258,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -3284,14 +3292,14 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
                 },
                 {
                   "key": "managed",
-                  "label": "Managed by Nuvio",
+                  "label": "Managed by Nuvero",
                   "type": "bool",
                   "required": false,
                   "group": "List content"
@@ -3404,7 +3412,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -3452,7 +3460,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -3548,7 +3556,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -3625,7 +3633,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -3693,7 +3701,7 @@
             "type": "textarea",
             "required": false,
             "group": "Section intro",
-            "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+            "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
             "options": {
               "rows": 4
             }
@@ -3720,7 +3728,7 @@
                   "type": "select",
                   "required": false,
                   "group": "List content",
-                  "hint": "Choose one approved Nuvio icon. Trusted icon markup can override this where reviewed.",
+                  "hint": "Choose one approved Nuvero icon. Trusted icon markup can override this where reviewed.",
                   "options": {
                     "values": [
                       {
@@ -3797,7 +3805,7 @@
                   "type": "textarea",
                   "required": false,
                   "group": "List content",
-                  "hint": "Use plain text only. Site styling and layout are handled by Nuvio.",
+                  "hint": "Use plain text only. Site styling and layout are handled by Nuvero.",
                   "options": {
                     "rows": 4
                   }
@@ -3851,12 +3859,12 @@
     {
       "slug": "home",
       "title": "Home",
-      "seoTitle": "Nuvio - Presen\u00e7a online gerida para neg\u00f3cios locais",
-      "seoDescription": "A Nuvio cria e gere a presen\u00e7a online de neg\u00f3cios locais com um site profissional, bases de visibilidade local, contactos claros, conte\u00fado edit\u00e1vel, relat\u00f3rios mensais e apoio ap\u00f3s o lan\u00e7amento.",
+      "seoTitle": "Nuvero - Presen\u00e7a online gerida para neg\u00f3cios locais",
+      "seoDescription": "A Nuvero cria e gere a presen\u00e7a online de neg\u00f3cios locais com um site profissional, bases de visibilidade local, contactos claros, conte\u00fado edit\u00e1vel, relat\u00f3rios mensais e apoio ap\u00f3s o lan\u00e7amento.",
       "seoTranslations": {
         "en": {
-          "title": "Nuvio - Managed online presence for local businesses",
-          "description": "Nuvio creates and manages online presence for local businesses with a professional website, local visibility foundations, clear contact options, editable content, monthly reports, and support after launch."
+          "title": "Nuvero - Managed online presence for local businesses",
+          "description": "Nuvero creates and manages online presence for local businesses with a professional website, local visibility foundations, clear contact options, editable content, monthly reports, and support after launch."
         }
       },
       "published": true,
@@ -3872,9 +3880,9 @@
             "eyebrow": "Presen\u00e7a online gerida para neg\u00f3cios locais",
             "headingPrefix": "Seja encontrado, transmita confian\u00e7a e transforme visitantes em",
             "headingAccent": "contactos reais.",
-            "support": "A Nuvio cria e gere o seu site, as bases de visibilidade local, os caminhos de contacto, o conte\u00fado edit\u00e1vel, os relat\u00f3rios mensais e o apoio ap\u00f3s o lan\u00e7amento.",
+            "support": "A Nuvero cria e gere o seu site, as bases de visibilidade local, os caminhos de contacto, o conte\u00fado edit\u00e1vel, os relat\u00f3rios mensais e o apoio ap\u00f3s o lan\u00e7amento.",
             "primaryCta": {
-              "label": "Ver o que a Nuvio criaria para mim",
+              "label": "Ver o que a Nuvero criaria para mim",
               "href": "/contact"
             },
             "secondaryCta": {
@@ -3889,9 +3897,9 @@
               "eyebrow": "Managed online presence for local businesses",
               "headingPrefix": "Get found, look professional, and turn visitors into",
               "headingAccent": "real contacts.",
-              "support": "Nuvio creates and manages your website, local visibility foundations, contact paths, editable content, monthly reports, and support after launch.",
+              "support": "Nuvero creates and manages your website, local visibility foundations, contact paths, editable content, monthly reports, and support after launch.",
               "primaryCta": {
-                "label": "See what Nuvio would build for me",
+                "label": "See what Nuvero would build for me",
                 "href": "/contact"
               },
               "secondaryCta": {
@@ -3919,7 +3927,7 @@
             "eyebrow": "Site para neg\u00f3cio local",
             "heading": "Servi\u00e7os claros. Contacto mais f\u00e1cil. Apoio gerido.",
             "cta": {
-              "label": "Ver o que a Nuvio criaria para mim",
+              "label": "Ver o que a Nuvero criaria para mim",
               "href": "/contact"
             },
             "pages": [
@@ -3942,7 +3950,7 @@
               "eyebrow": "Local business website",
               "heading": "Clear services. Easier contact. Managed support.",
               "cta": {
-                "label": "See what Nuvio would build for me",
+                "label": "See what Nuvero would build for me",
                 "href": "/contact"
               },
               "pages": [
@@ -3961,7 +3969,7 @@
           "title": "Reassurance Rail",
           "order": 30,
           "props": {
-            "ariaLabel": "Sinais de apoio Nuvio",
+            "ariaLabel": "Sinais de apoio Nuvero",
             "items": [
               {
                 "icon": "clarity",
@@ -3987,7 +3995,7 @@
           },
           "translations": {
             "en": {
-              "ariaLabel": "Nuvio support cues",
+              "ariaLabel": "Nuvero support cues",
               "items": [
                 {
                   "icon": "clarity",
@@ -4019,12 +4027,12 @@
           "title": "Delivers",
           "order": 40,
           "props": {
-            "eyebrow": "O que a Nuvio entrega",
+            "eyebrow": "O que a Nuvero entrega",
             "headingPrefix": "Um site p\u00fablico para clientes. Um",
             "headingAccent": "backoffice simples",
             "headingSuffix": "para si.",
-            "support": "Os clientes veem servi\u00e7os e caminhos de contacto com clareza. O seu neg\u00f3cio pode atualizar conte\u00fado-chave, rever contactos e acompanhar relat\u00f3rios enquanto a Nuvio gere a parte t\u00e9cnica.",
-            "overviewAriaLabel": "Vis\u00e3o geral do que a Nuvio entrega",
+            "support": "Os clientes veem servi\u00e7os e caminhos de contacto com clareza. O seu neg\u00f3cio pode atualizar conte\u00fado-chave, rever contactos e acompanhar relat\u00f3rios enquanto a Nuvero gere a parte t\u00e9cnica.",
+            "overviewAriaLabel": "Vis\u00e3o geral do que a Nuvero entrega",
             "publicPanel": {
               "ariaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do site p\u00fablico",
               "eyebrow": "Site p\u00fablico",
@@ -4067,12 +4075,12 @@
               ]
             },
             "backofficePanel": {
-              "ariaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do backoffice Nuvio",
-              "eyebrow": "Backoffice Nuvio",
+              "ariaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do backoffice Nuvero",
+              "eyebrow": "Backoffice Nuvero",
               "heading": "O que o seu neg\u00f3cio controla",
-              "previewAriaLabel": "Screenshot do backoffice Nuvio e benef\u00edcios de controlo",
+              "previewAriaLabel": "Screenshot do backoffice Nuvero e benef\u00edcios de controlo",
               "imageSrc": "/backoffice/cms.png",
-              "imageAlt": "Ecr\u00e3 do backoffice Nuvio para editar conte\u00fado do site.",
+              "imageAlt": "Ecr\u00e3 do backoffice Nuvero para editar conte\u00fado do site.",
               "benefitsLabel": "Destaques de controlo no backoffice",
               "callouts": [
                 {
@@ -4098,12 +4106,12 @@
           },
           "translations": {
             "en": {
-              "eyebrow": "What Nuvio delivers",
+              "eyebrow": "What Nuvero delivers",
               "headingPrefix": "A public website for customers. A simple",
               "headingAccent": "backoffice",
               "headingSuffix": "for you.",
-              "support": "Customers see services and contact paths clearly. You can update key content, review contacts, and follow reports while Nuvio manages the technical side.",
-              "overviewAriaLabel": "Nuvio delivery overview",
+              "support": "Customers see services and contact paths clearly. You can update key content, review contacts, and follow reports while Nuvero manages the technical side.",
+              "overviewAriaLabel": "Nuvero delivery overview",
               "publicPanel": {
                 "ariaLabel": "Public website preview",
                 "eyebrow": "Public website",
@@ -4146,12 +4154,12 @@
                 ]
               },
               "backofficePanel": {
-                "ariaLabel": "Nuvio backoffice preview",
-                "eyebrow": "Nuvio backoffice",
+                "ariaLabel": "Nuvero backoffice preview",
+                "eyebrow": "Nuvero backoffice",
                 "heading": "What your business controls",
-                "previewAriaLabel": "Nuvio backoffice screenshot and control benefits",
+                "previewAriaLabel": "Nuvero backoffice screenshot and control benefits",
                 "imageSrc": "/backoffice/cms.png",
-                "imageAlt": "Nuvio backoffice screen for editing website content.",
+                "imageAlt": "Nuvero backoffice screen for editing website content.",
                 "benefitsLabel": "Backoffice control highlights",
                 "callouts": [
                   {
@@ -4285,19 +4293,19 @@
           "title": "Managed Backoffice",
           "order": 60,
           "props": {
-            "eyebrow": "O que a Nuvio gere",
+            "eyebrow": "O que a Nuvero gere",
             "headingPrefix": "Um backoffice simples para o seu neg\u00f3cio.",
-            "headingAccent": "A Nuvio gere o resto",
+            "headingAccent": "A Nuvero gere o resto",
             "headingSuffix": ".",
-            "support": "Controle conte\u00fado, contactos, newsletters e relat\u00f3rios. A Nuvio mant\u00e9m o servi\u00e7o t\u00e9cnico a funcionar.",
-            "layoutAriaLabel": "Backoffice Nuvio e vis\u00e3o geral do servi\u00e7o gerido",
-            "backofficeAriaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do produto Backoffice Nuvio",
-            "productLabel": "NUVIO BACKOFFICE",
+            "support": "Controle conte\u00fado, contactos, newsletters e relat\u00f3rios. A Nuvero mant\u00e9m o servi\u00e7o t\u00e9cnico a funcionar.",
+            "layoutAriaLabel": "Backoffice Nuvero e vis\u00e3o geral do servi\u00e7o gerido",
+            "backofficeAriaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do produto Backoffice Nuvero",
+            "productLabel": "NUVERO BACKOFFICE",
             "contextPill": "Camada simples de controlo",
             "tabRailLabel": "Seletor de pr\u00e9-visualiza\u00e7\u00e3o do backoffice",
-            "overlayLabel": "Backoffice Nuvio",
-            "managedAriaLabel": "Gerido pela Nuvio",
-            "managedTitle": "Gerido pela Nuvio",
+            "overlayLabel": "Backoffice Nuvero",
+            "managedAriaLabel": "Gerido pela Nuvero",
+            "managedTitle": "Gerido pela Nuvero",
             "features": [
               {
                 "id": "content",
@@ -4307,7 +4315,7 @@
                 "title": "Editar conte\u00fado-chave",
                 "detail": "Servi\u00e7os, hor\u00e1rios, contactos",
                 "image": "/backoffice/cms.png",
-                "alt": "Ecr\u00e3 do CMS Nuvio para editar conte\u00fado do site."
+                "alt": "Ecr\u00e3 do CMS Nuvero para editar conte\u00fado do site."
               },
               {
                 "id": "leads",
@@ -4317,7 +4325,7 @@
                 "title": "Acompanhar contactos e marca\u00e7\u00f5es",
                 "detail": "Contactos, marca\u00e7\u00f5es, seguimento",
                 "image": "/backoffice/leads.png",
-                "alt": "Ecr\u00e3 do backoffice Nuvio para contactos e atividade de marca\u00e7\u00f5es."
+                "alt": "Ecr\u00e3 do backoffice Nuvero para contactos e atividade de marca\u00e7\u00f5es."
               },
               {
                 "id": "newsletter",
@@ -4327,7 +4335,7 @@
                 "title": "Gerir atividade de newsletter",
                 "detail": "Subscritores, envios, inscri\u00e7\u00f5es",
                 "image": "/backoffice/newsletter.png",
-                "alt": "Ecr\u00e3 de newsletter no backoffice Nuvio."
+                "alt": "Ecr\u00e3 de newsletter no backoffice Nuvero."
               },
               {
                 "id": "reports",
@@ -4337,7 +4345,7 @@
                 "title": "Rever relat\u00f3rios",
                 "detail": "Visitas, p\u00e1ginas principais, cliques de contacto",
                 "image": "/backoffice/reports.png",
-                "alt": "Ecr\u00e3 de relat\u00f3rios do backoffice Nuvio."
+                "alt": "Ecr\u00e3 de relat\u00f3rios do backoffice Nuvero."
               }
             ],
             "managedItems": [
@@ -4381,19 +4389,19 @@
           },
           "translations": {
             "en": {
-              "eyebrow": "What Nuvio manages",
+              "eyebrow": "What Nuvero manages",
               "headingPrefix": "A simple backoffice for your business.",
-              "headingAccent": "Nuvio manages the rest",
+              "headingAccent": "Nuvero manages the rest",
               "headingSuffix": ".",
-              "support": "Control content, contacts, newsletters, and reports. Nuvio keeps the technical service running.",
-              "layoutAriaLabel": "Nuvio backoffice and managed service overview",
-              "backofficeAriaLabel": "Nuvio Backoffice product preview",
-              "productLabel": "NUVIO BACKOFFICE",
+              "support": "Control content, contacts, newsletters, and reports. Nuvero keeps the technical service running.",
+              "layoutAriaLabel": "Nuvero backoffice and managed service overview",
+              "backofficeAriaLabel": "Nuvero Backoffice product preview",
+              "productLabel": "NUVERO BACKOFFICE",
               "contextPill": "Simple control layer",
               "tabRailLabel": "Backoffice preview selector",
-              "overlayLabel": "Nuvio Backoffice",
-              "managedAriaLabel": "Managed by Nuvio",
-              "managedTitle": "Managed by Nuvio",
+              "overlayLabel": "Nuvero Backoffice",
+              "managedAriaLabel": "Managed by Nuvero",
+              "managedTitle": "Managed by Nuvero",
               "features": [
                 {
                   "id": "content",
@@ -4403,7 +4411,7 @@
                   "title": "Edit key content",
                   "detail": "Services, opening hours, contact details",
                   "image": "/backoffice/cms.png",
-                  "alt": "Nuvio CMS backoffice screen for editing website content."
+                  "alt": "Nuvero CMS backoffice screen for editing website content."
                 },
                 {
                   "id": "leads",
@@ -4413,7 +4421,7 @@
                   "title": "Follow leads and bookings",
                   "detail": "Contacts, bookings, follow-up",
                   "image": "/backoffice/leads.png",
-                  "alt": "Nuvio backoffice screen for leads and booking activity."
+                  "alt": "Nuvero backoffice screen for leads and booking activity."
                 },
                 {
                   "id": "newsletter",
@@ -4423,7 +4431,7 @@
                   "title": "Manage newsletter activity",
                   "detail": "Subscribers, sends, signups",
                   "image": "/backoffice/newsletter.png",
-                  "alt": "Nuvio newsletter backoffice screen."
+                  "alt": "Nuvero newsletter backoffice screen."
                 },
                 {
                   "id": "reports",
@@ -4433,7 +4441,7 @@
                   "title": "Review reports",
                   "detail": "Visits, top pages, contact clicks",
                   "image": "/backoffice/reports.png",
-                  "alt": "Nuvio reports backoffice screen."
+                  "alt": "Nuvero reports backoffice screen."
                 }
               ],
               "managedItems": [
@@ -4487,10 +4495,10 @@
             "headingPrefix": "O que acontece depois de",
             "headingAccent": "pedir um plano",
             "headingSuffix": ".",
-            "support": "A Nuvio mapeia o que o seu neg\u00f3cio precisa e mostra \u00e2mbito, pre\u00e7o e pr\u00f3ximos passos antes de construir.",
+            "support": "A Nuvero mapeia o que o seu neg\u00f3cio precisa e mostra \u00e2mbito, pre\u00e7o e pr\u00f3ximos passos antes de construir.",
             "actionsLabel": "A\u00e7\u00f5es dos pr\u00f3ximos passos",
             "primaryCta": {
-              "label": "Ver o que a Nuvio criaria para mim",
+              "label": "Ver o que a Nuvero criaria para mim",
               "href": "/contact"
             },
             "secondaryCta": {
@@ -4521,7 +4529,7 @@
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                 "title": "Aprove a primeira vers\u00e3o",
-                "description": "Depois da aprova\u00e7\u00e3o, a Nuvio constr\u00f3i e lan\u00e7a a primeira vers\u00e3o."
+                "description": "Depois da aprova\u00e7\u00e3o, a Nuvero constr\u00f3i e lan\u00e7a a primeira vers\u00e3o."
               }
             ]
           },
@@ -4531,10 +4539,10 @@
               "headingPrefix": "What happens after you",
               "headingAccent": "ask for a plan",
               "headingSuffix": ".",
-              "support": "Nuvio maps what your business needs, then shows scope, pricing, and next steps before build.",
+              "support": "Nuvero maps what your business needs, then shows scope, pricing, and next steps before build.",
               "actionsLabel": "Next step actions",
               "primaryCta": {
-                "label": "See what Nuvio would build for me",
+                "label": "See what Nuvero would build for me",
                 "href": "/contact"
               },
               "secondaryCta": {
@@ -4565,7 +4573,7 @@
                   "icon": "improve",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
                   "title": "Approve the first version",
-                  "description": "After approval, Nuvio builds and launches the first version."
+                  "description": "After approval, Nuvero builds and launches the first version."
                 }
               ]
             }
@@ -4581,7 +4589,7 @@
             "headingPrefix": "Antes de aprovar, os",
             "headingAccent": "detalhes est\u00e3o claros",
             "headingSuffix": ".",
-            "support": "A Nuvio mostra \u00e2mbito, taxa de setup, mensalidade e termos de reembolso antes de o trabalho come\u00e7ar.",
+            "support": "A Nuvero mostra \u00e2mbito, taxa de setup, mensalidade e termos de reembolso antes de o trabalho come\u00e7ar.",
             "miniCards": [
               {
                 "label": "\u00c2mbito confirmado",
@@ -4618,7 +4626,7 @@
               "headingPrefix": "Before you approve, the",
               "headingAccent": "details are clear",
               "headingSuffix": ".",
-              "support": "Nuvio shows scope, setup fee, monthly service, and refund terms before work starts.",
+              "support": "Nuvero shows scope, setup fee, monthly service, and refund terms before work starts.",
               "miniCards": [
                 {
                   "label": "Scope confirmed",
@@ -4658,20 +4666,20 @@
           "order": 90,
           "props": {
             "eyebrow": "PR\u00d3XIMO PASSO",
-            "heading": "Pronto para ver o que a Nuvio mapearia para o seu neg\u00f3cio?",
-            "support": "Partilhe o seu neg\u00f3cio, o site atual e o que precisa. A Nuvio transforma isso num \u00e2mbito recomendado claro antes de qualquer constru\u00e7\u00e3o.",
+            "heading": "Pronto para ver o que a Nuvero mapearia para o seu neg\u00f3cio?",
+            "support": "Partilhe o seu neg\u00f3cio, o site atual e o que precisa. A Nuvero transforma isso num \u00e2mbito recomendado claro antes de qualquer constru\u00e7\u00e3o.",
             "primaryCta": {
-              "label": "Ver o que a Nuvio criaria para mim",
+              "label": "Ver o que a Nuvero criaria para mim",
               "href": "/contact"
             }
           },
           "translations": {
             "en": {
               "eyebrow": "NEXT STEP",
-              "heading": "Ready to see what Nuvio would map for your business?",
-              "support": "Share your business, current website, and what you need. Nuvio will turn it into a clear recommended scope before anything is built.",
+              "heading": "Ready to see what Nuvero would map for your business?",
+              "support": "Share your business, current website, and what you need. Nuvero will turn it into a clear recommended scope before anything is built.",
               "primaryCta": {
-                "label": "See what Nuvio would build for me",
+                "label": "See what Nuvero would build for me",
                 "href": "/contact"
               }
             }
@@ -4682,12 +4690,12 @@
     {
       "slug": "services",
       "title": "How it works",
-      "seoTitle": "Como funciona - Nuvio",
-      "seoDescription": "Veja como a Nuvio transforma contexto de neg\u00f3cio numa presen\u00e7a online gerida com p\u00e1ginas mapeadas, caminhos de contacto, apoio ao lan\u00e7amento, relat\u00f3rios mensais e suporte cont\u00ednuo.",
+      "seoTitle": "Como funciona - Nuvero",
+      "seoDescription": "Veja como a Nuvero transforma contexto de neg\u00f3cio numa presen\u00e7a online gerida com p\u00e1ginas mapeadas, caminhos de contacto, apoio ao lan\u00e7amento, relat\u00f3rios mensais e suporte cont\u00ednuo.",
       "seoTranslations": {
         "en": {
-          "title": "How it works - Nuvio",
-          "description": "See how Nuvio turns business context into a managed online presence with mapped pages, contact paths, launch support, monthly reports, and ongoing managed support."
+          "title": "How it works - Nuvero",
+          "description": "See how Nuvero turns business context into a managed online presence with mapped pages, contact paths, launch support, monthly reports, and ongoing managed support."
         }
       },
       "published": true,
@@ -4701,22 +4709,22 @@
           "order": 10,
           "props": {
             "eyebrow": "Como funciona",
-            "headingPrefix": "Como a Nuvio transforma contexto de neg\u00f3cio",
+            "headingPrefix": "Como a Nuvero transforma contexto de neg\u00f3cio",
             "headingConnector": "numa",
             "headingAccent": "presen\u00e7a online gerida",
             "headingSuffix": ".",
-            "support": "Contexto entra. Estrutura sai. A Nuvio constr\u00f3i a primeira vers\u00e3o e mant\u00e9m o apoio gerido ap\u00f3s o lan\u00e7amento.",
+            "support": "Contexto entra. Estrutura sai. A Nuvero constr\u00f3i a primeira vers\u00e3o e mant\u00e9m o apoio gerido ap\u00f3s o lan\u00e7amento.",
             "actionsLabel": "A\u00e7\u00f5es de Como funciona",
             "primaryCta": {
-              "label": "Ver o que a Nuvio criaria para mim",
+              "label": "Ver o que a Nuvero criaria para mim",
               "href": "/contact"
             },
             "secondaryCta": {
               "label": "Ver pre\u00e7os",
               "href": "/pricing"
             },
-            "visualLabel": "Contexto de neg\u00f3cio mapeado na estrutura Nuvio",
-            "diagramLabel": "Contexto de neg\u00f3cio mapeado em outputs estruturados Nuvio",
+            "visualLabel": "Contexto de neg\u00f3cio mapeado na estrutura Nuvero",
+            "diagramLabel": "Contexto de neg\u00f3cio mapeado em outputs estruturados Nuvero",
             "inputColumnLabel": "Contexto",
             "outputColumnLabel": "Estrutura",
             "supportLayerLabel": "Backoffice",
@@ -4753,22 +4761,22 @@
           "translations": {
             "en": {
               "eyebrow": "How it works",
-              "headingPrefix": "How Nuvio turns business context",
+              "headingPrefix": "How Nuvero turns business context",
               "headingConnector": "into a",
               "headingAccent": "managed online presence",
               "headingSuffix": ".",
-              "support": "Context in. Structure out. Nuvio builds the first version and keeps support managed after launch.",
+              "support": "Context in. Structure out. Nuvero builds the first version and keeps support managed after launch.",
               "actionsLabel": "How it works actions",
               "primaryCta": {
-                "label": "See what Nuvio would build for me",
+                "label": "See what Nuvero would build for me",
                 "href": "/contact"
               },
               "secondaryCta": {
                 "label": "View pricing",
                 "href": "/pricing"
               },
-              "visualLabel": "Business context mapped into Nuvio structure",
-              "diagramLabel": "Business context mapped into structured Nuvio outputs",
+              "visualLabel": "Business context mapped into Nuvero structure",
+              "diagramLabel": "Business context mapped into structured Nuvero outputs",
               "inputColumnLabel": "Context in",
               "outputColumnLabel": "Structure out",
               "supportLayerLabel": "Backoffice",
@@ -4815,7 +4823,7 @@
             "headingAccent": "antes de construir",
             "headingSuffix": ".",
             "support": "Quatro passos mant\u00eam o trabalho claro antes da constru\u00e7\u00e3o e do lan\u00e7amento.",
-            "stepsLabel": "Passos do processo Nuvio",
+            "stepsLabel": "Passos do processo Nuvero",
             "steps": [
               {
                 "icon": "presence",
@@ -4833,7 +4841,7 @@
                 "icon": "layout",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                 "title": "Construir a primeira vers\u00e3o",
-                "text": "A Nuvio transforma o plano numa primeira vers\u00e3o funcional."
+                "text": "A Nuvero transforma o plano numa primeira vers\u00e3o funcional."
               },
               {
                 "icon": "support",
@@ -4850,7 +4858,7 @@
               "headingAccent": "before anything is built",
               "headingSuffix": ".",
               "support": "Four steps keep the work clear before build and launch.",
-              "stepsLabel": "Nuvio process steps",
+              "stepsLabel": "Nuvero process steps",
               "steps": [
                 {
                   "icon": "presence",
@@ -4868,7 +4876,7 @@
                   "icon": "layout",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
                   "title": "Build the first version",
-                  "text": "Nuvio turns the plan into a working first version."
+                  "text": "Nuvero turns the plan into a working first version."
                 },
                 {
                   "icon": "support",
@@ -4886,12 +4894,12 @@
           "title": "Mapping",
           "order": 30,
           "props": {
-            "eyebrow": "O que a Nuvio mapeia",
+            "eyebrow": "O que a Nuvero mapeia",
             "headingPrefix": "Do que envia a uma",
             "headingAccent": "primeira vers\u00e3o clara",
             "headingSuffix": ".",
             "support": "Os seus inputs tornam-se p\u00e1ginas, caminhos de contacto, controlos e um ritmo de lan\u00e7amento.",
-            "compositionLabel": "Contexto de neg\u00f3cio mapeado num output Nuvio",
+            "compositionLabel": "Contexto de neg\u00f3cio mapeado num output Nuvero",
             "inputLabel": "Inputs do briefing de planeamento",
             "inputTitle": "BRIEFING DE PLANEAMENTO",
             "briefRows": [
@@ -4965,12 +4973,12 @@
           },
           "translations": {
             "en": {
-              "eyebrow": "What Nuvio maps",
+              "eyebrow": "What Nuvero maps",
               "headingPrefix": "From what you send to a clear",
               "headingAccent": "first version",
               "headingSuffix": ".",
               "support": "Your inputs become pages, contact paths, controls, and a launch rhythm.",
-              "compositionLabel": "Business context mapped into Nuvio output",
+              "compositionLabel": "Business context mapped into Nuvero output",
               "inputLabel": "Planning brief inputs",
               "inputTitle": "PLANNING BRIEF",
               "briefRows": [
@@ -5052,9 +5060,9 @@
           "props": {
             "eyebrow": "Sistema gerido",
             "headingPrefix": "Controla os detalhes do neg\u00f3cio.",
-            "headingAccent": "A Nuvio gere",
+            "headingAccent": "A Nuvero gere",
             "headingSuffix": "a camada t\u00e9cnica.",
-            "support": "O seu neg\u00f3cio mant\u00e9m os detalhes importantes claros. A Nuvio trata do site gerido, apoio, relat\u00f3rios e camada t\u00e9cnica \u00e0 volta deles.",
+            "support": "O seu neg\u00f3cio mant\u00e9m os detalhes importantes claros. A Nuvero trata do site gerido, apoio, relat\u00f3rios e camada t\u00e9cnica \u00e0 volta deles.",
             "responsibilitiesLabel": "Responsabilidades do sistema gerido",
             "responsibilityRows": [
               {
@@ -5063,24 +5071,24 @@
                 "managed": false
               },
               {
-                "label": "A NUVIO GERE",
+                "label": "A NUVERO GERE",
                 "text": "Alojamento, manuten\u00e7\u00e3o, corre\u00e7\u00f5es t\u00e9cnicas, relat\u00f3rios e apoio cont\u00ednuo.",
                 "managed": true
               }
             ],
-            "visualLabel": "Backoffice Nuvio e modelo de servi\u00e7o gerido",
-            "backofficeLabel": "Backoffice Nuvio",
+            "visualLabel": "Backoffice Nuvero e modelo de servi\u00e7o gerido",
+            "backofficeLabel": "Backoffice Nuvero",
             "contextPill": "Camada simples de controlo",
             "imageSrc": "/backoffice/cms.png",
-            "imageAlt": "Screenshot do backoffice Nuvio com p\u00e1ginas do site e pr\u00e9-visualiza\u00e7\u00e3o de conte\u00fado"
+            "imageAlt": "Screenshot do backoffice Nuvero com p\u00e1ginas do site e pr\u00e9-visualiza\u00e7\u00e3o de conte\u00fado"
           },
           "translations": {
             "en": {
               "eyebrow": "Managed system",
               "headingPrefix": "You control the business details.",
-              "headingAccent": "Nuvio manages",
+              "headingAccent": "Nuvero manages",
               "headingSuffix": "the technical layer.",
-              "support": "Your business keeps the important details clear. Nuvio handles the managed website, support, reports, and technical layer around them.",
+              "support": "Your business keeps the important details clear. Nuvero handles the managed website, support, reports, and technical layer around them.",
               "responsibilitiesLabel": "Managed system responsibilities",
               "responsibilityRows": [
                 {
@@ -5089,16 +5097,16 @@
                   "managed": false
                 },
                 {
-                  "label": "NUVIO MANAGES",
+                  "label": "NUVERO MANAGES",
                   "text": "Hosting, maintenance, technical fixes, reports, and ongoing support.",
                   "managed": true
                 }
               ],
-              "visualLabel": "Nuvio backoffice and managed service model",
-              "backofficeLabel": "Nuvio Backoffice",
+              "visualLabel": "Nuvero backoffice and managed service model",
+              "backofficeLabel": "Nuvero Backoffice",
               "contextPill": "Simple control layer",
               "imageSrc": "/backoffice/cms.png",
-              "imageAlt": "Nuvio backoffice screenshot showing website pages and content preview"
+              "imageAlt": "Nuvero backoffice screenshot showing website pages and content preview"
             }
           }
         },
@@ -5115,7 +5123,7 @@
             "headingSuffix": ".",
             "support": "Depois do lan\u00e7amento, as partes \u00fateis continuam vis\u00edveis e mais f\u00e1ceis de melhorar.",
             "imageSrc": "/backoffice/reports.png",
-            "imageAlt": "Screenshot dos relat\u00f3rios Nuvio com vis\u00e3o geral da atividade mensal",
+            "imageAlt": "Screenshot dos relat\u00f3rios Nuvero com vis\u00e3o geral da atividade mensal",
             "supportCardLabel": "Apoio mensal",
             "supportCardHeading": "Relat\u00f3rios e atualiza\u00e7\u00f5es continuam ligados.",
             "listLabel": "Apoio ap\u00f3s o lan\u00e7amento",
@@ -5155,7 +5163,7 @@
               "headingSuffix": ".",
               "support": "After launch, the useful parts stay visible and easier to improve.",
               "imageSrc": "/backoffice/reports.png",
-              "imageAlt": "Nuvio reports screenshot showing monthly activity overview",
+              "imageAlt": "Nuvero reports screenshot showing monthly activity overview",
               "supportCardLabel": "Monthly support",
               "supportCardHeading": "Reports and updates stay connected.",
               "listLabel": "After launch support",
@@ -5195,20 +5203,20 @@
           "order": 60,
           "props": {
             "eyebrow": "PR\u00d3XIMO PASSO",
-            "heading": "Pronto para ver o que a Nuvio criaria para o seu neg\u00f3cio?",
-            "support": "Partilhe o contexto do seu neg\u00f3cio. A Nuvio mapeia a primeira vers\u00e3o e o \u00e2mbito recomendado antes de construir.",
+            "heading": "Pronto para ver o que a Nuvero criaria para o seu neg\u00f3cio?",
+            "support": "Partilhe o contexto do seu neg\u00f3cio. A Nuvero mapeia a primeira vers\u00e3o e o \u00e2mbito recomendado antes de construir.",
             "primaryCta": {
-              "label": "Ver o que a Nuvio criaria para mim",
+              "label": "Ver o que a Nuvero criaria para mim",
               "href": "/contact"
             }
           },
           "translations": {
             "en": {
               "eyebrow": "NEXT STEP",
-              "heading": "Ready to see what Nuvio would build for your business?",
-              "support": "Share your business context. Nuvio maps the first version and recommended scope before anything is built.",
+              "heading": "Ready to see what Nuvero would build for your business?",
+              "support": "Share your business context. Nuvero maps the first version and recommended scope before anything is built.",
               "primaryCta": {
-                "label": "See what Nuvio would build for me",
+                "label": "See what Nuvero would build for me",
                 "href": "/contact"
               }
             }
@@ -5219,12 +5227,12 @@
     {
       "slug": "pricing",
       "title": "Pricing",
-      "seoTitle": "Pre\u00e7os - Nuvio",
-      "seoDescription": "Pre\u00e7os claros da Nuvio para setup da primeira vers\u00e3o do site, mensalidade de servi\u00e7o gerido, pre\u00e7o founder e termos de reembolso da taxa de setup.",
+      "seoTitle": "Pre\u00e7os - Nuvero",
+      "seoDescription": "Pre\u00e7os claros da Nuvero para setup da primeira vers\u00e3o do site, mensalidade de servi\u00e7o gerido, pre\u00e7o founder e termos de reembolso da taxa de setup.",
       "seoTranslations": {
         "en": {
-          "title": "Pricing - Nuvio",
-          "description": "Clear Nuvio pricing for first-version website setup, monthly managed service, founder pricing, and setup-fee refund terms."
+          "title": "Pricing - Nuvero",
+          "description": "Clear Nuvero pricing for first-version website setup, monthly managed service, founder pricing, and setup-fee refund terms."
         }
       },
       "published": true,
@@ -5241,10 +5249,10 @@
             "headingPrefix": "Pre\u00e7os claros para uma",
             "headingAccent": "presen\u00e7a online gerida",
             "headingSuffix": ".",
-            "support": "A Nuvio separa a constru\u00e7\u00e3o da primeira vers\u00e3o da mensalidade, para saber o que \u00e9 criado antes do lan\u00e7amento, o que continua gerido depois e como funciona o reembolso da taxa de setup.",
+            "support": "A Nuvero separa a constru\u00e7\u00e3o da primeira vers\u00e3o da mensalidade, para saber o que \u00e9 criado antes do lan\u00e7amento, o que continua gerido depois e como funciona o reembolso da taxa de setup.",
             "actionsLabel": "A\u00e7\u00f5es de pre\u00e7os",
             "primaryCta": {
-              "label": "Pedir plano Nuvio",
+              "label": "Pedir plano Nuvero",
               "href": "/contact"
             },
             "secondaryCta": {
@@ -5271,10 +5279,10 @@
               "headingPrefix": "Clear pricing for a",
               "headingAccent": "managed online presence",
               "headingSuffix": ".",
-              "support": "Nuvio separates the first-version build from the monthly service, so you know what is created before launch, what stays managed after, and how the setup-fee refund works.",
+              "support": "Nuvero separates the first-version build from the monthly service, so you know what is created before launch, what stays managed after, and how the setup-fee refund works.",
               "actionsLabel": "Pricing actions",
               "primaryCta": {
-                "label": "Request my Nuvio plan",
+                "label": "Request my Nuvero plan",
                 "href": "/contact"
               },
               "secondaryCta": {
@@ -5683,7 +5691,7 @@
               },
               {
                 "question": "O que acontece depois do lan\u00e7amento?",
-                "answer": "A Nuvio mant\u00e9m a parte t\u00e9cnica gerida, envia relat\u00f3rios, apoia altera\u00e7\u00f5es e melhora a presen\u00e7a ao longo do tempo."
+                "answer": "A Nuvero mant\u00e9m a parte t\u00e9cnica gerida, envia relat\u00f3rios, apoia altera\u00e7\u00f5es e melhora a presen\u00e7a ao longo do tempo."
               },
               {
                 "question": "O que est\u00e1 inclu\u00eddo no apoio mensal?",
@@ -5691,7 +5699,7 @@
               },
               {
                 "question": "Garantem contactos, rankings ou receita?",
-                "answer": "N\u00e3o. A Nuvio melhora estrutura, clareza e caminhos de contacto, mas n\u00e3o promete contactos, rankings ou receita fixos."
+                "answer": "N\u00e3o. A Nuvero melhora estrutura, clareza e caminhos de contacto, mas n\u00e3o promete contactos, rankings ou receita fixos."
               },
               {
                 "question": "Como funciona o reembolso de 30 dias da taxa de setup?",
@@ -5723,7 +5731,7 @@
                 },
                 {
                   "question": "What happens after launch?",
-                  "answer": "Nuvio keeps the technical side managed, sends reports, supports changes, and improves the presence over time."
+                  "answer": "Nuvero keeps the technical side managed, sends reports, supports changes, and improves the presence over time."
                 },
                 {
                   "question": "What is included in monthly support?",
@@ -5731,7 +5739,7 @@
                 },
                 {
                   "question": "Do you guarantee leads, rankings, or revenue?",
-                  "answer": "No. Nuvio improves structure, clarity, and contact paths, but does not promise fixed leads, rankings, or revenue."
+                  "answer": "No. Nuvero improves structure, clarity, and contact paths, but does not promise fixed leads, rankings, or revenue."
                 },
                 {
                   "question": "How does the 30-day setup-fee refund work?",
@@ -5753,9 +5761,9 @@
           "props": {
             "eyebrow": "PR\u00d3XIMO PASSO",
             "heading": "Pronto para escolher o plano certo para o seu neg\u00f3cio?",
-            "support": "Diga \u00e0 Nuvio o que faz, o que precisa e que n\u00edvel de apoio faz sentido. Recebe um plano claro antes de qualquer constru\u00e7\u00e3o.",
+            "support": "Diga \u00e0 Nuvero o que faz, o que precisa e que n\u00edvel de apoio faz sentido. Recebe um plano claro antes de qualquer constru\u00e7\u00e3o.",
             "primaryCta": {
-              "label": "Pedir plano Nuvio",
+              "label": "Pedir plano Nuvero",
               "href": "/contact"
             },
             "secondaryCta": {
@@ -5770,9 +5778,9 @@
             "en": {
               "eyebrow": "NEXT STEP",
               "heading": "Ready to choose the right plan for your business?",
-              "support": "Tell Nuvio what you do, what you need, and which level of support feels right. You will get a clear plan before anything is built.",
+              "support": "Tell Nuvero what you do, what you need, and which level of support feels right. You will get a clear plan before anything is built.",
               "primaryCta": {
-                "label": "Request my Nuvio plan",
+                "label": "Request my Nuvero plan",
                 "href": "/contact"
               },
               "secondaryCta": {
@@ -5790,12 +5798,12 @@
     {
       "slug": "contact",
       "title": "Contact",
-      "seoTitle": "Pedir plano Nuvio | Presen\u00e7a online gerida para neg\u00f3cios locais",
-      "seoDescription": "Partilhe o contexto do seu neg\u00f3cio e a Nuvio mapeia a presen\u00e7a online certa, caminhos de contacto, controlos de backoffice e apoio mensal antes de construir.",
+      "seoTitle": "Pedir plano Nuvero | Presen\u00e7a online gerida para neg\u00f3cios locais",
+      "seoDescription": "Partilhe o contexto do seu neg\u00f3cio e a Nuvero mapeia a presen\u00e7a online certa, caminhos de contacto, controlos de backoffice e apoio mensal antes de construir.",
       "seoTranslations": {
         "en": {
-          "title": "Request a Nuvio plan | Managed online presence for local businesses",
-          "description": "Share your business context and Nuvio will map the right online presence, contact paths, backoffice controls, and monthly support before anything is built."
+          "title": "Request a Nuvero plan | Managed online presence for local businesses",
+          "description": "Share your business context and Nuvero will map the right online presence, contact paths, backoffice controls, and monthly support before anything is built."
         }
       },
       "published": true,
@@ -5811,7 +5819,7 @@
             "context": {
               "eyebrow": "O que enviar",
               "headingPrefix": "Envie o contexto.",
-              "headingAccent": "A Nuvio mapeia o plano",
+              "headingAccent": "A Nuvero mapeia o plano",
               "headingSuffix": ".",
               "whatToSendLabel": "Contexto \u00fatil para enviar",
               "whatToSend": [
@@ -5828,9 +5836,9 @@
                   "text": "Ligar, enviar mensagem, pedir or\u00e7amento, marcar ou perceber primeiro a oferta."
                 }
               ],
-              "mappedOutputsLabel": "O que a Nuvio mapeia a partir deste contexto",
+              "mappedOutputsLabel": "O que a Nuvero mapeia a partir deste contexto",
               "mappedOutputsHeadingPrefix": "O que",
-              "mappedOutputsHeadingAccent": "a Nuvio mapeia",
+              "mappedOutputsHeadingAccent": "a Nuvero mapeia",
               "mappedOutputsHeadingSuffix": "a partir disto",
               "mappedOutputs": [
                 {
@@ -5852,11 +5860,11 @@
               ]
             },
             "form": {
-              "eyebrow": "Pedir plano Nuvio",
+              "eyebrow": "Pedir plano Nuvero",
               "headingPrefix": "Pedir o seu",
-              "headingAccent": "plano Nuvio",
+              "headingAccent": "plano Nuvero",
               "support": "Uma mensagem curta basta para come\u00e7ar. Quanto mais contexto enviar, mais f\u00e1cil \u00e9 mapear a primeira vers\u00e3o certa.",
-              "loadingStatus": "A enviar o seu pedido de plano Nuvio...",
+              "loadingStatus": "A enviar o seu pedido de plano Nuvero...",
               "honeypotLabel": "URL do site",
               "labels": {
                 "name": "O seu nome",
@@ -5873,11 +5881,11 @@
                 "message": "Detalhes \u00fateis: servi\u00e7os, zona, links atuais, prefer\u00eancia de contacto e o que hoje parece pouco claro."
               },
               "optionalLabel": "opcional",
-              "submitIdle": "Pedir plano Nuvio",
+              "submitIdle": "Pedir plano Nuvero",
               "submitLoading": "A enviar pedido...",
               "successMessage": "Obrigado pelo contacto. Vamos responder em breve.",
               "errorMessage": "Ainda n\u00e3o foi poss\u00edvel enviar o pedido. Verifique os campos e tente novamente.",
-              "note": "Ainda n\u00e3o tem tudo pronto? Envie o que tiver. A Nuvio pode come\u00e7ar pelo seu site, Perfil de Empresa Google ou Instagram."
+              "note": "Ainda n\u00e3o tem tudo pronto? Envie o que tiver. A Nuvero pode come\u00e7ar pelo seu site, Perfil de Empresa Google ou Instagram."
             }
           },
           "translations": {
@@ -5885,7 +5893,7 @@
               "context": {
                 "eyebrow": "What to send",
                 "headingPrefix": "Send the context.",
-                "headingAccent": "Nuvio maps the plan",
+                "headingAccent": "Nuvero maps the plan",
                 "headingSuffix": ".",
                 "whatToSendLabel": "Useful context to send",
                 "whatToSend": [
@@ -5902,9 +5910,9 @@
                     "text": "Call, message, request a quote, book, or understand the offer first."
                   }
                 ],
-                "mappedOutputsLabel": "What Nuvio maps from this context",
+                "mappedOutputsLabel": "What Nuvero maps from this context",
                 "mappedOutputsHeadingPrefix": "What",
-                "mappedOutputsHeadingAccent": "Nuvio maps",
+                "mappedOutputsHeadingAccent": "Nuvero maps",
                 "mappedOutputsHeadingSuffix": "from this",
                 "mappedOutputs": [
                   {
@@ -5926,11 +5934,11 @@
                 ]
               },
               "form": {
-                "eyebrow": "Request a Nuvio plan",
+                "eyebrow": "Request a Nuvero plan",
                 "headingPrefix": "Request your",
-                "headingAccent": "Nuvio plan",
+                "headingAccent": "Nuvero plan",
                 "support": "A short message is enough to begin. The more context you send, the easier it is to map the right first version.",
-                "loadingStatus": "Sending your Nuvio plan request...",
+                "loadingStatus": "Sending your Nuvero plan request...",
                 "honeypotLabel": "Website URL",
                 "labels": {
                   "name": "Your name",
@@ -5947,11 +5955,11 @@
                   "message": "Useful details: services, area, current online links, contact preference, and what feels unclear today."
                 },
                 "optionalLabel": "optional",
-                "submitIdle": "Request my Nuvio plan",
+                "submitIdle": "Request my Nuvero plan",
                 "submitLoading": "Sending request...",
                 "successMessage": "Thank you for contacting us. We'll reply soon.",
                 "errorMessage": "We couldn't send the request yet. Please check the fields and try again.",
-                "note": "Not ready with everything? Send what you have. Nuvio can start from your website, Google profile, or Instagram."
+                "note": "Not ready with everything? Send what you have. Nuvero can start from your website, Google profile, or Instagram."
               }
             }
           }

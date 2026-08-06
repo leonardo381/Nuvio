@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/pocketbase/dbx"
@@ -21,6 +23,15 @@ func TestNuvioMarketingSeedFixtureContract(t *testing.T) {
 
 	if fixture.Website.Slug != "nuvio" {
 		t.Fatalf("expected website slug nuvio, got %q", fixture.Website.Slug)
+	}
+	if fixture.Website.Name != "Nuvero" || fixture.Website.Title != "Nuvero" || fixture.Website.BusinessName != "Nuvero" {
+		t.Fatalf("expected public website display name/title/business name Nuvero, got %#v", fixture.Website)
+	}
+	if !strings.Contains(fixture.Website.SeoTitle, "Nuvero") || !strings.Contains(fixture.Website.SeoDescription, "Nuvero") {
+		t.Fatalf("expected website SEO metadata to use Nuvero, got title=%q description=%q", fixture.Website.SeoTitle, fixture.Website.SeoDescription)
+	}
+	if fixture.Website.SeoTitleTemplate != "%s | Nuvero" || fixture.Website.SeoTitleSeparator != "|" {
+		t.Fatalf("expected website SEO template to use Nuvero, got template=%q separator=%q", fixture.Website.SeoTitleTemplate, fixture.Website.SeoTitleSeparator)
 	}
 	if len(fixture.Components) != 17 {
 		t.Fatalf("expected 17 component definitions, got %d", len(fixture.Components))
@@ -197,6 +208,15 @@ func TestNuvioMarketingSeedAppliesIdempotentlyToCleanCMSCollections(t *testing.T
 	}
 	settings := nuvioMarketingSeedMapValue(website.Get("settings"))
 	seededI18n := nuvioMarketingSeedMapValue(settings["i18n"])
+	if website.GetString("name") != "Nuvero" || website.GetString("title") != "Nuvero" || website.GetString("business_name") != "Nuvero" {
+		t.Fatalf("expected seeded website display fields to use Nuvero, got name=%q title=%q business_name=%q", website.GetString("name"), website.GetString("title"), website.GetString("business_name"))
+	}
+	if !strings.Contains(website.GetString("seoTitle"), "Nuvero") || !strings.Contains(website.GetString("seoDescription"), "Nuvero") {
+		t.Fatalf("expected seeded website SEO fields to use Nuvero, got title=%q description=%q", website.GetString("seoTitle"), website.GetString("seoDescription"))
+	}
+	if website.GetString("seo_title_template") != "%s | Nuvero" || website.GetString("seo_title_separator") != "|" {
+		t.Fatalf("expected seeded website SEO template to use Nuvero, got template=%q separator=%q", website.GetString("seo_title_template"), website.GetString("seo_title_separator"))
+	}
 	if seededI18n["enabled"] != true || seededI18n["defaultLanguage"] != "pt-PT" {
 		t.Fatalf("expected seeded website i18n pt-PT/en settings, got %#v", seededI18n)
 	}
@@ -319,6 +339,128 @@ func TestNuvioMarketingSeedPreservesExistingEnglishContentAsTranslations(t *test
 	}
 }
 
+func TestNuvioMarketingSeedRefreshesOwnedContentFromFixture(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("failed to create test app: %v", err)
+	}
+	defer app.Cleanup()
+
+	ensureNuvioMarketingSeedTestCollections(t, app)
+	fixture, err := loadNuvioMarketingSeedFixture("")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+	if _, err := applyNuvioMarketingSeedFixture(app, fixture, true); err != nil {
+		t.Fatalf("failed to apply fixture: %v", err)
+	}
+
+	websiteID := mustNuvioMarketingSeedWebsiteID(t, app)
+	homePage, err := findNuvioPublicPageBySlug(app, websiteID, "home")
+	if err != nil {
+		t.Fatalf("expected home page: %v", err)
+	}
+	homePage.Set("seo_translations", map[string]any{"en": map[string]any{"title": "Old Nuvio SEO", "description": "Old Nuvio description"}})
+	if err := app.Save(homePage); err != nil {
+		t.Fatalf("failed to save stale SEO translation: %v", err)
+	}
+
+	websiteRecord, err := app.FindRecordById(nuvioWebsitesCollectionID, websiteID)
+	if err != nil {
+		t.Fatalf("expected website record: %v", err)
+	}
+	staleSettings := nuvioMarketingSeedMapValue(websiteRecord.Get("settings"))
+	staleSettings["contactForm"] = map[string]any{
+		"confirmationMessage": "Nuvio received your plan request.",
+		"enabled":             true,
+		"fields":              map[string]any{"phone": true},
+	}
+	staleSettings["featureFlags"] = map[string]any{"contactForm": true}
+	websiteRecord.Set("settings", staleSettings)
+	if err := app.Save(websiteRecord); err != nil {
+		t.Fatalf("failed to save stale website settings: %v", err)
+	}
+
+	homeFixturePage := findNuvioMarketingSeedPage(fixture, "home")
+	if homeFixturePage == nil {
+		t.Fatal("expected home fixture page")
+	}
+	homeFixtureHero := findNuvioMarketingSeedBlock(*homeFixturePage, "nuvio-home-hero")
+	if homeFixtureHero == nil {
+		t.Fatal("expected home hero fixture block")
+	}
+
+	blocksCollection, err := app.FindCachedCollectionByNameOrId(nuvioBlocksCollectionID)
+	if err != nil {
+		t.Fatalf("failed to resolve blocks collection: %v", err)
+	}
+	heroRecord, err := app.FindFirstRecordByFilter(blocksCollection, "page={:page} && slot={:slot}", dbx.Params{"page": homePage.Id, "slot": homeFixtureHero.Slot})
+	if err != nil {
+		t.Fatalf("expected home hero block: %v", err)
+	}
+	heroRecord.Set("translations", map[string]any{"en": map[string]any{"headingPrefix": "Old Nuvio headline"}})
+	if err := app.Save(heroRecord); err != nil {
+		t.Fatalf("failed to save stale block translation: %v", err)
+	}
+
+	legacyBlock := core.NewRecord(blocksCollection)
+	legacyBlock.Set("page", homePage.Id)
+	legacyBlock.Set("slot", "home.legacy")
+	legacyBlock.Set("component_key", "nuvio-home-hero")
+	legacyBlock.Set("title", "Old Nuvio legacy block")
+	legacyBlock.Set("enabled", true)
+	legacyBlock.Set("visible", true)
+	legacyBlock.Set("status", "active")
+	legacyBlock.Set("props", map[string]any{"heading": "Old Nuvio legacy block"})
+	if err := app.Save(legacyBlock); err != nil {
+		t.Fatalf("failed to save legacy block: %v", err)
+	}
+
+	if _, err := applyNuvioMarketingSeedFixture(app, fixture, true, nuvioMarketingSeedApplyOptions{RefreshOwnedContent: true}); err != nil {
+		t.Fatalf("failed to refresh fixture-owned content: %v", err)
+	}
+
+	refreshedPage, err := findNuvioPublicPageBySlug(app, websiteID, "home")
+	if err != nil {
+		t.Fatalf("expected refreshed home page: %v", err)
+	}
+	englishSeo := nuvioMarketingSeedMapValue(nuvioMarketingSeedMapValue(refreshedPage.Get("seo_translations"))["en"])
+	fixtureEnglishSeo := nuvioMarketingSeedMapValue(homeFixturePage.SeoTranslations["en"])
+	if !reflect.DeepEqual(englishSeo, fixtureEnglishSeo) || !strings.Contains(fmt.Sprint(englishSeo["title"]), "Nuvero") {
+		t.Fatalf("expected English SEO refreshed from fixture, got %#v", englishSeo)
+	}
+
+	refreshedWebsite, err := app.FindRecordById(nuvioWebsitesCollectionID, websiteID)
+	if err != nil {
+		t.Fatalf("expected refreshed website record: %v", err)
+	}
+	contactFormSettings := nuvioMarketingSeedMapValue(nuvioMarketingSeedMapValue(refreshedWebsite.Get("settings"))["contactForm"])
+	if contactFormSettings["confirmationMessage"] != "Nuvero received your plan request." || contactFormSettings["enabled"] != true {
+		t.Fatalf("expected website contactForm settings refreshed and preserved, got %#v", contactFormSettings)
+	}
+	fields := nuvioMarketingSeedMapValue(contactFormSettings["fields"])
+	if fields["phone"] != true {
+		t.Fatalf("expected website contactForm fields preserved, got %#v", fields)
+	}
+	refreshedLegacyBlock, err := app.FindRecordById(nuvioBlocksCollectionID, legacyBlock.Id)
+	if err != nil {
+		t.Fatalf("expected legacy block to remain present: %v", err)
+	}
+	if refreshedLegacyBlock.GetBool("enabled") || refreshedLegacyBlock.GetBool("visible") || refreshedLegacyBlock.GetString("status") != "disabled" {
+		t.Fatalf("expected legacy block disabled but preserved, got enabled=%v visible=%v status=%q", refreshedLegacyBlock.GetBool("enabled"), refreshedLegacyBlock.GetBool("visible"), refreshedLegacyBlock.GetString("status"))
+	}
+
+	refreshedHero, err := app.FindFirstRecordByFilter(blocksCollection, "page={:page} && slot={:slot}", dbx.Params{"page": refreshedPage.Id, "slot": homeFixtureHero.Slot})
+	if err != nil {
+		t.Fatalf("expected refreshed home hero block: %v", err)
+	}
+	englishTranslation := nuvioMarketingSeedMapValue(nuvioMarketingSeedMapValue(refreshedHero.Get("translations"))["en"])
+	fixtureEnglishTranslation := nuvioMarketingSeedMapValue(homeFixtureHero.Translations["en"])
+	if !reflect.DeepEqual(englishTranslation, fixtureEnglishTranslation) || strings.Contains(fmt.Sprint(englishTranslation["headingPrefix"]), "Old Nuvio") {
+		t.Fatalf("expected English block translation refreshed from fixture, got %#v", englishTranslation)
+	}
+}
+
 func TestNuvioMarketingSeedPublicContentEndpoints(t *testing.T) {
 	t.Parallel()
 
@@ -431,6 +573,11 @@ func ensureNuvioMarketingSeedTestCollections(t testing.TB, app *tests.TestApp) {
 	ensureNuvioCMSBackofficeCollection(t, app, "Websites", nuvioWebsitesCollectionID, []core.Field{
 		&core.TextField{Name: "name"},
 		&core.TextField{Name: "title"},
+		&core.TextField{Name: "seoTitle"},
+		&core.TextField{Name: "seoDescription"},
+		&core.TextField{Name: "seo_title_template"},
+		&core.TextField{Name: "seo_title_separator"},
+		&core.TextField{Name: "business_name"},
 		&core.TextField{Name: "slug"},
 		&core.TextField{Name: "domain"},
 		&core.BoolField{Name: "enabled"},

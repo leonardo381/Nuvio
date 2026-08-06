@@ -35,11 +35,16 @@ type nuvioMarketingSeedFixture struct {
 }
 
 type nuvioMarketingSeedWebsite struct {
-	Slug     string         `json:"slug"`
-	Name     string         `json:"name"`
-	Title    string         `json:"title"`
-	Domain   string         `json:"domain"`
-	Settings map[string]any `json:"settings"`
+	Slug              string         `json:"slug"`
+	Name              string         `json:"name"`
+	Title             string         `json:"title"`
+	SeoTitle          string         `json:"seoTitle"`
+	SeoDescription    string         `json:"seoDescription"`
+	SeoTitleTemplate  string         `json:"seoTitleTemplate"`
+	SeoTitleSeparator string         `json:"seoTitleSeparator"`
+	BusinessName      string         `json:"businessName"`
+	Domain            string         `json:"domain"`
+	Settings          map[string]any `json:"settings"`
 }
 
 type nuvioMarketingSeedComponent struct {
@@ -70,13 +75,15 @@ type nuvioMarketingSeedBlock struct {
 }
 
 type nuvioMarketingSeedOptions struct {
-	FixturePath   string
-	Apply         bool
-	AdoptExisting bool
+	FixturePath         string
+	Apply               bool
+	AdoptExisting       bool
+	RefreshOwnedContent bool
 }
 
 type nuvioMarketingSeedApplyOptions struct {
 	AdoptExistingWebsite bool
+	RefreshOwnedContent  bool
 }
 
 type nuvioMarketingSeedStats struct {
@@ -111,7 +118,7 @@ func newNuvioMarketingSeedCommand(app core.App) *cobra.Command {
 				return err
 			}
 
-			stats, err := applyNuvioMarketingSeedFixture(app, fixture, opts.Apply, nuvioMarketingSeedApplyOptions{AdoptExistingWebsite: opts.AdoptExisting})
+			stats, err := applyNuvioMarketingSeedFixture(app, fixture, opts.Apply, nuvioMarketingSeedApplyOptions{AdoptExistingWebsite: opts.AdoptExisting, RefreshOwnedContent: opts.RefreshOwnedContent})
 			if err != nil {
 				return err
 			}
@@ -124,6 +131,7 @@ func newNuvioMarketingSeedCommand(app core.App) *cobra.Command {
 	command.Flags().StringVar(&opts.FixturePath, "fixture", "", "Optional fixture JSON path. Defaults to the embedded Nuvio marketing fixture.")
 	command.Flags().BoolVar(&opts.Apply, "apply", false, "Write changes. Without this flag the command runs in dry-run mode.")
 	command.Flags().BoolVar(&opts.AdoptExisting, "adopt-existing", false, "Allow updating an existing nuvio website record that is not yet marked as fixture-owned.")
+	command.Flags().BoolVar(&opts.RefreshOwnedContent, "refresh-owned-content", false, "Replace fixture-owned marketing SEO translations and block translations with fixture content instead of preserving edited English copy.")
 
 	return command
 }
@@ -282,7 +290,7 @@ func applyNuvioMarketingSeedFixture(app core.App, fixture nuvioMarketingSeedFixt
 	}
 
 	for _, page := range fixture.Pages {
-		pageRecord, err := upsertNuvioMarketingSeedPage(app, pagesCollection, fixture, page, websiteID, apply, &stats)
+		pageRecord, err := upsertNuvioMarketingSeedPage(app, pagesCollection, fixture, page, websiteID, apply, applyOptions, &stats)
 		if err != nil {
 			return stats, err
 		}
@@ -292,9 +300,16 @@ func applyNuvioMarketingSeedFixture(app core.App, fixture nuvioMarketingSeedFixt
 			pageID = "dry-run-page-" + page.Slug
 		}
 
+		expectedSlots := map[string]struct{}{}
 		for _, block := range page.Blocks {
+			expectedSlots[strings.TrimSpace(block.Slot)] = struct{}{}
 			componentRecord := componentRecords[strings.TrimSpace(block.ComponentKey)]
-			if err := upsertNuvioMarketingSeedBlock(app, blocksCollection, fixture, block, pageID, componentRecord, apply, &stats); err != nil {
+			if err := upsertNuvioMarketingSeedBlock(app, blocksCollection, fixture, block, pageID, componentRecord, apply, applyOptions, &stats); err != nil {
+				return stats, err
+			}
+		}
+		if applyOptions.RefreshOwnedContent {
+			if err := disableNuvioMarketingSeedLegacyBlocks(app, blocksCollection, pageID, expectedSlots, componentRecords, apply, &stats); err != nil {
 				return stats, err
 			}
 		}
@@ -334,6 +349,16 @@ func upsertNuvioMarketingSeedWebsite(app core.App, collection *core.Collection, 
 	setNuvioMarketingSeedField(record, collection, "slug", fixture.Website.Slug)
 	setNuvioMarketingSeedField(record, collection, "name", fixture.Website.Name)
 	setNuvioMarketingSeedField(record, collection, "title", fixture.Website.Title)
+	setNuvioMarketingSeedField(record, collection, "seoTitle", fixture.Website.SeoTitle)
+	setNuvioMarketingSeedField(record, collection, "seo_title", fixture.Website.SeoTitle)
+	setNuvioMarketingSeedField(record, collection, "seoDescription", fixture.Website.SeoDescription)
+	setNuvioMarketingSeedField(record, collection, "seo_description", fixture.Website.SeoDescription)
+	setNuvioMarketingSeedField(record, collection, "seo_title_template", fixture.Website.SeoTitleTemplate)
+	setNuvioMarketingSeedField(record, collection, "seoTitleTemplate", fixture.Website.SeoTitleTemplate)
+	setNuvioMarketingSeedField(record, collection, "seo_title_separator", fixture.Website.SeoTitleSeparator)
+	setNuvioMarketingSeedField(record, collection, "seoTitleSeparator", fixture.Website.SeoTitleSeparator)
+	setNuvioMarketingSeedField(record, collection, "business_name", fixture.Website.BusinessName)
+	setNuvioMarketingSeedField(record, collection, "businessName", fixture.Website.BusinessName)
 	setNuvioMarketingSeedField(record, collection, "domain", fixture.Website.Domain)
 	setNuvioMarketingSeedField(record, collection, "enabled", true)
 	setNuvioMarketingSeedField(record, collection, "active", true)
@@ -390,7 +415,7 @@ func upsertNuvioMarketingSeedComponent(app core.App, collection *core.Collection
 	return record, nil
 }
 
-func upsertNuvioMarketingSeedPage(app core.App, collection *core.Collection, fixture nuvioMarketingSeedFixture, page nuvioMarketingSeedPage, websiteID string, apply bool, stats *nuvioMarketingSeedStats) (*core.Record, error) {
+func upsertNuvioMarketingSeedPage(app core.App, collection *core.Collection, fixture nuvioMarketingSeedFixture, page nuvioMarketingSeedPage, websiteID string, apply bool, options nuvioMarketingSeedApplyOptions, stats *nuvioMarketingSeedStats) (*core.Record, error) {
 	websiteField := resolveNuvioPublicPagesWebsiteFieldName(collection)
 	if websiteField == "" {
 		return nil, errors.New("Pages collection has no website/site relation field")
@@ -416,7 +441,7 @@ func upsertNuvioMarketingSeedPage(app core.App, collection *core.Collection, fix
 		return record, nil
 	}
 
-	seoTranslations := resolveNuvioMarketingSeedPageSEOTranslations(record, page)
+	seoTranslations := resolveNuvioMarketingSeedPageSEOTranslations(record, page, options.RefreshOwnedContent)
 
 	setNuvioMarketingSeedField(record, collection, websiteField, websiteID)
 	setNuvioMarketingSeedField(record, collection, "slug", page.Slug)
@@ -442,7 +467,7 @@ func upsertNuvioMarketingSeedPage(app core.App, collection *core.Collection, fix
 	return record, nil
 }
 
-func upsertNuvioMarketingSeedBlock(app core.App, collection *core.Collection, fixture nuvioMarketingSeedFixture, block nuvioMarketingSeedBlock, pageID string, componentRecord *core.Record, apply bool, stats *nuvioMarketingSeedStats) error {
+func upsertNuvioMarketingSeedBlock(app core.App, collection *core.Collection, fixture nuvioMarketingSeedFixture, block nuvioMarketingSeedBlock, pageID string, componentRecord *core.Record, apply bool, options nuvioMarketingSeedApplyOptions, stats *nuvioMarketingSeedStats) error {
 	if !hasNuvioMarketingSeedField(collection, "page") {
 		return errors.New("Blocks collection has no page relation field")
 	}
@@ -475,7 +500,7 @@ func upsertNuvioMarketingSeedBlock(app core.App, collection *core.Collection, fi
 		return nil
 	}
 
-	blockTranslations := resolveNuvioMarketingSeedBlockTranslations(record, block)
+	blockTranslations := resolveNuvioMarketingSeedBlockTranslations(record, block, options.RefreshOwnedContent)
 
 	setNuvioMarketingSeedField(record, collection, "page", pageID)
 	setNuvioMarketingSeedField(record, collection, "slot", block.Slot)
@@ -507,12 +532,75 @@ func resolveNuvioMarketingSeedApplyOptions(options ...nuvioMarketingSeedApplyOpt
 	return options[0]
 }
 
+func disableNuvioMarketingSeedLegacyBlocks(app core.App, collection *core.Collection, pageID string, expectedSlots map[string]struct{}, componentRecords map[string]*core.Record, apply bool, stats *nuvioMarketingSeedStats) error {
+	if !apply || strings.TrimSpace(pageID) == "" {
+		return nil
+	}
+
+	records, err := app.FindRecordsByFilter(collection, "page={:page}", "", 500, 0, dbx.Params{"page": pageID})
+	if err != nil {
+		return fmt.Errorf("failed to scan legacy marketing blocks for page %q: %w", pageID, err)
+	}
+
+	for _, record := range records {
+		slot := strings.TrimSpace(record.GetString("slot"))
+		if _, ok := expectedSlots[slot]; ok {
+			continue
+		}
+
+		componentKey := strings.TrimSpace(record.GetString("component_key"))
+		if componentKey == "" {
+			componentKey = strings.TrimSpace(record.GetString("componentKey"))
+		}
+		if !strings.HasPrefix(componentKey, "nuvio-") {
+			continue
+		}
+		if _, ok := componentRecords[componentKey]; !ok {
+			continue
+		}
+
+		changed := false
+		if hasNuvioMarketingSeedField(collection, "enabled") && record.GetBool("enabled") {
+			record.Set("enabled", false)
+			changed = true
+		}
+		if hasNuvioMarketingSeedField(collection, "visible") && record.GetBool("visible") {
+			record.Set("visible", false)
+			changed = true
+		}
+		if hasNuvioMarketingSeedField(collection, "status") && strings.TrimSpace(record.GetString("status")) != "disabled" {
+			record.Set("status", "disabled")
+			changed = true
+		}
+		if !changed {
+			continue
+		}
+		if err := app.Save(record); err != nil {
+			return fmt.Errorf("failed to disable legacy marketing block %q: %w", slot, err)
+		}
+		countNuvioMarketingSeedStat(stats.Updated, "LegacyBlocks")
+	}
+
+	return nil
+}
+
 func mergeNuvioMarketingSeedWebsiteSettings(existing map[string]any, fixtureSettings map[string]any) map[string]any {
 	merged := cloneNuvioMarketingSeedMap(existing)
-	for key, value := range fixtureSettings {
-		merged[key] = value
-	}
+	mergeNuvioMarketingSeedMapInto(merged, fixtureSettings)
 	return merged
+}
+
+func mergeNuvioMarketingSeedMapInto(target map[string]any, source map[string]any) {
+	for key, value := range source {
+		fixtureChild, fixtureIsMap := value.(map[string]any)
+		existingChild, existingIsMap := target[key].(map[string]any)
+		if fixtureIsMap && existingIsMap {
+			mergeNuvioMarketingSeedMapInto(existingChild, fixtureChild)
+			target[key] = existingChild
+			continue
+		}
+		target[key] = value
+	}
 }
 
 func firstNuvioMarketingSeedField(collection *core.Collection, fields ...string) string {
@@ -559,8 +647,11 @@ func cloneNuvioMarketingSeedMap(value map[string]any) map[string]any {
 	return cloned
 }
 
-func resolveNuvioMarketingSeedPageSEOTranslations(record *core.Record, page nuvioMarketingSeedPage) map[string]any {
+func resolveNuvioMarketingSeedPageSEOTranslations(record *core.Record, page nuvioMarketingSeedPage, refreshOwnedContent bool) map[string]any {
 	translations := cloneNuvioMarketingSeedMap(page.SeoTranslations)
+	if refreshOwnedContent {
+		return translations
+	}
 	if existing, ok := getNuvioMarketingSeedLanguageMap(nuvioMarketingSeedMapValue(record.Get("seo_translations")), "en"); ok && hasMeaningfulNuvioMarketingSeedMap(existing) {
 		translations["en"] = existing
 		return translations
@@ -583,8 +674,11 @@ func resolveNuvioMarketingSeedPageSEOTranslations(record *core.Record, page nuvi
 	return translations
 }
 
-func resolveNuvioMarketingSeedBlockTranslations(record *core.Record, block nuvioMarketingSeedBlock) map[string]any {
+func resolveNuvioMarketingSeedBlockTranslations(record *core.Record, block nuvioMarketingSeedBlock, refreshOwnedContent bool) map[string]any {
 	translations := cloneNuvioMarketingSeedMap(block.Translations)
+	if refreshOwnedContent {
+		return translations
+	}
 	existingTranslations := nuvioMarketingSeedMapValue(record.Get("translations"))
 	if existingEnglish, ok := getNuvioMarketingSeedLanguageMap(existingTranslations, "en"); ok && hasMeaningfulNuvioMarketingSeedMap(existingEnglish) {
 		translations["en"] = existingEnglish
