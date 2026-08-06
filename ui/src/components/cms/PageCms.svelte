@@ -907,8 +907,8 @@
         }
     }
     $: isSectionEditorDirty = !!selectedEditingSection
-        && stableSerializeForDirtyCheck(selectedEditingSectionDraftActiveProps)
-            !== stableSerializeForDirtyCheck(selectedEditingSectionOriginalActiveProps);
+        && stableSerializeSectionPropsForDirtyCheck(selectedEditingSectionDraftActiveProps, selectedEditingSectionFields)
+            !== stableSerializeSectionPropsForDirtyCheck(selectedEditingSectionOriginalActiveProps, selectedEditingSectionFields);
     $: if (!sectionEditorSupportsTranslations && activeSectionLanguageKey !== sectionDefaultLanguageKey) {
         activeSectionLanguageKey = sectionDefaultLanguageKey;
     }
@@ -3226,6 +3226,152 @@
         } catch (_) {
             return JSON.stringify({});
         }
+    }
+    function stableSerializeSectionPropsForDirtyCheck(value, schemaFields = []) {
+        try {
+            return JSON.stringify(normalizeSectionComparableForDirtyCheck(toPropsObject(value), schemaFields));
+        } catch (_) {
+            return JSON.stringify({});
+        }
+    }
+
+    function normalizeSectionComparableForDirtyCheck(value, schemaFields = []) {
+        if (!isPlainObject(value)) {
+            return normalizeComparableForDirtyCheck(value);
+        }
+
+        const fieldByKey = new Map(
+            (Array.isArray(schemaFields) ? schemaFields : [])
+                .map((field) => [normalizeString(field?.key), field])
+                .filter(([key]) => !!key),
+        );
+        const normalizedObject = {};
+
+        for (const key of Object.keys(value).sort()) {
+            const nextValue = value[key];
+            if (typeof nextValue === "undefined") {
+                continue;
+            }
+
+            normalizedObject[key] = normalizeSectionFieldComparableForDirtyCheck(nextValue, fieldByKey.get(key));
+        }
+
+        return normalizedObject;
+    }
+
+    function normalizeSectionFieldComparableForDirtyCheck(value, field = null) {
+        if (isBasicRichTextFieldForDirtyCheck(field)) {
+            return normalizeBasicRichTextComparableForDirtyCheck(value);
+        }
+
+        if (isTrustedMarkupFieldForDirtyCheck(field)) {
+            return normalizeTrustedMarkupComparableForDirtyCheck(value);
+        }
+
+        if (Array.isArray(value)) {
+            const itemFields = Array.isArray(field?.item?.fields)
+                ? field.item.fields
+                : Array.isArray(field?.items?.fields)
+                    ? field.items.fields
+                    : [];
+            return value.map((item) => itemFields.length && isPlainObject(item)
+                ? normalizeSectionComparableForDirtyCheck(item, itemFields)
+                : normalizeComparableForDirtyCheck(item));
+        }
+
+        if (isPlainObject(value)) {
+            const objectFields = Array.isArray(field?.fields) ? field.fields : [];
+            return objectFields.length
+                ? normalizeSectionComparableForDirtyCheck(value, objectFields)
+                : normalizeComparableForDirtyCheck(value);
+        }
+
+        return normalizeComparableForDirtyCheck(value);
+    }
+
+    function isBasicRichTextFieldForDirtyCheck(field) {
+        if (!field || field?.richText !== true) {
+            return false;
+        }
+
+        const profile = normalizeString(field?.richTextProfile || "basicRichText");
+        return profile === "basicRichText";
+    }
+
+    function isTrustedMarkupFieldForDirtyCheck(field) {
+        if (!field) {
+            return false;
+        }
+
+        if (field?.trustedMarkup === true) {
+            return true;
+        }
+
+        const profileCandidates = [
+            field?.profile,
+            field?.trustedMarkupProfile,
+            field?.richTextProfile,
+            field?.key,
+            field?.name,
+        ];
+
+        return profileCandidates.some((candidate) => {
+            const normalizedCandidate = normalizeString(candidate).toLowerCase();
+            return normalizedCandidate.includes("trustediconsvg")
+                || normalizedCandidate.includes("trustedsvgillustration")
+                || normalizedCandidate.includes("trustedhtmlillustration");
+        });
+    }
+
+    function normalizeBasicRichTextComparableForDirtyCheck(value) {
+        const rawValue = `${value ?? ""}`.trim();
+        if (!rawValue) {
+            return "";
+        }
+
+        const singlePlainParagraph = rawValue.match(/^<p(?:\s[^>]*)?>([\s\S]*)<\/p>$/i);
+        if (singlePlainParagraph && !/<(?!br\s*\/?\s*>)/i.test(singlePlainParagraph[1])) {
+            return normalizePlainRichTextComparableForDirtyCheck(
+                singlePlainParagraph[1].replace(/<br\s*\/?\s*>/gi, "\n"),
+            );
+        }
+
+        if (!rawValue.includes("<")) {
+            return normalizePlainRichTextComparableForDirtyCheck(rawValue);
+        }
+
+        return rawValue.replace(/>\s+</g, "><");
+    }
+
+    function normalizePlainRichTextComparableForDirtyCheck(value) {
+        return decodeHtmlEntitiesForDirtyCheck(`${value ?? ""}`)
+            .replace(/\u00a0/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function normalizeTrustedMarkupComparableForDirtyCheck(value) {
+        return `${value ?? ""}`
+            .trim()
+            .replace(/\sdata-mce-[a-z0-9_-]+=("[^"]*"|'[^']*')/gi, "")
+            .replace(/>\s+</g, "><");
+    }
+
+    function decodeHtmlEntitiesForDirtyCheck(value) {
+        const text = `${value ?? ""}`;
+        if (typeof document !== "undefined") {
+            const textarea = document.createElement("textarea");
+            textarea.innerHTML = text;
+            return textarea.value;
+        }
+
+        return text
+            .replace(/&nbsp;/gi, " ")
+            .replace(/&amp;/gi, "&")
+            .replace(/&lt;/gi, "<")
+            .replace(/&gt;/gi, ">")
+            .replace(/&quot;/gi, '"')
+            .replace(/&#39;/g, "'");
     }
 
     function buildWebsiteSettingsPatchDiff(currentValue, persistedValue) {
