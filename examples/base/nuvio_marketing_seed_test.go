@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -33,11 +34,56 @@ func TestNuvioMarketingSeedFixtureContract(t *testing.T) {
 		}
 	}
 
+	i18n := nuvioMarketingSeedMapValue(fixture.Website.Settings["i18n"])
+	if i18n["enabled"] != true {
+		t.Fatalf("expected fixture i18n to be enabled, got %#v", i18n["enabled"])
+	}
+	if i18n["defaultLanguage"] != "pt-PT" {
+		t.Fatalf("expected fixture default language pt-PT, got %#v", i18n["defaultLanguage"])
+	}
+	languages, ok := i18n["languages"].([]any)
+	if !ok || len(languages) != 2 {
+		t.Fatalf("expected fixture i18n languages pt-PT/en, got %#v", i18n["languages"])
+	}
+	for index, expectedCode := range []string{"pt-PT", "en"} {
+		language := nuvioMarketingSeedMapValue(languages[index])
+		if language["code"] != expectedCode {
+			t.Fatalf("expected fixture language %d to be %q, got %#v", index, expectedCode, language["code"])
+		}
+	}
+
 	expectedBlocks := map[string]int{"home": 9, "services": 6, "pricing": 4, "contact": 1}
 	for _, page := range fixture.Pages {
 		if expectedBlocks[page.Slug] != len(page.Blocks) {
 			t.Fatalf("expected %d blocks for %s, got %d", expectedBlocks[page.Slug], page.Slug, len(page.Blocks))
 		}
+		seoTranslations := nuvioMarketingSeedMapValue(page.SeoTranslations)
+		englishSeo := nuvioMarketingSeedMapValue(seoTranslations["en"])
+		if fmt.Sprint(englishSeo["title"]) == "" || fmt.Sprint(englishSeo["description"]) == "" {
+			t.Fatalf("expected English SEO translation for %s, got %#v", page.Slug, englishSeo)
+		}
+		for _, block := range page.Blocks {
+			englishProps := nuvioMarketingSeedMapValue(block.Translations["en"])
+			if len(englishProps) == 0 {
+				t.Fatalf("expected English block translation for %s.%s", page.Slug, block.Slot)
+			}
+		}
+	}
+
+	homePage := findNuvioMarketingSeedPage(fixture, "home")
+	if homePage == nil {
+		t.Fatal("expected home fixture page")
+	}
+	homeHero := findNuvioMarketingSeedBlock(*homePage, "nuvio-home-hero")
+	if homeHero == nil {
+		t.Fatal("expected home hero fixture block")
+	}
+	if fmt.Sprint(homeHero.Props["headingPrefix"]) != "Seja encontrado, transmita confian\u00e7a e transforme visitantes em" {
+		t.Fatalf("expected PT home hero props, got %#v", homeHero.Props["headingPrefix"])
+	}
+	englishHomeHero := nuvioMarketingSeedMapValue(homeHero.Translations["en"])
+	if fmt.Sprint(englishHomeHero["headingPrefix"]) != "Get found, look professional, and turn visitors into" {
+		t.Fatalf("expected EN home hero translation, got %#v", englishHomeHero["headingPrefix"])
 	}
 }
 
@@ -150,6 +196,14 @@ func TestNuvioMarketingSeedAppliesIdempotentlyToCleanCMSCollections(t *testing.T
 		t.Fatalf("expected seeded Nuvio website: %v", err)
 	}
 	settings := nuvioMarketingSeedMapValue(website.Get("settings"))
+	seededI18n := nuvioMarketingSeedMapValue(settings["i18n"])
+	if seededI18n["enabled"] != true || seededI18n["defaultLanguage"] != "pt-PT" {
+		t.Fatalf("expected seeded website i18n pt-PT/en settings, got %#v", seededI18n)
+	}
+	seededLanguages, ok := seededI18n["languages"].([]any)
+	if !ok || len(seededLanguages) != 2 {
+		t.Fatalf("expected seeded language list, got %#v", seededI18n["languages"])
+	}
 	previewRoutes := nuvioMarketingSeedMapValue(settings["previewRoutes"])
 	for pageSlug, expectedPath := range map[string]string{"home": "/", "services": "/services", "pricing": "/pricing", "contact": "/contact"} {
 		if previewRoutes[pageSlug] != expectedPath {
@@ -169,6 +223,99 @@ func TestNuvioMarketingSeedAppliesIdempotentlyToCleanCMSCollections(t *testing.T
 		if len(blocks) == 0 {
 			t.Fatalf("expected public blocks for %s", pageSlug)
 		}
+		seoTranslations := nuvioMarketingSeedMapValue(page.Get("seo_translations"))
+		if englishSeo := nuvioMarketingSeedMapValue(seoTranslations["en"]); fmt.Sprint(englishSeo["title"]) == "" {
+			t.Fatalf("expected seeded English SEO translation for %s, got %#v", pageSlug, seoTranslations)
+		}
+		for _, block := range blocks {
+			translations := nuvioMarketingSeedMapValue(block.Get("translations"))
+			if len(nuvioMarketingSeedMapValue(translations["en"])) == 0 {
+				t.Fatalf("expected seeded English translation for %s block %s", pageSlug, block.GetString("slot"))
+			}
+		}
+	}
+}
+
+func TestNuvioMarketingSeedPreservesExistingEnglishContentAsTranslations(t *testing.T) {
+	app, err := tests.NewTestApp()
+	if err != nil {
+		t.Fatalf("failed to create test app: %v", err)
+	}
+	defer app.Cleanup()
+
+	ensureNuvioMarketingSeedTestCollections(t, app)
+	fixture, err := loadNuvioMarketingSeedFixture("")
+	if err != nil {
+		t.Fatalf("failed to load fixture: %v", err)
+	}
+	if _, err := applyNuvioMarketingSeedFixture(app, fixture, true); err != nil {
+		t.Fatalf("failed to apply fixture: %v", err)
+	}
+
+	websiteID := mustNuvioMarketingSeedWebsiteID(t, app)
+	homePage, err := findNuvioPublicPageBySlug(app, websiteID, "home")
+	if err != nil {
+		t.Fatalf("expected home page: %v", err)
+	}
+	homePage.Set("seo_title", "Edited English SEO title")
+	homePage.Set("seo_description", "Edited English SEO description")
+	homePage.Set("seo_translations", map[string]any{})
+	if err := app.Save(homePage); err != nil {
+		t.Fatalf("failed to save edited SEO: %v", err)
+	}
+
+	homeFixturePage := findNuvioMarketingSeedPage(fixture, "home")
+	if homeFixturePage == nil {
+		t.Fatal("expected home fixture page")
+	}
+	homeFixtureHero := findNuvioMarketingSeedBlock(*homeFixturePage, "nuvio-home-hero")
+	if homeFixtureHero == nil {
+		t.Fatal("expected home hero fixture block")
+	}
+
+	blocksCollection, err := app.FindCachedCollectionByNameOrId(nuvioBlocksCollectionID)
+	if err != nil {
+		t.Fatalf("failed to resolve blocks collection: %v", err)
+	}
+	heroRecord, err := app.FindFirstRecordByFilter(blocksCollection, "page={:page} && slot={:slot}", dbx.Params{"page": homePage.Id, "slot": homeFixtureHero.Slot})
+	if err != nil {
+		t.Fatalf("expected home hero block: %v", err)
+	}
+	editedEnglishProps := cloneNuvioMarketingSeedMap(nuvioMarketingSeedMapValue(homeFixtureHero.Translations["en"]))
+	editedEnglishProps["headingPrefix"] = "Edited English CMS headline"
+	heroRecord.Set("props", editedEnglishProps)
+	heroRecord.Set("translations", map[string]any{})
+	if err := app.Save(heroRecord); err != nil {
+		t.Fatalf("failed to save edited hero props: %v", err)
+	}
+
+	if _, err := applyNuvioMarketingSeedFixture(app, fixture, true); err != nil {
+		t.Fatalf("failed to reapply fixture: %v", err)
+	}
+
+	reseededPage, err := findNuvioPublicPageBySlug(app, websiteID, "home")
+	if err != nil {
+		t.Fatalf("expected reseeded home page: %v", err)
+	}
+	if got := reseededPage.GetString("seo_title"); got != homeFixturePage.SeoTitle {
+		t.Fatalf("expected PT SEO title restored to %q, got %q", homeFixturePage.SeoTitle, got)
+	}
+	englishSeo := nuvioMarketingSeedMapValue(nuvioMarketingSeedMapValue(reseededPage.Get("seo_translations"))["en"])
+	if englishSeo["title"] != "Edited English SEO title" || englishSeo["description"] != "Edited English SEO description" {
+		t.Fatalf("expected existing English SEO preserved, got %#v", englishSeo)
+	}
+
+	reseededHero, err := app.FindFirstRecordByFilter(blocksCollection, "page={:page} && slot={:slot}", dbx.Params{"page": reseededPage.Id, "slot": homeFixtureHero.Slot})
+	if err != nil {
+		t.Fatalf("expected reseeded home hero block: %v", err)
+	}
+	props := nuvioMarketingSeedMapValue(reseededHero.Get("props"))
+	if props["headingPrefix"] != homeFixtureHero.Props["headingPrefix"] {
+		t.Fatalf("expected PT props restored, got %#v", props["headingPrefix"])
+	}
+	englishTranslation := nuvioMarketingSeedMapValue(nuvioMarketingSeedMapValue(reseededHero.Get("translations"))["en"])
+	if englishTranslation["headingPrefix"] != "Edited English CMS headline" {
+		t.Fatalf("expected edited English props preserved in translations.en, got %#v", englishTranslation["headingPrefix"])
 	}
 }
 
@@ -184,7 +331,7 @@ func TestNuvioMarketingSeedPublicContentEndpoints(t *testing.T) {
 				setupNuvioMarketingSeedPublicContentScenario(t, app, e)
 			},
 			ExpectedStatus:  200,
-			ExpectedContent: []string{`"slug":"nuvio"`, `"slug":"home"`, `nuvio-customer-website-concept`},
+			ExpectedContent: []string{`"slug":"nuvio"`, `"slug":"home"`, `nuvio-customer-website-concept`, `"translations":{"en"`},
 		},
 		{
 			Name:   "seeded services page renders through public content endpoint",
@@ -194,7 +341,7 @@ func TestNuvioMarketingSeedPublicContentEndpoints(t *testing.T) {
 				setupNuvioMarketingSeedPublicContentScenario(t, app, e)
 			},
 			ExpectedStatus:  200,
-			ExpectedContent: []string{`"slug":"services"`, `nuvio-services-mapping`},
+			ExpectedContent: []string{`"slug":"services"`, `nuvio-services-mapping`, `"translations":{"en"`},
 		},
 		{
 			Name:   "seeded pricing page renders comparison and foundation source block",

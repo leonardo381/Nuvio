@@ -4,7 +4,9 @@
   "source": {
     "repository": "Nuvio-CalmEditorialV2",
     "file": "src/lib/nuvio/marketing-content.ts",
-    "export": "defaultMarketingContent"
+    "export": "defaultMarketingContent",
+    "defaultLocale": "pt-PT",
+    "secondaryLocale": "en"
   },
   "website": {
     "slug": "nuvio",
@@ -17,11 +19,44 @@
         "ownerKey": "nuvio-marketing-cms-fixture",
         "version": 1
       },
+      "defaultLocale": "pt-PT",
+      "locales": [
+        "pt-PT",
+        "en"
+      ],
+      "i18n": {
+        "enabled": true,
+        "defaultLanguage": "pt-PT",
+        "languages": [
+          {
+            "code": "pt-PT",
+            "label": "Portugu\u00eas"
+          },
+          {
+            "code": "en",
+            "label": "English"
+          }
+        ]
+      },
       "previewRoutes": {
         "home": "/",
         "services": "/services",
         "pricing": "/pricing",
         "contact": "/contact"
+      },
+      "localizedRoutes": {
+        "pt-PT": {
+          "home": "/",
+          "services": "/services",
+          "pricing": "/pricing",
+          "contact": "/contact"
+        },
+        "en": {
+          "home": "/en",
+          "services": "/en/services",
+          "pricing": "/en/pricing",
+          "contact": "/en/contact"
+        }
       }
     }
   },
@@ -498,6 +533,22 @@
                 "type": "text",
                 "required": false,
                 "group": "Buttons",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "successMessage",
+                "label": "Success Message",
+                "type": "text",
+                "required": false,
+                "group": "Form copy",
+                "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
+              },
+              {
+                "key": "errorMessage",
+                "label": "Error Message",
+                "type": "text",
+                "required": false,
+                "group": "Form copy",
                 "hint": "Presentation copy only. Form fields, validation, endpoint, and honeypot stay code-owned."
               },
               {
@@ -3800,8 +3851,14 @@
     {
       "slug": "home",
       "title": "Home",
-      "seoTitle": "Nuvio - Managed online presence for local businesses",
-      "seoDescription": "Nuvio creates and manages online presence for local businesses with a professional website, local visibility foundations, clear contact options, editable content, monthly reports, and support after launch.",
+      "seoTitle": "Nuvio - Presen\u00e7a online gerida para neg\u00f3cios locais",
+      "seoDescription": "A Nuvio cria e gere a presen\u00e7a online de neg\u00f3cios locais com um site profissional, bases de visibilidade local, contactos claros, conte\u00fado edit\u00e1vel, relat\u00f3rios mensais e apoio ap\u00f3s o lan\u00e7amento.",
+      "seoTranslations": {
+        "en": {
+          "title": "Nuvio - Managed online presence for local businesses",
+          "description": "Nuvio creates and manages online presence for local businesses with a professional website, local visibility foundations, clear contact options, editable content, monthly reports, and support after launch."
+        }
+      },
       "published": true,
       "seoNoindex": false,
       "seoExcludeFromSitemap": false,
@@ -3812,20 +3869,38 @@
           "title": "Hero",
           "order": 10,
           "props": {
-            "eyebrow": "Managed online presence for local businesses",
-            "headingPrefix": "Get found, look professional, and turn visitors into",
-            "headingAccent": "real contacts.",
-            "support": "Nuvio creates and manages your website, local visibility foundations, contact paths, editable content, monthly reports, and support after launch.",
+            "eyebrow": "Presen\u00e7a online gerida para neg\u00f3cios locais",
+            "headingPrefix": "Seja encontrado, transmita confian\u00e7a e transforme visitantes em",
+            "headingAccent": "contactos reais.",
+            "support": "A Nuvio cria e gere o seu site, as bases de visibilidade local, os caminhos de contacto, o conte\u00fado edit\u00e1vel, os relat\u00f3rios mensais e o apoio ap\u00f3s o lan\u00e7amento.",
             "primaryCta": {
-              "label": "See what Nuvio would build for me",
+              "label": "Ver o que a Nuvio criaria para mim",
               "href": "/contact"
             },
             "secondaryCta": {
-              "label": "View plans",
+              "label": "Ver planos",
               "href": "/pricing"
             },
-            "actionsLabel": "Hero actions",
-            "scopeLine": "Clear plan before build - Managed after launch - Monthly reports"
+            "actionsLabel": "A\u00e7\u00f5es da sec\u00e7\u00e3o inicial",
+            "scopeLine": "Plano claro antes de construir - Gerido ap\u00f3s o lan\u00e7amento - Relat\u00f3rios mensais"
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "Managed online presence for local businesses",
+              "headingPrefix": "Get found, look professional, and turn visitors into",
+              "headingAccent": "real contacts.",
+              "support": "Nuvio creates and manages your website, local visibility foundations, contact paths, editable content, monthly reports, and support after launch.",
+              "primaryCta": {
+                "label": "See what Nuvio would build for me",
+                "href": "/contact"
+              },
+              "secondaryCta": {
+                "label": "View plans",
+                "href": "/pricing"
+              },
+              "actionsLabel": "Hero actions",
+              "scopeLine": "Clear plan before build - Managed after launch - Monthly reports"
+            }
           }
         },
         {
@@ -3834,26 +3909,50 @@
           "title": "Customer Website Concept",
           "order": 20,
           "props": {
-            "ariaLabel": "Illustrative customer website concept",
-            "brand": "Harbour Bookkeeping",
+            "ariaLabel": "Conceito ilustrativo de site para cliente",
+            "brand": "Contabilidade Atl\u00e2ntico",
             "navItems": [
-              "Services",
-              "Proof",
-              "Contact"
+              "Servi\u00e7os",
+              "Prova",
+              "Contacto"
             ],
-            "eyebrow": "Local business website",
-            "heading": "Clear services. Easier contact. Managed support.",
+            "eyebrow": "Site para neg\u00f3cio local",
+            "heading": "Servi\u00e7os claros. Contacto mais f\u00e1cil. Apoio gerido.",
             "cta": {
-              "label": "See what Nuvio would build for me",
+              "label": "Ver o que a Nuvio criaria para mim",
               "href": "/contact"
             },
             "pages": [
-              "Home",
-              "Services",
-              "Proof",
-              "Contact"
+              "In\u00edcio",
+              "Servi\u00e7os",
+              "Prova",
+              "Contacto"
             ],
             "trustedHtmlIllustration": "<div class=\"customer-presence-illustration\" role=\"presentation\" data-nuvio-visual=\"customer-presence\"><div class=\"visual-panel visual-panel-main\"></div><div class=\"visual-panel visual-panel-side\"></div><div class=\"contact-path\"><span></span><span></span><span></span></div></div>"
+          },
+          "translations": {
+            "en": {
+              "ariaLabel": "Illustrative customer website concept",
+              "brand": "Harbour Bookkeeping",
+              "navItems": [
+                "Services",
+                "Proof",
+                "Contact"
+              ],
+              "eyebrow": "Local business website",
+              "heading": "Clear services. Easier contact. Managed support.",
+              "cta": {
+                "label": "See what Nuvio would build for me",
+                "href": "/contact"
+              },
+              "pages": [
+                "Home",
+                "Services",
+                "Proof",
+                "Contact"
+              ],
+              "trustedHtmlIllustration": "<div class=\"customer-presence-illustration\" role=\"presentation\" data-nuvio-visual=\"customer-presence\"><div class=\"visual-panel visual-panel-main\"></div><div class=\"visual-panel visual-panel-side\"></div><div class=\"contact-path\"><span></span><span></span><span></span></div></div>"
+            }
           }
         },
         {
@@ -3862,29 +3961,56 @@
           "title": "Reassurance Rail",
           "order": 30,
           "props": {
-            "ariaLabel": "Nuvio support cues",
+            "ariaLabel": "Sinais de apoio Nuvio",
             "items": [
               {
                 "icon": "clarity",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
-                "text": "Get found online"
+                "text": "Ser encontrado online"
               },
               {
                 "icon": "presence",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
-                "text": "Look professional"
+                "text": "Transmitir confian\u00e7a"
               },
               {
                 "icon": "control",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
-                "text": "Stay in control"
+                "text": "Manter controlo"
               },
               {
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
-                "text": "Keep improving"
+                "text": "Continuar a melhorar"
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "ariaLabel": "Nuvio support cues",
+              "items": [
+                {
+                  "icon": "clarity",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
+                  "text": "Get found online"
+                },
+                {
+                  "icon": "presence",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
+                  "text": "Look professional"
+                },
+                {
+                  "icon": "control",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
+                  "text": "Stay in control"
+                },
+                {
+                  "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
+                  "text": "Keep improving"
+                }
+              ]
+            }
           }
         },
         {
@@ -3893,81 +4019,161 @@
           "title": "Delivers",
           "order": 40,
           "props": {
-            "eyebrow": "What Nuvio delivers",
-            "headingPrefix": "A public website for customers. A simple",
-            "headingAccent": "backoffice",
-            "headingSuffix": "for you.",
-            "support": "Customers see services and contact paths clearly. You can update key content, review contacts, and follow reports while Nuvio manages the technical side.",
-            "overviewAriaLabel": "Nuvio delivery overview",
+            "eyebrow": "O que a Nuvio entrega",
+            "headingPrefix": "Um site p\u00fablico para clientes. Um",
+            "headingAccent": "backoffice simples",
+            "headingSuffix": "para si.",
+            "support": "Os clientes veem servi\u00e7os e caminhos de contacto com clareza. O seu neg\u00f3cio pode atualizar conte\u00fado-chave, rever contactos e acompanhar relat\u00f3rios enquanto a Nuvio gere a parte t\u00e9cnica.",
+            "overviewAriaLabel": "Vis\u00e3o geral do que a Nuvio entrega",
             "publicPanel": {
-              "ariaLabel": "Public website preview",
-              "eyebrow": "Public website",
-              "heading": "What customers see",
-              "previewAriaLabel": "Illustrative public website concept",
-              "brand": "Lume Electrical",
+              "ariaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do site p\u00fablico",
+              "eyebrow": "Site p\u00fablico",
+              "heading": "O que os clientes veem",
+              "previewAriaLabel": "Conceito ilustrativo de site p\u00fablico",
+              "brand": "Lume Electricidade",
               "navItems": [
-                "Services",
-                "About",
-                "Contact"
+                "Servi\u00e7os",
+                "Sobre",
+                "Contacto"
               ],
-              "siteEyebrow": "Local electrical services",
-              "siteHeading": "Clear help for homes, shops, and small offices.",
+              "siteEyebrow": "Servi\u00e7os el\u00e9tricos locais",
+              "siteHeading": "Ajuda clara para casas, lojas e pequenos escrit\u00f3rios.",
               "cta": {
-                "label": "Request a quote",
+                "label": "Pedir or\u00e7amento",
                 "href": "/contact"
               },
-              "visualLabel": "Service/contact visual",
-              "visualText": "Real work, team, or service detail.",
-              "benefitsLabel": "Public website highlights",
+              "visualLabel": "Visual de servi\u00e7o/contacto",
+              "visualText": "Trabalho real, equipa ou detalhe do servi\u00e7o.",
+              "benefitsLabel": "Destaques do site p\u00fablico",
               "points": [
                 {
                   "icon": "clarity",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
-                  "title": "Clear services",
-                  "text": "People understand what you offer quickly."
+                  "title": "Servi\u00e7os claros",
+                  "text": "As pessoas percebem rapidamente o que oferece."
                 },
                 {
                   "icon": "message",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                  "title": "Easy contact",
-                  "text": "Calls, messages, forms, and bookings stay visible."
+                  "title": "Contacto f\u00e1cil",
+                  "text": "Chamadas, mensagens, formul\u00e1rios e marca\u00e7\u00f5es ficam vis\u00edveis."
                 },
                 {
                   "icon": "mobile",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"8\" y=\"4.2\" width=\"8\" height=\"15.6\" rx=\"2.2\"></rect><path d=\"M10.5 7h3\"></path><path d=\"M11.2 17h1.6\"></path></svg>",
-                  "title": "Mobile-ready",
-                  "text": "Phone visitors see the same next step."
+                  "title": "Pronto para telem\u00f3vel",
+                  "text": "Quem visita pelo telefone v\u00ea o mesmo pr\u00f3ximo passo."
                 }
               ]
             },
             "backofficePanel": {
-              "ariaLabel": "Nuvio backoffice preview",
-              "eyebrow": "Nuvio backoffice",
-              "heading": "What your business controls",
-              "previewAriaLabel": "Nuvio backoffice screenshot and control benefits",
+              "ariaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do backoffice Nuvio",
+              "eyebrow": "Backoffice Nuvio",
+              "heading": "O que o seu neg\u00f3cio controla",
+              "previewAriaLabel": "Screenshot do backoffice Nuvio e benef\u00edcios de controlo",
               "imageSrc": "/backoffice/cms.png",
-              "imageAlt": "Nuvio backoffice screen for editing website content.",
-              "benefitsLabel": "Backoffice control highlights",
+              "imageAlt": "Ecr\u00e3 do backoffice Nuvio para editar conte\u00fado do site.",
+              "benefitsLabel": "Destaques de controlo no backoffice",
               "callouts": [
                 {
                   "icon": "layout",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
-                  "label": "Update key content",
-                  "text": "Services, pages, and key details stay editable."
+                  "label": "Atualizar conte\u00fado-chave",
+                  "text": "Servi\u00e7os, p\u00e1ginas e detalhes importantes continuam edit\u00e1veis."
                 },
                 {
                   "icon": "message",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                  "label": "Review contacts",
-                  "text": "Contact requests stay easy to review."
+                  "label": "Rever contactos",
+                  "text": "Os pedidos de contacto ficam f\u00e1ceis de acompanhar."
                 },
                 {
                   "icon": "improve",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
-                  "label": "Follow reports",
-                  "text": "Monthly signals stay visible."
+                  "label": "Acompanhar relat\u00f3rios",
+                  "text": "Os sinais mensais continuam vis\u00edveis."
                 }
               ]
+            }
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "What Nuvio delivers",
+              "headingPrefix": "A public website for customers. A simple",
+              "headingAccent": "backoffice",
+              "headingSuffix": "for you.",
+              "support": "Customers see services and contact paths clearly. You can update key content, review contacts, and follow reports while Nuvio manages the technical side.",
+              "overviewAriaLabel": "Nuvio delivery overview",
+              "publicPanel": {
+                "ariaLabel": "Public website preview",
+                "eyebrow": "Public website",
+                "heading": "What customers see",
+                "previewAriaLabel": "Illustrative public website concept",
+                "brand": "Lume Electrical",
+                "navItems": [
+                  "Services",
+                  "About",
+                  "Contact"
+                ],
+                "siteEyebrow": "Local electrical services",
+                "siteHeading": "Clear help for homes, shops, and small offices.",
+                "cta": {
+                  "label": "Request a quote",
+                  "href": "/contact"
+                },
+                "visualLabel": "Service/contact visual",
+                "visualText": "Real work, team, or service detail.",
+                "benefitsLabel": "Public website highlights",
+                "points": [
+                  {
+                    "icon": "clarity",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
+                    "title": "Clear services",
+                    "text": "People understand what you offer quickly."
+                  },
+                  {
+                    "icon": "message",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                    "title": "Easy contact",
+                    "text": "Calls, messages, forms, and bookings stay visible."
+                  },
+                  {
+                    "icon": "mobile",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"8\" y=\"4.2\" width=\"8\" height=\"15.6\" rx=\"2.2\"></rect><path d=\"M10.5 7h3\"></path><path d=\"M11.2 17h1.6\"></path></svg>",
+                    "title": "Mobile-ready",
+                    "text": "Phone visitors see the same next step."
+                  }
+                ]
+              },
+              "backofficePanel": {
+                "ariaLabel": "Nuvio backoffice preview",
+                "eyebrow": "Nuvio backoffice",
+                "heading": "What your business controls",
+                "previewAriaLabel": "Nuvio backoffice screenshot and control benefits",
+                "imageSrc": "/backoffice/cms.png",
+                "imageAlt": "Nuvio backoffice screen for editing website content.",
+                "benefitsLabel": "Backoffice control highlights",
+                "callouts": [
+                  {
+                    "icon": "layout",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
+                    "label": "Update key content",
+                    "text": "Services, pages, and key details stay editable."
+                  },
+                  {
+                    "icon": "message",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                    "label": "Review contacts",
+                    "text": "Contact requests stay easy to review."
+                  },
+                  {
+                    "icon": "improve",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
+                    "label": "Follow reports",
+                    "text": "Monthly signals stay visible."
+                  }
+                ]
+              }
             }
           }
         },
@@ -3977,50 +4183,99 @@
           "title": "Trust Gap",
           "order": 50,
           "props": {
-            "eyebrow": "The real problem",
-            "headingPrefix": "Opportunities are lost when people cannot",
-            "headingAccent": "find, trust, or contact",
-            "headingSuffix": "you.",
-            "support": "Missed opportunities are practical: unclear pages, outdated details, hidden contact options, slow updates, or no reports.",
-            "gapsLabel": "Common website confidence gaps",
+            "eyebrow": "O problema real",
+            "headingPrefix": "Perdem-se oportunidades quando as pessoas n\u00e3o conseguem",
+            "headingAccent": "encontrar, confiar ou contactar",
+            "headingSuffix": "o seu neg\u00f3cio.",
+            "support": "As oportunidades perdidas s\u00e3o pr\u00e1ticas: p\u00e1ginas pouco claras, detalhes desatualizados, contactos escondidos, atualiza\u00e7\u00f5es lentas ou falta de relat\u00f3rios.",
+            "gapsLabel": "Falhas comuns de confian\u00e7a no site",
             "items": [
               {
                 "icon": "clarity",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
-                "title": "People struggle to find you",
-                "text": "Even good businesses get missed when presence is weak."
+                "title": "As pessoas t\u00eam dificuldade em encontr\u00e1-lo",
+                "text": "Mesmo bons neg\u00f3cios passam despercebidos quando a presen\u00e7a \u00e9 fraca."
               },
               {
                 "icon": "presence",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
-                "title": "The business looks less trustworthy",
-                "text": "Customers compare fast. The clearer business feels safer."
+                "title": "O neg\u00f3cio parece menos confi\u00e1vel",
+                "text": "Os clientes comparam depressa. Quanto mais claro parece o neg\u00f3cio, mais seguro se torna."
               },
               {
                 "icon": "message",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                "title": "Contact options are not obvious",
-                "text": "Calls, forms, WhatsApp, and bookings should be obvious."
+                "title": "As op\u00e7\u00f5es de contacto n\u00e3o s\u00e3o \u00f3bvias",
+                "text": "Chamadas, formul\u00e1rios, WhatsApp e marca\u00e7\u00f5es devem estar claros."
               },
               {
                 "icon": "control",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
-                "title": "Small updates take too long",
-                "text": "Services, hours, photos, and key details should stay current."
+                "title": "Pequenas atualiza\u00e7\u00f5es demoram demasiado",
+                "text": "Servi\u00e7os, hor\u00e1rios, fotografias e detalhes importantes devem manter-se atuais."
               },
               {
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
-                "title": "You cannot see what to improve",
-                "text": "Without reports, activity stays hidden and improvements become guesswork."
+                "title": "N\u00e3o v\u00ea o que deve melhorar",
+                "text": "Sem relat\u00f3rios, a atividade fica escondida e as melhorias tornam-se adivinha\u00e7\u00e3o."
               }
             ],
-            "visualAriaLabel": "Illustrative trust gap visual",
+            "visualAriaLabel": "Visual ilustrativo da falha de confian\u00e7a",
             "visual": {
-              "siteLabel": "Invisible or outdated",
-              "siteText": "Customer interest has no clear next step.",
-              "supportLabel": "No reports or support",
-              "supportText": "Small fixes wait. Useful signals get missed."
+              "siteLabel": "Invis\u00edvel ou desatualizado",
+              "siteText": "O interesse do cliente n\u00e3o tem um pr\u00f3ximo passo claro.",
+              "supportLabel": "Sem relat\u00f3rios nem apoio",
+              "supportText": "Pequenas corre\u00e7\u00f5es ficam \u00e0 espera. Sinais \u00fateis passam despercebidos."
+            }
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "The real problem",
+              "headingPrefix": "Opportunities are lost when people cannot",
+              "headingAccent": "find, trust, or contact",
+              "headingSuffix": "you.",
+              "support": "Missed opportunities are practical: unclear pages, outdated details, hidden contact options, slow updates, or no reports.",
+              "gapsLabel": "Common website confidence gaps",
+              "items": [
+                {
+                  "icon": "clarity",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
+                  "title": "People struggle to find you",
+                  "text": "Even good businesses get missed when presence is weak."
+                },
+                {
+                  "icon": "presence",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
+                  "title": "The business looks less trustworthy",
+                  "text": "Customers compare fast. The clearer business feels safer."
+                },
+                {
+                  "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                  "title": "Contact options are not obvious",
+                  "text": "Calls, forms, WhatsApp, and bookings should be obvious."
+                },
+                {
+                  "icon": "control",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
+                  "title": "Small updates take too long",
+                  "text": "Services, hours, photos, and key details should stay current."
+                },
+                {
+                  "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
+                  "title": "You cannot see what to improve",
+                  "text": "Without reports, activity stays hidden and improvements become guesswork."
+                }
+              ],
+              "visualAriaLabel": "Illustrative trust gap visual",
+              "visual": {
+                "siteLabel": "Invisible or outdated",
+                "siteText": "Customer interest has no clear next step.",
+                "supportLabel": "No reports or support",
+                "supportText": "Small fixes wait. Useful signals get missed."
+              }
             }
           }
         },
@@ -4030,99 +4285,196 @@
           "title": "Managed Backoffice",
           "order": 60,
           "props": {
-            "eyebrow": "What Nuvio manages",
-            "headingPrefix": "A simple backoffice for your business.",
-            "headingAccent": "Nuvio manages the rest",
+            "eyebrow": "O que a Nuvio gere",
+            "headingPrefix": "Um backoffice simples para o seu neg\u00f3cio.",
+            "headingAccent": "A Nuvio gere o resto",
             "headingSuffix": ".",
-            "support": "Control content, contacts, newsletters, and reports. Nuvio keeps the technical service running.",
-            "layoutAriaLabel": "Nuvio backoffice and managed service overview",
-            "backofficeAriaLabel": "Nuvio Backoffice product preview",
+            "support": "Controle conte\u00fado, contactos, newsletters e relat\u00f3rios. A Nuvio mant\u00e9m o servi\u00e7o t\u00e9cnico a funcionar.",
+            "layoutAriaLabel": "Backoffice Nuvio e vis\u00e3o geral do servi\u00e7o gerido",
+            "backofficeAriaLabel": "Pr\u00e9-visualiza\u00e7\u00e3o do produto Backoffice Nuvio",
             "productLabel": "NUVIO BACKOFFICE",
-            "contextPill": "Simple control layer",
-            "tabRailLabel": "Backoffice preview selector",
-            "overlayLabel": "Nuvio Backoffice",
-            "managedAriaLabel": "Managed by Nuvio",
-            "managedTitle": "Managed by Nuvio",
+            "contextPill": "Camada simples de controlo",
+            "tabRailLabel": "Seletor de pr\u00e9-visualiza\u00e7\u00e3o do backoffice",
+            "overlayLabel": "Backoffice Nuvio",
+            "managedAriaLabel": "Gerido pela Nuvio",
+            "managedTitle": "Gerido pela Nuvio",
             "features": [
               {
                 "id": "content",
-                "label": "Content",
+                "label": "Conte\u00fado",
                 "icon": "layout",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
-                "title": "Edit key content",
-                "detail": "Services, opening hours, contact details",
+                "title": "Editar conte\u00fado-chave",
+                "detail": "Servi\u00e7os, hor\u00e1rios, contactos",
                 "image": "/backoffice/cms.png",
-                "alt": "Nuvio CMS backoffice screen for editing website content."
+                "alt": "Ecr\u00e3 do CMS Nuvio para editar conte\u00fado do site."
               },
               {
                 "id": "leads",
-                "label": "Leads & bookings",
+                "label": "Contactos e marca\u00e7\u00f5es",
                 "icon": "message",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                "title": "Follow leads and bookings",
-                "detail": "Contacts, bookings, follow-up",
+                "title": "Acompanhar contactos e marca\u00e7\u00f5es",
+                "detail": "Contactos, marca\u00e7\u00f5es, seguimento",
                 "image": "/backoffice/leads.png",
-                "alt": "Nuvio backoffice screen for leads and booking activity."
+                "alt": "Ecr\u00e3 do backoffice Nuvio para contactos e atividade de marca\u00e7\u00f5es."
               },
               {
                 "id": "newsletter",
                 "label": "Newsletter",
                 "icon": "support",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
-                "title": "Manage newsletter activity",
-                "detail": "Subscribers, sends, signups",
+                "title": "Gerir atividade de newsletter",
+                "detail": "Subscritores, envios, inscri\u00e7\u00f5es",
                 "image": "/backoffice/newsletter.png",
-                "alt": "Nuvio newsletter backoffice screen."
+                "alt": "Ecr\u00e3 de newsletter no backoffice Nuvio."
               },
               {
                 "id": "reports",
-                "label": "Reports",
+                "label": "Relat\u00f3rios",
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
-                "title": "Review reports",
-                "detail": "Visits, top pages, contact clicks",
+                "title": "Rever relat\u00f3rios",
+                "detail": "Visitas, p\u00e1ginas principais, cliques de contacto",
                 "image": "/backoffice/reports.png",
-                "alt": "Nuvio reports backoffice screen."
+                "alt": "Ecr\u00e3 de relat\u00f3rios do backoffice Nuvio."
               }
             ],
             "managedItems": [
               {
-                "title": "Hosting and maintenance",
+                "title": "Alojamento e manuten\u00e7\u00e3o",
                 "icon": "support",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
-                "description": "Online, updated, and stable."
+                "description": "Online, atualizado e est\u00e1vel."
               },
               {
-                "title": "Backoffice setup",
+                "title": "Configura\u00e7\u00e3o do backoffice",
                 "icon": "control",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
-                "description": "Setup and small fixes stay handled."
+                "description": "Setup e pequenas corre\u00e7\u00f5es ficam tratados."
               },
               {
-                "title": "Contact path checks",
+                "title": "Verifica\u00e7\u00e3o dos caminhos de contacto",
                 "icon": "message",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                "description": "Forms, calls, WhatsApp, or bookings stay clear."
+                "description": "Formul\u00e1rios, chamadas, WhatsApp ou marca\u00e7\u00f5es continuam claros."
               },
               {
-                "title": "Local and search foundations",
+                "title": "Bases locais e de pesquisa",
                 "icon": "map",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.5 6.2l4.2-1.7 6.6 2.8 4.2-1.7v12.2l-4.2 1.7-6.6-2.8-4.2 1.7V6.2z\"></path><path d=\"M8.7 4.5v12.2\"></path><path d=\"M15.3 7.3v12.2\"></path></svg>",
-                "description": "Search basics stay aligned."
+                "description": "As bases de pesquisa ficam alinhadas."
               },
               {
-                "title": "Content support",
+                "title": "Apoio ao conte\u00fado",
                 "icon": "layout",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
-                "description": "Small updates stay supported."
+                "description": "Pequenas atualiza\u00e7\u00f5es continuam apoiadas."
               },
               {
-                "title": "Reports and improvements",
+                "title": "Relat\u00f3rios e melhorias",
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
-                "description": "Useful signals guide improvements."
+                "description": "Sinais \u00fateis orientam melhorias."
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "What Nuvio manages",
+              "headingPrefix": "A simple backoffice for your business.",
+              "headingAccent": "Nuvio manages the rest",
+              "headingSuffix": ".",
+              "support": "Control content, contacts, newsletters, and reports. Nuvio keeps the technical service running.",
+              "layoutAriaLabel": "Nuvio backoffice and managed service overview",
+              "backofficeAriaLabel": "Nuvio Backoffice product preview",
+              "productLabel": "NUVIO BACKOFFICE",
+              "contextPill": "Simple control layer",
+              "tabRailLabel": "Backoffice preview selector",
+              "overlayLabel": "Nuvio Backoffice",
+              "managedAriaLabel": "Managed by Nuvio",
+              "managedTitle": "Managed by Nuvio",
+              "features": [
+                {
+                  "id": "content",
+                  "label": "Content",
+                  "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
+                  "title": "Edit key content",
+                  "detail": "Services, opening hours, contact details",
+                  "image": "/backoffice/cms.png",
+                  "alt": "Nuvio CMS backoffice screen for editing website content."
+                },
+                {
+                  "id": "leads",
+                  "label": "Leads & bookings",
+                  "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                  "title": "Follow leads and bookings",
+                  "detail": "Contacts, bookings, follow-up",
+                  "image": "/backoffice/leads.png",
+                  "alt": "Nuvio backoffice screen for leads and booking activity."
+                },
+                {
+                  "id": "newsletter",
+                  "label": "Newsletter",
+                  "icon": "support",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
+                  "title": "Manage newsletter activity",
+                  "detail": "Subscribers, sends, signups",
+                  "image": "/backoffice/newsletter.png",
+                  "alt": "Nuvio newsletter backoffice screen."
+                },
+                {
+                  "id": "reports",
+                  "label": "Reports",
+                  "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
+                  "title": "Review reports",
+                  "detail": "Visits, top pages, contact clicks",
+                  "image": "/backoffice/reports.png",
+                  "alt": "Nuvio reports backoffice screen."
+                }
+              ],
+              "managedItems": [
+                {
+                  "title": "Hosting and maintenance",
+                  "icon": "support",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
+                  "description": "Online, updated, and stable."
+                },
+                {
+                  "title": "Backoffice setup",
+                  "icon": "control",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
+                  "description": "Setup and small fixes stay handled."
+                },
+                {
+                  "title": "Contact path checks",
+                  "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                  "description": "Forms, calls, WhatsApp, or bookings stay clear."
+                },
+                {
+                  "title": "Local and search foundations",
+                  "icon": "map",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.5 6.2l4.2-1.7 6.6 2.8 4.2-1.7v12.2l-4.2 1.7-6.6-2.8-4.2 1.7V6.2z\"></path><path d=\"M8.7 4.5v12.2\"></path><path d=\"M15.3 7.3v12.2\"></path></svg>",
+                  "description": "Search basics stay aligned."
+                },
+                {
+                  "title": "Content support",
+                  "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
+                  "description": "Small updates stay supported."
+                },
+                {
+                  "title": "Reports and improvements",
+                  "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
+                  "description": "Useful signals guide improvements."
+                }
+              ]
+            }
           }
         },
         {
@@ -4131,47 +4483,92 @@
           "title": "Process",
           "order": 70,
           "props": {
-            "eyebrow": "NEXT STEPS",
-            "headingPrefix": "What happens after you",
-            "headingAccent": "ask for a plan",
+            "eyebrow": "PR\u00d3XIMOS PASSOS",
+            "headingPrefix": "O que acontece depois de",
+            "headingAccent": "pedir um plano",
             "headingSuffix": ".",
-            "support": "Nuvio maps what your business needs, then shows scope, pricing, and next steps before build.",
-            "actionsLabel": "Next step actions",
+            "support": "A Nuvio mapeia o que o seu neg\u00f3cio precisa e mostra \u00e2mbito, pre\u00e7o e pr\u00f3ximos passos antes de construir.",
+            "actionsLabel": "A\u00e7\u00f5es dos pr\u00f3ximos passos",
             "primaryCta": {
-              "label": "See what Nuvio would build for me",
+              "label": "Ver o que a Nuvio criaria para mim",
               "href": "/contact"
             },
             "secondaryCta": {
-              "label": "View plans",
+              "label": "Ver planos",
               "href": "/pricing"
             },
-            "stepsLabel": "What happens after you ask for a plan",
+            "stepsLabel": "O que acontece depois de pedir um plano",
             "steps": [
               {
                 "icon": "message",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                "title": "Share your business",
-                "description": "Services, location, current profile, and preferred contact path."
+                "title": "Partilhe o seu neg\u00f3cio",
+                "description": "Servi\u00e7os, localiza\u00e7\u00e3o, presen\u00e7a atual e caminho de contacto preferido."
               },
               {
                 "icon": "layout",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
-                "title": "Receive your plan",
-                "description": "Recommended pages, contact options, Google profile, controls, and support."
+                "title": "Receba o seu plano",
+                "description": "P\u00e1ginas recomendadas, op\u00e7\u00f5es de contacto, perfil Google, controlos e apoio."
               },
               {
                 "icon": "scope",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6.5 5.5h11v13h-11z\"></path><path d=\"M9 9h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 15h3.8\"></path><path d=\"M5 7.5h3\"></path><path d=\"M5 12h3\"></path><path d=\"M5 16.5h3\"></path></svg>",
-                "title": "Review scope and pricing",
-                "description": "Setup fee, monthly service, refund terms, and inclusions."
+                "title": "Reveja \u00e2mbito e pre\u00e7o",
+                "description": "Taxa de setup, mensalidade, termos de reembolso e inclus\u00f5es."
               },
               {
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
-                "title": "Approve the first version",
-                "description": "After approval, Nuvio builds and launches the first version."
+                "title": "Aprove a primeira vers\u00e3o",
+                "description": "Depois da aprova\u00e7\u00e3o, a Nuvio constr\u00f3i e lan\u00e7a a primeira vers\u00e3o."
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "NEXT STEPS",
+              "headingPrefix": "What happens after you",
+              "headingAccent": "ask for a plan",
+              "headingSuffix": ".",
+              "support": "Nuvio maps what your business needs, then shows scope, pricing, and next steps before build.",
+              "actionsLabel": "Next step actions",
+              "primaryCta": {
+                "label": "See what Nuvio would build for me",
+                "href": "/contact"
+              },
+              "secondaryCta": {
+                "label": "View plans",
+                "href": "/pricing"
+              },
+              "stepsLabel": "What happens after you ask for a plan",
+              "steps": [
+                {
+                  "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                  "title": "Share your business",
+                  "description": "Services, location, current profile, and preferred contact path."
+                },
+                {
+                  "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
+                  "title": "Receive your plan",
+                  "description": "Recommended pages, contact options, Google profile, controls, and support."
+                },
+                {
+                  "icon": "scope",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6.5 5.5h11v13h-11z\"></path><path d=\"M9 9h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 15h3.8\"></path><path d=\"M5 7.5h3\"></path><path d=\"M5 12h3\"></path><path d=\"M5 16.5h3\"></path></svg>",
+                  "title": "Review scope and pricing",
+                  "description": "Setup fee, monthly service, refund terms, and inclusions."
+                },
+                {
+                  "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
+                  "title": "Approve the first version",
+                  "description": "After approval, Nuvio builds and launches the first version."
+                }
+              ]
+            }
           }
         },
         {
@@ -4180,40 +4577,78 @@
           "title": "Commercial Clarity",
           "order": 80,
           "props": {
-            "eyebrow": "COMMERCIAL CLARITY",
-            "headingPrefix": "Before you approve, the",
-            "headingAccent": "details are clear",
+            "eyebrow": "CLAREZA COMERCIAL",
+            "headingPrefix": "Antes de aprovar, os",
+            "headingAccent": "detalhes est\u00e3o claros",
             "headingSuffix": ".",
-            "support": "Nuvio shows scope, setup fee, monthly service, and refund terms before work starts.",
+            "support": "A Nuvio mostra \u00e2mbito, taxa de setup, mensalidade e termos de reembolso antes de o trabalho come\u00e7ar.",
             "miniCards": [
               {
-                "label": "Scope confirmed",
-                "text": "First version clear before build."
+                "label": "\u00c2mbito confirmado",
+                "text": "Primeira vers\u00e3o clara antes de construir."
               },
               {
-                "label": "Approval ready",
-                "text": "Setup, service, and refund terms visible."
+                "label": "Pronto para aprova\u00e7\u00e3o",
+                "text": "Setup, servi\u00e7o e termos de reembolso vis\u00edveis."
               }
             ],
-            "checklistLabel": "Approval clarity checklist",
+            "checklistLabel": "Checklist de clareza para aprova\u00e7\u00e3o",
             "checklist": [
               {
-                "title": "Scope",
-                "description": "Recommended pages, contact paths, and first-version work."
+                "title": "\u00c2mbito",
+                "description": "P\u00e1ginas recomendadas, caminhos de contacto e trabalho da primeira vers\u00e3o."
               },
               {
-                "title": "Setup fee",
-                "description": "One-time build and setup cost confirmed before work starts."
+                "title": "Taxa de setup",
+                "description": "Custo \u00fanico de constru\u00e7\u00e3o e configura\u00e7\u00e3o confirmado antes do trabalho come\u00e7ar."
               },
               {
-                "title": "Monthly service",
-                "description": "Hosting, support, reports, and improvements are clear."
+                "title": "Mensalidade",
+                "description": "Alojamento, apoio, relat\u00f3rios e melhorias ficam claros."
               },
               {
-                "title": "Refund terms",
-                "description": "30-day setup-fee refund explained before approval."
+                "title": "Termos de reembolso",
+                "description": "Reembolso de 30 dias da taxa de setup explicado antes da aprova\u00e7\u00e3o."
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "COMMERCIAL CLARITY",
+              "headingPrefix": "Before you approve, the",
+              "headingAccent": "details are clear",
+              "headingSuffix": ".",
+              "support": "Nuvio shows scope, setup fee, monthly service, and refund terms before work starts.",
+              "miniCards": [
+                {
+                  "label": "Scope confirmed",
+                  "text": "First version clear before build."
+                },
+                {
+                  "label": "Approval ready",
+                  "text": "Setup, service, and refund terms visible."
+                }
+              ],
+              "checklistLabel": "Approval clarity checklist",
+              "checklist": [
+                {
+                  "title": "Scope",
+                  "description": "Recommended pages, contact paths, and first-version work."
+                },
+                {
+                  "title": "Setup fee",
+                  "description": "One-time build and setup cost confirmed before work starts."
+                },
+                {
+                  "title": "Monthly service",
+                  "description": "Hosting, support, reports, and improvements are clear."
+                },
+                {
+                  "title": "Refund terms",
+                  "description": "30-day setup-fee refund explained before approval."
+                }
+              ]
+            }
           }
         },
         {
@@ -4222,12 +4657,23 @@
           "title": "Final Cta",
           "order": 90,
           "props": {
-            "eyebrow": "NEXT STEP",
-            "heading": "Ready to see what Nuvio would map for your business?",
-            "support": "Share your business, current website, and what you need. Nuvio will turn it into a clear recommended scope before anything is built.",
+            "eyebrow": "PR\u00d3XIMO PASSO",
+            "heading": "Pronto para ver o que a Nuvio mapearia para o seu neg\u00f3cio?",
+            "support": "Partilhe o seu neg\u00f3cio, o site atual e o que precisa. A Nuvio transforma isso num \u00e2mbito recomendado claro antes de qualquer constru\u00e7\u00e3o.",
             "primaryCta": {
-              "label": "See what Nuvio would build for me",
+              "label": "Ver o que a Nuvio criaria para mim",
               "href": "/contact"
+            }
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "NEXT STEP",
+              "heading": "Ready to see what Nuvio would map for your business?",
+              "support": "Share your business, current website, and what you need. Nuvio will turn it into a clear recommended scope before anything is built.",
+              "primaryCta": {
+                "label": "See what Nuvio would build for me",
+                "href": "/contact"
+              }
             }
           }
         }
@@ -4236,8 +4682,14 @@
     {
       "slug": "services",
       "title": "How it works",
-      "seoTitle": "How it works - Nuvio",
-      "seoDescription": "See how Nuvio turns business context into a managed online presence with mapped pages, contact paths, launch support, monthly reports, and ongoing managed support.",
+      "seoTitle": "Como funciona - Nuvio",
+      "seoDescription": "Veja como a Nuvio transforma contexto de neg\u00f3cio numa presen\u00e7a online gerida com p\u00e1ginas mapeadas, caminhos de contacto, apoio ao lan\u00e7amento, relat\u00f3rios mensais e suporte cont\u00ednuo.",
+      "seoTranslations": {
+        "en": {
+          "title": "How it works - Nuvio",
+          "description": "See how Nuvio turns business context into a managed online presence with mapped pages, contact paths, launch support, monthly reports, and ongoing managed support."
+        }
+      },
       "published": true,
       "seoNoindex": false,
       "seoExcludeFromSitemap": false,
@@ -4248,40 +4700,40 @@
           "title": "Hero",
           "order": 10,
           "props": {
-            "eyebrow": "How it works",
-            "headingPrefix": "How Nuvio turns business context",
-            "headingConnector": "into a",
-            "headingAccent": "managed online presence",
+            "eyebrow": "Como funciona",
+            "headingPrefix": "Como a Nuvio transforma contexto de neg\u00f3cio",
+            "headingConnector": "numa",
+            "headingAccent": "presen\u00e7a online gerida",
             "headingSuffix": ".",
-            "support": "Context in. Structure out. Nuvio builds the first version and keeps support managed after launch.",
-            "actionsLabel": "How it works actions",
+            "support": "Contexto entra. Estrutura sai. A Nuvio constr\u00f3i a primeira vers\u00e3o e mant\u00e9m o apoio gerido ap\u00f3s o lan\u00e7amento.",
+            "actionsLabel": "A\u00e7\u00f5es de Como funciona",
             "primaryCta": {
-              "label": "See what Nuvio would build for me",
+              "label": "Ver o que a Nuvio criaria para mim",
               "href": "/contact"
             },
             "secondaryCta": {
-              "label": "View pricing",
+              "label": "Ver pre\u00e7os",
               "href": "/pricing"
             },
-            "visualLabel": "Business context mapped into Nuvio structure",
-            "diagramLabel": "Business context mapped into structured Nuvio outputs",
-            "inputColumnLabel": "Context in",
-            "outputColumnLabel": "Structure out",
+            "visualLabel": "Contexto de neg\u00f3cio mapeado na estrutura Nuvio",
+            "diagramLabel": "Contexto de neg\u00f3cio mapeado em outputs estruturados Nuvio",
+            "inputColumnLabel": "Contexto",
+            "outputColumnLabel": "Estrutura",
             "supportLayerLabel": "Backoffice",
             "inputItems": [
-              "Services",
-              "Location",
-              "Assets",
-              "Contact paths"
+              "Servi\u00e7os",
+              "Localiza\u00e7\u00e3o",
+              "Materiais",
+              "Caminhos de contacto"
             ],
             "outputItems": [
               {
-                "title": "Pages",
+                "title": "P\u00e1ginas",
                 "icon": "layout",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>"
               },
               {
-                "title": "Contact paths",
+                "title": "Caminhos de contacto",
                 "icon": "message",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>"
               },
@@ -4291,12 +4743,65 @@
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>"
               },
               {
-                "title": "Monthly reports",
+                "title": "Relat\u00f3rios mensais",
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>"
               }
             ],
             "trustedSvgIllustration": "<svg class=\"diagram-trusted-illustration\" viewBox=\"0 0 220 150\" xmlns=\"http://www.w3.org/2000/svg\" role=\"presentation\"><path class=\"diagram-main-flow\" d=\"M10 76 C62 20 158 20 210 76\"></path><path class=\"diagram-soft-flow\" d=\"M10 76 C62 130 158 130 210 76\"></path><path class=\"diagram-support-flow\" d=\"M122 98 C150 112 166 126 188 137\"></path><circle class=\"diagram-node\" cx=\"10\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node\" cx=\"210\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"122\" cy=\"98\" r=\"3.5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"188\" cy=\"137\" r=\"3.5\"></circle></svg>"
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "How it works",
+              "headingPrefix": "How Nuvio turns business context",
+              "headingConnector": "into a",
+              "headingAccent": "managed online presence",
+              "headingSuffix": ".",
+              "support": "Context in. Structure out. Nuvio builds the first version and keeps support managed after launch.",
+              "actionsLabel": "How it works actions",
+              "primaryCta": {
+                "label": "See what Nuvio would build for me",
+                "href": "/contact"
+              },
+              "secondaryCta": {
+                "label": "View pricing",
+                "href": "/pricing"
+              },
+              "visualLabel": "Business context mapped into Nuvio structure",
+              "diagramLabel": "Business context mapped into structured Nuvio outputs",
+              "inputColumnLabel": "Context in",
+              "outputColumnLabel": "Structure out",
+              "supportLayerLabel": "Backoffice",
+              "inputItems": [
+                "Services",
+                "Location",
+                "Assets",
+                "Contact paths"
+              ],
+              "outputItems": [
+                {
+                  "title": "Pages",
+                  "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>"
+                },
+                {
+                  "title": "Contact paths",
+                  "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>"
+                },
+                {
+                  "title": "Backoffice",
+                  "icon": "control",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>"
+                },
+                {
+                  "title": "Monthly reports",
+                  "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>"
+                }
+              ],
+              "trustedSvgIllustration": "<svg class=\"diagram-trusted-illustration\" viewBox=\"0 0 220 150\" xmlns=\"http://www.w3.org/2000/svg\" role=\"presentation\"><path class=\"diagram-main-flow\" d=\"M10 76 C62 20 158 20 210 76\"></path><path class=\"diagram-soft-flow\" d=\"M10 76 C62 130 158 130 210 76\"></path><path class=\"diagram-support-flow\" d=\"M122 98 C150 112 166 126 188 137\"></path><circle class=\"diagram-node\" cx=\"10\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node\" cx=\"210\" cy=\"76\" r=\"5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"122\" cy=\"98\" r=\"3.5\"></circle><circle class=\"diagram-node diagram-node-small\" cx=\"188\" cy=\"137\" r=\"3.5\"></circle></svg>"
+            }
           }
         },
         {
@@ -4305,38 +4810,74 @@
           "title": "Process",
           "order": 20,
           "props": {
-            "eyebrow": "Process",
-            "headingPrefix": "A clear process",
-            "headingAccent": "before anything is built",
+            "eyebrow": "Processo",
+            "headingPrefix": "Um processo claro",
+            "headingAccent": "antes de construir",
             "headingSuffix": ".",
-            "support": "Four steps keep the work clear before build and launch.",
-            "stepsLabel": "Nuvio process steps",
+            "support": "Quatro passos mant\u00eam o trabalho claro antes da constru\u00e7\u00e3o e do lan\u00e7amento.",
+            "stepsLabel": "Passos do processo Nuvio",
             "steps": [
               {
                 "icon": "presence",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
-                "title": "Share context",
-                "text": "Share what exists and what customers need."
+                "title": "Partilhar contexto",
+                "text": "Partilhe o que j\u00e1 existe e o que os clientes precisam."
               },
               {
                 "icon": "map",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.5 6.2l4.2-1.7 6.6 2.8 4.2-1.7v12.2l-4.2 1.7-6.6-2.8-4.2 1.7V6.2z\"></path><path d=\"M8.7 4.5v12.2\"></path><path d=\"M15.3 7.3v12.2\"></path></svg>",
-                "title": "Map the plan",
-                "text": "We define pages, contact paths, and scope."
+                "title": "Mapear o plano",
+                "text": "Definimos p\u00e1ginas, caminhos de contacto e \u00e2mbito."
               },
               {
                 "icon": "layout",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
-                "title": "Build the first version",
-                "text": "Nuvio turns the plan into a working first version."
+                "title": "Construir a primeira vers\u00e3o",
+                "text": "A Nuvio transforma o plano numa primeira vers\u00e3o funcional."
               },
               {
                 "icon": "support",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
-                "title": "Manage after launch",
-                "text": "Hosting, updates, reports, and support stay covered."
+                "title": "Gerir ap\u00f3s o lan\u00e7amento",
+                "text": "Alojamento, atualiza\u00e7\u00f5es, relat\u00f3rios e apoio continuam cobertos."
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "Process",
+              "headingPrefix": "A clear process",
+              "headingAccent": "before anything is built",
+              "headingSuffix": ".",
+              "support": "Four steps keep the work clear before build and launch.",
+              "stepsLabel": "Nuvio process steps",
+              "steps": [
+                {
+                  "icon": "presence",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"6\" width=\"15\" height=\"12\" rx=\"3\"></rect><path d=\"M7.8 9.7h5.2\"></path><path d=\"M7.8 13h8.4\"></path><path d=\"M7.8 16h3.6\"></path></svg>",
+                  "title": "Share context",
+                  "text": "Share what exists and what customers need."
+                },
+                {
+                  "icon": "map",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4.5 6.2l4.2-1.7 6.6 2.8 4.2-1.7v12.2l-4.2 1.7-6.6-2.8-4.2 1.7V6.2z\"></path><path d=\"M8.7 4.5v12.2\"></path><path d=\"M15.3 7.3v12.2\"></path></svg>",
+                  "title": "Map the plan",
+                  "text": "We define pages, contact paths, and scope."
+                },
+                {
+                  "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
+                  "title": "Build the first version",
+                  "text": "Nuvio turns the plan into a working first version."
+                },
+                {
+                  "icon": "support",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
+                  "title": "Manage after launch",
+                  "text": "Hosting, updates, reports, and support stay covered."
+                }
+              ]
+            }
           }
         },
         {
@@ -4345,82 +4886,162 @@
           "title": "Mapping",
           "order": 30,
           "props": {
-            "eyebrow": "What Nuvio maps",
-            "headingPrefix": "From what you send to a clear",
-            "headingAccent": "first version",
+            "eyebrow": "O que a Nuvio mapeia",
+            "headingPrefix": "Do que envia a uma",
+            "headingAccent": "primeira vers\u00e3o clara",
             "headingSuffix": ".",
-            "support": "Your inputs become pages, contact paths, controls, and a launch rhythm.",
-            "compositionLabel": "Business context mapped into Nuvio output",
-            "inputLabel": "Planning brief inputs",
-            "inputTitle": "PLANNING BRIEF",
+            "support": "Os seus inputs tornam-se p\u00e1ginas, caminhos de contacto, controlos e um ritmo de lan\u00e7amento.",
+            "compositionLabel": "Contexto de neg\u00f3cio mapeado num output Nuvio",
+            "inputLabel": "Inputs do briefing de planeamento",
+            "inputTitle": "BRIEFING DE PLANEAMENTO",
             "briefRows": [
               {
-                "title": "Business details",
-                "text": "Services, location, hours, and priorities."
+                "title": "Detalhes do neg\u00f3cio",
+                "text": "Servi\u00e7os, localiza\u00e7\u00e3o, hor\u00e1rios e prioridades."
               },
               {
-                "title": "Brand material",
-                "text": "Logo, colours, photos, and references."
+                "title": "Material de marca",
+                "text": "Log\u00f3tipo, cores, fotografias e refer\u00eancias."
               },
               {
-                "title": "Contact paths",
-                "text": "Call, WhatsApp, form, booking, or next step."
+                "title": "Caminhos de contacto",
+                "text": "Chamada, WhatsApp, formul\u00e1rio, marca\u00e7\u00e3o ou pr\u00f3ximo passo."
               },
               {
-                "title": "Priorities",
-                "text": "What launches first and what waits."
+                "title": "Prioridades",
+                "text": "O que lan\u00e7a primeiro e o que fica para depois."
               }
             ],
-            "centerVisualLabel": "Mapped first public version preview",
-            "centerTitle": "FIRST PUBLIC VERSION",
-            "siteBrand": "Local business site",
+            "centerVisualLabel": "Pr\u00e9-visualiza\u00e7\u00e3o da primeira vers\u00e3o p\u00fablica mapeada",
+            "centerTitle": "PRIMEIRA VERS\u00c3O P\u00daBLICA",
+            "siteBrand": "Site de neg\u00f3cio local",
             "navItems": [
-              "Home",
-              "Services",
-              "Contact"
+              "In\u00edcio",
+              "Servi\u00e7os",
+              "Contacto"
             ],
-            "contactPathsLabel": "Contact paths",
+            "contactPathsLabel": "Caminhos de contacto",
             "contactChips": [
-              "Call",
+              "Chamada",
               "WhatsApp",
-              "Form"
+              "Formul\u00e1rio"
             ],
             "pageChips": [
-              "Home",
-              "Services",
-              "Proof",
-              "Contact"
+              "In\u00edcio",
+              "Servi\u00e7os",
+              "Prova",
+              "Contacto"
             ],
             "systemStrip": [
               "Backoffice",
-              "Reports"
+              "Relat\u00f3rios"
             ],
             "outputLayers": [
               {
                 "icon": "layout",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
-                "title": "Website structure",
-                "text": "Pages, navigation, and launch priorities."
+                "title": "Estrutura do site",
+                "text": "P\u00e1ginas, navega\u00e7\u00e3o e prioridades de lan\u00e7amento."
               },
               {
                 "icon": "message",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                "title": "Contact paths",
-                "text": "Calls, forms, WhatsApp, booking, or quote routes."
+                "title": "Caminhos de contacto",
+                "text": "Chamadas, formul\u00e1rios, WhatsApp, marca\u00e7\u00f5es ou pedidos de or\u00e7amento."
               },
               {
                 "icon": "control",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
-                "title": "Backoffice controls",
-                "text": "Editable content, contacts, and reports."
+                "title": "Controlos de backoffice",
+                "text": "Conte\u00fado edit\u00e1vel, contactos e relat\u00f3rios."
               },
               {
                 "icon": "support",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
-                "title": "Managed support",
-                "text": "Hosting, updates, and small improvements."
+                "title": "Apoio gerido",
+                "text": "Alojamento, atualiza\u00e7\u00f5es e pequenas melhorias."
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "What Nuvio maps",
+              "headingPrefix": "From what you send to a clear",
+              "headingAccent": "first version",
+              "headingSuffix": ".",
+              "support": "Your inputs become pages, contact paths, controls, and a launch rhythm.",
+              "compositionLabel": "Business context mapped into Nuvio output",
+              "inputLabel": "Planning brief inputs",
+              "inputTitle": "PLANNING BRIEF",
+              "briefRows": [
+                {
+                  "title": "Business details",
+                  "text": "Services, location, hours, and priorities."
+                },
+                {
+                  "title": "Brand material",
+                  "text": "Logo, colours, photos, and references."
+                },
+                {
+                  "title": "Contact paths",
+                  "text": "Call, WhatsApp, form, booking, or next step."
+                },
+                {
+                  "title": "Priorities",
+                  "text": "What launches first and what waits."
+                }
+              ],
+              "centerVisualLabel": "Mapped first public version preview",
+              "centerTitle": "FIRST PUBLIC VERSION",
+              "siteBrand": "Local business site",
+              "navItems": [
+                "Home",
+                "Services",
+                "Contact"
+              ],
+              "contactPathsLabel": "Contact paths",
+              "contactChips": [
+                "Call",
+                "WhatsApp",
+                "Form"
+              ],
+              "pageChips": [
+                "Home",
+                "Services",
+                "Proof",
+                "Contact"
+              ],
+              "systemStrip": [
+                "Backoffice",
+                "Reports"
+              ],
+              "outputLayers": [
+                {
+                  "icon": "layout",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
+                  "title": "Website structure",
+                  "text": "Pages, navigation, and launch priorities."
+                },
+                {
+                  "icon": "message",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                  "title": "Contact paths",
+                  "text": "Calls, forms, WhatsApp, booking, or quote routes."
+                },
+                {
+                  "icon": "control",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
+                  "title": "Backoffice controls",
+                  "text": "Editable content, contacts, and reports."
+                },
+                {
+                  "icon": "support",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
+                  "title": "Managed support",
+                  "text": "Hosting, updates, and small improvements."
+                }
+              ]
+            }
           }
         },
         {
@@ -4429,29 +5050,56 @@
           "title": "Managed System",
           "order": 40,
           "props": {
-            "eyebrow": "Managed system",
-            "headingPrefix": "You control the business details.",
-            "headingAccent": "Nuvio manages",
-            "headingSuffix": "the technical layer.",
-            "support": "Your business keeps the important details clear. Nuvio handles the managed website, support, reports, and technical layer around them.",
-            "responsibilitiesLabel": "Managed system responsibilities",
+            "eyebrow": "Sistema gerido",
+            "headingPrefix": "Controla os detalhes do neg\u00f3cio.",
+            "headingAccent": "A Nuvio gere",
+            "headingSuffix": "a camada t\u00e9cnica.",
+            "support": "O seu neg\u00f3cio mant\u00e9m os detalhes importantes claros. A Nuvio trata do site gerido, apoio, relat\u00f3rios e camada t\u00e9cnica \u00e0 volta deles.",
+            "responsibilitiesLabel": "Responsabilidades do sistema gerido",
             "responsibilityRows": [
               {
-                "label": "YOU CONTROL",
-                "text": "Services, key content, contact details, and incoming requests.",
+                "label": "VOC\u00ca CONTROLA",
+                "text": "Servi\u00e7os, conte\u00fado-chave, contactos e pedidos recebidos.",
                 "managed": false
               },
               {
-                "label": "NUVIO MANAGES",
-                "text": "Hosting, maintenance, technical fixes, reports, and ongoing support.",
+                "label": "A NUVIO GERE",
+                "text": "Alojamento, manuten\u00e7\u00e3o, corre\u00e7\u00f5es t\u00e9cnicas, relat\u00f3rios e apoio cont\u00ednuo.",
                 "managed": true
               }
             ],
-            "visualLabel": "Nuvio backoffice and managed service model",
-            "backofficeLabel": "Nuvio Backoffice",
-            "contextPill": "Simple control layer",
+            "visualLabel": "Backoffice Nuvio e modelo de servi\u00e7o gerido",
+            "backofficeLabel": "Backoffice Nuvio",
+            "contextPill": "Camada simples de controlo",
             "imageSrc": "/backoffice/cms.png",
-            "imageAlt": "Nuvio backoffice screenshot showing website pages and content preview"
+            "imageAlt": "Screenshot do backoffice Nuvio com p\u00e1ginas do site e pr\u00e9-visualiza\u00e7\u00e3o de conte\u00fado"
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "Managed system",
+              "headingPrefix": "You control the business details.",
+              "headingAccent": "Nuvio manages",
+              "headingSuffix": "the technical layer.",
+              "support": "Your business keeps the important details clear. Nuvio handles the managed website, support, reports, and technical layer around them.",
+              "responsibilitiesLabel": "Managed system responsibilities",
+              "responsibilityRows": [
+                {
+                  "label": "YOU CONTROL",
+                  "text": "Services, key content, contact details, and incoming requests.",
+                  "managed": false
+                },
+                {
+                  "label": "NUVIO MANAGES",
+                  "text": "Hosting, maintenance, technical fixes, reports, and ongoing support.",
+                  "managed": true
+                }
+              ],
+              "visualLabel": "Nuvio backoffice and managed service model",
+              "backofficeLabel": "Nuvio Backoffice",
+              "contextPill": "Simple control layer",
+              "imageSrc": "/backoffice/cms.png",
+              "imageAlt": "Nuvio backoffice screenshot showing website pages and content preview"
+            }
           }
         },
         {
@@ -4460,43 +5108,84 @@
           "title": "After Launch",
           "order": 50,
           "props": {
-            "eyebrow": "After launch",
-            "headingPrefix": "Launch is not the handoff.",
-            "headingConnector": "It is the",
-            "headingAccent": "start of support",
+            "eyebrow": "Ap\u00f3s o lan\u00e7amento",
+            "headingPrefix": "O lan\u00e7amento n\u00e3o \u00e9 a entrega final.",
+            "headingConnector": "\u00c9 o",
+            "headingAccent": "in\u00edcio do apoio",
             "headingSuffix": ".",
-            "support": "After launch, the useful parts stay visible and easier to improve.",
+            "support": "Depois do lan\u00e7amento, as partes \u00fateis continuam vis\u00edveis e mais f\u00e1ceis de melhorar.",
             "imageSrc": "/backoffice/reports.png",
-            "imageAlt": "Nuvio reports screenshot showing monthly activity overview",
-            "supportCardLabel": "Monthly support",
-            "supportCardHeading": "Reports and updates stay connected.",
-            "listLabel": "After launch support",
+            "imageAlt": "Screenshot dos relat\u00f3rios Nuvio com vis\u00e3o geral da atividade mensal",
+            "supportCardLabel": "Apoio mensal",
+            "supportCardHeading": "Relat\u00f3rios e atualiza\u00e7\u00f5es continuam ligados.",
+            "listLabel": "Apoio ap\u00f3s o lan\u00e7amento",
             "items": [
               {
                 "icon": "improve",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
-                "title": "Monthly reports",
-                "text": "Activity, top pages, and contact signals."
+                "title": "Relat\u00f3rios mensais",
+                "text": "Atividade, p\u00e1ginas principais e sinais de contacto."
               },
               {
                 "icon": "scope",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6.5 5.5h11v13h-11z\"></path><path d=\"M9 9h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 15h3.8\"></path><path d=\"M5 7.5h3\"></path><path d=\"M5 12h3\"></path><path d=\"M5 16.5h3\"></path></svg>",
-                "title": "Small improvements",
-                "text": "Useful details improve over time."
+                "title": "Pequenas melhorias",
+                "text": "Detalhes \u00fateis melhoram ao longo do tempo."
               },
               {
                 "icon": "clarity",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
-                "title": "Technical stability",
-                "text": "Hosting, maintenance, and fixes stay handled."
+                "title": "Estabilidade t\u00e9cnica",
+                "text": "Alojamento, manuten\u00e7\u00e3o e corre\u00e7\u00f5es ficam tratados."
               },
               {
                 "icon": "support",
                 "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
-                "title": "Content support",
-                "text": "Service and contact updates stay easier."
+                "title": "Apoio ao conte\u00fado",
+                "text": "Atualiza\u00e7\u00f5es de servi\u00e7os e contactos ficam mais f\u00e1ceis."
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "After launch",
+              "headingPrefix": "Launch is not the handoff.",
+              "headingConnector": "It is the",
+              "headingAccent": "start of support",
+              "headingSuffix": ".",
+              "support": "After launch, the useful parts stay visible and easier to improve.",
+              "imageSrc": "/backoffice/reports.png",
+              "imageAlt": "Nuvio reports screenshot showing monthly activity overview",
+              "supportCardLabel": "Monthly support",
+              "supportCardHeading": "Reports and updates stay connected.",
+              "listLabel": "After launch support",
+              "items": [
+                {
+                  "icon": "improve",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 17.5l4.2-4.2 2.7 2.7 5.1-7.5\"></path><path d=\"M15.2 8.5H18v2.8\"></path><path d=\"M5 6.5h6\"></path></svg>",
+                  "title": "Monthly reports",
+                  "text": "Activity, top pages, and contact signals."
+                },
+                {
+                  "icon": "scope",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6.5 5.5h11v13h-11z\"></path><path d=\"M9 9h6\"></path><path d=\"M9 12h6\"></path><path d=\"M9 15h3.8\"></path><path d=\"M5 7.5h3\"></path><path d=\"M5 12h3\"></path><path d=\"M5 16.5h3\"></path></svg>",
+                  "title": "Small improvements",
+                  "text": "Useful details improve over time."
+                },
+                {
+                  "icon": "clarity",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
+                  "title": "Technical stability",
+                  "text": "Hosting, maintenance, and fixes stay handled."
+                },
+                {
+                  "icon": "support",
+                  "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
+                  "title": "Content support",
+                  "text": "Service and contact updates stay easier."
+                }
+              ]
+            }
           }
         },
         {
@@ -4505,12 +5194,23 @@
           "title": "Final Cta",
           "order": 60,
           "props": {
-            "eyebrow": "NEXT STEP",
-            "heading": "Ready to see what Nuvio would build for your business?",
-            "support": "Share your business context. Nuvio maps the first version and recommended scope before anything is built.",
+            "eyebrow": "PR\u00d3XIMO PASSO",
+            "heading": "Pronto para ver o que a Nuvio criaria para o seu neg\u00f3cio?",
+            "support": "Partilhe o contexto do seu neg\u00f3cio. A Nuvio mapeia a primeira vers\u00e3o e o \u00e2mbito recomendado antes de construir.",
             "primaryCta": {
-              "label": "See what Nuvio would build for me",
+              "label": "Ver o que a Nuvio criaria para mim",
               "href": "/contact"
+            }
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "NEXT STEP",
+              "heading": "Ready to see what Nuvio would build for your business?",
+              "support": "Share your business context. Nuvio maps the first version and recommended scope before anything is built.",
+              "primaryCta": {
+                "label": "See what Nuvio would build for me",
+                "href": "/contact"
+              }
             }
           }
         }
@@ -4519,8 +5219,14 @@
     {
       "slug": "pricing",
       "title": "Pricing",
-      "seoTitle": "Pricing - Nuvio",
-      "seoDescription": "Clear Nuvio pricing for first-version website setup, monthly managed service, founder pricing, and setup-fee refund terms.",
+      "seoTitle": "Pre\u00e7os - Nuvio",
+      "seoDescription": "Pre\u00e7os claros da Nuvio para setup da primeira vers\u00e3o do site, mensalidade de servi\u00e7o gerido, pre\u00e7o founder e termos de reembolso da taxa de setup.",
+      "seoTranslations": {
+        "en": {
+          "title": "Pricing - Nuvio",
+          "description": "Clear Nuvio pricing for first-version website setup, monthly managed service, founder pricing, and setup-fee refund terms."
+        }
+      },
       "published": true,
       "seoNoindex": false,
       "seoExcludeFromSitemap": false,
@@ -4531,33 +5237,64 @@
           "title": "Hero",
           "order": 10,
           "props": {
-            "eyebrow": "Pricing",
-            "headingPrefix": "Clear pricing for a",
-            "headingAccent": "managed online presence",
+            "eyebrow": "Pre\u00e7os",
+            "headingPrefix": "Pre\u00e7os claros para uma",
+            "headingAccent": "presen\u00e7a online gerida",
             "headingSuffix": ".",
-            "support": "Nuvio separates the first-version build from the monthly service, so you know what is created before launch, what stays managed after, and how the setup-fee refund works.",
-            "actionsLabel": "Pricing actions",
+            "support": "A Nuvio separa a constru\u00e7\u00e3o da primeira vers\u00e3o da mensalidade, para saber o que \u00e9 criado antes do lan\u00e7amento, o que continua gerido depois e como funciona o reembolso da taxa de setup.",
+            "actionsLabel": "A\u00e7\u00f5es de pre\u00e7os",
             "primaryCta": {
-              "label": "Request my Nuvio plan",
+              "label": "Pedir plano Nuvio",
               "href": "/contact"
             },
             "secondaryCta": {
-              "label": "Compare plans",
+              "label": "Comparar planos",
               "href": "#plans"
             },
-            "panelLabel": "Pricing model",
-            "panelKicker": "Pricing model",
-            "panelHeading": "Build once. Managed monthly.",
-            "modelAriaLabel": "Setup fee, monthly service, founder pricing, and refund terms",
-            "setupLabel": "Setup fee",
-            "setupDescription": "First version build",
-            "monthlyLabel": "Monthly service",
-            "monthlyDescription": "Managed after launch",
-            "founderLabel": "Founder entry",
-            "founderDescription": "First 15 clients",
-            "refundLabel": "30-day refund",
-            "refundDescription": "After launch. Setup fee only.",
+            "panelLabel": "Modelo de pre\u00e7os",
+            "panelKicker": "Modelo de pre\u00e7os",
+            "panelHeading": "Constr\u00f3i-se uma vez. Gere-se todos os meses.",
+            "modelAriaLabel": "Taxa de setup, mensalidade, pre\u00e7o founder e termos de reembolso",
+            "setupLabel": "Taxa de setup",
+            "setupDescription": "Constru\u00e7\u00e3o da primeira vers\u00e3o",
+            "monthlyLabel": "Mensalidade",
+            "monthlyDescription": "Gerido ap\u00f3s o lan\u00e7amento",
+            "founderLabel": "Entrada founder",
+            "founderDescription": "Primeiros 15 clientes",
+            "refundLabel": "Reembolso de 30 dias",
+            "refundDescription": "Depois do lan\u00e7amento. Apenas taxa de setup.",
             "trustedSvgIllustration": "<svg class=\"pricing-model-connector\" viewBox=\"0 0 360 220\" xmlns=\"http://www.w3.org/2000/svg\" role=\"presentation\"><path class=\"pricing-connector-main\" d=\"M84 82 C136 62 224 62 276 82\"></path><path class=\"pricing-connector-soft\" d=\"M96 142 C150 174 210 174 264 142\"></path><circle class=\"pricing-connector-node\" cx=\"84\" cy=\"82\" r=\"4\"></circle><circle class=\"pricing-connector-node\" cx=\"276\" cy=\"82\" r=\"4\"></circle><circle class=\"pricing-connector-node pricing-connector-node-soft\" cx=\"96\" cy=\"142\" r=\"3\"></circle><circle class=\"pricing-connector-node pricing-connector-node-soft\" cx=\"264\" cy=\"142\" r=\"3\"></circle></svg>"
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "Pricing",
+              "headingPrefix": "Clear pricing for a",
+              "headingAccent": "managed online presence",
+              "headingSuffix": ".",
+              "support": "Nuvio separates the first-version build from the monthly service, so you know what is created before launch, what stays managed after, and how the setup-fee refund works.",
+              "actionsLabel": "Pricing actions",
+              "primaryCta": {
+                "label": "Request my Nuvio plan",
+                "href": "/contact"
+              },
+              "secondaryCta": {
+                "label": "Compare plans",
+                "href": "#plans"
+              },
+              "panelLabel": "Pricing model",
+              "panelKicker": "Pricing model",
+              "panelHeading": "Build once. Managed monthly.",
+              "modelAriaLabel": "Setup fee, monthly service, founder pricing, and refund terms",
+              "setupLabel": "Setup fee",
+              "setupDescription": "First version build",
+              "monthlyLabel": "Monthly service",
+              "monthlyDescription": "Managed after launch",
+              "founderLabel": "Founder entry",
+              "founderDescription": "First 15 clients",
+              "refundLabel": "30-day refund",
+              "refundDescription": "After launch. Setup fee only.",
+              "trustedSvgIllustration": "<svg class=\"pricing-model-connector\" viewBox=\"0 0 360 220\" xmlns=\"http://www.w3.org/2000/svg\" role=\"presentation\"><path class=\"pricing-connector-main\" d=\"M84 82 C136 62 224 62 276 82\"></path><path class=\"pricing-connector-soft\" d=\"M96 142 C150 174 210 174 264 142\"></path><circle class=\"pricing-connector-node\" cx=\"84\" cy=\"82\" r=\"4\"></circle><circle class=\"pricing-connector-node\" cx=\"276\" cy=\"82\" r=\"4\"></circle><circle class=\"pricing-connector-node pricing-connector-node-soft\" cx=\"96\" cy=\"142\" r=\"3\"></circle><circle class=\"pricing-connector-node pricing-connector-node-soft\" cx=\"264\" cy=\"142\" r=\"3\"></circle></svg>"
+            }
           }
         },
         {
@@ -4567,86 +5304,86 @@
           "order": 20,
           "props": {
             "plansSection": {
-              "eyebrow": "Plans",
-              "headingPrefix": "Choose the level of",
-              "headingAccent": "managed support",
-              "headingSuffix": "your business needs.",
-              "support": "Choose based on the scope, support rhythm, and improvement level your business needs.",
+              "eyebrow": "Planos",
+              "headingPrefix": "Escolha o n\u00edvel de",
+              "headingAccent": "apoio gerido",
+              "headingSuffix": "que o seu neg\u00f3cio precisa.",
+              "support": "Escolha com base no \u00e2mbito, ritmo de apoio e n\u00edvel de melhoria que o seu neg\u00f3cio precisa.",
               "founder": {
-                "title": "Founder pricing for the first 15 clients.",
-                "text": "Lower setup pricing. Same monthly service. Founder monthly rate stays while the original contract remains active and in good standing.",
-                "factsLabel": "Founder pricing details",
+                "title": "Pre\u00e7o founder para os primeiros 15 clientes.",
+                "text": "Pre\u00e7o de setup mais baixo. A mesma mensalidade de servi\u00e7o. A mensalidade founder mant\u00e9m-se enquanto o contrato original estiver ativo e em boa situa\u00e7\u00e3o.",
+                "factsLabel": "Detalhes do pre\u00e7o founder",
                 "facts": [
-                  "15 founder spots",
-                  "Lower setup fee",
-                  "Same monthly service"
+                  "15 vagas founder",
+                  "Taxa de setup mais baixa",
+                  "Mesma mensalidade"
                 ]
               },
               "plans": [
                 {
                   "id": "presenca",
                   "name": "Presen\u00e7a",
-                  "label": "Plan 01",
-                  "promise": "Get found and look professional.",
-                  "who": "A focused start.",
+                  "label": "Plano 01",
+                  "promise": "Ser encontrado e parecer profissional.",
+                  "who": "Um arranque focado.",
                   "standardSetup": "\u20ac990",
                   "founderSetup": "\u20ac590",
                   "monthly": "\u20ac69/month",
                   "recommended": false,
                   "includes": [
-                    "Essential site structure",
-                    "Core contact paths",
-                    "Backoffice controls",
-                    "Monthly report"
+                    "Estrutura essencial do site",
+                    "Caminhos de contacto principais",
+                    "Controlos de backoffice",
+                    "Relat\u00f3rio mensal"
                   ]
                 },
                 {
                   "id": "crescimento",
                   "name": "Crescimento",
-                  "label": "Recommended",
-                  "promise": "Improve the presence every month.",
-                  "who": "Monthly growth rhythm.",
+                  "label": "Recomendado",
+                  "promise": "Melhorar a presen\u00e7a todos os meses.",
+                  "who": "Ritmo mensal de evolu\u00e7\u00e3o.",
                   "standardSetup": "\u20ac1,490",
                   "founderSetup": "\u20ac990",
                   "monthly": "\u20ac99/month",
                   "recommended": true,
                   "includes": [
-                    "Larger site structure",
-                    "Deeper contact planning",
-                    "Active monthly support",
-                    "Detailed report"
+                    "Estrutura de site maior",
+                    "Planeamento de contacto mais profundo",
+                    "Apoio mensal ativo",
+                    "Relat\u00f3rio detalhado"
                   ]
                 },
                 {
                   "id": "parceiro",
                   "name": "Parceiro",
-                  "label": "Plan 03",
-                  "promise": "Delegate more of the work.",
-                  "who": "Higher support coverage.",
+                  "label": "Plano 03",
+                  "promise": "Delegar mais trabalho.",
+                  "who": "Maior cobertura de apoio.",
                   "standardSetup": "\u20ac1,990",
                   "founderSetup": "\u20ac1,390",
                   "monthly": "\u20ac149/month",
                   "recommended": false,
                   "includes": [
-                    "Broader page scope",
-                    "Monthly improvements",
-                    "Landing page support",
-                    "Annual review"
+                    "\u00c2mbito de p\u00e1ginas mais amplo",
+                    "Melhorias mensais",
+                    "Apoio a landing pages",
+                    "Revis\u00e3o anual"
                   ]
                 }
               ],
-              "founderSetupLabel": "Founder setup",
-              "standardSetupPrefix": "Standard setup",
-              "monthlyLabel": "Monthly service",
-              "fitLabel": "Fit",
-              "planCtaLabel": "Request this plan"
+              "founderSetupLabel": "Setup founder",
+              "standardSetupPrefix": "Setup normal",
+              "monthlyLabel": "Mensalidade",
+              "fitLabel": "Ideal para",
+              "planCtaLabel": "Pedir este plano"
             },
             "comparison": {
-              "ariaLabel": "Plan comparison details",
-              "summaryLabel": "Compare plan details",
-              "summarySupport": "See scope, support, reports, and monthly service differences.",
-              "tableLabel": "Plan comparison",
-              "headerArea": "Area",
+              "ariaLabel": "Detalhes de compara\u00e7\u00e3o dos planos",
+              "summaryLabel": "Comparar detalhes dos planos",
+              "summarySupport": "Veja diferen\u00e7as de \u00e2mbito, apoio, relat\u00f3rios e mensalidade.",
+              "tableLabel": "Compara\u00e7\u00e3o de planos",
+              "headerArea": "\u00c1rea",
               "planHeaders": [
                 "Presen\u00e7a",
                 "Crescimento",
@@ -4654,92 +5391,271 @@
               ],
               "rows": [
                 {
-                  "category": "First-version scope",
-                  "presenca": "Essential website structure",
-                  "crescimento": "Larger site structure",
-                  "parceiro": "Broader page scope"
+                  "category": "\u00c2mbito da primeira vers\u00e3o",
+                  "presenca": "Estrutura essencial do site",
+                  "crescimento": "Estrutura de site maior",
+                  "parceiro": "\u00c2mbito de p\u00e1ginas mais amplo"
                 },
                 {
-                  "category": "Contact paths",
-                  "presenca": "Clear calls, forms, WhatsApp, booking, or quote paths",
-                  "crescimento": "More complete contact-path planning",
-                  "parceiro": "More hands-on contact-path support"
+                  "category": "Caminhos de contacto",
+                  "presenca": "Chamadas, formul\u00e1rios, WhatsApp, marca\u00e7\u00f5es ou pedidos de or\u00e7amento claros",
+                  "crescimento": "Planeamento de caminhos de contacto mais completo",
+                  "parceiro": "Apoio mais pr\u00f3ximo nos caminhos de contacto"
                 },
                 {
-                  "category": "Backoffice controls",
-                  "presenca": "Essential content and contact activity",
-                  "crescimento": "Expanded controls where useful",
-                  "parceiro": "Broader control and reporting view"
+                  "category": "Controlos de backoffice",
+                  "presenca": "Conte\u00fado essencial e atividade de contacto",
+                  "crescimento": "Controlos expandidos quando fizer sentido",
+                  "parceiro": "Vis\u00e3o mais ampla de controlo e relat\u00f3rios"
                 },
                 {
-                  "category": "Monthly reports",
-                  "presenca": "Monthly report",
-                  "crescimento": "More detailed monthly report",
-                  "parceiro": "More hands-on review rhythm"
+                  "category": "Relat\u00f3rios mensais",
+                  "presenca": "Relat\u00f3rio mensal",
+                  "crescimento": "Relat\u00f3rio mensal mais detalhado",
+                  "parceiro": "Ritmo de revis\u00e3o mais pr\u00f3ximo"
                 },
                 {
-                  "category": "Improvement rhythm",
-                  "presenca": "Small monthly improvements",
-                  "crescimento": "More monthly changes",
-                  "parceiro": "More active improvement support"
+                  "category": "Ritmo de melhoria",
+                  "presenca": "Pequenas melhorias mensais",
+                  "crescimento": "Mais altera\u00e7\u00f5es mensais",
+                  "parceiro": "Apoio mais ativo \u00e0 melhoria"
                 },
                 {
-                  "category": "Support priority",
-                  "presenca": "Managed support",
-                  "crescimento": "Priority support",
-                  "parceiro": "Higher support priority"
+                  "category": "Prioridade de apoio",
+                  "presenca": "Apoio gerido",
+                  "crescimento": "Apoio priorit\u00e1rio",
+                  "parceiro": "Prioridade de apoio superior"
                 },
                 {
-                  "category": "Local visibility foundations",
-                  "presenca": "SEO foundations",
-                  "crescimento": "Stronger local visibility foundations",
-                  "parceiro": "Broader support around visibility foundations"
+                  "category": "Bases de visibilidade local",
+                  "presenca": "Bases de SEO",
+                  "crescimento": "Bases de visibilidade local mais fortes",
+                  "parceiro": "Apoio mais amplo \u00e0 visibilidade local"
                 },
                 {
-                  "category": "Campaign support",
-                  "presenca": "Not included",
-                  "crescimento": "Scoped separately if needed",
-                  "parceiro": "Included within agreed scope"
+                  "category": "Apoio a campanhas",
+                  "presenca": "N\u00e3o inclu\u00eddo",
+                  "crescimento": "Definido \u00e0 parte se necess\u00e1rio",
+                  "parceiro": "Inclu\u00eddo dentro do \u00e2mbito acordado"
                 }
               ]
             },
             "foundation": {
-              "eyebrow": "Included",
-              "headingPrefix": "Every plan includes the",
-              "headingAccent": "managed foundation",
+              "eyebrow": "Inclu\u00eddo",
+              "headingPrefix": "Todos os planos incluem a",
+              "headingAccent": "base gerida",
               "headingSuffix": ".",
               "items": [
                 {
                   "icon": "layout",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
-                  "title": "Website structure",
-                  "body": "Pages planned before build."
+                  "title": "Estrutura do site",
+                  "body": "P\u00e1ginas planeadas antes da constru\u00e7\u00e3o."
                 },
                 {
                   "icon": "message",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
-                  "title": "Contact paths",
-                  "body": "Calls, forms, WhatsApp, or booking requests."
+                  "title": "Caminhos de contacto",
+                  "body": "Chamadas, formul\u00e1rios, WhatsApp ou pedidos de marca\u00e7\u00e3o."
                 },
                 {
                   "icon": "control",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
-                  "title": "Backoffice controls",
-                  "body": "Essential content and contact activity."
+                  "title": "Controlos de backoffice",
+                  "body": "Conte\u00fado essencial e atividade de contacto."
                 },
                 {
                   "icon": "support",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
-                  "title": "Managed technical side",
-                  "body": "Hosting, maintenance, support."
+                  "title": "Camada t\u00e9cnica gerida",
+                  "body": "Alojamento, manuten\u00e7\u00e3o e apoio."
                 },
                 {
                   "icon": "clarity",
                   "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
-                  "title": "Monthly reports",
-                  "body": "Useful activity signals after launch."
+                  "title": "Relat\u00f3rios mensais",
+                  "body": "Sinais \u00fateis de atividade ap\u00f3s o lan\u00e7amento."
                 }
               ]
+            }
+          },
+          "translations": {
+            "en": {
+              "plansSection": {
+                "eyebrow": "Plans",
+                "headingPrefix": "Choose the level of",
+                "headingAccent": "managed support",
+                "headingSuffix": "your business needs.",
+                "support": "Choose based on the scope, support rhythm, and improvement level your business needs.",
+                "founder": {
+                  "title": "Founder pricing for the first 15 clients.",
+                  "text": "Lower setup pricing. Same monthly service. Founder monthly rate stays while the original contract remains active and in good standing.",
+                  "factsLabel": "Founder pricing details",
+                  "facts": [
+                    "15 founder spots",
+                    "Lower setup fee",
+                    "Same monthly service"
+                  ]
+                },
+                "plans": [
+                  {
+                    "id": "presenca",
+                    "name": "Presen\u00e7a",
+                    "label": "Plan 01",
+                    "promise": "Get found and look professional.",
+                    "who": "A focused start.",
+                    "standardSetup": "\u20ac990",
+                    "founderSetup": "\u20ac590",
+                    "monthly": "\u20ac69/month",
+                    "recommended": false,
+                    "includes": [
+                      "Essential site structure",
+                      "Core contact paths",
+                      "Backoffice controls",
+                      "Monthly report"
+                    ]
+                  },
+                  {
+                    "id": "crescimento",
+                    "name": "Crescimento",
+                    "label": "Recommended",
+                    "promise": "Improve the presence every month.",
+                    "who": "Monthly growth rhythm.",
+                    "standardSetup": "\u20ac1,490",
+                    "founderSetup": "\u20ac990",
+                    "monthly": "\u20ac99/month",
+                    "recommended": true,
+                    "includes": [
+                      "Larger site structure",
+                      "Deeper contact planning",
+                      "Active monthly support",
+                      "Detailed report"
+                    ]
+                  },
+                  {
+                    "id": "parceiro",
+                    "name": "Parceiro",
+                    "label": "Plan 03",
+                    "promise": "Delegate more of the work.",
+                    "who": "Higher support coverage.",
+                    "standardSetup": "\u20ac1,990",
+                    "founderSetup": "\u20ac1,390",
+                    "monthly": "\u20ac149/month",
+                    "recommended": false,
+                    "includes": [
+                      "Broader page scope",
+                      "Monthly improvements",
+                      "Landing page support",
+                      "Annual review"
+                    ]
+                  }
+                ],
+                "founderSetupLabel": "Founder setup",
+                "standardSetupPrefix": "Standard setup",
+                "monthlyLabel": "Monthly service",
+                "fitLabel": "Fit",
+                "planCtaLabel": "Request this plan"
+              },
+              "comparison": {
+                "ariaLabel": "Plan comparison details",
+                "summaryLabel": "Compare plan details",
+                "summarySupport": "See scope, support, reports, and monthly service differences.",
+                "tableLabel": "Plan comparison",
+                "headerArea": "Area",
+                "planHeaders": [
+                  "Presen\u00e7a",
+                  "Crescimento",
+                  "Parceiro"
+                ],
+                "rows": [
+                  {
+                    "category": "First-version scope",
+                    "presenca": "Essential website structure",
+                    "crescimento": "Larger site structure",
+                    "parceiro": "Broader page scope"
+                  },
+                  {
+                    "category": "Contact paths",
+                    "presenca": "Clear calls, forms, WhatsApp, booking, or quote paths",
+                    "crescimento": "More complete contact-path planning",
+                    "parceiro": "More hands-on contact-path support"
+                  },
+                  {
+                    "category": "Backoffice controls",
+                    "presenca": "Essential content and contact activity",
+                    "crescimento": "Expanded controls where useful",
+                    "parceiro": "Broader control and reporting view"
+                  },
+                  {
+                    "category": "Monthly reports",
+                    "presenca": "Monthly report",
+                    "crescimento": "More detailed monthly report",
+                    "parceiro": "More hands-on review rhythm"
+                  },
+                  {
+                    "category": "Improvement rhythm",
+                    "presenca": "Small monthly improvements",
+                    "crescimento": "More monthly changes",
+                    "parceiro": "More active improvement support"
+                  },
+                  {
+                    "category": "Support priority",
+                    "presenca": "Managed support",
+                    "crescimento": "Priority support",
+                    "parceiro": "Higher support priority"
+                  },
+                  {
+                    "category": "Local visibility foundations",
+                    "presenca": "SEO foundations",
+                    "crescimento": "Stronger local visibility foundations",
+                    "parceiro": "Broader support around visibility foundations"
+                  },
+                  {
+                    "category": "Campaign support",
+                    "presenca": "Not included",
+                    "crescimento": "Scoped separately if needed",
+                    "parceiro": "Included within agreed scope"
+                  }
+                ]
+              },
+              "foundation": {
+                "eyebrow": "Included",
+                "headingPrefix": "Every plan includes the",
+                "headingAccent": "managed foundation",
+                "headingSuffix": ".",
+                "items": [
+                  {
+                    "icon": "layout",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4.5\" y=\"5\" width=\"15\" height=\"14\" rx=\"3\"></rect><path d=\"M4.5 9.2h15\"></path><path d=\"M9.2 13h5.6\"></path><path d=\"M9.2 16h3.8\"></path></svg>",
+                    "title": "Website structure",
+                    "body": "Pages planned before build."
+                  },
+                  {
+                    "icon": "message",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 6.5h14v9.2a2.3 2.3 0 0 1-2.3 2.3H9l-4 2v-13.5z\"></path><path d=\"M8.3 10.2h7.4\"></path><path d=\"M8.3 13.3h4.8\"></path></svg>",
+                    "title": "Contact paths",
+                    "body": "Calls, forms, WhatsApp, or booking requests."
+                  },
+                  {
+                    "icon": "control",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 7h12\"></path><path d=\"M6 12h12\"></path><path d=\"M6 17h12\"></path><circle cx=\"9\" cy=\"7\" r=\"1.4\"></circle><circle cx=\"15\" cy=\"12\" r=\"1.4\"></circle><circle cx=\"11\" cy=\"17\" r=\"1.4\"></circle></svg>",
+                    "title": "Backoffice controls",
+                    "body": "Essential content and contact activity."
+                  },
+                  {
+                    "icon": "support",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 12a6 6 0 0 1 12 0v3.3a2 2 0 0 1-2 2h-1.8\"></path><path d=\"M6 12v3.3a2 2 0 0 0 2 2h1.8\"></path><path d=\"M9.8 19h4.4\"></path><path d=\"M8.2 12.4h1.3\"></path><path d=\"M14.5 12.4h1.3\"></path></svg>",
+                    "title": "Managed technical side",
+                    "body": "Hosting, maintenance, support."
+                  },
+                  {
+                    "icon": "clarity",
+                    "trustedIconSvg": "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6.4\"></circle><path d=\"M12 7.8v4.5l2.7 2\"></path><path d=\"M4.2 12h2\"></path><path d=\"M17.8 12h2\"></path></svg>",
+                    "title": "Monthly reports",
+                    "body": "Useful activity signals after launch."
+                  }
+                ]
+              }
             }
           }
         },
@@ -4750,42 +5666,83 @@
           "order": 30,
           "props": {
             "eyebrow": "FAQ",
-            "heading": "Questions before you choose.",
-            "gridLabel": "Pricing questions",
+            "heading": "Perguntas antes de escolher.",
+            "gridLabel": "Perguntas sobre pre\u00e7os",
             "items": [
               {
-                "question": "Why is there a setup fee and a monthly fee?",
-                "answer": "The setup fee covers the first version. The monthly fee keeps hosting, support, reports, and improvements managed after launch."
+                "question": "Porque existe uma taxa de setup e uma mensalidade?",
+                "answer": "A taxa de setup cobre a primeira vers\u00e3o. A mensalidade mant\u00e9m alojamento, apoio, relat\u00f3rios e melhorias geridos ap\u00f3s o lan\u00e7amento."
               },
               {
-                "question": "What affects the final setup scope?",
-                "answer": "Pages, content, contact paths, Google Business Profile support, and backoffice needs can affect scope."
+                "question": "O que influencia o \u00e2mbito final de setup?",
+                "answer": "P\u00e1ginas, conte\u00fado, caminhos de contacto, apoio ao Perfil de Empresa Google e necessidades de backoffice podem influenciar o \u00e2mbito."
               },
               {
-                "question": "Can I start with Presen\u00e7a and upgrade later?",
-                "answer": "Yes. Presen\u00e7a can start as a focused foundation, then move into a larger plan if your support needs grow."
+                "question": "Posso come\u00e7ar com Presen\u00e7a e fazer upgrade mais tarde?",
+                "answer": "Sim. Presen\u00e7a pode come\u00e7ar como uma base focada e passar para um plano maior se as necessidades de apoio crescerem."
               },
               {
-                "question": "What happens after launch?",
-                "answer": "Nuvio keeps the technical side managed, sends reports, supports changes, and improves the presence over time."
+                "question": "O que acontece depois do lan\u00e7amento?",
+                "answer": "A Nuvio mant\u00e9m a parte t\u00e9cnica gerida, envia relat\u00f3rios, apoia altera\u00e7\u00f5es e melhora a presen\u00e7a ao longo do tempo."
               },
               {
-                "question": "What is included in monthly support?",
-                "answer": "Hosting, maintenance, practical support, reporting, and improvements within the selected plan scope."
+                "question": "O que est\u00e1 inclu\u00eddo no apoio mensal?",
+                "answer": "Alojamento, manuten\u00e7\u00e3o, apoio pr\u00e1tico, relat\u00f3rios e melhorias dentro do \u00e2mbito do plano escolhido."
               },
               {
-                "question": "Do you guarantee leads, rankings, or revenue?",
-                "answer": "No. Nuvio improves structure, clarity, and contact paths, but does not promise fixed leads, rankings, or revenue."
+                "question": "Garantem contactos, rankings ou receita?",
+                "answer": "N\u00e3o. A Nuvio melhora estrutura, clareza e caminhos de contacto, mas n\u00e3o promete contactos, rankings ou receita fixos."
               },
               {
-                "question": "How does the 30-day setup-fee refund work?",
-                "answer": "After launch, the setup fee can be refunded within 30 days. Setup fee only."
+                "question": "Como funciona o reembolso de 30 dias da taxa de setup?",
+                "answer": "Depois do lan\u00e7amento, a taxa de setup pode ser reembolsada nos primeiros 30 dias. Apenas taxa de setup."
               },
               {
-                "question": "What does founder pricing mean?",
-                "answer": "Founder pricing is for the first 15 clients and keeps the founder monthly rate while the original contract remains active."
+                "question": "O que significa pre\u00e7o founder?",
+                "answer": "O pre\u00e7o founder \u00e9 para os primeiros 15 clientes e mant\u00e9m a mensalidade founder enquanto o contrato original estiver ativo."
               }
             ]
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "FAQ",
+              "heading": "Questions before you choose.",
+              "gridLabel": "Pricing questions",
+              "items": [
+                {
+                  "question": "Why is there a setup fee and a monthly fee?",
+                  "answer": "The setup fee covers the first version. The monthly fee keeps hosting, support, reports, and improvements managed after launch."
+                },
+                {
+                  "question": "What affects the final setup scope?",
+                  "answer": "Pages, content, contact paths, Google Business Profile support, and backoffice needs can affect scope."
+                },
+                {
+                  "question": "Can I start with Presen\u00e7a and upgrade later?",
+                  "answer": "Yes. Presen\u00e7a can start as a focused foundation, then move into a larger plan if your support needs grow."
+                },
+                {
+                  "question": "What happens after launch?",
+                  "answer": "Nuvio keeps the technical side managed, sends reports, supports changes, and improves the presence over time."
+                },
+                {
+                  "question": "What is included in monthly support?",
+                  "answer": "Hosting, maintenance, practical support, reporting, and improvements within the selected plan scope."
+                },
+                {
+                  "question": "Do you guarantee leads, rankings, or revenue?",
+                  "answer": "No. Nuvio improves structure, clarity, and contact paths, but does not promise fixed leads, rankings, or revenue."
+                },
+                {
+                  "question": "How does the 30-day setup-fee refund work?",
+                  "answer": "After launch, the setup fee can be refunded within 30 days. Setup fee only."
+                },
+                {
+                  "question": "What does founder pricing mean?",
+                  "answer": "Founder pricing is for the first 15 clients and keeps the founder monthly rate while the original contract remains active."
+                }
+              ]
+            }
           }
         },
         {
@@ -4794,20 +5751,38 @@
           "title": "Final Cta",
           "order": 40,
           "props": {
-            "eyebrow": "NEXT STEP",
-            "heading": "Ready to choose the right plan for your business?",
-            "support": "Tell Nuvio what you do, what you need, and which level of support feels right. You will get a clear plan before anything is built.",
+            "eyebrow": "PR\u00d3XIMO PASSO",
+            "heading": "Pronto para escolher o plano certo para o seu neg\u00f3cio?",
+            "support": "Diga \u00e0 Nuvio o que faz, o que precisa e que n\u00edvel de apoio faz sentido. Recebe um plano claro antes de qualquer constru\u00e7\u00e3o.",
             "primaryCta": {
-              "label": "Request my Nuvio plan",
+              "label": "Pedir plano Nuvio",
               "href": "/contact"
             },
             "secondaryCta": {
-              "label": "Compare plans",
+              "label": "Comparar planos",
               "href": "#plans"
             },
-            "actionsLabel": "Pricing final actions",
-            "motifTitle": "Plan first",
-            "motifText": "Scope and commercial details before build."
+            "actionsLabel": "A\u00e7\u00f5es finais de pre\u00e7os",
+            "motifTitle": "Plano primeiro",
+            "motifText": "\u00c2mbito e detalhes comerciais antes da constru\u00e7\u00e3o."
+          },
+          "translations": {
+            "en": {
+              "eyebrow": "NEXT STEP",
+              "heading": "Ready to choose the right plan for your business?",
+              "support": "Tell Nuvio what you do, what you need, and which level of support feels right. You will get a clear plan before anything is built.",
+              "primaryCta": {
+                "label": "Request my Nuvio plan",
+                "href": "/contact"
+              },
+              "secondaryCta": {
+                "label": "Compare plans",
+                "href": "#plans"
+              },
+              "actionsLabel": "Pricing final actions",
+              "motifTitle": "Plan first",
+              "motifText": "Scope and commercial details before build."
+            }
           }
         }
       ]
@@ -4815,8 +5790,14 @@
     {
       "slug": "contact",
       "title": "Contact",
-      "seoTitle": "Request a Nuvio plan | Managed online presence for local businesses",
-      "seoDescription": "Share your business context and Nuvio will map the right online presence, contact paths, backoffice controls, and monthly support before anything is built.",
+      "seoTitle": "Pedir plano Nuvio | Presen\u00e7a online gerida para neg\u00f3cios locais",
+      "seoDescription": "Partilhe o contexto do seu neg\u00f3cio e a Nuvio mapeia a presen\u00e7a online certa, caminhos de contacto, controlos de backoffice e apoio mensal antes de construir.",
+      "seoTranslations": {
+        "en": {
+          "title": "Request a Nuvio plan | Managed online presence for local businesses",
+          "description": "Share your business context and Nuvio will map the right online presence, contact paths, backoffice controls, and monthly support before anything is built."
+        }
+      },
       "published": true,
       "seoNoindex": false,
       "seoExcludeFromSitemap": false,
@@ -4828,73 +5809,150 @@
           "order": 10,
           "props": {
             "context": {
-              "eyebrow": "What to send",
-              "headingPrefix": "Send the context.",
-              "headingAccent": "Nuvio maps the plan",
+              "eyebrow": "O que enviar",
+              "headingPrefix": "Envie o contexto.",
+              "headingAccent": "A Nuvio mapeia o plano",
               "headingSuffix": ".",
-              "whatToSendLabel": "Useful context to send",
+              "whatToSendLabel": "Contexto \u00fatil para enviar",
               "whatToSend": [
                 {
-                  "title": "Current online presence",
-                  "text": "Website, Google profile, Instagram, or any current page customers use."
+                  "title": "Presen\u00e7a online atual",
+                  "text": "Site, Perfil de Empresa Google, Instagram ou qualquer p\u00e1gina atual que os clientes usem."
                 },
                 {
-                  "title": "Business and services",
-                  "text": "What you do, where you work, key services, and who usually contacts you."
+                  "title": "Neg\u00f3cio e servi\u00e7os",
+                  "text": "O que faz, onde trabalha, servi\u00e7os principais e quem normalmente o contacta."
                 },
                 {
-                  "title": "Desired customer action",
-                  "text": "Call, message, request a quote, book, or understand the offer first."
+                  "title": "A\u00e7\u00e3o desejada do cliente",
+                  "text": "Ligar, enviar mensagem, pedir or\u00e7amento, marcar ou perceber primeiro a oferta."
                 }
               ],
-              "mappedOutputsLabel": "What Nuvio maps from this context",
-              "mappedOutputsHeadingPrefix": "What",
-              "mappedOutputsHeadingAccent": "Nuvio maps",
-              "mappedOutputsHeadingSuffix": "from this",
+              "mappedOutputsLabel": "O que a Nuvio mapeia a partir deste contexto",
+              "mappedOutputsHeadingPrefix": "O que",
+              "mappedOutputsHeadingAccent": "a Nuvio mapeia",
+              "mappedOutputsHeadingSuffix": "a partir disto",
               "mappedOutputs": [
                 {
-                  "title": "First version",
-                  "text": "Pages and structure."
+                  "title": "Primeira vers\u00e3o",
+                  "text": "P\u00e1ginas e estrutura."
                 },
                 {
-                  "title": "Contact paths",
-                  "text": "Calls, forms, WhatsApp, or booking requests."
+                  "title": "Caminhos de contacto",
+                  "text": "Chamadas, formul\u00e1rios, WhatsApp ou pedidos de marca\u00e7\u00e3o."
                 },
                 {
-                  "title": "Backoffice controls",
-                  "text": "Content, contacts, and reports."
+                  "title": "Controlos de backoffice",
+                  "text": "Conte\u00fado, contactos e relat\u00f3rios."
                 },
                 {
-                  "title": "Commercial clarity",
-                  "text": "Scope, setup fee, and monthly service."
+                  "title": "Clareza comercial",
+                  "text": "\u00c2mbito, taxa de setup e mensalidade."
                 }
               ]
             },
             "form": {
-              "eyebrow": "Request a Nuvio plan",
-              "headingPrefix": "Request your",
-              "headingAccent": "Nuvio plan",
-              "support": "A short message is enough to begin. The more context you send, the easier it is to map the right first version.",
-              "loadingStatus": "Sending your Nuvio plan request...",
-              "honeypotLabel": "Website URL",
+              "eyebrow": "Pedir plano Nuvio",
+              "headingPrefix": "Pedir o seu",
+              "headingAccent": "plano Nuvio",
+              "support": "Uma mensagem curta basta para come\u00e7ar. Quanto mais contexto enviar, mais f\u00e1cil \u00e9 mapear a primeira vers\u00e3o certa.",
+              "loadingStatus": "A enviar o seu pedido de plano Nuvio...",
+              "honeypotLabel": "URL do site",
               "labels": {
-                "name": "Your name",
+                "name": "O seu nome",
                 "email": "Email",
-                "phone": "Phone or WhatsApp",
-                "subject": "Business name",
-                "message": "What should customers be able to do next?"
+                "phone": "Telefone ou WhatsApp",
+                "subject": "Nome do neg\u00f3cio",
+                "message": "O que os clientes devem conseguir fazer a seguir?"
               },
               "placeholders": {
-                "subject": "Your business name or main topic",
-                "message": "Share your current website, Google profile, Instagram, services, location, and what customers should do next."
+                "subject": "Nome do seu neg\u00f3cio ou tema principal",
+                "message": "Partilhe o site atual, Perfil de Empresa Google, Instagram, servi\u00e7os, localiza\u00e7\u00e3o e o que os clientes devem fazer a seguir."
               },
               "help": {
-                "message": "Useful details: services, area, current online links, contact preference, and what feels unclear today."
+                "message": "Detalhes \u00fateis: servi\u00e7os, zona, links atuais, prefer\u00eancia de contacto e o que hoje parece pouco claro."
               },
-              "optionalLabel": "optional",
-              "submitIdle": "Request my Nuvio plan",
-              "submitLoading": "Sending request...",
-              "note": "Not ready with everything? Send what you have. Nuvio can start from your website, Google profile, or Instagram."
+              "optionalLabel": "opcional",
+              "submitIdle": "Pedir plano Nuvio",
+              "submitLoading": "A enviar pedido...",
+              "successMessage": "Obrigado pelo contacto. Vamos responder em breve.",
+              "errorMessage": "Ainda n\u00e3o foi poss\u00edvel enviar o pedido. Verifique os campos e tente novamente.",
+              "note": "Ainda n\u00e3o tem tudo pronto? Envie o que tiver. A Nuvio pode come\u00e7ar pelo seu site, Perfil de Empresa Google ou Instagram."
+            }
+          },
+          "translations": {
+            "en": {
+              "context": {
+                "eyebrow": "What to send",
+                "headingPrefix": "Send the context.",
+                "headingAccent": "Nuvio maps the plan",
+                "headingSuffix": ".",
+                "whatToSendLabel": "Useful context to send",
+                "whatToSend": [
+                  {
+                    "title": "Current online presence",
+                    "text": "Website, Google profile, Instagram, or any current page customers use."
+                  },
+                  {
+                    "title": "Business and services",
+                    "text": "What you do, where you work, key services, and who usually contacts you."
+                  },
+                  {
+                    "title": "Desired customer action",
+                    "text": "Call, message, request a quote, book, or understand the offer first."
+                  }
+                ],
+                "mappedOutputsLabel": "What Nuvio maps from this context",
+                "mappedOutputsHeadingPrefix": "What",
+                "mappedOutputsHeadingAccent": "Nuvio maps",
+                "mappedOutputsHeadingSuffix": "from this",
+                "mappedOutputs": [
+                  {
+                    "title": "First version",
+                    "text": "Pages and structure."
+                  },
+                  {
+                    "title": "Contact paths",
+                    "text": "Calls, forms, WhatsApp, or booking requests."
+                  },
+                  {
+                    "title": "Backoffice controls",
+                    "text": "Content, contacts, and reports."
+                  },
+                  {
+                    "title": "Commercial clarity",
+                    "text": "Scope, setup fee, and monthly service."
+                  }
+                ]
+              },
+              "form": {
+                "eyebrow": "Request a Nuvio plan",
+                "headingPrefix": "Request your",
+                "headingAccent": "Nuvio plan",
+                "support": "A short message is enough to begin. The more context you send, the easier it is to map the right first version.",
+                "loadingStatus": "Sending your Nuvio plan request...",
+                "honeypotLabel": "Website URL",
+                "labels": {
+                  "name": "Your name",
+                  "email": "Email",
+                  "phone": "Phone or WhatsApp",
+                  "subject": "Business name",
+                  "message": "What should customers be able to do next?"
+                },
+                "placeholders": {
+                  "subject": "Your business name or main topic",
+                  "message": "Share your current website, Google profile, Instagram, services, location, and what customers should do next."
+                },
+                "help": {
+                  "message": "Useful details: services, area, current online links, contact preference, and what feels unclear today."
+                },
+                "optionalLabel": "optional",
+                "submitIdle": "Request my Nuvio plan",
+                "submitLoading": "Sending request...",
+                "successMessage": "Thank you for contacting us. We'll reply soon.",
+                "errorMessage": "We couldn't send the request yet. Please check the fields and try again.",
+                "note": "Not ready with everything? Send what you have. Nuvio can start from your website, Google profile, or Instagram."
+              }
             }
           }
         }
